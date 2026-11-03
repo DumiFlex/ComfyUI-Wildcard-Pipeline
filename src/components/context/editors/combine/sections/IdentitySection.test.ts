@@ -43,7 +43,7 @@ describe("combine IdentitySection", () => {
     // Combine's distinguishing test — library default sources from
     // `payload.output_var`, not `payload.var_binding`.
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]').element;
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input').element;
     expect(input.placeholder).toBe("final_prompt");
     expect(input.value).toBe("");
   });
@@ -52,13 +52,13 @@ describe("combine IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "header_text" } }) },
     });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]').element;
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input').element;
     expect(input.value).toBe("header_text");
   });
 
   it("emits update with new variable_binding when binding input changes", async () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "header_text";
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -68,7 +68,7 @@ describe("combine IdentitySection", () => {
 
   it("strips comma + punctuation from the binding on input (var names must be identifiers)", async () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "head,er;text!";
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -81,7 +81,7 @@ describe("combine IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "header_text" } }) },
     });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "";
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -93,7 +93,7 @@ describe("combine IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "header_text" } }) },
     });
-    expect(w.find('[data-test="id-binding"]').classes()).toContain("id__input--mod");
+    expect(w.find('[data-test="id-binding"]').attributes("data-tone")).toBe("accent");
   });
 
   it("name reset button restores meta.name to library_name", async () => {
@@ -142,6 +142,7 @@ describe("combine IdentitySection", () => {
     const info = w.find('[data-test="id-binding-collision"]');
     expect(info.exists()).toBe(true);
     expect(info.classes()).toContain("id__collision--info");
+    expect(w.find('[data-test="id-binding"]').attributes("data-tone")).toBe("accent");
   });
 
   it("override binding triggers collision check against override value", async () => {
@@ -167,5 +168,6 @@ describe("combine IdentitySection", () => {
     const warn = w.find('[data-test="id-binding-collision"]');
     expect(warn.classes()).toContain("id__collision--warn");
     expect(warn.classes()).not.toContain("id__collision--info");
+    expect(w.find('[data-test="id-binding"]').attributes("data-tone")).toBe("warn");
   });
 });

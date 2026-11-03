@@ -7,6 +7,7 @@
  * members off the graph and applies every change this emits.
  */
 import WpSegmented from "@/kit/WpSegmented.vue";
+import Chip from "@/kit/Chip.vue";
 import { vTooltip } from "@/kit/tooltip";
 import type { MemberMode } from "../../extension/node-group";
 
@@ -63,16 +64,16 @@ function allMode(): string {
     >
       <span class="wp-ng__title">{{ m.title }}</span>
       <span class="wp-ng__id">#{{ m.id }}</span>
-      <button
+      <Chip
         v-tooltip="`Click: ${LABEL[NEXT[m.mode]].toLowerCase()}`"
-        type="button"
+        as="button"
         class="wp-ng__chip"
         :class="`is-${m.mode}`"
         :data-test="`ng-mode-${m.id}`"
         @click="emit('set-member', m.id, NEXT[m.mode])"
       >
         {{ LABEL[m.mode] }}
-      </button>
+      </Chip>
     </div>
     <div v-if="!members.length" class="wp-ng__ghost">
       Wire nodes into the dots on the left, then this node's output into a WP Toggles control dot.
@@ -114,7 +115,8 @@ function allMode(): string {
 .wp-ng__row.is-bypassed .wp-ng__title { opacity: 0.55; }
 .wp-ng__title { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wp-ng__id { font: 10.5px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-ng__chip {
+/* A kit Chip (as a button) in the mode's colour. */
+.wp-chip.wp-ng__chip {
   flex: none;
   height: 20px;
   padding: 0 8px;
@@ -127,9 +129,9 @@ function allMode(): string {
   font: 600 10.5px var(--wp-font-sans, sans-serif);
   cursor: pointer;
 }
-.wp-ng__chip.is-on { border-color: var(--wp-accent); color: var(--wp-accent); }
-.wp-ng__chip.is-bypassed { border-color: var(--wp-violet); color: var(--wp-violet); }
-.wp-ng__chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--wp-border-focus, var(--wp-accent)); }
+.wp-chip.wp-ng__chip.is-on { border-color: var(--wp-accent); color: var(--wp-accent); }
+.wp-chip.wp-ng__chip.is-bypassed { border-color: var(--wp-violet); color: var(--wp-violet); }
+.wp-chip.wp-ng__chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--wp-border-focus, var(--wp-accent)); }
 .wp-ng__ghost,
 .wp-ng__note { padding: 2px 4px; font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ng__ghost { font-style: italic; }

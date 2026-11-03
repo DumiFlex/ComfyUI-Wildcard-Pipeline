@@ -3,6 +3,7 @@
  * One option row's probability cell: the share bar and, for a non-null
  * option, the fallback chip + its hover-revealed toggle.
  */
+import Button from "@/kit/Button.vue";
 import { formatProbability } from "../../utils/percent";
 
 defineProps<{
@@ -37,8 +38,9 @@ const emit = defineEmits<{ "toggle-fallback": [] }>();
       <i class="pi pi-shield" aria-hidden="true" />
       <span>fallback</span>
     </span>
-    <button
-      type="button"
+    <Button
+      variant="link"
+      size="sm"
       class="wc-fallback-toggle"
       :aria-pressed="fallback ? 'true' : 'false'"
       :data-test="`wc-opt-fallback-${index}`"
@@ -46,7 +48,7 @@ const emit = defineEmits<{ "toggle-fallback": [] }>();
         ? 'Make this an ordinary option again'
         : 'Also use this option when every option is ruled out'"
       @click.stop="emit('toggle-fallback')"
-    >{{ fallback ? "unset" : "set as fallback" }}</button>
+    >{{ fallback ? "unset" : "set as fallback" }}</Button>
   </div>
 </template>
 
@@ -96,14 +98,13 @@ const emit = defineEmits<{ "toggle-fallback": [] }>();
   font-weight: 600;
 }
 .wc-fallback-chip .pi { font-size: 10px; }
+/* A kit link button that shows on row hover or focus. */
 .wc-fallback-toggle {
+  height: auto;
   padding: 0;
-  border: none;
-  background: none;
   color: var(--wp-text-dim);
   font-family: var(--wp-font-mono, monospace);
   font-size: var(--wp-text-xs, 11px);
-  cursor: pointer;
   opacity: 0;
   transition: opacity .12s, color .12s;
 }

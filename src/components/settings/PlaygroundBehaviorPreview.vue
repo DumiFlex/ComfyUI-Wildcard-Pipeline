@@ -16,6 +16,8 @@
  */
 import { computed, nextTick, ref } from "vue";
 import Button from "@/kit/Button.vue";
+import { inputEl as inputElOf } from "@/manager/utils/kit-field-el";
+import Input from "@/kit/Input.vue";
 import { pushToast } from "@/components/shared/toast-store";
 import { filterForValidation, type ValidationMode } from "@/extension/settings";
 import { committedSuffixFor, tagInsertText } from "@/manager/components/rich-text/word-rows";
@@ -111,10 +113,11 @@ const shownConflicts = computed(() => filterForValidation(props.validation, [...
 
     <section class="wp-pg-behave__card">
       <div class="wp-pg-behave__title">Autocomplete</div>
-      <input
-        ref="inputEl"
+      <Input
+        :ref="(c) => (inputEl = inputElOf(c))"
+        size="sm"
         class="wp-pg-behave__input"
-        :value="text"
+        :model-value="text"
         placeholder="Type “blu”, “fate” or “^_”"
         aria-label="Autocomplete preview"
         role="combobox"
@@ -127,7 +130,7 @@ const shownConflicts = computed(() => filterForValidation(props.validation, [...
         @input="readCaret"
         @click="readCaret"
         @keydown="onKey"
-      >
+      />
       <ul v-if="suggestions.length" id="wp-pg-ac-list" class="wp-pg-behave__list" role="listbox" data-test="pg-ac-list">
         <li
           v-for="(tag, i) in suggestions" :id="`wp-pg-ac-${i}`"

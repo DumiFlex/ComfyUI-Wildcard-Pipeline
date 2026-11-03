@@ -10,6 +10,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
+import Chip from "@/kit/Chip.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
 import { api } from "../../api/client";
 import type { AiOrganizeChange, AiOrganizeResult, ModuleUpdateInput } from "../../api/types";
@@ -271,52 +272,54 @@ function close(): void {
             <span v-if="c.reason" class="wp-ai-org__reason">{{ c.reason }}</span>
           </label>
           <div class="wp-ai-org__chips">
-            <button
+            <Chip
               v-if="c.category"
-              type="button"
+              size="sm"
+              icon="pi-folder"
+              :pressed="!off.has(`${i}:cat`)"
               class="wp-ai-org__chip"
               data-kind="category"
               :data-new="c.category.new ? 'true' : 'false'"
-              :aria-pressed="!off.has(`${i}:cat`)"
               :title="c.category.new ? 'New category, created when you apply' : 'Existing category'"
               data-test="ai-organize-chip"
               @click="toggle(`${i}:cat`)"
             >
-              <i class="pi pi-folder" aria-hidden="true" />
               <span v-if="c.before.category" class="wp-ai-org__was">{{ c.before.category }}</span>
               <i v-if="c.before.category" class="pi pi-arrow-right wp-ai-org__arrow" aria-hidden="true" />
               {{ c.category.name }}
-            </button>
-            <button
+            </Chip>
+            <Chip
               v-for="t in c.tags_add"
               :key="`a-${t.tag}`"
-              type="button"
+              size="sm"
               class="wp-ai-org__chip"
               data-kind="add"
               :data-new="t.new ? 'true' : 'false'"
-              :aria-pressed="!off.has(`${i}:add:${t.tag}`)"
+              :pressed="!off.has(`${i}:add:${t.tag}`)"
               :title="t.new ? 'New tag' : 'Existing tag'"
               data-test="ai-organize-chip"
               @click="toggle(`${i}:add:${t.tag}`)"
-            >+ #{{ t.tag }}</button>
-            <button
+            >+ #{{ t.tag }}</Chip>
+            <Chip
               v-for="t in c.tags_remove"
               :key="`r-${t}`"
-              type="button"
+              size="sm"
               class="wp-ai-org__chip"
               data-kind="remove"
-              :aria-pressed="!off.has(`${i}:rm:${t}`)"
+              :pressed="!off.has(`${i}:rm:${t}`)"
+              color="var(--wp-danger)"
               title="Remove this tag"
               data-test="ai-organize-chip"
               @click="toggle(`${i}:rm:${t}`)"
-            >− #{{ t }}</button>
-            <button
+            >− #{{ t }}</Chip>
+            <Chip
               v-if="c.rating"
-              type="button"
+              size="sm"
               class="wp-ai-org__chip"
               data-kind="rating"
               :data-rating="c.rating"
-              :aria-pressed="!off.has(`${i}:rating`)"
+              :pressed="!off.has(`${i}:rating`)"
+              color="var(--wp-warn)"
               title="Content rating"
               data-test="ai-organize-chip"
               @click="toggle(`${i}:rating`)"
@@ -324,7 +327,7 @@ function close(): void {
               <span class="wp-ai-org__was">{{ RATING_LABEL[c.before.rating] }}</span>
               <i class="pi pi-arrow-right wp-ai-org__arrow" aria-hidden="true" />
               {{ RATING_LABEL[c.rating] }}
-            </button>
+            </Chip>
           </div>
         </li>
       </ul>
@@ -378,25 +381,8 @@ function close(): void {
 .wp-ai-org__reason { font-size: 12px; color: var(--wp-text-muted); }
 .wp-ai-org__reason::before { content: "· "; }
 .wp-ai-org__chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 24px; }
-.wp-ai-org__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font: inherit;
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: min(10px, var(--wp-radius-cap, 999px));
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid color-mix(in oklab, var(--wp-success) 45%, transparent);
-  color: var(--wp-success);
-}
-.wp-ai-org__chip[data-kind="category"] { border-color: color-mix(in oklab, var(--wp-accent-400) 60%, transparent); color: var(--wp-accent-text); }
-.wp-ai-org__chip[data-kind="remove"] { border-color: color-mix(in oklab, var(--wp-danger) 45%, transparent); color: var(--wp-danger-text, var(--wp-danger)); }
-.wp-ai-org__chip[data-kind="rating"] { border-color: color-mix(in oklab, var(--wp-warn) 45%, transparent); color: var(--wp-warn); }
 .wp-ai-org__chip[data-new="true"] { border-style: dashed; }
 .wp-ai-org__chip[aria-pressed="false"] { opacity: 0.4; text-decoration: line-through; }
-.wp-ai-org__chip .pi { font-size: 10px; }
 .wp-ai-org__was { color: var(--wp-text-dim); }
 .wp-ai-org__arrow { color: var(--wp-text-dim); }
 .wp-ai-org__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }

@@ -346,17 +346,16 @@ const constraintTargetValues = computed<string[]>(() => {
           <i class="pi pi-external-link" aria-hidden="true" />
           Open in bundle editor
         </RouterLink>
-        <button
+        <Button
           v-else-if="child?.id"
-          type="button"
-          class="wp-bpane__ref-cta wp-bpane__ref-cta--disabled"
+          variant="secondary"
+          size="sm"
+          icon="pi-ban"
+          class="wp-bpane__ref-off"
           disabled
           data-test="bundle-pane-ref-open-disabled"
           title="Referenced bundle no longer exists"
-        >
-          <i class="pi pi-ban" aria-hidden="true" />
-          Open in bundle editor
-        </button>
+        >Open in bundle editor</Button>
       </div>
 
       <div
@@ -510,13 +509,7 @@ const constraintTargetValues = computed<string[]>(() => {
   transition: filter 120ms ease;
 }
 .wp-bpane__ref-cta:hover { filter: brightness(1.1); }
-.wp-bpane__ref-cta--disabled {
-  background: var(--wp-bg-3);
-  color: var(--wp-text-dim);
-  cursor: not-allowed;
-  border: 1px solid var(--wp-border);
-}
-.wp-bpane__ref-cta--disabled:hover { filter: none; }
+.wp-bpane__ref-off { align-self: flex-start; }
 
 .wp-bpane__sections {
   display: flex;

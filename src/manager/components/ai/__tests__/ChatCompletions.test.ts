@@ -68,6 +68,25 @@ describe("ChatCompletions", () => {
     wrap.unmount();
   });
 
+  it("a press in the box keeps the menu, a press outside closes it", async () => {
+    const wrap = mount(Box, { attachTo: document.body });
+    await nextTick();
+    const box = wrap.find('[data-test="box"]').element as HTMLTextAreaElement;
+    await type(box, "use $wea");
+    expect(document.querySelector('[data-test="ai-ac"]')).not.toBeNull();
+    box.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    await nextTick();
+    expect(document.querySelector('[data-test="ai-ac"]')).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 0));
+    const outside = document.createElement("div");
+    document.body.appendChild(outside);
+    outside.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    await nextTick();
+    expect(document.querySelector('[data-test="ai-ac"]')).toBeNull();
+    expect(wrap.find('[data-test="text"]').text()).toBe("use $wea");
+    wrap.unmount();
+  });
+
   it("offers $ variables and Escape closes without inserting", async () => {
     const wrap = mount(Box, { attachTo: document.body });
     await nextTick();

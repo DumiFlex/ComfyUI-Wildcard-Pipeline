@@ -24,19 +24,19 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("wildcard IdentitySection — frameActive gating on variable binding", () => {
   it("binding input is NOT disabled in base mode (frameActive absent)", () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    const input = w.find('[data-test="id-binding"]');
+    const input = w.find('[data-test="id-binding"] input');
     expect(input.attributes("disabled")).toBeUndefined();
   });
 
   it("binding input is NOT disabled when frameActive=false", () => {
     const w = mount(IdentitySection, { props: { module: makeModule(), frameActive: false } });
-    const input = w.find('[data-test="id-binding"]');
+    const input = w.find('[data-test="id-binding"] input');
     expect(input.attributes("disabled")).toBeUndefined();
   });
 
   it("binding input IS disabled when frameActive=true", () => {
     const w = mount(IdentitySection, { props: { module: makeModule(), frameActive: true } });
-    const input = w.find('[data-test="id-binding"]');
+    const input = w.find('[data-test="id-binding"] input');
     expect(input.attributes("disabled")).toBeDefined();
   });
 

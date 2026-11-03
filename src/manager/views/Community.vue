@@ -18,7 +18,7 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Card from "@/kit/Card.vue";
-import Icon from "@/kit/Icon.vue";
+import Button from "@/kit/Button.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
 import { DISCORD_INVITE, WPC_API_URL, WPC_EMBED_FRAME_URL } from "../config/links";
 import { connectFrame, type FrameBridge, type FrameTarget } from "../community/frameBridge";
@@ -205,17 +205,15 @@ onBeforeUnmount(() => {
       </p>
       <pre class="wp-community-offline__detail">{{ loadError }}</pre>
       <div class="wp-community-offline__actions">
-        <button class="wp-btn wp-btn--primary" @click="retry">
-          <Icon name="pi-refresh" />Retry
-        </button>
-        <a
-          class="wp-btn wp-btn--ghost"
+        <Button variant="primary" icon="pi-refresh" @click="retry">Retry</Button>
+        <Button
+          as="a"
+          variant="ghost"
+          icon="pi-discord"
           :href="DISCORD_INVITE"
           target="_blank"
           rel="noopener"
-        >
-          <Icon name="pi-discord" />Open Discord invite
-        </a>
+        >Open Discord invite</Button>
       </div>
     </Card>
   </div>

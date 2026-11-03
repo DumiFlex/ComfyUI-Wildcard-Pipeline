@@ -11,17 +11,14 @@
  * input handling (typing, deletion, autocomplete insertion, click-to-
  * edit) is wired up in Tasks 6/7/8.
  *
- * The `$` / `@` autocomplete popover is teleported to <body> and
- * positioned with `position: fixed` so it escapes any ancestor
- * `overflow: hidden` (e.g. the `.wp-rt` wrapper itself, scroll
- * containers in editor tables). The popover state is preserved here
- * verbatim from the previous implementation; the input plumbing that
- * drives it (`probeAutocomplete`, `onInput`, etc.) is currently
- * dormant because the textarea it used to read from is gone. Task 6
- * rewires those handlers against the contenteditable host + selection
- * API.
+ * The `$` / `@` autocomplete list, the filter picker and the remap popup
+ * are kit `Popover`s placed against virtual anchors (`./rich-text/anchors`):
+ * the list under the word being completed, the picker and remap popup at the
+ * chip (or the field on the insert flow).
  */
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from "vue";
+import Popover from "@/kit/Popover.vue";
+import type { VirtualAnchor } from "@/kit/floating";
 import {
   replaceAtom,
   serialiseVarAtom,
@@ -69,7 +66,7 @@ import {
   AC_MAX_ITEMS, axisKnownFor as axisKnownForProducers, kindTint, matchSuggestions,
   placeholderNameFor, varSpanAttrsFor, varTint,
 } from "./rich-text/suggestions";
-import { hugTrigger, pickerAnchorFor, popupPlacement, shouldFlipAbove } from "./rich-text/popup-geometry";
+import { caretAnchor, followAnchor } from "./rich-text/anchors";
 import {
   inTextSpan, isChipEl, isTextSpan, placeCaretInText, selectCollapsed, setCaretAtSpanEdge,
   visibleOffsetWithin,
@@ -279,7 +276,11 @@ const emit = defineEmits<{
 
 // --- Refs ---
 const hostEl = ref<HTMLDivElement | null>(null);
-const popoverEl = ref<HTMLDivElement | null>(null);
+/** The suggestion list's panel id (the Popover panel carries it). */
+const acListId = `wp-rt-ac-${useId()}`;
+function acPanel(): HTMLElement | null {
+  return typeof document === "undefined" ? null : document.getElementById(acListId);
+}
 const focused = ref(false);
 
 // Placeholder-ghost gate. The host ALWAYS carries a ZWSP pad span (padAtoms),
@@ -441,14 +442,8 @@ function scheduleTagFetch(query: string): void {
 }
 const acStart = ref(-1);
 const acActive = ref(0);
-// Popup geometry — `position: fixed` viewport coordinates so the teleported
-// popover lands directly under the input regardless of ancestor overflow.
-const popupPos = ref<{ top: number; left: number; width: number; flipped: boolean }>({
-  top: 0,
-  left: 0,
-  width: 240,
-  flipped: false,
-});
+/** Where the suggestion list hangs: the trigger of the word being completed. */
+const acAnchor = shallowRef<VirtualAnchor | null>(null);
 
 // --- Step-2 SubcategoryFilterPicker state ---
 // Opened after picking an `@` ref that has declared sub_categories. Both the
@@ -491,12 +486,9 @@ const pendingInsert = ref<{ uuid: string } | null>(null);
  *  reads 0 and the chip lands at the start of the value. Capturing
  *  here lets us restore the right slice positions in `insertRefAtCursor`. */
 const pendingInsertCaret = ref<{ caret: number; acStart: number } | null>(null);
-// Anchor coordinates for the picker popover — relative to the chip
-// being edited (click-to-edit flow) or the host element (insert
-// flow). Flips above the anchor if there's no room below.
-const pickerAnchor = ref<{ top: number; left: number; flipped: boolean }>({
-  top: 0, left: 0, flipped: false,
-});
+// What the picker popover hangs from: the chip being edited (click-to-edit
+// flow) or the host element (insert flow). The Popover flips and clamps it.
+const pickerAnchor = shallowRef<VirtualAnchor | null>(null);
 
 // --- RemapRefPopup state (#3 broken-chip heal) ---
 const remapOpen = ref(false);
@@ -504,7 +496,7 @@ const remapOldUuid = ref("");
 const remapCachedName = ref("");
 const remapOldExpr = ref("");
 const remapOldExcludeNull = ref(false);
-const remapAnchor = ref<{ top: number; left: number }>({ top: 0, left: 0 });
+const remapAnchor = shallowRef<VirtualAnchor | null>(null);
 
 /** WildcardRefData the popup's dropdown + reconcile consume. RichTextInput
  *  already receives the per-uuid maps as props (uuidToName etc.), so we
@@ -520,9 +512,9 @@ const remapRefData = computed(() => ({
 }));
 
 /** Theme class to stamp on the body-teleported overlays (`@`-autocomplete
- *  popover + the SubcategoryFilterPicker anchor/backdrop).
+ *  popover + the SubcategoryFilterPicker panel).
  *
- *  Why: both overlays `<Teleport to="body">`, so they escape the host's
+ *  Why: both are Popovers, whose panels live under <body>, so they escape the host's
  *  subtree. The `--wp-*` light + dark token variants are declared on
  *  `.wp-theme-light` / `.wp-theme-dark`; when the HOST sits under a
  *  non-default theme (canvas light mode, or the SPA's light theme) the
@@ -753,82 +745,12 @@ function onChipClick(idx: number, ev?: MouseEvent): void {
   // the host's rect if the event target isn't a chip element.
   setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
   pickerOpen.value = true;
-  clampPickerIntoView();
 }
 
-// First-paint bounds (`PICKER_APPROX_H` / `PICKER_W`) and the flip decision
-// live in `pickerAnchorFor`; the precise size is measured in
-// clampPickerIntoView(), which then re-anchors the popover snug against the
-// trigger.
-// The trigger's rect (chip or host) captured at open, so the post-paint
-// re-clamp can hug it using the popover's real height instead of the
-// over-estimated APPROX_H (which floated it too far from the pill).
-let pickerTriggerRect: { top: number; bottom: number; left: number } | null = null;
-
-/** The live viewport, for the placement helpers in `./rich-text/popup-geometry`. */
-function viewport(): { width: number; height: number } {
-  return { width: window.innerWidth, height: window.innerHeight };
-}
-
+/** Hang the picker from `el` (the clicked chip), or the field when there is none. */
 function setPickerAnchorFromElement(el: HTMLElement | null): void {
-  const fallback = hostEl.value;
-  const rect = (el ?? fallback)?.getBoundingClientRect();
-  if (!rect) return;
-  pickerTriggerRect = { top: rect.top, bottom: rect.bottom, left: rect.left };
-  pickerAnchor.value = pickerAnchorFor(rect, viewport());
-}
-
-/** Once the popover has painted, measure its real box and re-anchor it
- *  tight against the trigger (6px gap), then clamp into the viewport. The
- *  approximate constants can't know the exact height, so without this the
- *  flipped popover floats far above the pill / clips off a short viewport. */
-function clampPickerIntoView(): void {
-  void nextTick(() => {
-    const el = document.querySelector(".wp-subcat-picker__anchor") as HTMLElement | null;
-    if (!el || !pickerTriggerRect) return;
-    const r = el.getBoundingClientRect();
-    // Sit just above (flipped) or just below the trigger using the REAL height.
-    const { top, left } = hugTrigger(
-      pickerTriggerRect, r, pickerAnchor.value.flipped, pickerAnchor.value.left, viewport(),
-    );
-    pickerAnchor.value = { ...pickerAnchor.value, top, left };
-  });
-}
-
-/** Live re-anchor for the RemapRefPopup. The popup GROWS when the user
- *  picks a wildcard (the reconcile section + filter picker mount), so a
- *  one-shot measure isn't enough — a popup that fit below the chip at open
- *  can overflow the viewport after a pick. We measure the popup's REAL box
- *  and re-hug the chip: 6px below, flipping above only when the real height
- *  doesn't fit below; the top is clamped on-screen. Driven once on paint and
- *  again on every size change via a ResizeObserver. */
-let remapResizeObs: ResizeObserver | null = null;
-
-function anchorRemapToTrigger(el: HTMLElement): void {
-  if (!pickerTriggerRect) return;
-  const r = el.getBoundingClientRect();
-  const t = pickerTriggerRect;
-  const flip = shouldFlipAbove(t, r.height, window.innerHeight);
-  remapAnchor.value = hugTrigger(t, r, flip, remapAnchor.value.left, viewport());
-}
-
-function clampRemapIntoView(): void {
-  void nextTick(() => {
-    const el = document.querySelector("[data-test='remap-popup']") as HTMLElement | null;
-    if (!el) return;
-    anchorRemapToTrigger(el);
-    // Re-anchor on growth (pick expands the reconcile section). Guarded for
-    // jsdom, which has no ResizeObserver — the one-shot anchor above still runs.
-    if (typeof ResizeObserver === "undefined") return;
-    remapResizeObs?.disconnect();
-    remapResizeObs = new ResizeObserver(() => anchorRemapToTrigger(el));
-    remapResizeObs.observe(el);
-  });
-}
-
-function teardownRemapObs(): void {
-  remapResizeObs?.disconnect();
-  remapResizeObs = null;
+  const target = el ?? hostEl.value;
+  pickerAnchor.value = target ? followAnchor(target) : null;
 }
 
 // --- Suggestion list filtering. ---
@@ -927,7 +849,7 @@ watch(acItems, (items) => {
 // so the highlight vanished and the list looked frozen.
 watch(acActive, (i) => {
   void nextTick(() => {
-    const row = popoverEl.value?.querySelectorAll<HTMLElement>(".wp-rt-suggestions__item")[i];
+    const row = acPanel()?.querySelectorAll<HTMLElement>(".wp-rt-suggestions__item")[i];
     row?.scrollIntoView({ block: "nearest" });
   });
 });
@@ -938,17 +860,15 @@ watch(acActive, (i) => {
 // `$$sep$$` multi-pick delimiter.
 
 // --- Popup placement ---
-// Anchor to the wrapper's bounding box. We use the host's parent (`.wp-rt`)
-// rect rather than caret pixel coordinates for robustness — caret-pixel
-// math against a contenteditable is error-prone and the prototype ships
-// the same "below-the-input" behaviour. Flips above when there's no room
-// below.
+// The list hangs from the trigger of the word being completed (the caret moved
+// back over the typed query), so it starts under the `@` / `$` and stays put
+// while the word grows; the Popover flips and clamps it. A caret with no box
+// (an empty line) falls back to the field's wrapper.
 function positionPopup(): void {
   const host = hostEl.value;
   if (!host) return;
-  const wrap = host.parentElement;
-  if (!wrap) return;
-  popupPos.value = popupPlacement(wrap.getBoundingClientRect(), { height: window.innerHeight });
+  const back = acQuery.value.length + (acTrigger.value === "tag" ? 0 : 1);
+  acAnchor.value = caretAnchor(host, host.parentElement ?? host, back);
 }
 
 // --- Autocomplete probe driven by the contenteditable host's Selection ---
@@ -1093,7 +1013,6 @@ function applyAutocomplete(label: string | undefined): void {
       // typed `@` into.
       setPickerAnchorFromElement(hostEl.value);
       pickerOpen.value = true;
-      clampPickerIntoView();
     }
   } else {
     // `$var` trigger — insert var atom directly (no step-2 picker for vars).
@@ -1770,17 +1689,9 @@ function onChipRemap(idx: number, ev?: MouseEvent): void {
   const { expr, excludeNull } = refFilterOf(atom);
   remapOldExpr.value = expr;
   remapOldExcludeNull.value = excludeNull;
-  // Reuse the picker's anchor maths to position the remap popup at the chip.
-  setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
-  // Seed just BELOW the chip (not the tall-picker flip seed) so the first
-  // paint is already close — clampRemapIntoView then hugs it exactly using
-  // the popup's real height. Avoids the one-frame high-flash.
-  remapAnchor.value = {
-    top: (pickerTriggerRect?.bottom ?? pickerAnchor.value.top) + 6,
-    left: pickerAnchor.value.left,
-  };
+  const chip = (ev?.currentTarget as HTMLElement | null) ?? hostEl.value;
+  remapAnchor.value = chip ? followAnchor(chip) : null;
   remapOpen.value = true;
-  clampRemapIntoView();
 }
 
 /** Rewrite EVERY occurrence of the dead uuid in THIS field's raw text once,
@@ -1792,12 +1703,10 @@ function applyRemap(next: { uuid: string; name: string; subcatExpr: string; excl
   applyAtoms(parseForSurface(rewritten));
   emitValue(rewritten);
   remapOpen.value = false;
-  teardownRemapObs();
 }
 
 function cancelRemap(): void {
   remapOpen.value = false;
-  teardownRemapObs();
 }
 
 // Test seam — drive confirm without faking the popup click chain in jsdom.
@@ -1870,7 +1779,7 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   applyAutocomplete(label);
 }
 
-// --- Global listeners: close popup on outside-click / scroll / resize.
+// --- Global listeners: close the list on a press outside it and the field.
 //     We attach lazily (only while open) so non-editing inputs cost nothing.
 
 /**
@@ -1894,53 +1803,41 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
  * popover, so firing before them changes nothing.
  */
 function onDocumentPressStart(e: Event): void {
-  const t = e.target as Node | null;
-  if (!t) return;
-  if (hostEl.value?.contains(t)) return;
-  if (popoverEl.value?.contains(t)) return;
-  acOpen.value = false;
-}
-function onWindowScroll(e: Event): void {
-  // Scrolling INSIDE the popover is the user reading the list — wheeling over
-  // it, or dragging its scrollbar. This listener is capture-phase on window,
-  // so those scrolls used to land here and close the popover outright: the
-  // list had a scrollbar that could not be used, and a scrollbar drag left a
-  // half-typed reference behind. Ignore them.
-  const t = e.target as Node | null;
-  if (t && popoverEl.value?.contains(t)) return;
-  // The popover IS the scroll target when the wheel lands on it directly
-  // (target is the element, not a descendant).
-  if (t && t === popoverEl.value) return;
-  // A genuine outside scroll moved the anchor. Re-anchor rather than close —
-  // `positionPopup` recomputes from the host's live rect, so the popover
-  // simply follows the input instead of destroying the user's in-progress
-  // token. Matches the injector menu + VarAutocompleteInput behaviour.
-  positionPopup();
-}
-function onWindowResize(): void {
-  if (acOpen.value) positionPopup();
+  const path = e.composedPath();
+  const host = hostEl.value;
+  const list = acPanel();
+  pressKeepsList = (!!host && path.includes(host)) || (!!list && path.includes(list));
+  // Read by `onAcOpenChange` while this same press is being handled, then gone.
+  setTimeout(() => { pressKeepsList = false; }, 0);
+  if (!pressKeepsList) acOpen.value = false;
 }
 
+/** True while a press inside the field or the list is being handled. The
+ *  Popover counts a press in the field as outside (its anchor is the caret,
+ *  not an element), and this keeps it open there as before. */
+let pressKeepsList = false;
+
+/** The list's Popover asks to close: Escape, or a press outside it. */
+function onAcOpenChange(open: boolean): void {
+  if (!open && !pressKeepsList) acOpen.value = false;
+}
+
+// Listening from the moment the list opens, so these run before the Popover's
+// own outside-press listener (added once it has rows to show).
 watch(acOpen, (open) => {
   if (open) {
     void nextTick(positionPopup);
     window.addEventListener("pointerdown", onDocumentPressStart, true);
     window.addEventListener("mousedown", onDocumentPressStart, true);
-    window.addEventListener("scroll", onWindowScroll, true);
-    window.addEventListener("resize", onWindowResize);
   } else {
     window.removeEventListener("pointerdown", onDocumentPressStart, true);
     window.removeEventListener("mousedown", onDocumentPressStart, true);
-    window.removeEventListener("scroll", onWindowScroll, true);
-    window.removeEventListener("resize", onWindowResize);
   }
-});
+}, { flush: "sync" });
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", onDocumentPressStart, true);
   window.removeEventListener("mousedown", onDocumentPressStart, true);
-  window.removeEventListener("scroll", onWindowScroll, true);
-  window.removeEventListener("resize", onWindowResize);
   window.removeEventListener("keydown", onPickerEscape, true);
 });
 
@@ -2659,13 +2556,13 @@ function onHostKeydown(ev: KeyboardEvent): void {
         { 'wp-rt__host--wrap': wrap && !multiline, 'wp-rt__host--empty': isEmpty },
       ]"
       :contenteditable="!disabled"
-      @scroll="updateOverflowHint"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
       :data-multiline="multiline"
       role="textbox"
       :aria-multiline="multiline"
       spellcheck="false"
+      @scroll="updateOverflowHint"
       @focus="onHostFocus"
       @blur="onHostBlur"
       @input="onHostInput"
@@ -2759,270 +2656,265 @@ function onHostKeydown(ev: KeyboardEvent): void {
       />
     </div>
 
-    <!-- Teleport so the popover escapes ancestor overflow:hidden /
-         transformed scroll containers / table cells. -->
-    <Teleport to="body">
-      <div
-        v-if="acOpen && acRowCount > 0"
-        ref="popoverEl"
-        class="wp-rt-suggestions"
-        :class="[teleportThemeClass(), { 'wp-rt-suggestions--up': popupPos.flipped }]"
-        :data-stale="rowsStale ? '' : null"
-        :style="{
-          top: popupPos.top + 'px',
-          left: popupPos.left + 'px',
-          minWidth: popupPos.width + 'px',
-        }"
-        role="listbox"
-      >
-        <div v-if="acTrigger === 'tag'" class="wp-rt-suggestions__head">
-          <span class="wp-rt-suggestions__query">{{ acQuery }}</span>
-          <!-- Says WHICH autocomplete this is. Without a sigil in the query
-               there is otherwise nothing distinguishing it from the `$` / `@`
-               popover, which looks identical and behaves differently. -->
-          <span class="wp-rt-suggestions__src">{{ wordSections.map((s) => s.label).join(" · ") }}</span>
-          <span class="wp-rt-suggestions__count">{{ wordRows.length }}</span>
-          <!-- Names the one thing the rows cannot: that they are not for what
-               is currently typed. Without it the reflow when results land
-               reads as the list glitching. -->
-          <span v-if="rowsStale" class="wp-rt-suggestions__stale">searching…</span>
-          <span class="wp-spacer" />
-          <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
-        </div>
-        <template v-if="acTrigger === 'tag'">
-          <!-- Sections, because the sources have no common ranking key: a tag
-               ranks by post count in the tens of thousands, a model has no
-               count at all. Any single ordering has to invent a comparison
-               between "12,000 posts" and "a file on disk", and tags win it on
-               weight of numbers every time.
+    <!-- A Popover, so the list escapes ancestor overflow:hidden /
+         transformed scroll containers / table cells. Focus stays in the
+         field: it moves through the rows with the arrow keys. -->
+    <!-- The kit Popover's own prop, turning its focus move OFF. -->
+    <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+    <Popover :id="acListId" :autofocus="false"
+      :open="acOpen && acRowCount > 0"
+      :anchor="acAnchor"
+      :max-height="240"
+      role="listbox"
+      label="Suggestions"
+      class="wp-rt-suggestions"
+      :class="teleportThemeClass()"
+      :data-stale="rowsStale ? '' : null"
+      @update:open="onAcOpenChange"
+    >
+      <div v-if="acTrigger === 'tag'" class="wp-rt-suggestions__head">
+        <span class="wp-rt-suggestions__query">{{ acQuery }}</span>
+        <!-- Says WHICH autocomplete this is. Without a sigil in the query
+             there is otherwise nothing distinguishing it from the `$` / `@`
+             popover, which looks identical and behaves differently. -->
+        <span class="wp-rt-suggestions__src">{{ wordSections.map((s) => s.label).join(" · ") }}</span>
+        <span class="wp-rt-suggestions__count">{{ wordRows.length }}</span>
+        <!-- Names the one thing the rows cannot: that they are not for what
+             is currently typed. Without it the reflow when results land
+             reads as the list glitching. -->
+        <span v-if="rowsStale" class="wp-rt-suggestions__stale">searching…</span>
+        <span class="wp-spacer" />
+        <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
+      </div>
+      <template v-if="acTrigger === 'tag'">
+        <!-- Sections, because the sources have no common ranking key: a tag
+             ranks by post count in the tens of thousands, a model has no
+             count at all. Any single ordering has to invent a comparison
+             between "12,000 posts" and "a file on disk", and tags win it on
+             weight of numbers every time.
 
-               `entry.index` is the row's position in the FLAT `wordRows`, which
-               is what `acActive` indexes. Headers are not in that array, so
-               arrow-key navigation cannot land on one — no skip logic needed. -->
-          <template v-for="section in wordSections" :key="section.source">
-            <div
-              v-if="wordSections.length > 1"
-              class="wp-rt-suggestions__section"
-            >
-              <i :class="SOURCE_ICON[section.source]" aria-hidden="true" />{{ section.label }}
-            </div>
-            <button
-              v-for="entry in section.rows"
-              :key="section.source + ':' + (entry.row.source === 'tag' ? entry.row.tag.matched : entry.row.model.path)"
-              type="button"
-              class="wp-rt-suggestions__item wp-rt-tag"
-              :data-active="entry.index === acActive ? '' : null"
-              role="option"
-              :aria-selected="entry.index === acActive"
-              @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row) + committedSuffix())"
-              @mouseenter="acActive = entry.index"
-            >
-              <template v-if="entry.row.source !== 'tag'">
-                <span class="wp-rt-tag__cat" :class="`wp-rt-tag__cat--${entry.row.source}`">
-                  <i :class="SOURCE_ICON[entry.row.source]" aria-hidden="true" />
+             `entry.index` is the row's position in the FLAT `wordRows`, which
+             is what `acActive` indexes. Headers are not in that array, so
+             arrow-key navigation cannot land on one — no skip logic needed. -->
+        <template v-for="section in wordSections" :key="section.source">
+          <div
+            v-if="wordSections.length > 1"
+            class="wp-rt-suggestions__section"
+          >
+            <i :class="SOURCE_ICON[section.source]" aria-hidden="true" />{{ section.label }}
+          </div>
+          <div
+            v-for="entry in section.rows"
+            :key="section.source + ':' + (entry.row.source === 'tag' ? entry.row.tag.matched : entry.row.model.path)"
+            class="wp-rt-suggestions__item wp-rt-tag"
+            :data-active="entry.index === acActive ? '' : null"
+            role="option"
+            :aria-selected="entry.index === acActive"
+            @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row) + committedSuffix())"
+            @mouseenter="acActive = entry.index"
+          >
+            <template v-if="entry.row.source !== 'tag'">
+              <span class="wp-rt-tag__cat" :class="`wp-rt-tag__cat--${entry.row.source}`">
+                <i :class="SOURCE_ICON[entry.row.source]" aria-hidden="true" />
+              </span>
+              <span class="wp-rt-tag__body">
+                <span class="wp-rt-tag__name">{{ entry.row.model.name }}</span>
+                <!-- The folder is the only thing separating two files with
+                     the same name, and the insert uses the full path. -->
+                <span v-if="entry.row.model.folder" class="wp-rt-tag__sub">
+                  {{ entry.row.model.folder }}
                 </span>
-                <span class="wp-rt-tag__body">
-                  <span class="wp-rt-tag__name">{{ entry.row.model.name }}</span>
-                  <!-- The folder is the only thing separating two files with
-                       the same name, and the insert uses the full path. -->
-                  <span v-if="entry.row.model.folder" class="wp-rt-tag__sub">
-                    {{ entry.row.model.folder }}
-                  </span>
+              </span>
+            </template>
+            <template v-else>
+              <!-- Colour bar only when the loaded file HAS categories. A
+                   two-column list would otherwise show a column of identical
+                   grey bars explaining nothing. -->
+              <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is
+                   already the fixed_values module kind, so a booru tag row
+                   would have rendered identically to a library module.
+                   Tinted by category, so this one slot says both "this is a
+                   tag" and "of this kind". -->
+              <span
+                v-if="tagHasCategories"
+                class="wp-rt-tag__cat"
+                :class="entry.row.tag.category_name ? `wp-rt-tag__cat--${entry.row.tag.category_name}` : null"
+              ><i class="pi pi-tags" aria-hidden="true" /></span>
+              <span class="wp-rt-tag__body">
+                <!-- Always the tag that will be INSERTED, never the alias
+                     that matched. Enter must put exactly this on screen. -->
+                <span class="wp-rt-tag__name">{{ entry.row.tag.name }}</span>
+                <span v-if="entry.row.tag.matched !== entry.row.tag.name" class="wp-rt-tag__sub">
+                  from <span class="wp-rt-tag__alias">{{ entry.row.tag.matched }}</span>
                 </span>
-              </template>
-              <template v-else>
-                <!-- Colour bar only when the loaded file HAS categories. A
-                     two-column list would otherwise show a column of identical
-                     grey bars explaining nothing. -->
-                <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is
-                     already the fixed_values module kind, so a booru tag row
-                     would have rendered identically to a library module.
-                     Tinted by category, so this one slot says both "this is a
-                     tag" and "of this kind". -->
                 <span
-                  v-if="tagHasCategories"
-                  class="wp-rt-tag__cat"
-                  :class="entry.row.tag.category_name ? `wp-rt-tag__cat--${entry.row.tag.category_name}` : null"
-                ><i class="pi pi-tags" aria-hidden="true" /></span>
-                <span class="wp-rt-tag__body">
-                  <!-- Always the tag that will be INSERTED, never the alias
-                       that matched. Enter must put exactly this on screen. -->
-                  <span class="wp-rt-tag__name">{{ entry.row.tag.name }}</span>
-                  <span v-if="entry.row.tag.matched !== entry.row.tag.name" class="wp-rt-tag__sub">
-                    from <span class="wp-rt-tag__alias">{{ entry.row.tag.matched }}</span>
-                  </span>
-                  <span
-                    v-else-if="tagHasCategories && entry.row.tag.category_name"
-                    class="wp-rt-tag__sub"
-                  >{{ entry.row.tag.category_name }}</span>
-                </span>
-                <span class="wp-rt-tag__count">{{ formatTagCount(entry.row.tag.count) }}</span>
-              </template>
-            </button>
-          </template>
-          <div v-if="tagLegend.length" class="wp-rt-tag__legend">
-            <span v-for="cat in tagLegend" :key="cat">
-              <i class="pi pi-tags wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" aria-hidden="true" />{{ cat }}
-            </span>
+                  v-else-if="tagHasCategories && entry.row.tag.category_name"
+                  class="wp-rt-tag__sub"
+                >{{ entry.row.tag.category_name }}</span>
+              </span>
+              <span class="wp-rt-tag__count">{{ formatTagCount(entry.row.tag.count) }}</span>
+            </template>
           </div>
         </template>
-        <div v-else class="wp-rt-suggestions__head">
-          <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
-          <!-- The match count belongs in the header, not implied by the list
-               length: the list is capped and scrolls, so "how many did I
-               actually match" is otherwise unanswerable without scrolling.
-               Counts MATCHES, not rendered rows — and says so when the cap
-               hid some, since a silent truncation is how you conclude the
-               wildcard you are looking for does not exist. -->
-          <span class="wp-rt-suggestions__count">
-            {{ acMatches.length }} match{{ acMatches.length === 1 ? "" : "es" }}
-            <template v-if="acMatches.length > acRows.length">
-              · showing {{ acRows.length }}
-            </template>
+        <div v-if="tagLegend.length" class="wp-rt-tag__legend">
+          <span v-for="cat in tagLegend" :key="cat">
+            <i class="pi pi-tags wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" aria-hidden="true" />{{ cat }}
           </span>
-          <span class="wp-spacer" />
-          <!-- Says what the keys actually do. Choosing an `@` row goes on to
-               the filter panel rather than inserting a bare ref, so Enter is
-               labelled for where it leads. -->
-          <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
         </div>
-        <button
-          v-for="(row, i) in (acTrigger === 'tag' ? [] : acRows)"
-          :key="row.token"
-          type="button"
-          class="wp-rt-suggestions__item"
-          :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
-          :data-active="i === acActive ? '' : null"
-          role="option"
-          :aria-selected="i === acActive"
-          @mousedown="(e) => onSuggestionMouseDown(e, row.token)"
-          @mouseenter="acActive = i"
-        >
-          <!-- The glyph sits in a tinted box in its OWN kind's colour. A `$var`
-               can be written by a fixed_values or a combine as easily as by a
-               wildcard, and painting every row accent-violet throws away the
-               one cue that says which. -->
-          <span
-            class="wp-rt-suggestions__icon-box"
-            :style="acTrigger === '$' ? varTint(varBaseName(row.label)) : kindTint(row.kind)"
-            aria-hidden="true"
-          ><i :class="row.icon" /></span>
-          <span class="wp-rt-suggestions__body">
-            <span
-              class="wp-rt-suggestions__label"
-              :class="acTrigger === '$' ? varColorClass(varBaseName(row.label)) : null"
-            >
-              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span
-              ><template v-if="row.isAxis"
-                >{{ row.label.slice(0, row.label.indexOf('.')) }}<span
-                  class="wp-rt-suggestions__axis"
-                >.{{ row.label.slice(row.label.indexOf('.') + 1) }}</span></template
-              ><template v-else>{{ row.label }}</template>
-            </span>
-            <!-- Second line: the facts that separate same-named entries. For
-                 `@` these are structural (options/axes/tags); for `$` it is
-                 the writer. Either way the row answers "which one is this?"
-                 without the user having to insert it and find out. -->
-            <span v-if="row.uuid || row.facts.length || row.producer" class="wp-rt-suggestions__sub">
-              <span v-if="row.uuid" class="wp-rt-suggestions__uuid">{{ row.uuid }}</span>
-              <template v-if="row.producer">
-                <span v-if="row.producer.verb">{{ row.producer.verb }}</span>
-                <!-- The module name is the identifying half of the sentence,
-                     so it is the part that gets picked out. -->
-                <span v-if="row.producer.moduleName" class="wp-rt-suggestions__by">
-                  {{ row.producer.moduleName }}
-                </span>
-                <span v-if="row.producer.moduleName && row.producer.tail" class="wp-rt-suggestions__sep">·</span>
-                <span v-if="row.producer.tail" class="wp-rt-suggestions__node">{{ row.producer.tail }}</span>
-              </template>
-              <span
-                v-for="fact in row.facts"
-                :key="fact"
-                class="wp-rt-suggestions__fact"
-              >{{ fact }}</span>
-              <!-- Same mark the chip and the filter header carry, so "this is
-                   the node's copy" reads identically wherever it appears. -->
-              <span
-                v-if="row.fromNode"
-                class="wp-rt-suggestions__origin"
-                data-test="suggestion-origin-node"
-              ><i class="pi pi-database" aria-hidden="true" /> this node</span>
-              <span v-if="row.badge" class="wp-rt-suggestions__badge">{{ row.badge }}</span>
-              <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
-            </span>
-          </span>
-          <!-- Funnel marks the rows that lead to a filter — i.e. the ones
-               whose wildcard declares tags to filter by. Shown on the active
-               row only: on every row it becomes a column of noise, and the
-               next step applies to the row you are on. -->
-          <i
-            v-if="row.filterable && i === acActive"
-            class="pi pi-filter wp-rt-suggestions__funnel"
-            aria-hidden="true"
-          />
-        </button>
-        <!-- Reference a module that does not exist yet. Inserts the red broken
-             chip under this name; clicking it later repoints it. -->
-        <button
-          v-if="acPlaceholderName"
-          type="button"
-          class="wp-rt-suggestions__item wp-rt-suggestions__item--placeholder"
-          :data-active="acActive === acItems.length ? '' : null"
-          role="option"
-          :aria-selected="acActive === acItems.length"
-          data-test="suggestion-placeholder"
-          @mousedown.prevent="insertPlaceholderRef(acPlaceholderName)"
-          @mouseenter="acActive = acItems.length"
-        >
-          <span class="wp-rt-suggestions__icon-box wp-rt-suggestions__icon-box--placeholder" aria-hidden="true">
-            <i class="pi pi-plus" />
-          </span>
-          <span class="wp-rt-suggestions__body">
-            <span class="wp-rt-suggestions__label">
-              Placeholder <span class="wp-rt-suggestions__placeholder-name">@{{ acPlaceholderName }}</span>
-            </span>
-            <span class="wp-rt-suggestions__sub">
-              not in the library yet · repoint it later
-            </span>
-          </span>
-        </button>
+      </template>
+      <div v-else class="wp-rt-suggestions__head">
+        <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
+        <!-- The match count belongs in the header, not implied by the list
+             length: the list is capped and scrolls, so "how many did I
+             actually match" is otherwise unanswerable without scrolling.
+             Counts MATCHES, not rendered rows — and says so when the cap
+             hid some, since a silent truncation is how you conclude the
+             wildcard you are looking for does not exist. -->
+        <span class="wp-rt-suggestions__count">
+          {{ acMatches.length }} match{{ acMatches.length === 1 ? "" : "es" }}
+          <template v-if="acMatches.length > acRows.length">
+            · showing {{ acRows.length }}
+          </template>
+        </span>
+        <span class="wp-spacer" />
+        <!-- Says what the keys actually do. Choosing an `@` row goes on to
+             the filter panel rather than inserting a bare ref, so Enter is
+             labelled for where it leads. -->
+        <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
       </div>
-    </Teleport>
-
-    <!-- Backdrop click cancels the picker without inserting anything. To
-         insert an unfiltered @{uuid}, use the Skip button inside the
-         picker. The picker itself is anchored beneath (or above) the
-         clicked chip / host element via `pickerAnchor` — a popover,
-         not a modal — so it feels like a contextual control on the
-         element the user just touched. -->
-    <Teleport v-if="pickerOpen" to="body">
-      <div class="wp-subcat-picker__backdrop" :class="teleportThemeClass()" @click="cancelPicker"></div>
       <div
-        class="wp-subcat-picker__anchor"
-        :class="[teleportThemeClass(), { 'wp-subcat-picker__anchor--flipped': pickerAnchor.flipped }]"
-        :style="{
-          top: pickerAnchor.top + 'px',
-          left: pickerAnchor.left + 'px',
-        }"
-        @click.stop
+        v-for="(row, i) in (acTrigger === 'tag' ? [] : acRows)"
+        :key="row.token"
+        class="wp-rt-suggestions__item"
+        :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
+        :data-active="i === acActive ? '' : null"
+        role="option"
+        :aria-selected="i === acActive"
+        @mousedown="(e) => onSuggestionMouseDown(e, row.token)"
+        @mouseenter="acActive = i"
       >
-        <SubcategoryFilterPicker
-          :wildcard-name="pickerWildcardName"
-          :pool-origin="pickerPoolOrigin"
-          :sub-categories="pickerSubCats"
-          :tag-groups="pickerTagGroups"
-          :option-tag-sets="pickerOptionTagSets"
-          :initial-expr="pickerInitialExpr"
-          :initial-exclude-null="pickerInitialExcludeNull"
-          :mode="pickerMode"
-          :has-null-option="pickerHasNull"
-          @apply="onPickerApply"
-          @back="onPickerBack"
-          @skip="onPickerSkip"
-          @delete="onPickerDelete"
+        <!-- The glyph sits in a tinted box in its OWN kind's colour. A `$var`
+             can be written by a fixed_values or a combine as easily as by a
+             wildcard, and painting every row accent-violet throws away the
+             one cue that says which. -->
+        <span
+          class="wp-rt-suggestions__icon-box"
+          :style="acTrigger === '$' ? varTint(varBaseName(row.label)) : kindTint(row.kind)"
+          aria-hidden="true"
+        ><i :class="row.icon" /></span>
+        <span class="wp-rt-suggestions__body">
+          <span
+            class="wp-rt-suggestions__label"
+            :class="acTrigger === '$' ? varColorClass(varBaseName(row.label)) : null"
+          >
+            <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span
+            ><template v-if="row.isAxis"
+              >{{ row.label.slice(0, row.label.indexOf('.')) }}<span
+                class="wp-rt-suggestions__axis"
+              >.{{ row.label.slice(row.label.indexOf('.') + 1) }}</span></template
+            ><template v-else>{{ row.label }}</template>
+          </span>
+          <!-- Second line: the facts that separate same-named entries. For
+               `@` these are structural (options/axes/tags); for `$` it is
+               the writer. Either way the row answers "which one is this?"
+               without the user having to insert it and find out. -->
+          <span v-if="row.uuid || row.facts.length || row.producer" class="wp-rt-suggestions__sub">
+            <span v-if="row.uuid" class="wp-rt-suggestions__uuid">{{ row.uuid }}</span>
+            <template v-if="row.producer">
+              <span v-if="row.producer.verb">{{ row.producer.verb }}</span>
+              <!-- The module name is the identifying half of the sentence,
+                   so it is the part that gets picked out. -->
+              <span v-if="row.producer.moduleName" class="wp-rt-suggestions__by">
+                {{ row.producer.moduleName }}
+              </span>
+              <span v-if="row.producer.moduleName && row.producer.tail" class="wp-rt-suggestions__sep">·</span>
+              <span v-if="row.producer.tail" class="wp-rt-suggestions__node">{{ row.producer.tail }}</span>
+            </template>
+            <span
+              v-for="fact in row.facts"
+              :key="fact"
+              class="wp-rt-suggestions__fact"
+            >{{ fact }}</span>
+            <!-- Same mark the chip and the filter header carry, so "this is
+                 the node's copy" reads identically wherever it appears. -->
+            <span
+              v-if="row.fromNode"
+              class="wp-rt-suggestions__origin"
+              data-test="suggestion-origin-node"
+            ><i class="pi pi-database" aria-hidden="true" /> this node</span>
+            <span v-if="row.badge" class="wp-rt-suggestions__badge">{{ row.badge }}</span>
+            <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
+          </span>
+        </span>
+        <!-- Funnel marks the rows that lead to a filter — i.e. the ones
+             whose wildcard declares tags to filter by. Shown on the active
+             row only: on every row it becomes a column of noise, and the
+             next step applies to the row you are on. -->
+        <i
+          v-if="row.filterable && i === acActive"
+          class="pi pi-filter wp-rt-suggestions__funnel"
+          aria-hidden="true"
         />
       </div>
-    </Teleport>
+      <!-- Reference a module that does not exist yet. Inserts the red broken
+           chip under this name; clicking it later repoints it. -->
+      <div
+        v-if="acPlaceholderName"
+        class="wp-rt-suggestions__item wp-rt-suggestions__item--placeholder"
+        :data-active="acActive === acItems.length ? '' : null"
+        role="option"
+        :aria-selected="acActive === acItems.length"
+        data-test="suggestion-placeholder"
+        @mousedown.prevent="insertPlaceholderRef(acPlaceholderName)"
+        @mouseenter="acActive = acItems.length"
+      >
+        <span class="wp-rt-suggestions__icon-box wp-rt-suggestions__icon-box--placeholder" aria-hidden="true">
+          <i class="pi pi-plus" />
+        </span>
+        <span class="wp-rt-suggestions__body">
+          <span class="wp-rt-suggestions__label">
+            Placeholder <span class="wp-rt-suggestions__placeholder-name">@{{ acPlaceholderName }}</span>
+          </span>
+          <span class="wp-rt-suggestions__sub">
+            not in the library yet · repoint it later
+          </span>
+        </span>
+      </div>
+    </Popover>
+
+    <!-- A press outside cancels the picker without inserting anything. To
+         insert an unfiltered @{uuid}, use the Skip button inside the
+         picker. The picker hangs beneath (or above) the clicked chip /
+         host element via `pickerAnchor` — a popover, not a modal — so it
+         feels like a contextual control on the element the user just
+         touched. Escape is `onPickerEscape`'s (back or cancel). -->
+    <!-- The kit Popover's own prop, turning its focus move OFF: focus stays
+         where it was, as before (the picker's keys are window-level). -->
+    <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+    <Popover :autofocus="false"
+      :open="pickerOpen"
+      :anchor="pickerAnchor"
+      label="Filter reference"
+      class="wp-subcat-picker__anchor"
+      :class="teleportThemeClass()"
+      @update:open="(v: boolean) => { if (!v) cancelPicker(); }"
+    >
+      <SubcategoryFilterPicker
+        :wildcard-name="pickerWildcardName"
+        :pool-origin="pickerPoolOrigin"
+        :sub-categories="pickerSubCats"
+        :tag-groups="pickerTagGroups"
+        :option-tag-sets="pickerOptionTagSets"
+        :initial-expr="pickerInitialExpr"
+        :initial-exclude-null="pickerInitialExcludeNull"
+        :mode="pickerMode"
+        :has-null-option="pickerHasNull"
+        @apply="onPickerApply"
+        @back="onPickerBack"
+        @skip="onPickerSkip"
+        @delete="onPickerDelete"
+      />
+    </Popover>
 
     <RemapRefPopup
       v-if="remapOpen"
@@ -3268,43 +3160,27 @@ function onHostKeydown(ev: KeyboardEvent): void {
 
 <style>
 /* Autocomplete popover -------------------------------------------------- *
- * NOT scoped — the popover is teleported to <body>, so a scoped selector
- * (which adds a `[data-v-…]` attribute) wouldn't match. The class names
- * are component-specific (`wp-rt-suggestions*`) so global is fine.
+ * NOT scoped — the list is a Popover panel under <body>, which a scoped
+ * selector (`[data-v-…]`) never reaches. The class names are
+ * component-specific (`wp-rt-suggestions*`) so global is fine. The Popover
+ * places, flips, caps and animates the panel; this is only its look.
  * ------------------------------------------------------------------------ */
-.wp-rt-suggestions {
-  position: fixed;
+.wp-popover.wp-rt-suggestions {
   /* POPOVER tier — above every modal overlay (9999 ModalShell … 10010
-     InjectorBindingModal). At 9999 this only cleared modals that were also
-     9999, winning on DOM order; inside a 10000+ modal it rendered behind. */
+     InjectorBindingModal). */
   z-index: 10020;
-  min-width: 200px;
+  min-width: 240px;
   max-width: 360px;
-  max-height: 240px;
   overflow-y: auto;
   background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border-strong, rgba(255, 255, 255, 0.14));
-  border-radius: var(--wp-radius);
-  padding: 0 var(--wp-space-2) var(--wp-space-2);
-  box-shadow: var(--wp-shadow-lg, var(--wp-shadow, 0 10px 30px rgba(0, 0, 0, 0.45)));
+  /* The outline is the Popover's inset ring (1px), so the padding has 1px more. */
+  padding: 1px calc(var(--wp-space-2) + 1px) calc(var(--wp-space-2) + 1px);
+  box-shadow: inset 0 0 0 1px var(--wp-border-strong), var(--wp-shadow-lg, var(--wp-shadow-md));
   display: flex;
   flex-direction: column;
   gap: 1px;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);
-  animation: wp-rt-suggestions-in 0.12s ease-out;
-}
-.wp-rt-suggestions--up {
-  transform: translateY(-100%);
-  animation-name: wp-rt-suggestions-in-up;
-}
-@keyframes wp-rt-suggestions-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes wp-rt-suggestions-in-up {
-  from { opacity: 0; transform: translateY(calc(-100% + 4px)); }
-  to   { opacity: 1; transform: translateY(-100%); }
 }
 .wp-rt-suggestions__head {
   display: flex;
@@ -3519,7 +3395,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-weight: var(--wp-weight-semibold);
 }
 
+/* Listbox options (role="option"): focus stays in the text, arrows move. */
 .wp-rt-suggestions__item {
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: var(--wp-space-4);
@@ -3660,30 +3538,19 @@ function onHostKeydown(ev: KeyboardEvent): void {
   color: var(--wp-text);
 }
 
-/* Step-2 SubcategoryFilterPicker — anchored popover next to the
-   clicked chip (or below the host on insert flow). Teleported to
-   <body> so it escapes ancestor overflow/transform contexts. Backdrop
-   is a transparent click-target full-viewport layer that cancels the
-   picker (Skip semantics — no insert). Escape key dismisses the
-   same way. */
-/* Z-index sits in the autocomplete-popover tier (9999), NOT the old
-   1000/1001. On the canvas the derivation/wildcard instance modal renders
-   on its own high-z overlay; at 1000/1001 the body-teleported picker fell
-   BEHIND that modal. The picker tracks the autocomplete popover's tier so it
-   clears every modal: those run up to 10010 (InjectorBindingModal), so the
-   old 10000/10001 was no longer above all of them. Backdrop sits just under
-   the anchor, both above the modal tier. */
-.wp-subcat-picker__backdrop {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  z-index: 10020;
-}
-.wp-subcat-picker__anchor {
-  position: fixed;
+/* Step-2 SubcategoryFilterPicker — a Popover at the clicked chip (or below
+   the host on the insert flow). The picker draws its own card, so the panel
+   is bare. Same tier as the autocomplete list, above every modal (they run
+   up to 10010, InjectorBindingModal), so the picker never falls behind the
+   canvas editor modal it was opened from. */
+.wp-popover.wp-subcat-picker__anchor {
   z-index: 10021;
-  /* Subtle drop-shadow so the popover reads as elevated even without
-     the dimmed backdrop of the previous modal version. */
+  padding: 0;
+  max-width: calc(100vw - 16px);
+  background: transparent;
+  box-shadow: none;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
+  /* Subtle drop-shadow so the popover reads as elevated. */
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
 }
 </style>

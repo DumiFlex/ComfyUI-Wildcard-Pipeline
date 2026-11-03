@@ -16,6 +16,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import WpImageZoom from "@/kit/WpImageZoom.vue";
 import CopyButton from "@/kit/CopyButton.vue";
@@ -684,7 +685,7 @@ const subLine = computed(() => {
                 <span class="wp-ifp__compare-line" :style="{ left: `${comparePos}%` }" aria-hidden="true" />
                 <span class="wp-ifp__compare-tag is-left">{{ cellName(compareCell) }}</span>
                 <span class="wp-ifp__compare-tag is-right">{{ cellName(cell) }}</span>
-                <input v-model.number="comparePos" type="range" min="0" max="100" class="wp-ifp__compare-range" aria-label="Compare slider">
+                <Slider v-model="comparePos" :min="0" :max="100" class="wp-ifp__compare-range" aria-label="Compare slider" data-test="image-filter-compare-slider" />
               </div>
               <img
                 v-else
@@ -834,11 +835,11 @@ const subLine = computed(() => {
                 v-tooltip="`Set by $${run.name}`"
                 :style="valueHue(run.axis ?? -1, run.name)"
               >{{ run.text }}</mark><template v-else>{{ run.text }}</template></template></div>
-              <textarea
+              <Textarea
                 v-else
                 class="wp-ifp__text"
-                :value="textValue(field)"
-                rows="4"
+                :model-value="textValue(field)"
+                :rows="4"
                 spellcheck="false"
                 :aria-label="`${field} prompt`"
                 :data-test="`image-filter-${field}`"
@@ -1063,7 +1064,12 @@ const subLine = computed(() => {
 .wp-ifp__compare-tag { position: absolute; top: 8px; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: rgb(0 0 0 / 0.6); color: white; font: 11px/1.4 var(--wp-font-sans); pointer-events: none; }
 .wp-ifp__compare-tag.is-left { left: 8px; }
 .wp-ifp__compare-tag.is-right { right: 8px; }
-.wp-ifp__compare-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+/* The kit Slider, invisible over the pair so a drag anywhere on the picture
+ * moves the split. Its track sits half a thumb (8px at md) in from each side,
+ * so the slider reaches that far past the picture and the track spans it
+ * exactly; `--wp-control-h-md` stretches the track to the picture's height. */
+.wp-ifp__compare > .wp-ifp__compare-range { position: absolute; top: 0; bottom: 0; left: -8px; width: calc(100% + 16px); --wp-control-h-md: 100%; opacity: 0; }
+.wp-ifp__compare-range :deep(.wp-slider__track) { cursor: ew-resize; }
 
 .wp-ifp__side { width: 300px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-left: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); }
 .wp-ifp__side > * { flex-shrink: 0; }
@@ -1087,8 +1093,8 @@ const subLine = computed(() => {
 .wp-ifp__marked mark { padding: 0 2px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-text); background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 20%, transparent); box-shadow: inset 0 -1.5px 0 var(--wp-ifp-hue, var(--wp-accent)); }
 .wp-ifp__marked mark:hover { background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 38%, transparent); }
 .wp-ifp__badge { font: 600 10px var(--wp-font-sans); padding: 1px 5px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-ifp__text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; padding: 6px; border: 1px solid var(--wp-border); border-radius: min(4px, var(--wp-radius-cap, 999px)); background: var(--wp-bg2); color: var(--wp-text); font: 11px/1.45 var(--wp-font-mono, monospace); }
-.wp-ifp__text:focus { outline: none; border-color: var(--wp-accent); }
+/* The kit Textarea draws the box; prompts read in small monospace. */
+.wp-ifp__text { min-height: 64px; font: 11px/1.45 var(--wp-font-mono, monospace); }
 .wp-ifp__hint { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ifp__warn { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-amber); }
 .wp-ifp__brush { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; }

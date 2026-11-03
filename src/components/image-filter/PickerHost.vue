@@ -6,6 +6,7 @@
  * it tucked away to look at the canvas.
  */
 import { computed, ref, watch } from "vue";
+import Button from "@/kit/Button.vue";
 import PickerModal from "./PickerModal.vue";
 import { app } from "#comfyui/app";
 import { submitAnswer, waiting } from "../../extension/image-filter";
@@ -34,22 +35,24 @@ function onAnswer(answer: PickAnswer): void {
     @answer="onAnswer"
     @minimize="minimized = true"
   />
-  <button
+  <Button
     v-else-if="current"
-    type="button"
+    variant="secondary"
     class="wp-ifp-pill"
     data-test="image-filter-pill"
-    title="Open the picker"
+    hint="Open the picker"
     @click="minimized = false"
   >
     <span class="wp-ifp-pill__dot" aria-hidden="true" />
     Image Filter is waiting<template v-if="waiting.length > 1"> ({{ waiting.length }})</template>
     <span class="wp-ifp-pill__open">Open</span>
-  </button>
+  </Button>
 </template>
 
 <style scoped>
-.wp-ifp-pill { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9998; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--wp-radius-cap, 999px); border: 1px solid var(--wp-accent); background: var(--wp-bg2); color: var(--wp-text); font: 12px var(--wp-font-sans); cursor: pointer; box-shadow: var(--wp-shadow-md); }
+/* The kit Button, floated at the bottom of the canvas as a pill. */
+.wp-ifp-pill :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 8px; }
+.wp-ifp-pill.wp-btn { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9998; gap: 8px; padding: 0 14px; border-radius: var(--wp-radius-cap, 999px); border-color: var(--wp-accent); box-shadow: var(--wp-shadow-md); }
 .wp-ifp-pill__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wp-amber); animation: wp-ifp-pulse 1.4s ease-in-out infinite; }
 .wp-ifp-pill__open { color: var(--wp-accent-text, var(--wp-accent)); font-weight: 600; }
 @keyframes wp-ifp-pulse { 50% { opacity: .35; } }

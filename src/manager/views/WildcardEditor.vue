@@ -14,7 +14,7 @@
  * the EditorFrame's history button works on the next mount.
  */
 import WpNumber from "@/kit/WpNumber.vue";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
@@ -175,11 +175,8 @@ const options = ref<WildcardOption[]>([
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
 ]);
-/** Which option row's tag picker is expanded (option id), H2. */
+/** Which option row's tag picker is open (option id), H2. */
 const openOptTagPicker = ref<string | null>(null);
-/** When a menu opens too close to the viewport bottom we flip it to open
- *  upward so it isn't clipped off the end of the page (bugs #1/#4). */
-const pickerDropUp = ref(false);
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
 const saveError = ref<string>("");
@@ -434,132 +431,18 @@ function chipStyle(tag: string): Record<string, string> {
   return tagChipStyle(tagGroups.value, tag);
 }
 
-/** True when the trigger that fired `ev` sits within `menuPx` of the
- *  viewport bottom — i.e. a downward menu would be clipped, so flip up. */
-function shouldDropUp(ev: MouseEvent | undefined, menuPx: number): boolean {
-  const el = ev?.currentTarget as HTMLElement | null;
-  const r = el?.getBoundingClientRect();
-  return !!r && window.innerHeight - r.bottom < menuPx;
-}
-
-/** Close the editor's transient overlays: the per-option tag picker and the
- *  options filter's tag menu. Used by the document-level outside-click +
- *  Escape handlers (bug #3); the sub-categories card dismisses its own
- *  kebab menus and inline add-tag input the same way. */
-function closeAllMenus(): void {
-  openOptTagPicker.value = null;
-  // The options filter's tag menu is teleported like the per-option one, so it
-  // needs the same dismissal — without this it stayed open until its own
-  // button was clicked again.
-  optTagMenuOpen.value = false;
-}
-
-/** Outside-click: any pointer landing outside an open menu / its trigger
- *  dismisses everything. Clicks inside these regions are handled by their
- *  own (`@click.stop`) handlers, so we bail when the target is within one. */
-function onDocPointerDown(e: MouseEvent): void {
-  const t = e.target as HTMLElement | null;
-  if (
-    t?.closest(
-      // `.opt-tags__picker` is listed separately: the menu is teleported to
-      // <body>, so it is no longer inside `.opt-tags` and would otherwise be
-      // dismissed by its own clicks.
-      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags,"
-      + " .opt-tags__picker, .wc-optfilter__tagbtn",
-    )
-  ) {
-    return;
-  }
-  closeAllMenus();
-}
-
-function onDocKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape") closeAllMenus();
-}
-
 /* ── Per-option grouped multi-select (§4.3, H2) ─────────────────────── */
 
 /** Box model for the option tag picker — same axis grouping as the
  *  registry boxes but used to render the grouped checkbox sections. */
 const optionTagGroups = computed<SubcatGroup[]>(() => subcatGroups.value);
 
-
-
-
-/**
- * Viewport coordinates for the teleported tag menu.
- *
- * The menu used to be `position: absolute` inside the table cell, which put it
- * inside `.wp-editor__body` — an `overflow: auto` scroller. Anything extending
- * past that container's edge was simply cut off, which is why the menu lost its
- * bottom rows near the foot of the page. Teleporting to <body> and positioning
- * from the trigger's rect is what every other popover here already does.
- */
-const optTagAnchor = ref({ top: 0, left: 0, width: 0 });
-/** Height reserved when deciding whether to flip above the trigger. Matches
- *  the menu's own cap (240px list + search + padding). */
-const OPT_TAG_MENU_PX = 300;
-
-function toggleOptTagPicker(optionId: string, ev?: MouseEvent): void {
-  const opening = openOptTagPicker.value !== optionId;
-  openOptTagPicker.value = opening ? optionId : null;
-  if (!opening) return;
-  pickerDropUp.value = shouldDropUp(ev, OPT_TAG_MENU_PX);
-  optTagTriggerEl = (ev?.currentTarget as HTMLElement | null) ?? null;
-  const r = optTagTriggerEl?.getBoundingClientRect();
-  if (!r) return;
-  // Fixed coordinates, so no scroll offset is added — and the menu is
-  // re-anchored on every open rather than tracked, since the editor body
-  // scrolls underneath it and a stale anchor is worse than a closed menu.
-  optTagAnchor.value = {
-    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
-    left: r.left,
-    width: r.width,
-  };
-}
-
-/** The button the open menu belongs to, so it can be re-measured on scroll. */
-let optTagTriggerEl: HTMLElement | null = null;
-
-/**
- * Keep the menu attached to its trigger while the editor scrolls under it.
- *
- * A fixed-position popover does not move with the page, so without this it
- * would sit stranded beside unrelated rows. Closing instead was the first
- * attempt and is wrong: the browser scrolls a partly-visible button into view
- * as part of clicking it, so opening a menu near either edge closed it in the
- * same gesture.
- *
- * Once the trigger has left the viewport entirely there is nothing to anchor
- * to, and closing IS right.
- */
-function reanchorOptTagPicker(ev?: Event): void {
-  // A scroll that happens INSIDE a teleported menu is the user reading its own
-  // list — with the wheel or by dragging its scrollbar — and must not dismiss
-  // it. Only movement of the surface UNDER the menu is a reason to react.
-  const from = ev?.target as HTMLElement | null;
-  if (from?.closest?.(".opt-tags__picker")) return;
-  // Re-measure rather than dismiss. Closing on any layout change meant the
-  // menu vanished the moment the list behind it changed height — filtering to
-  // zero results shortens the page, which fires a scroll, which closed the
-  // very menu you were using to filter.
-  if (optTagMenuOpen.value) {
-    const r = optFilterTriggerEl?.getBoundingClientRect();
-    if (!r || r.bottom < 0 || r.top > window.innerHeight) optTagMenuOpen.value = false;
-    else positionFilterMenu();
-  }
-  if (openOptTagPicker.value === null || !optTagTriggerEl) return;
-  const r = optTagTriggerEl.getBoundingClientRect();
-  if (r.bottom < 0 || r.top > window.innerHeight) {
-    openOptTagPicker.value = null;
-    return;
-  }
-  pickerDropUp.value = window.innerHeight - r.bottom < OPT_TAG_MENU_PX;
-  optTagAnchor.value = {
-    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
-    left: r.left,
-    width: r.width,
-  };
+/** The tag picker Popover opens or closes a row's menu. A close only clears
+ *  the row it came from: pressing another row's chevron closes this one
+ *  (outside press) just before that row opens. */
+function setOptTagPicker(optionId: string, open: boolean): void {
+  if (open) openOptTagPicker.value = optionId;
+  else if (openOptTagPicker.value === optionId) openOptTagPicker.value = null;
 }
 
 
@@ -620,21 +503,7 @@ function toggleFallback(o: WildcardOption): void {
 // `normalizeTagGroups` / `normalizeTagGroupKinds` / `serializeTagGroups` /
 // `serializeTagGroupKinds` live in `components/wildcard-editor/tag-groups`.
 
-onUnmounted(() => {
-  document.removeEventListener("click", onDocPointerDown);
-  document.removeEventListener("keydown", onDocKeydown);
-  window.removeEventListener("scroll", reanchorOptTagPicker, true);
-  window.removeEventListener("resize", reanchorOptTagPicker);
-});
-
 onMounted(async () => {
-  // Outside-click + Escape dismissal for all transient menus (bug #3).
-  document.addEventListener("click", onDocPointerDown);
-  document.addEventListener("keydown", onDocKeydown);
-  // Capture, so a scroll in ANY nested scroller reaches this — scroll events
-  // do not bubble, and the editor body is the one that actually moves.
-  window.addEventListener("scroll", reanchorOptTagPicker, true);
-  window.addEventListener("resize", reanchorOptTagPicker);
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
     try {
@@ -1055,36 +924,6 @@ function nudgeOption(id: string, dir: -1 | 1): void {
 const optQuery = ref("");
 const optTagFilter = ref<string[]>([]);
 const optTagMenuOpen = ref(false);
-/** Viewport coordinates for the teleported filter menu. */
-const optFilterAnchor = ref({ top: 0, left: 0 });
-/** True when the filter menu should grow upward instead. */
-const optFilterDropUp = ref(false);
-
-/** The filter button, kept so the menu can be re-measured against it. */
-let optFilterTriggerEl: HTMLElement | null = null;
-
-function positionFilterMenu(): void {
-  const r = optFilterTriggerEl?.getBoundingClientRect();
-  if (!r) return;
-  // Prefer below, but flip when there is meaningfully more room above — near
-  // the foot of the page a downward menu has nowhere to go, and capping its
-  // height there would leave a 140px sliver.
-  const below = window.innerHeight - r.bottom;
-  const above = r.top;
-  optFilterDropUp.value = below < 260 && above > below;
-  optFilterAnchor.value = {
-    top: optFilterDropUp.value ? r.top - 4 : r.bottom + 4,
-    left: r.left,
-  };
-}
-
-function toggleOptTagMenu(ev: MouseEvent): void {
-  const opening = !optTagMenuOpen.value;
-  optTagMenuOpen.value = opening;
-  if (!opening) return;
-  optFilterTriggerEl = (ev.currentTarget as HTMLElement | null) ?? null;
-  positionFilterMenu();
-}
 
 const optionFilter = computed(() => ({
   query: optQuery.value,
@@ -1788,11 +1627,8 @@ defineExpose({
           :all-tags="subCategories"
           :groups="subcatGroups"
           :selected-tags="optTagFilter"
-          :menu-open="optTagMenuOpen"
-          :anchor="optFilterAnchor"
-          :drop-up="optFilterDropUp"
+          v-model:menu-open="optTagMenuOpen"
           :tag-style="chipStyle"
-          @toggle-menu="toggleOptTagMenu"
           @toggle-tag="toggleOptTagFilter"
           @clear="clearOptionFilter"
         />
@@ -1964,11 +1800,13 @@ defineExpose({
                    since dropping between two visible rows says nothing about
                    the hidden ones between them. The bulk moves above stay
                    available there — their destination is absolute. -->
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 class="opt-grip"
+                icon="pi-bars"
                 :disabled="optionFilterActive || undefined"
-                :title="optionFilterActive
+                :hint="optionFilterActive
                   ? 'Dragging is off while a filter is active — use Bulk edit ▸ Top / Bottom / Move here'
                   : 'Drag to reorder · Alt+↑/↓ to move one step'"
                 :aria-label="`Reorder ${o.value || 'option'}`"
@@ -1978,7 +1816,7 @@ defineExpose({
                 @dragend="onOptDragEnd"
                 @keydown.alt.up.prevent="nudgeOption(o.id, -1)"
                 @keydown.alt.down.prevent="nudgeOption(o.id, 1)"
-              ><i class="pi pi-bars" aria-hidden="true" /></button>
+              />
             </td>
             <td>
               <WpNumber commit="input"
@@ -2064,14 +1902,12 @@ defineExpose({
                 :view="optionTagView(o)"
                 :expanded="expandedOptTags.has(o.id)"
                 :picker-open="openOptTagPicker === o.id"
-                :anchor="optTagAnchor"
-                :drop-up="pickerDropUp"
                 :groups="optionTagGroups"
                 :all-tags="subCategories"
                 :tag-style="chipStyle"
                 @toggle-tag="(t: string) => toggleOptionTag(o, t)"
                 @toggle-expanded="toggleOptTagsExpanded(o.id)"
-                @toggle-picker="(ev: MouseEvent) => toggleOptTagPicker(o.id, ev)"
+                @update:picker-open="(v: boolean) => setOptTagPicker(o.id, v)"
               />
             </td>
             <td>
@@ -2101,7 +1937,7 @@ defineExpose({
             <td :colspan="bulkMode ? 6 : 5" class="wc-optfilter__empty" data-test="wc-opt-noresults">
               <b>No option matches this filter</b>
               All {{ options.length }} are still here — only the view is filtered.
-              <button type="button" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</button>
+              <Button variant="link" size="sm" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</Button>
             </td>
           </tr>
         </tbody>
@@ -2258,24 +2094,10 @@ defineExpose({
 .opt-col-grip { width: 26px; }
 /* The only pointer affordance the value cell's contenteditable does not
    poison. Hidden until row hover so the resting table is unchanged. */
-.opt-grip {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 22px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  font-size: 11px;
-  cursor: grab;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
+/* The kit row icon button, shown on row hover only. */
+.opt-grip { cursor: grab; opacity: 0; transition: opacity 0.1s; }
 tr:hover .opt-grip { opacity: 0.7; }
-.opt-grip:hover { opacity: 1; background: var(--wp-bg-3); }
-.opt-grip:focus-visible { opacity: 1; outline: 2px solid var(--wp-accent-500); outline-offset: 1px; }
+.opt-grip:hover, .opt-grip:focus-visible { opacity: 1; }
 .opt-grip:disabled { cursor: not-allowed; }
 tr:hover .opt-grip:disabled { opacity: 0.2; }
 
@@ -2294,11 +2116,6 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
 }
 
 /* Also styled inside OptionFilterBar; this copy serves the no-results row. */
-.wc-optfilter__clear {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-}
 .wc-optfilter__empty {
   padding: var(--wp-space-6) var(--wp-space-5);
   text-align: center; color: var(--wp-text-dim); font-size: 12px;

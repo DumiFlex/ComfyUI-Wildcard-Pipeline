@@ -12,6 +12,7 @@
  */
 import { computed, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
 import Modal from "@/kit/Modal.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
 import RelativeDate from "@/kit/RelativeDate.vue";
@@ -108,23 +109,22 @@ watch(
         <div v-else class="wp-history-panel__body">
           <!-- Left: list of snapshots -->
           <div class="wp-history-list" data-test="history-list">
-            <button
+            <ListRow
               v-for="(entry, idx) in ordered"
               :key="`${entry.saved_at}-${idx}`"
-              type="button"
               class="wp-history-item"
-              :data-active="idx === selected ? 'true' : 'false'"
+              :selected="idx === selected"
               :data-test="`history-entry-${idx}`"
               @click="selected = idx"
             >
-              <div class="wp-history-item__top">
+              <span class="wp-history-item__top">
                 <span class="wp-history-item__label">{{ itemLabel(idx) }}</span>
                 <span class="wp-history-item__time">
                   <RelativeDate :value="entry.saved_at" />
                 </span>
-              </div>
-              <div class="wp-history-item__name">{{ entry.name || "(untitled)" }}</div>
-            </button>
+              </span>
+              <span class="wp-history-item__name">{{ entry.name || "(untitled)" }}</span>
+            </ListRow>
           </div>
 
           <!-- Right: preview pane -->
@@ -196,26 +196,9 @@ watch(
   gap: var(--wp-space-2);
 }
 
-.wp-history-item {
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius);
-  padding: var(--wp-space-5) var(--wp-space-5);
-  color: var(--wp-text);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.wp-history-item:hover {
-  background: var(--wp-bg-3);
-}
-.wp-history-item[data-active="true"] {
-  background: rgba(79, 70, 229, 0.20);
-  background: color-mix(in oklab, var(--wp-accent-600) 20%, transparent);
-  border-color: rgba(99, 102, 241, 0.50);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 50%, transparent);
-}
+/* A kit ListRow holding two lines: label + time, then the saved name. */
+.wp-history-item { padding: var(--wp-space-4) var(--wp-space-5); }
+.wp-history-item :deep(.wp-list-row__label) { display: flex; flex-direction: column; }
 .wp-history-item__top {
   display: flex;
   justify-content: space-between;

@@ -7,6 +7,7 @@
  * Kept thin since the 2026-05-09 extraction; previous body lived
  * inline alongside two verbatim copies for combine + fixed_values.
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import SeedLockControls from "../../_shared/SeedLockControls.vue";
@@ -66,17 +67,18 @@ function onMatchInput(e: Event): void {
     <label class="match" :class="{ 'match--on': matchVar }" data-test="runtime-match">
       <i class="pi pi-equals" aria-hidden="true" />
       <span>Match variable</span>
-      <span class="match__sigil">$</span>
-      <input
+      <Input
+        size="sm"
+        mono
+        prefix="$"
         class="match__input"
-        type="text"
         spellcheck="false"
         placeholder="model_variant"
         data-test="runtime-match-input"
-        :value="matchVar"
+        :model-value="matchVar"
         :disabled="frameActive || undefined"
         @change="onMatchInput"
-      >
+      />
     </label>
     <p
       v-if="matchVar"
@@ -120,17 +122,7 @@ function onMatchInput(e: Event): void {
 }
 .match .pi { font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
 .match--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); }
-.match__sigil { font-family: var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); margin-right: -4px; }
-.match__input {
-  width: 120px;
-  padding: 2px 6px;
-  border: 1px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: min(2px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg2);
-  color: var(--wp-text);
-  font: 11px var(--wp-font-mono, monospace);
-}
-.match__input:disabled { opacity: 0.45; cursor: not-allowed; }
+.match .match__input { width: 120px; }
 .runtime__frame-hint {
   margin: 4px 0 0;
   font: 10px var(--wp-font-sans);

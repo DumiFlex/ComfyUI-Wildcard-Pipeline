@@ -62,14 +62,14 @@ const s = props.state;
       </ul>
     </div>
     <div class="wp-ai-found__actions">
-      <button
+      <Button
         v-if="s.count.value > 1"
-        type="button"
-        class="wp-ai-found__mini"
+        variant="link"
+        size="sm"
         :disabled="busy"
         data-test="ai-found-all"
         @click="s.setAll(s.picks.value.size < s.count.value)"
-      >{{ s.picks.value.size < s.count.value ? "Tick all" : "Untick all" }}</button>
+      >{{ s.picks.value.size < s.count.value ? "Tick all" : "Untick all" }}</Button>
       <span class="wp-ai-found__spacer" />
       <Button size="sm" variant="ghost" :disabled="busy" data-test="ai-found-none" @click="emit('none')">None of these</Button>
       <Button
@@ -126,7 +126,5 @@ const s = props.state;
 }
 .wp-ai-found__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wp-ai-found__spacer { flex: 1; }
-.wp-ai-found__mini { border: 0; background: none; padding: 0 4px; font-size: 11.5px; color: var(--wp-text-dim); cursor: pointer; }
-.wp-ai-found__mini:hover { color: var(--wp-text); }
 .wp-ai-found__used { margin: 0; display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--wp-text-muted); }
 </style>

@@ -7,6 +7,7 @@ import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import AppTopbar from "../layout/AppTopbar.vue";
 import { useUiStore } from "../stores/uiStore";
 import * as releaseCheck from "../composables/useReleaseCheck";
+import * as browserHistory from "../composables/useBrowserHistory";
 
 // Community status pill / sign-in / user-menu surfaces moved to the
 // `feat/community-tab` branch alongside the views that need them. Topbar
@@ -104,16 +105,13 @@ describe("AppTopbar.vue", () => {
   });
 
   it("calls router.back() on click when enabled", async () => {
+    // The kit Button ignores clicks while its `disabled` prop is set, so
+    // pretend there is history to go back to.
+    vi.spyOn(browserHistory, "useBrowserHistory").mockReturnValue({ canGoBack: ref(true) });
     const { wrap, router } = await mountTopbar();
-    // Manually push a second route so in-app history has an entry.
-    await router.push("/dashboard");
-    await flushPromises();
     const backSpy = vi.spyOn(router, "back").mockImplementation(() => {});
-    // Force canGoBack by triggering with a mocked history length
-    // (JSDOM history.length stays 1; we spy on the handler directly).
     const btn = wrap.find('[data-test="topbar-back"]');
-    // Remove disabled attribute to allow the click to fire
-    await btn.element.removeAttribute("disabled");
+    expect(btn.attributes("disabled")).toBeUndefined();
     await btn.trigger("click");
     expect(backSpy).toHaveBeenCalledOnce();
     backSpy.mockRestore();

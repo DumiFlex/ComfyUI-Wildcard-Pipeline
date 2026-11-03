@@ -5,6 +5,7 @@
  * rule writes a different `target_var`), so there's no
  * variable-binding row to override. Rule editing stays in SPA.
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import Button from "@/kit/Button.vue";
@@ -37,12 +38,13 @@ function onResetName(): void {
     <div class="id__row">
       <span class="id__key">Display name</span>
       <div class="id__input-row">
-        <input
+        <Input
+          size="sm"
+          mono
           class="id__input"
-          :class="{ 'id__input--mod': nameOverridden }"
+          :tone="nameOverridden ? 'accent' : undefined"
           data-test="id-name"
-          type="text"
-          :value="nameValue"
+          :model-value="nameValue"
           :placeholder="module.meta?.library_name ?? 'module name'"
           aria-label="Display name"
           @input="onNameInput"
@@ -84,20 +86,6 @@ function onResetName(): void {
 .id__key {
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
-}
-.id__input {
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  padding: 5px 8px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-}
-.id__input:focus { border-color: var(--wp-accent); outline: none; }
-.id__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-.id__input--mod {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
 }
 .id__input-row {
   display: flex;

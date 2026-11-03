@@ -26,6 +26,7 @@
  * bundle row gets `indent=1`); each level adds 16px of left padding.
  */
 import { computed, ref, useId } from "vue";
+import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import Chip from "@/kit/Chip.vue";
@@ -289,30 +290,26 @@ function onRowClick(ev: MouseEvent): void {
       aria-hidden="true"
     />
     <span v-else class="wp-picker-row__dep-chips">
-      <button
+      <Chip
         v-if="props.unselectedDeps.length > 0"
-        type="button"
-        class="wp-dep-chip"
+        as="button"
+        tone="warn"
+        icon="pi-arrow-right"
         :aria-expanded="unselectedExpanded ? 'true' : 'false'"
         :aria-controls="unselectedListId"
         data-test="dep-warn-chip"
         @click="toggleUnselected"
-      >
-        <i class="pi pi-arrow-right" aria-hidden="true" />
-        <span>Requires {{ props.unselectedDeps.length }}</span>
-      </button>
-      <button
+      >Requires {{ props.unselectedDeps.length }}</Chip>
+      <Chip
         v-if="props.missingDeps.length > 0"
-        type="button"
-        class="wp-dep-chip wp-dep-chip--missing"
+        as="button"
+        tone="danger"
+        icon="pi-exclamation-triangle"
         :aria-expanded="missingExpanded ? 'true' : 'false'"
         :aria-controls="missingListId"
         data-test="dep-missing-chip"
         @click="toggleMissing"
-      >
-        <i class="pi pi-exclamation-triangle" aria-hidden="true" />
-        <span>Missing {{ props.missingDeps.length }}</span>
-      </button>
+      >Missing {{ props.missingDeps.length }}</Chip>
     </span>
 
     <div
@@ -330,13 +327,15 @@ function onRowClick(ev: MouseEvent): void {
         <i :class="depIconClass(d)" aria-hidden="true" />
         <span class="wp-row-dep-list__name">{{ d.name }}</span>
         <span class="wp-row-dep-list__id">{{ d.id.slice(0, 8) }}</span>
-        <button
-          type="button"
+        <Button
+          variant="link"
+          size="sm"
+          icon="pi-plus"
           class="wp-row-dep-list__action"
           :data-test="`dep-warn-select-${d.id}`"
           :aria-label="`Select ${d.name}`"
           @click="emit('select-dep', d.id)"
-        >+ select</button>
+        >Select</Button>
       </div>
     </div>
 
@@ -510,36 +509,6 @@ function onRowClick(ev: MouseEvent): void {
   gap: 6px;
 }
 
-/* Dep chip — amber (unselected deps) / red (truly missing).
- * Verbatim from prototype lines 190-199. */
-.wp-dep-chip {
-  background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
-  color: var(--wp-warn);
-  font-family: var(--wp-font);
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  padding: 2px 8px 2px 6px;
-  border-radius: var(--wp-radius-sm);
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-.wp-dep-chip--missing {
-  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
-  color: var(--wp-danger);
-  border-color: color-mix(in oklab, var(--wp-danger) 32%, transparent);
-}
-.wp-dep-chip .pi { font-size: 9px; }
-.wp-dep-chip:hover {
-  background: color-mix(in oklab, var(--wp-warn) 24%, transparent);
-}
-.wp-dep-chip--missing:hover {
-  background: color-mix(in oklab, var(--wp-danger) 22%, transparent);
-}
-
 /* Expanded dep list — spans full row width below the chip(s).
  * Verbatim from prototype lines 201-223. */
 .wp-row-dep-list {
@@ -584,23 +553,7 @@ function onRowClick(ev: MouseEvent): void {
   font-family: var(--wp-font-mono);
   font-size: 10px;
 }
-.wp-row-dep-list__action {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
-  color: var(--wp-warn);
-  font-size: 9.5px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  font-family: var(--wp-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.wp-row-dep-list__action:hover {
-  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
-}
+.wp-row-dep-list__action { margin-left: auto; }
 .wp-row-dep-list__verdict {
   margin-left: auto;
   color: var(--wp-danger);

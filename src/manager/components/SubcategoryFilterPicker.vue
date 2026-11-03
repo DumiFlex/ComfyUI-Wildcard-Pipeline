@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import SearchInput from "@/kit/SearchInput.vue";
+import { textareaEl } from "../utils/kit-field-el";
+import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
+import ListRow from "@/kit/ListRow.vue";
+import Textarea from "@/kit/Textarea.vue";
+import { vTooltip } from "@/kit/tooltip";
 import { computed, onMounted, ref, watch } from "vue";
 import {
   parse,
@@ -81,6 +87,7 @@ const excludeNull = ref<boolean>(props.initialExcludeNull);
  *  (`(warm or cool) and not vivid and (hair-natural or eye-vivid)` is 56
  *  characters) and a single-line field clipped everything past ~40, so the
  *  thing being authored was the thing you could not see. */
+/** The `<textarea>` inside the kit Textarea, drawn over the mirror. */
 const inputEl = ref<HTMLTextAreaElement | null>(null);
 const growable = useGrowableField(() => inputEl.value, { minHeight: 44 });
 const { hasMoreBelow, startResize } = growable;
@@ -354,15 +361,14 @@ function onApply(): void {
          behind it, so it shows a plain title. Everything below is identical. -->
     <div class="wp-subcat-picker__head">
       <template v-if="mode === 'insert'">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
+          icon="pi-angle-left"
           class="wp-subcat-picker__crumb"
           data-test="picker-back"
           @click="emit('back')"
-        >
-          <i class="pi pi-angle-left" aria-hidden="true" />
-          Suggestions
-        </button>
+        >Suggestions</Button>
         <span class="wp-subcat-picker__crumb-sep">/</span>
       </template>
       <i v-else class="pi pi-filter" aria-hidden="true" />
@@ -418,11 +424,11 @@ function onApply(): void {
                line short of the textarea mid-edit. -->
           <span>&#8203;</span>
         </div>
-        <textarea
+        <Textarea
           id="wp-subcat-expr"
-          ref="inputEl"
+          :ref="(c) => (inputEl = textareaEl(c))"
           v-model="expr"
-          rows="1"
+          :rows="1"
           aria-label="Sub-category filter expression"
           class="wp-subcat-picker__input"
           :class="{ 'wp-subcat-picker__input--invalid': error !== null }"
@@ -432,7 +438,7 @@ function onApply(): void {
           autocomplete="off"
           @scroll="growable.updateOverflowHint(); syncMirrorScroll();"
           @input="syncMirrorScroll"
-        ></textarea>
+        />
         <span v-if="hasMoreBelow" class="wp-subcat-picker__more" aria-hidden="true" />
         <!-- Triangle grip, matching every other resizable field in the app.
              Native `resize` is used nowhere here: it accumulates travel past
@@ -459,12 +465,13 @@ function onApply(): void {
         Unknown sub-category <code>{{ unknownTerm }}</code>
         <template v-if="didYouMean">
           — did you mean
-          <button
-            type="button"
+          <Button
+            variant="link"
+            size="sm"
             class="wp-subcat-picker__fixit"
             data-test="did-you-mean"
             @click="applySuggestion"
-          >{{ didYouMean }}</button>?
+          >{{ didYouMean }}</Button>?
         </template>
       </span>
       <span v-else>{{ error }}</span>
@@ -530,41 +537,37 @@ function onApply(): void {
       >
         <!-- An axis header is a button because it folds. Ungrouped tags have
              no axis to fold, so they render bare. -->
-        <button
+        <ListRow
           v-if="g.axis"
-          type="button"
+          size="sm"
+          :icon="collapsedAxes.has(g.axis) ? 'pi-chevron-right' : 'pi-chevron-down'"
+          :count="g.tags.length"
           class="wp-subcat-picker__group-head"
           data-test="axis-head"
           :aria-expanded="!collapsedAxes.has(g.axis)"
           @click="toggleAxis(g.axis)"
         >
-          <i
-            :class="collapsedAxes.has(g.axis) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'"
-            aria-hidden="true"
-          />
           <span class="wp-subcat-picker__group-name">{{ g.axis }}</span>
-          <span class="wp-subcat-picker__group-count">{{ g.tags.length }}</span>
-          <span class="wp-spacer" />
           <!-- A folded axis still reports whether anything inside it is in
                play, so folding never hides state. -->
-          <span v-if="axisSummary(g.tags)" class="wp-subcat-picker__group-sum">
-            {{ axisSummary(g.tags) }}
-          </span>
-        </button>
+          <template v-if="axisSummary(g.tags)" #end>
+            <span class="wp-subcat-picker__group-sum">{{ axisSummary(g.tags) }}</span>
+          </template>
+        </ListRow>
         <div v-if="!g.axis || !collapsedAxes.has(g.axis)" class="wp-subcat-picker__chips">
-          <button
+          <Chip
             v-for="sub in g.tags"
             :key="sub"
-            type="button"
+            v-tooltip="stateOf(sub) === 'dead'
+              ? `${sub} — declared by this wildcard but carried by no option`
+              : undefined"
+            as="button"
             class="wp-subcat-chip"
             data-test="subcat-chip"
             :data-value="sub"
             :data-state="stateOf(sub)"
-            :title="stateOf(sub) === 'dead'
-              ? `${sub} — declared by this wildcard but carried by no option`
-              : undefined"
             @click="insertAtCursor(sub)"
-          >{{ sub }}</button>
+          >{{ sub }}</Chip>
         </div>
       </div>
       <p v-if="visibleGroups.length === 0" class="wp-subcat-picker__no-tags" data-test="no-tags">
@@ -573,38 +576,34 @@ function onApply(): void {
       </div>
     </div>
     <div class="wp-subcat-picker__ops">
-      <button
+      <Chip
         v-for="op in OPERATORS"
         :key="op"
-        type="button"
+        as="button"
         class="wp-subcat-chip wp-subcat-chip--op"
         :data-test="'subcat-op'"
         :data-value="op"
         @click="insertAtCursor(op)"
-      >{{ op }}</button>
+      >{{ op }}</Chip>
     </div>
 
     <div class="wp-subcat-picker__actions">
-      <button
+      <Button
         v-if="mode === 'edit'"
-        type="button"
-        class="wp-btn wp-btn--danger wp-subcat-picker__delete"
+        variant="danger"
+        size="sm"
+        class="wp-subcat-picker__delete"
         data-test="picker-delete"
         @click="emit('delete')"
-      >Delete</button>
-      <button
-        type="button"
-        class="wp-btn"
-        data-test="picker-skip"
-        @click="emit('skip')"
-      >Skip</button>
-      <button
-        type="button"
-        class="wp-btn wp-btn--primary"
+      >Delete</Button>
+      <Button size="sm" data-test="picker-skip" @click="emit('skip')">Skip</Button>
+      <Button
+        variant="primary"
+        size="sm"
         data-test="picker-apply"
-        :disabled="applyDisabled || undefined"
+        :disabled="applyDisabled"
         @click="onApply"
-      >Apply</button>
+      >Apply</Button>
     </div>
   </div>
 </template>
@@ -700,6 +699,8 @@ function onApply(): void {
 }
 .wp-subcat-picker__input:focus {
   outline: none;
+  /* The mirror shows through: the kit field's focus fill must not cover it. */
+  background: transparent;
   border-color: var(--wp-accent-500);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
 }
@@ -777,17 +778,11 @@ function onApply(): void {
 /* The correction is highlighted, not underlined. Underlining the whole clause
    made the sentence the link; what the reader actually needs to spot is the
    one WORD they should have typed. */
-.wp-subcat-picker__fixit {
-  background: none;
-  border: none;
-  padding: 0;
+.wp-subcat-picker .wp-subcat-picker__fixit {
   font-family: var(--wp-font-mono);
   font-size: inherit;
   font-weight: 600;
-  color: var(--wp-accent-text, var(--wp-accent-300));
-  cursor: pointer;
 }
-.wp-subcat-picker__fixit:hover { text-decoration: underline; }
 .wp-subcat-picker__error code {
   font-family: var(--wp-font-mono);
   color: var(--wp-danger);
@@ -852,23 +847,19 @@ function onApply(): void {
 }
 .wp-subcat-picker__search { margin-bottom: 6px; }
 
-/* Axis header — a fold control, so it is a full-width button row. */
-.wp-subcat-picker__group-head {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
+/* Axis header — a fold control, so it is a full-width ListRow. */
+.wp-subcat-picker .wp-subcat-picker__group-head {
+  min-height: 0;
   padding: 2px 0; /* audit-exempt: hairline row padding */
-  background: none;
-  border: none;
-  cursor: pointer;
+  gap: 5px;
   color: var(--wp-text-dim, var(--wp-text3));
   font: 10px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.wp-subcat-picker__group-head .pi { font-size: 9px; }
-.wp-subcat-picker__group-count { opacity: 0.65; }
+.wp-subcat-picker__group-head :deep(.pi) { font-size: 9px; }
+.wp-subcat-picker__group-head :deep(.wp-list-row__main) { flex: 0 1 auto; }
+.wp-subcat-picker__group-head :deep(.wp-list-row__count) { opacity: 0.65; font: inherit; color: inherit; margin-right: auto; }
 .wp-subcat-picker__group-sum { text-transform: none; letter-spacing: 0; opacity: 0.8; }
 .wp-subcat-picker__head {
   display: flex;
@@ -881,18 +872,7 @@ function onApply(): void {
   color: var(--wp-text-dim, var(--wp-text3));
 }
 .wp-subcat-picker__head .pi { font-size: 10px; }
-.wp-subcat-picker__crumb {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px; /* audit-exempt: glyph-to-word gap inside the crumb */
-  padding: 0;
-  background: none;
-  border: none;
-  font: inherit;
-  color: var(--wp-text-muted, var(--wp-text2));
-  cursor: pointer;
-}
-.wp-subcat-picker__crumb:hover { color: var(--wp-text); }
+.wp-subcat-picker .wp-subcat-picker__crumb { padding: 0 4px; font-size: 11px; }
 .wp-subcat-picker__crumb-sep { opacity: 0.4; }
 .wp-subcat-picker__title {
   font-family: var(--wp-font-mono);
@@ -922,17 +902,17 @@ function onApply(): void {
    `dead`    — declared by the wildcard but carried by no option: offerable,
                and guaranteed to match nothing. Dashed rather than disabled,
                because inserting it is legal and sometimes deliberate. */
-.wp-subcat-chip[data-state="in"] {
+.wp-subcat-picker .wp-subcat-chip[data-state="in"] {
   background: color-mix(in oklab, var(--wp-accent-500) 28%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-text);
 }
-.wp-subcat-chip[data-state="negated"] {
+.wp-subcat-picker .wp-subcat-chip[data-state="negated"] {
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent);
   border-color: color-mix(in oklab, var(--wp-danger) 55%, transparent);
   text-decoration: line-through;
 }
-.wp-subcat-chip[data-state="dead"] {
+.wp-subcat-picker .wp-subcat-chip[data-state="dead"] {
   border-style: dashed;
   opacity: 0.55;
 }
@@ -1023,30 +1003,31 @@ function onApply(): void {
   padding-top: 6px;
   border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
 }
-.wp-subcat-chip {
+/* Tag and operator chips: kit Chips at the picker's 11px, in its own
+   corners and states. */
+.wp-subcat-picker .wp-subcat-chip {
+  height: auto;
   padding: 2px 8px;
   border-radius: min(10px, var(--wp-radius-cap, 999px));
-  border: 1px solid var(--wp-border);
   background: transparent;
   color: var(--wp-text-muted, var(--wp-text2));
   font: 11px var(--wp-font-sans);
-  cursor: pointer;
 }
-.wp-subcat-chip:hover {
+.wp-subcat-picker .wp-subcat-chip:hover {
   border-color: var(--wp-accent);
   color: var(--wp-text, var(--wp-text1));
 }
 /* Operators are structure, not content, so they get their own hue — the same
    blue the expression itself paints them, so the palette and the text agree
    about what a word IS. */
-.wp-subcat-chip--op {
+.wp-subcat-picker .wp-subcat-chip--op {
   font-family: var(--wp-font-mono);
   font-weight: 600;
   color: var(--wp-info);
   background: color-mix(in oklab, var(--wp-info) 12%, transparent);
 }
 /* The generic chip hover recolours to accent, which would fight the blue. */
-.wp-subcat-chip--op:hover {
+.wp-subcat-picker .wp-subcat-chip--op:hover {
   color: var(--wp-info);
   border-color: color-mix(in oklab, var(--wp-info) 55%, transparent);
 }
@@ -1055,16 +1036,6 @@ function onApply(): void {
   justify-content: flex-end;
   gap: 6px;
   margin-top: 12px;
-}
-/* Shrink the Delete/Skip/Apply buttons — the default .wp-btn size reads
- *  as oversized inside this popover. Compact them to fit the density. */
-.wp-subcat-picker__actions .wp-btn {
-  /* .wp-btn height is a fixed token (--wp-btn-h ~34px) — that, not padding,
-   * is what kept the buttons tall. Override it for the popover's density. */
-  height: 24px;
-  padding: 0 11px;
-  font-size: 11px;
-  border-radius: min(5px, var(--wp-radius-cap, 999px));
 }
 /* Destructive action sits far left, separated from Skip/Apply on the right. */
 .wp-subcat-picker__delete {

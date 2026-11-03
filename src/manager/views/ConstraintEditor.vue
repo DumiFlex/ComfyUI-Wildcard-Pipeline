@@ -1839,7 +1839,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             <td :colspan="exBulkActive ? 6 : 5" class="cn-ex-noresults" data-test="cn-ex-noresults">
               <b>No exception matches this filter</b>
               All {{ exceptions.length }} are still here — only the view is filtered.
-              <button type="button" class="cn-ex-clearlink" @click="exQuery = ''">Clear filter</button>
+              <Button variant="link" size="sm" class="cn-ex-clearlink" @click="exQuery = ''">Clear filter</Button>
             </td>
           </tr>
         </tbody>
@@ -2057,12 +2057,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   text-align: center; color: var(--wp-text-dim); font-size: 12px;
 }
 .cn-ex-noresults b { display: block; color: var(--wp-text); margin-bottom: 4px; }
-.cn-ex-clearlink {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-  margin-left: var(--wp-space-3);
-}
+.cn-ex-clearlink { margin-left: var(--wp-space-3); }
 
 /* Mode chip — icon glyph + label, tinted by --cn-mode-var. Editable +
  * read-only share the base; the read-only modifier mutes it to the same

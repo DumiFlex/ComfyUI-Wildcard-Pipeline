@@ -4,6 +4,8 @@
  * by the model from a one-line ask. Fields commit on change (blur or
  * Enter) so the server's check never rewrites a field mid-typing.
  */
+import Textarea from "@/kit/Textarea.vue";
+import Input from "@/kit/Input.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
@@ -71,20 +73,20 @@ async function send(): Promise<void> {
   <div class="wp-pack-edit" data-test="pack-item-editor">
     <p v-if="i.kind === 'library'" class="wp-pack-edit__note">
       Your {{ i.library_type === 'fixed_values' ? 'fixed values' : 'wildcard' }}, used as it is.
-      <button type="button" class="wp-pack-edit__link" :disabled="busy" @click="makeNew">Write a new one instead</button>
+      <Button variant="link" size="sm" :disabled="busy" @click="makeNew">Write a new one instead</Button>
     </p>
     <div class="wp-pack-edit__grid">
       <label v-if="i.kind !== 'library'" class="wp-pack-edit__field">
         <span>Name</span>
-        <input class="wp-input wp-input--sm" :value="i.name" :disabled="busy" data-test="pack-edit-name" @change="set('name', text($event))">
+        <Input size="sm" :model-value="i.name" :disabled="busy" data-test="pack-edit-name" @change="set('name', text($event))" />
       </label>
       <label v-if="hasVar" class="wp-pack-edit__field">
         <span>Variable</span>
-        <input class="wp-input wp-input--sm" :value="i.var" :placeholder="wild ? 'none: a vocabulary' : ''" :disabled="busy" data-test="pack-edit-var" @change="set('var', text($event).replace(/^\$/, '').trim())">
+        <Input size="sm" :model-value="i.var" :placeholder="wild ? 'none: a vocabulary' : ''" :disabled="busy" data-test="pack-edit-var" @change="set('var', text($event).replace(/^\$/, '').trim())" />
       </label>
       <label class="wp-pack-edit__field">
         <span>Section</span>
-        <input class="wp-input wp-input--sm" :value="i.section" list="wp-pack-sections" placeholder="the pack bundle" :disabled="busy || i.kind === 'constraint'" data-test="pack-edit-section" @change="set('section', text($event).trim())">
+        <Input size="sm" :model-value="i.section" list="wp-pack-sections" placeholder="the pack bundle" :disabled="busy || i.kind === 'constraint'" data-test="pack-edit-section" @change="set('section', text($event).trim())" />
       </label>
       <label v-if="wild" class="wp-pack-edit__field">
         <span>Options</span>
@@ -103,30 +105,30 @@ async function send(): Promise<void> {
     </div>
     <label v-if="i.kind !== 'library' && (!graphed || wild)" class="wp-pack-edit__field">
       <span>{{ i.kind === 'derivation' ? 'Rules, in plain words' : i.kind === 'constraint' ? 'What it rules out or favours' : 'What it holds' }}</span>
-      <textarea class="wp-textarea wp-pack-edit__about" rows="2" :value="aboutText" :disabled="busy" data-test="pack-edit-about" @change="set('about', text($event))" />
+      <Textarea class="wp-pack-edit__about" :rows="2" :model-value="aboutText" :disabled="busy" data-test="pack-edit-about" @change="set('about', text($event))" />
     </label>
     <PackGraphItem v-if="graphed" :item="i" />
     <label v-if="wild && !graphed" class="wp-pack-edit__field">
       <span>Tags (rules key on them)</span>
-      <input class="wp-input wp-input--sm" :value="i.tags.join(', ')" placeholder="warm, cold, formal" :disabled="busy" data-test="pack-edit-tags" @change="setTags(text($event))">
+      <Input size="sm" :model-value="i.tags.join(', ')" placeholder="warm, cold, formal" :disabled="busy" data-test="pack-edit-tags" @change="setTags(text($event))" />
     </label>
     <label v-if="hasUse" class="wp-pack-edit__field">
       <span>Use in the bundle</span>
-      <input class="wp-input wp-input--sm" :value="i.use" placeholder="pick 2-3; hold the pick across the batch" :disabled="busy" data-test="pack-edit-use" @change="set('use', text($event))">
+      <Input size="sm" :model-value="i.use" placeholder="pick 2-3; hold the pick across the batch" :disabled="busy" data-test="pack-edit-use" @change="set('use', text($event))" />
     </label>
     <datalist id="wp-pack-sections">
       <option v-for="s in sections" :key="s" :value="s" />
     </datalist>
     <div class="wp-pack-edit__ask">
-      <input
-        v-model="ask"
-        class="wp-input wp-input--sm"
+      <Input v-model="ask"
+        size="sm"
+       
         placeholder="Ask the AI to change just this item…"
         aria-label="Ask the AI to change this item"
         :disabled="busy"
         data-test="pack-item-ask"
         @keydown.enter.prevent="send"
-      >
+/>
       <Button size="sm" icon="pi-microchip-ai" :disabled="!ask.trim() || busy" :loading="pb.changing.value === i.key" data-test="pack-item-change" @click="send">Change</Button>
     </div>
   </div>
@@ -140,7 +142,6 @@ async function send(): Promise<void> {
 .wp-pack-edit__field input, .wp-pack-edit__about { width: 100%; }
 .wp-pack-edit__about { resize: vertical; font-size: 12.5px; }
 .wp-pack-edit__note { margin: 0; font-size: 12.5px; color: var(--wp-text-muted); }
-.wp-pack-edit__link { border: 0; background: none; padding: 0; color: var(--wp-accent-text); cursor: pointer; font: inherit; text-decoration: underline; }
 .wp-pack-edit__ask { display: flex; gap: 6px; align-items: center; }
 .wp-pack-edit__ask input { flex: 1; min-width: 0; }
 </style>

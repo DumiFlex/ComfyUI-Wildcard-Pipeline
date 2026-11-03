@@ -2,6 +2,8 @@
 import { computed, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
 import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
+import Input from "@/kit/Input.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
 import Button from "@/kit/Button.vue";
@@ -108,10 +110,11 @@ async function submit(mode: "update" | "new") {
       <div class="wp-stm__body">
         <div class="wp-stm-field">
           <label class="wp-stm-field__label" for="wp-stm-name">Name</label>
-          <input
+          <Input
             id="wp-stm-name"
             v-model="name"
-            type="text"
+            size="sm"
+           
             class="wp-stm-input"
             data-test="save-tpl-name"
             placeholder="e.g. cinematic portrait"
@@ -125,11 +128,11 @@ async function submit(mode: "update" | "new") {
 
         <div class="wp-stm-field">
           <label class="wp-stm-field__label" for="wp-stm-desc">Description</label>
-          <textarea
+          <Textarea
             id="wp-stm-desc"
             v-model="description"
             class="wp-stm-input wp-stm-input--multi"
-            rows="2"
+            :rows="2"
           />
         </div>
 
@@ -147,10 +150,11 @@ async function submit(mode: "update" | "new") {
           </div>
           <div class="wp-stm-field wp-stm-field--grow">
             <label class="wp-stm-field__label" for="wp-stm-tags">Tags (comma-separated)</label>
-            <input
+            <Input
               id="wp-stm-tags"
               v-model="tagsText"
-              type="text"
+              size="sm"
+             
               class="wp-stm-input"
               placeholder="e.g. style, portrait"
             />
@@ -252,18 +256,8 @@ async function submit(mode: "update" | "new") {
   text-transform: uppercase;
   color: var(--wp-text-dim);
 }
-.wp-stm-input {
-  width: 100%;
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: inherit;
-}
-.wp-stm-input:focus { outline: 1px solid var(--wp-accent-500, var(--wp-accent)); }
-.wp-stm-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 46px; }
+/* The kit Textarea draws the box; the description box is two lines tall. */
+.wp-stm-input--multi { overscroll-behavior: contain; min-height: 46px; }
 .wp-stm-select { width: 100%; height: 32px; font-size: 13px; }
 
 .wp-stm-preview--neg { border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border)); }

@@ -35,6 +35,7 @@
  * as the exact `{ new_id, new_name }` shape the commit-side partitioner
  * accepts.
  */
+import Input from "@/kit/Input.vue";
 import { ref } from "vue";
 import Button from "@/kit/Button.vue";
 import { newShortId } from "../utils/ids";
@@ -90,15 +91,15 @@ function onCancel(): void {
          by the batch-default select in `ConflictModal.vue`. -->
     <label class="wp-rename__label" for="wp-rename-input">
       <span class="wp-rename__label-text">Rename to</span>
-      <input
+      <Input
         id="wp-rename-input"
         v-model="renameTo"
-        type="text"
-        class="wp-input wp-rename__input"
+       
+        class="wp-rename__input"
         data-test="rename-input"
         autocomplete="off"
         spellcheck="false"
-      >
+/>
     </label>
     <div class="wp-rename__actions">
       <Button size="sm" data-test="rename-cancel" @click="onCancel">Cancel</Button>

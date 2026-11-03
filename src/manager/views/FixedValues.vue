@@ -217,15 +217,16 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
     </template>
 
     <template #favorite="{ row }">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         class="wp-row-fav-btn"
+        :icon="row.is_favorite ? 'pi-star-fill' : 'pi-star'"
         :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-pressed="row.is_favorite"
         :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
         @click.stop="fav(row)"
-      >
-        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-      </button>
+      />
     </template>
 
     <template #name="{ row }">
@@ -305,4 +306,6 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
 .wp-opts-more { margin-top: var(--wp-space-4); font-size: var(--wp-text-xs); }
 .wp-fv-row { display: flex; align-items: baseline; gap: var(--wp-space-3); }
 .wp-fv-sep { color: var(--wp-text-muted); }
+/* The favourite star: the kit ghost button, the star in the warn colour when on. */
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 </style>

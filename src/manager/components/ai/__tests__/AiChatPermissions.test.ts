@@ -9,6 +9,9 @@ import { _resetAiChatForTests, useAiChat } from "../../../composables/useAiChat"
 import { applyManage, undoManage, type ManageOp } from "../../../composables/aiManageOps";
 import { useCategoryStore } from "../../../stores/categoryStore";
 import type { AiChatProposal, AiChatResult, AiConfig } from "../../../api/types";
+import { inlineDrawer } from "./inline-drawer";
+
+inlineDrawer();
 
 const CONFIG = {
   enabled: true, provider: "ollama", base_url: "", model: "m", unload_after_s: 60, context_max: 16384,
