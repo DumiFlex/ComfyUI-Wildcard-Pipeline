@@ -6,6 +6,7 @@
  * text, or the template's lead, order and negative. Every change goes to
  * the graph; the server compiles the item from it again.
  */
+import Input from "@/kit/Input.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import Button from "@/kit/Button.vue";
 import { computed } from "vue";
@@ -146,7 +147,7 @@ function move(v: string, by: number): void {
         </label>
         <label class="wp-pack-graph__field">
           <span>Picks per run</span>
-          <input class="wp-input wp-input--sm" :value="slot.pick" placeholder="1" :disabled="busy" data-test="pack-slot-pick" @change="setSlot({ pick: text($event).trim() })">
+          <Input size="sm" :model-value="slot.pick" placeholder="1" :disabled="busy" data-test="pack-slot-pick" @change="setSlot({ pick: text($event).trim() })" />
         </label>
         <label class="wp-pack-graph__field">
           <span>Sometimes none (%)</span>
@@ -164,8 +165,8 @@ function move(v: string, by: number): void {
       <div class="wp-pack-graph__axes" data-test="pack-slot-axes">
         <span class="wp-pack-graph__label">Axes (what rules key on; every option gets a value of each)</span>
         <div v-for="(a, n) in slot.axes" :key="n" class="wp-pack-graph__axis">
-          <input class="wp-input wp-input--sm wp-pack-graph__axis-name" :value="a.name" :disabled="busy" aria-label="Axis name" data-test="pack-axis-name" @change="setAxisName(n, text($event))">
-          <input class="wp-input wp-input--sm" :value="a.values.join(', ')" :disabled="busy" aria-label="Axis values" data-test="pack-axis-values" @change="setAxisValues(n, text($event))">
+          <Input size="sm" class="wp-pack-graph__axis-name" :model-value="a.name" :disabled="busy" aria-label="Axis name" data-test="pack-axis-name" @change="setAxisName(n, text($event))" />
+          <Input size="sm" :model-value="a.values.join(', ')" :disabled="busy" aria-label="Axis values" data-test="pack-axis-values" @change="setAxisValues(n, text($event))" />
         </div>
         <Button variant="link" size="sm" class="wp-pack-graph__add" :disabled="busy" data-test="pack-axis-add" @click="addAxis">Add an axis</Button>
       </div>
@@ -179,15 +180,15 @@ function move(v: string, by: number): void {
         <Select v-if="keyed(r)" size="sm" :model-value="r.from.value" :options="valuesOf(r.from.slot, r.from.axis)" :filterable="false" :disabled="busy" aria-label="Source value" @update:model-value="(v) => setSide(n, r, 'from', { value: String(v) })" />
         <Select size="sm" class="wp-pack-graph__rel-kind" :model-value="r.kind" :options="KINDS" :filterable="false" :disabled="busy" aria-label="Relation" data-test="pack-relation-kind" @update:model-value="(v) => setKind(n, r, v as AiPackRelationKind)" />
         <template v-if="writes(r)">
-          <input class="wp-input wp-input--sm wp-pack-graph__rel-var" :value="r.var ?? ''" placeholder="variable" :disabled="busy" aria-label="Variable written" @change="pb.editRelation(n, { var: text($event).replace(/^\$/, '').trim() })">
-          <input class="wp-input wp-input--sm" :value="r.text ?? ''" placeholder="text" :disabled="busy" aria-label="Text" data-test="pack-relation-text" @change="pb.editRelation(n, { text: text($event) })">
-          <input v-if="r.kind === 'derive'" class="wp-input wp-input--sm" :value="r.otherwise ?? ''" placeholder="otherwise (optional)" :disabled="busy" aria-label="Otherwise" @change="pb.editRelation(n, { otherwise: text($event) })">
+          <Input size="sm" class="wp-pack-graph__rel-var" :model-value="r.var ?? ''" placeholder="variable" :disabled="busy" aria-label="Variable written" @change="pb.editRelation(n, { var: text($event).replace(/^\$/, '').trim() })" />
+          <Input size="sm" :model-value="r.text ?? ''" placeholder="text" :disabled="busy" aria-label="Text" data-test="pack-relation-text" @change="pb.editRelation(n, { text: text($event) })" />
+          <Input v-if="r.kind === 'derive'" size="sm" :model-value="r.otherwise ?? ''" placeholder="otherwise (optional)" :disabled="busy" aria-label="Otherwise" @change="pb.editRelation(n, { otherwise: text($event) })" />
         </template>
         <template v-else>
           <Select size="sm" class="wp-pack-graph__rel-slot" :model-value="r.to?.slot ?? ''" :options="slotOptions" :filterable="false" :disabled="busy" aria-label="Target slot" @update:model-value="(v) => setSide(n, r, 'to', { slot: String(v), axis: '', value: '' })" />
           <Select v-if="toKeyed(r)" size="sm" :model-value="r.to?.axis ?? ''" :options="axesOf(r.to?.slot ?? '')" :filterable="false" :disabled="busy" aria-label="Target axis" @update:model-value="(v) => setSide(n, r, 'to', { axis: String(v), value: '' })" />
           <Select v-if="toKeyed(r)" size="sm" :model-value="r.to?.value ?? ''" :options="valuesOf(r.to?.slot ?? '', r.to?.axis ?? '')" :filterable="false" :disabled="busy" aria-label="Target value" @update:model-value="(v) => setSide(n, r, 'to', { value: String(v) })" />
-          <input v-if="r.kind === 'exclude' || r.kind === 'only' || r.kind === 'boost' || r.kind === 'reduce'" class="wp-input wp-input--sm" :value="(r.words ?? []).join(', ')" placeholder="about (sandals, shorts)" :disabled="busy" aria-label="What the rule is about" data-test="pack-relation-words" @change="pb.editRelation(n, { words: words(text($event)) })">
+          <Input v-if="r.kind === 'exclude' || r.kind === 'only' || r.kind === 'boost' || r.kind === 'reduce'" size="sm" :model-value="(r.words ?? []).join(', ')" placeholder="about (sandals, shorts)" :disabled="busy" aria-label="What the rule is about" data-test="pack-relation-words" @change="pb.editRelation(n, { words: words(text($event)) })" />
           <WpNumber v-if="r.kind === 'boost' || r.kind === 'reduce'" commit="input" size="sm" class="wp-pack-graph__rel-factor" :model-value="r.factor ?? (r.kind === 'boost' ? 3 : 0.3)" :min="0" :max="100" :step="0.1" :disabled="busy" aria-label="Factor" @update:model-value="(v) => pb.editRelation(n, { factor: Number(v) })" />
         </template>
         <Button variant="ghost" size="sm" icon="pi-times" :disabled="busy" aria-label="Remove this rule" title="Remove this rule" data-test="pack-relation-remove" @click="pb.removeRelation(n)"/>
@@ -199,18 +200,18 @@ function move(v: string, by: number): void {
     <template v-if="fixed">
       <label class="wp-pack-graph__field">
         <span>Text, every run</span>
-        <input class="wp-input wp-input--sm" :value="fixed.text" :disabled="busy" data-test="pack-fixed-text" @change="setFixed({ text: text($event) })">
+        <Input size="sm" :model-value="fixed.text" :disabled="busy" data-test="pack-fixed-text" @change="setFixed({ text: text($event) })" />
       </label>
       <label class="wp-pack-graph__field">
         <span>Negative</span>
-        <input class="wp-input wp-input--sm" :value="fixed.negative" :disabled="busy" @change="setFixed({ negative: text($event) })">
+        <Input size="sm" :model-value="fixed.negative" :disabled="busy" @change="setFixed({ negative: text($event) })" />
       </label>
     </template>
 
     <template v-else-if="item.kind === 'template'">
       <label class="wp-pack-graph__field">
         <span>Always first</span>
-        <input class="wp-input wp-input--sm" :value="graph.template.lead" placeholder="1girl, solo" :disabled="busy" data-test="pack-template-lead" @change="setTemplate({ lead: text($event) })">
+        <Input size="sm" :model-value="graph.template.lead" placeholder="1girl, solo" :disabled="busy" data-test="pack-template-lead" @change="setTemplate({ lead: text($event) })" />
       </label>
       <div class="wp-pack-graph__order" data-test="pack-template-order">
         <span class="wp-pack-graph__label">Reading order</span>
@@ -224,11 +225,11 @@ function move(v: string, by: number): void {
       </div>
       <label class="wp-pack-graph__field">
         <span>Always last</span>
-        <input class="wp-input wp-input--sm" :value="graph.template.tail" :disabled="busy" @change="setTemplate({ tail: text($event) })">
+        <Input size="sm" :model-value="graph.template.tail" :disabled="busy" @change="setTemplate({ tail: text($event) })" />
       </label>
       <label class="wp-pack-graph__field">
         <span>Standing negative</span>
-        <input class="wp-input wp-input--sm" :value="graph.template.negative" :disabled="busy" data-test="pack-template-negative" @change="setTemplate({ negative: text($event) })">
+        <Input size="sm" :model-value="graph.template.negative" :disabled="busy" data-test="pack-template-negative" @change="setTemplate({ negative: text($event) })" />
       </label>
     </template>
   </div>

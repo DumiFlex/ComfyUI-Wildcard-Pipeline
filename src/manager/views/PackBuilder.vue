@@ -13,6 +13,9 @@
  * before offering Install. "Extend with AI" on a bundle opens this page
  * aimed at that bundle (`pb.target`).
  */
+import { textareaEl } from "../utils/kit-field-el";
+import Textarea from "@/kit/Textarea.vue";
+import Input from "@/kit/Input.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -484,17 +487,17 @@ function stopExtending(): void {
             the engine, and installs everything as one collection you can undo.
           </template>
         </p>
-        <textarea
-          ref="requestBox"
+        <Textarea
+          :ref="(c) => (requestBox = textareaEl(c))"
           v-model="convo.instruction.value"
-          class="wp-textarea wp-pack__request"
-          rows="5"
+          class="wp-pack__request"
+          :rows="5"
           :placeholder="pb.target.value ? 'Add weather that fits the season, and keep elves away from guns.' : `A fantasy character pack: race, class, an outfit and a weapon that fit the class. Elves never use guns. Give each character a title like 'Elven Archmage'.`"
           aria-label="Describe the pack"
           data-test="pack-request" data-ai-anchor="pack-request" data-ai-label="Describe the pack"
           :disabled="convo.loading.value"
           @keydown="onKey($event, toSettings)"
-        ></textarea>
+        />
         <ChatInputMarks :target="requestBox" :text="convo.instruction.value" />
         <ChatCompletions :target="requestBox" />
         <Button
@@ -507,16 +510,16 @@ function stopExtending(): void {
           @click="showSample = !showSample"
         >Start from a prompt you like</Button>
         <template v-if="showSample">
-          <textarea
-            ref="sampleBox"
+          <Textarea
+            :ref="(c) => (sampleBox = textareaEl(c))"
             v-model="pb.sample.value"
-            class="wp-textarea wp-pack__request"
-            rows="3"
+            class="wp-pack__request"
+            :rows="3"
             placeholder="1girl, long red hair, green eyes, sundress, sitting on a pier, sunset, masterpiece, best quality"
             aria-label="A prompt you like"
             data-test="pack-sample"
             :disabled="convo.loading.value"
-          ></textarea>
+          />
           <ChatInputMarks :target="sampleBox" :text="pb.sample.value" />
           <ChatCompletions :target="sampleBox" />
           <p class="wp-pack__dim">The plan splits it into slots, reuses your wildcards where they fit and builds the rest, so the pack makes more prompts like it.</p>
@@ -636,17 +639,17 @@ function stopExtending(): void {
           <PackFindings />
         </Card>
         <Card title="Change the plan">
-          <textarea
-            ref="editBox"
+          <Textarea
+            :ref="(c) => (editBox = textareaEl(c))"
             v-model="convo.instruction.value"
-            :class="['wp-textarea', 'wp-pack__request', { 'wp-pack__request--flash': flash }]"
-            rows="2"
+            :class="['wp-pack__request', { 'wp-pack__request--flash': flash }]"
+            :rows="2"
             placeholder="Add a $time_of_day wildcard with day, dusk and night…"
             aria-label="Change the plan"
             data-test="pack-edit"
             :disabled="convo.loading.value"
             @keydown="onKey($event, pb.refinePlan)"
-          ></textarea>
+          />
           <ChatInputMarks :target="editBox" :text="convo.instruction.value" />
           <ChatCompletions :target="editBox" />
           <p v-if="flash" class="wp-pack__flash-note" role="status" data-test="pack-edit-note"><i class="pi pi-arrow-up" aria-hidden="true" /> {{ flash }}</p>
@@ -849,14 +852,14 @@ function stopExtending(): void {
             <p v-if="pb.states.value[i.key].fixed?.length && status(i.key) !== 'fixing' && !pb.working.value && stillThere(i.key)" class="wp-pack__dim wp-pack__still" data-test="pack-still-why">{{ stillWhy(i.key) }}</p>
             <p v-if="pb.states.value[i.key].error" class="wp-pack__error">{{ pb.states.value[i.key].error }}</p>
             <div v-if="fixing === i.key" class="wp-pack__fixbox">
-              <input
-                v-model="fixNote"
-                class="wp-input wp-input--sm"
+              <Input v-model="fixNote"
+                size="sm"
+               
                 placeholder="What to do differently (more variety, fewer colours, …)"
                 aria-label="Note for the rebuild"
                 data-test="pack-fix-input"
                 @keydown.enter.prevent="rebuildWith(i.key)"
-              >
+/>
               <Button size="sm" icon="pi-refresh" data-test="pack-fix-go" @click="rebuildWith(i.key)">Rebuild</Button>
             </div>
             <ul v-if="problems(i.key).length" class="wp-pack__warnings">
