@@ -21,6 +21,7 @@ import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
+import { vToggleRow } from "@/kit/toggle-row";
 
 interface OptionFull extends WildcardOption {
   value: string;
@@ -516,7 +517,7 @@ const skewedTowards = computed(() => {
          Only meaningful while multi-pick is active; off = unique picks. -->
     <span
       v-if="multiActive"
-      class="pool__allow-repeats"
+      v-toggle-row class="pool__allow-repeats"
       data-test="pool-allow-repeats"
     >
       <Checkbox
@@ -530,12 +531,11 @@ const skewedTowards = computed(() => {
 
     <!-- Only shown when the wildcard actually has a null option to exclude
          (#5). In multi-pick mode the null option leaves the pool entirely, so
-         this control goes inert (use Min 0). The wp-check box is the toggle
-         (box-click); the row label text is non-interactive, matching the
-         per-option checkboxes. -->
+         this control goes inert (use Min 0). A click on the words ticks the box
+         too (v-toggle-row); the box is the keyboard stop. -->
     <span
       v-if="hasNullOption"
-      class="pool__exclude-null"
+      v-toggle-row class="pool__exclude-null"
       :class="{ 'pool__exclude-null--off': multiActive }"
       data-test="pool-exclude-null"
     >

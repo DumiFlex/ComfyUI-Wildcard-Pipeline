@@ -32,6 +32,7 @@ import type {
   RuleId,
   RunReport,
 } from "./types";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = withDefaults(defineProps<{
   modelValue: CleanerNodeConfig;
@@ -418,7 +419,7 @@ function isOverridden(rid: RuleId): boolean {
             @update:model-value="toggleNegRule(rule.id)"
           />
         </div>
-        <div class="wp-cleaner__rule-row wp-cleaner__rule-row--overlap">
+        <div v-toggle-row class="wp-cleaner__rule-row wp-cleaner__rule-row--overlap">
           <span
             class="wp-cleaner__rule wp-cleaner__rule--static"
             title="Drop negative tags the cleaned prompt also contains (it would be told to draw them and not draw them). Negative only."
