@@ -348,7 +348,13 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // its tags, operators and axis rows with Chip and ListRow and its actions
 // with Button, which pulls those pieces and the tooltip into its chunk
 // (dev 613,654 -> 616,336 bytes).
-const TOTAL_LIMIT = 603 * 1024;     // 603 KB
+// RAISED 603 -> 607 KB on 2026-11-03 for the canvas kit buttons (batches A
+// and B): the note editor's toolbar is the kit Toolbar with Buttons, the note
+// and bundle colours RadioGroup swatches (+ ColorField), the Var Picker the kit
+// Combobox with its Popover, the pickers' rows ListRows, and the debug viewer /
+// image filter use Button and WpIconButton, which pull those pieces into the
+// canvas chunks (dev ~616,500 -> 619,558 bytes).
+const TOTAL_LIMIT = 607 * 1024;     // 607 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
