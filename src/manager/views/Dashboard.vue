@@ -2,7 +2,7 @@
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { libraryVersion } from "../composables/useLibraryChanged";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
 import Card from "@/kit/Card.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
@@ -111,10 +111,6 @@ const RECENT_TABS: SegmentedOption<"recent" | "opened" | "favorites">[] = [
 
 function openDocs() {
   router.push("/docs");
-}
-
-function navigateToKind(slug: string) {
-  router.push(`/${slug}`);
 }
 
 function openTestRunner() {
@@ -455,15 +451,12 @@ onMounted(async () => {
 
     <!-- Stats -->
     <div class="wp-stats" aria-label="Library counts" data-ai-anchor="counts" data-ai-label="Library counts">
-      <button
+      <RouterLink
         v-for="kind in KIND_META"
         :key="kind.key"
-        type="button"
+        :to="`/${kind.slug}`"
         class="wp-stat dashboard__stat"
         :aria-label="`View all ${kind.label}`"
-        @click="navigateToKind(kind.slug)"
-        @keydown.enter.prevent="navigateToKind(kind.slug)"
-        @keydown.space.prevent="navigateToKind(kind.slug)"
       >
         <div
           class="wp-stat__icon"
@@ -487,7 +480,7 @@ onMounted(async () => {
             <Icon name="pi-arrow-up-right" :size="ICON_SM" /> View
           </span>
         </div>
-      </button>
+      </RouterLink>
     </div>
 
     <!-- Quick-create row — one '+ New <kind>' button per module type so
@@ -796,7 +789,7 @@ onMounted(async () => {
   margin: var(--wp-space-5) var(--wp-space-2) var(--wp-space-3);
 }
 
-.dashboard__stat { cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.dashboard__stat { cursor: pointer; text-align: left; font: inherit; color: inherit; text-decoration: none; }
 .dashboard__stat:hover { border-color: var(--wp-border-strong); }
 .dashboard__stat:focus-visible {
   outline: 2px solid var(--wp-border-focus);

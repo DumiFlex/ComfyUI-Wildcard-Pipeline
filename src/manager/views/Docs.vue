@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import SearchInput from "@/kit/SearchInput.vue";
 import Kbd from "@/kit/Kbd.vue";
+import Button from "@/kit/Button.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroupId, type DocPageMeta } from "../docs/registry";
@@ -203,16 +204,15 @@ watch(
     <main ref="contentEl" class="wp-doc__content" @scroll.passive="trackSection">
       <!-- Pinned to the top right of the page as it scrolls. -->
       <div v-if="ai.ready.value" class="wp-doc__askbar">
-        <button
-          type="button"
+        <Button
+          size="sm"
+          icon="pi-microchip-ai"
           class="wp-doc__ask"
           data-test="doc-ask-ai"
-          title="Ask about this page. Select text on it first to ask about just that part"
+          hint="Ask about this page. Select text on it first to ask about just that part"
           @mousedown.prevent
           @click="askAssistant"
-        >
-          <i class="pi pi-microchip-ai" aria-hidden="true" /> Ask about this page
-        </button>
+        >Ask about this page</Button>
       </div>
       <DocSearchResults v-if="searching" ref="resultsEl" :query="query" @open="query = ''" @pages="hitPages = $event" />
       <div v-show="!searching" class="wp-doc__page" :data-outline="showOutline || undefined">
@@ -273,25 +273,8 @@ watch(
   justify-content: flex-end;
   pointer-events: none;
 }
-.wp-doc__ask {
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 11px;
-  margin-top: -6px;
-  background: color-mix(in oklab, var(--wp-accent-500) 18%, var(--wp-bg-1));
-  box-shadow: var(--wp-shadow-md);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
-  border-radius: min(7px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.wp-doc__ask:hover { background: color-mix(in oklab, var(--wp-accent-500) 28%, var(--wp-bg-1)); }
-.wp-doc__ask:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
+/* The kit button, floating: it takes clicks through the bar and lifts off the page. */
+.wp-doc__ask { pointer-events: auto; margin-top: -6px; box-shadow: var(--wp-shadow-md); }
 .wp-doc__grp {
   font-size: 10px;
   font-weight: 600;

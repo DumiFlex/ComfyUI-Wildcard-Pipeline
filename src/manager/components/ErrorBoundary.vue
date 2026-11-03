@@ -12,6 +12,7 @@
  */
 import { onErrorCaptured, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import Button from "@/kit/Button.vue";
 import CodeBlock from "@/kit/CodeBlock.vue";
 
 const error = ref<Error | null>(null);
@@ -20,7 +21,7 @@ const route = useRoute();
 
 onErrorCaptured((err) => {
   error.value = err instanceof Error ? err : new Error(String(err));
-  // eslint-disable-next-line no-console
+   
   console.error("[ErrorBoundary]", err);
   return false;
 });
@@ -56,14 +57,15 @@ watch(
         restore them, or switch to another tab to keep working.
       </p>
       <div class="wp-error__detail">
-        <button
-          type="button"
-          class="wp-btn wp-btn--ghost wp-btn--sm"
+        <Button
+          variant="ghost"
+          size="sm"
+          :icon="showStack ? 'pi-chevron-up' : 'pi-chevron-down'"
+          :aria-expanded="showStack"
           @click="showStack = !showStack"
         >
-          <i :class="`pi ${showStack ? 'pi-chevron-up' : 'pi-chevron-down'}`" />
           {{ showStack ? "Hide details" : "Show details" }}
-        </button>
+        </Button>
         <CodeBlock
           v-if="showStack"
           class="wp-error__stack"
@@ -75,12 +77,8 @@ watch(
         />
       </div>
       <div class="wp-error__actions">
-        <button type="button" class="wp-btn wp-btn--primary" @click="reload">
-          <i class="pi pi-refresh" />Reload page
-        </button>
-        <button type="button" class="wp-btn wp-btn--ghost" @click="reset">
-          <i class="pi pi-times" />Dismiss
-        </button>
+        <Button variant="primary" icon="pi-refresh" @click="reload">Reload page</Button>
+        <Button variant="ghost" icon="pi-times" @click="reset">Dismiss</Button>
       </div>
       <p class="wp-error__path">
         Path: <code>{{ route.fullPath }}</code>
