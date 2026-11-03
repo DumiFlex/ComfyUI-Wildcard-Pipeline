@@ -13,6 +13,8 @@
  * Only question and choice numbers go back (`AiAskAnswer`); the server
  * reads the labels from the call it stored.
  */
+import { inputEl } from "../../utils/kit-field-el";
+import Input from "@/kit/Input.vue";
 import { computed, nextTick, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
@@ -202,13 +204,12 @@ function setRef(i: number, el: unknown): void {
           @keydown="onKey(i, $event)"
         >Decide for me</Chip>
       </div>
-      <input
+      <Input
         v-if="picks[i].other !== null"
-        :ref="(el) => setRef(i, el)"
+        :ref="(c) => setRef(i, inputEl(c))"
         class="wp-ai-ask__other"
-        type="text"
         maxlength="300"
-        :value="picks[i].other"
+        :model-value="picks[i].other ?? ''"
         :placeholder="instant ? 'Your answer, then Enter' : 'Your answer'"
         :aria-label="`Your own answer: ${q.header}`"
         :disabled="disabled"
@@ -262,11 +263,8 @@ function setRef(i: number, el: unknown): void {
 @container (max-width: 380px) {
   .wp-ai-ask__hint { display: none; }
 }
-.wp-ai-ask__other {
-  margin-top: 2px; padding: 5px 8px; border-radius: min(6px, var(--wp-radius-cap, 999px)); font: inherit; font-size: 12.5px;
-  border: 1px solid var(--wp-border); background: var(--wp-bg-1); color: var(--wp-text);
-}
-.wp-ai-ask__other:focus { outline: none; border-color: var(--wp-accent-500); }
+/* The kit Input; only its spacing under the answers is set here. */
+.wp-ai-ask__other { margin-top: 2px; }
 .wp-ai-ask__foot { display: flex; align-items: center; gap: 8px; }
 .wp-ai-ask__left { flex: 1; font-size: 11px; color: var(--wp-text-dim); }
 .wp-ai-ask__done {

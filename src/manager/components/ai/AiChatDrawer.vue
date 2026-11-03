@@ -23,6 +23,8 @@
  * Images can be attached (button, paste or drop) when the model sees them;
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
+import { textareaEl } from "../../utils/kit-field-el";
+import Textarea from "@/kit/Textarea.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "@/kit/Button.vue";
@@ -1320,18 +1322,18 @@ onMounted(() => {
           Editing your last message
           <Button variant="link" size="sm" class="wp-ai-chat__link" data-test="ai-chat-edit-cancel" @click="chat.cancelEdit()">Cancel</Button>
         </p>
-        <textarea
-          ref="box"
+        <Textarea
+          :ref="(c) => (box = textareaEl(c))"
           v-model="chat.input.value"
-          class="wp-textarea wp-ai-chat__input"
-          rows="2"
+          class="wp-ai-chat__input"
+          :rows="2"
           :placeholder="placeholder"
           aria-label="Message the assistant"
           data-test="ai-chat-input"
           :disabled="chat.loading.value"
           @keydown="onKeydown"
           @paste="onPaste"
-        ></textarea>
+        />
         <ChatInputMarks :target="box" :text="chat.input.value" />
         <ChatCompletions :target="box" />
         <input ref="picker" type="file" accept="image/*" multiple hidden aria-label="Attach images" data-test="ai-chat-file" @change="onPick" />

@@ -23,10 +23,11 @@
  * automatically when a subsequent parse attempt succeeds, so users
  * recover from a typo without manually dismissing anything.
  *
- * Buttons are the shared `<Button>`; the paste box stays a native
- * `<textarea>` with the global `.wp-textarea` look so tests can still
- * query it (`wrap.find("textarea")`).
+ * Buttons are the shared `<Button>` and the paste box the kit `<Textarea>`
+ * (a plain `<textarea>` inside, so tests still query it with
+ * `wrap.find("textarea")`).
  */
+import Textarea from "@/kit/Textarea.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
 import { type IntegrityWarning } from "./parse";
@@ -349,14 +350,14 @@ function handleParse(raw: string, source: "file" | "paste"): void {
           <span class="wp-import-tab__paste-label-text">
             Paste an exported JSON payload
           </span>
-          <textarea
+          <Textarea
             id="wp-import-tab-paste-area"
             v-model="pasteText"
-            class="wp-textarea wp-import-tab__textarea"
-            rows="10"
+            class="wp-import-tab__textarea"
+            :rows="10"
             placeholder="{ &quot;schema_version&quot;: 1, &quot;bundles&quot;: [], … }"
             data-test="import-paste-textarea"
-          />
+/>
         </label>
         <div class="wp-import-tab__paste-actions">
           <Button

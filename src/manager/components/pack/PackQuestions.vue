@@ -5,6 +5,7 @@
  * "Decide for me". Sending turns the answers into decisions the planner
  * never asks about again, and it comes back with the next round (or none).
  */
+import Textarea from "@/kit/Textarea.vue";
 import { computed } from "vue";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
@@ -63,16 +64,16 @@ function isPicked(q: string, c: string): boolean {
           @click="pb.decideFor(q)"
         >Decide for me</Chip>
       </div>
-      <textarea
-        class="wp-textarea wp-pack-qs__other"
-        rows="1"
-        :value="pb.pickFor(q.question).other"
+      <Textarea
+        class="wp-pack-qs__other"
+        :rows="1"
+        :model-value="pb.pickFor(q.question).other"
         :placeholder="q.multi ? 'Add your own…' : 'Or type your own answer…'"
         :aria-label="`Your own answer to: ${q.question}`"
         :disabled="convo.loading.value"
         data-test="pack-other"
         @input="onOther(q, $event)"
-      ></textarea>
+/>
     </div>
     <div class="wp-pack-qs__row">
       <span class="wp-pack-qs__dim">
