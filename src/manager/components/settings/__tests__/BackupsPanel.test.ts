@@ -6,6 +6,9 @@ import { api } from "../../../api/client";
 import { _resetServerSettingsForTesting } from "../../../composables/useServerSettings";
 import type { BackupEntry } from "../../../api/types";
 import { settingsRouter } from "../../../__tests__/helpers/settingsRouter";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
+import { useToast } from "@/kit/useToast";
+import { libraryVersion } from "../../../composables/useLibraryChanged";
 
 vi.mock("../../../api/client", () => ({
   api: {
@@ -14,8 +17,9 @@ vi.mock("../../../api/client", () => ({
       createBackup: vi.fn(),
       pinBackup: vi.fn(),
       deleteBackup: vi.fn(),
-      stageRestore: vi.fn(),
+      restoreBackup: vi.fn(),
       cancelRestore: vi.fn(),
+      info: vi.fn(async () => null),
     },
     serverSettings: {
       get: vi.fn(async () => ({ max_ref_depth: 8, backups: { enabled: false, keep: 2, daily: true } })),
@@ -103,5 +107,45 @@ describe("BackupsPanel", () => {
     expect(w.find("[data-test='backup-skeleton']").exists()).toBe(true);
     expect(w.find("[data-test='backup-list']").exists()).toBe(false);
     expect(w.find("[data-test='backup-empty']").exists()).toBe(false);
+  });
+
+  it("restores at once, refreshes the library, and offers Undo", async () => {
+    const pre = "wildcard-pipeline-20260106-000000-pre-restore.db";
+    db.restoreBackup.mockResolvedValue({ restored: rows[2].name, pre_restore: pre });
+    const toast = useToast();
+    const before = libraryVersion.value;
+    const w = await mountPanel();
+
+    await w.find(`[data-test='backup-restore-${rows[2].name}']`).trigger("click");
+    const modal = w.findAllComponents(ConfirmModal)[0];
+    expect(modal.props("body")).toContain("no restart");
+    modal.vm.$emit("confirm");
+    await flushPromises();
+
+    expect(db.restoreBackup).toHaveBeenCalledWith(rows[2].name);
+    expect(libraryVersion.value).toBe(before + 1);
+    const done = toast.toasts.value[toast.toasts.value.length - 1];
+    expect(done?.summary).toBe("Backup restored");
+    expect(done?.action?.label).toBe("Undo");
+
+    db.restoreBackup.mockResolvedValue({ restored: pre, pre_restore: "x-pre-restore.db" });
+    await done?.action?.run();
+    await flushPromises();
+    expect(db.restoreBackup).toHaveBeenLastCalledWith(pre);
+    expect(libraryVersion.value).toBe(before + 2);
+  });
+
+  it("says why a restore was refused and changes nothing", async () => {
+    db.restoreBackup.mockRejectedValue(new Error("This backup is damaged"));
+    const toast = useToast();
+    const before = libraryVersion.value;
+    const w = await mountPanel();
+    await w.find(`[data-test='backup-restore-${rows[0].name}']`).trigger("click");
+    w.findAllComponents(ConfirmModal)[0].vm.$emit("confirm");
+    await flushPromises();
+    const last = toast.toasts.value[toast.toasts.value.length - 1];
+    expect(last?.severity).toBe("error");
+    expect(last?.detail).toBe("This backup is damaged");
+    expect(libraryVersion.value).toBe(before);
   });
 });

@@ -9,6 +9,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch 
 import Button from "@/kit/Button.vue";
 import SortableList from "@/kit/SortableList.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import DockRow from "./DockRow.vue";
 import {
   addBookmarkHere,
@@ -255,6 +256,17 @@ function close(): void {
       <p v-else class="wp-bmdock__empty" data-test="bm-dock-empty">
         No bookmarks in this workflow yet.
       </p>
+      <WpSwitch
+        v-if="editing"
+        class="wp-bmdock__clear"
+        :model-value="prefs.clearDock"
+        label="Land clear of the dock"
+        :title="prefs.clearDock
+          ? 'Jumps move a bookmark out from under the dock. Off: it lands where it would without the dock, behind it.'
+          : 'Jumps land where they would without the dock, behind it. On: they move out from under it.'"
+        data-test="bm-dock-clear"
+        @update:model-value="savePrefs({ clearDock: $event })"
+      />
       <Button
         v-if="editing || !shown"
         variant="add"
@@ -325,6 +337,7 @@ function close(): void {
 /* The same air between rows in edit mode (the kit list's small size packs
    them at 2px). */
 .wp-bmdock__body :deep(.wp-sortable__list) { gap: 5px; }
+.wp-bmdock__clear { align-self: flex-start; margin: 2px 2px 0; }
 .wp-bmdock__empty { margin: 4px 2px; color: var(--wp-text-dim); }
 .wp-bmdock-ghost {
   position: fixed;

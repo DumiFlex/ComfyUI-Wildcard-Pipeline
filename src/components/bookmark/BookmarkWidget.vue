@@ -247,7 +247,9 @@ function done(): void {
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--wp-bm-color);
-  border-radius: var(--wp-radius-cap, 999px);
+  /* A finite radius, not 999px: Firefox draws a bordered full pill in pieces
+     that seam at canvas zooms like 0.64 / 0.8 (docs/component-standard.md). */
+  border-radius: min(14px, var(--wp-radius-cap, 999px)); /* 30px tall */
   box-shadow: var(--wp-shadow-md, 0 4px 14px rgb(0 0 0 / 0.35));
   white-space: nowrap;
 }
