@@ -7,6 +7,7 @@
  * Kept thin since the 2026-05-09 extraction; previous body lived
  * inline alongside two verbatim copies for combine + fixed_values.
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import SeedLockControls from "../../_shared/SeedLockControls.vue";
@@ -67,16 +68,16 @@ function onMatchInput(e: Event): void {
       <i class="pi pi-equals" aria-hidden="true" />
       <span>Match variable</span>
       <span class="match__sigil">$</span>
-      <input
+      <Input
+        size="sm"
         class="match__input"
-        type="text"
         spellcheck="false"
         placeholder="model_variant"
         data-test="runtime-match-input"
-        :value="matchVar"
+        :model-value="matchVar"
         :disabled="frameActive || undefined"
         @change="onMatchInput"
-      >
+      />
     </label>
     <p
       v-if="matchVar"

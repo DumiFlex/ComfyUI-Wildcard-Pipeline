@@ -8,6 +8,7 @@
  *  bundle.color is set so users can drop the override and fall back
  *  to the bundle-default token — useful for legacy bundles whose
  *  library entry stored the now-deprecated gray default. */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { BundleInstance } from "../../../../../widgets/_shared";
 import { COLOUR_PRESETS, DEFAULT_COLOUR } from "@/kit/colour-presets";
@@ -74,12 +75,12 @@ function onResetColor(): void {
     <div class="id__row">
       <span class="id__key">Display name</span>
       <div class="id__input-row">
-        <input
+        <Input
+          size="sm"
           class="id__input"
           :class="{ 'id__input--mod': nameOverridden }"
           data-test="bdm-name"
-          type="text"
-          :value="nameValue"
+          :model-value="nameValue"
           :placeholder="libraryName || 'bundle name'"
           aria-label="Display name"
           @input="onNameInput"

@@ -8,6 +8,7 @@
  * `extension/row-outputs.ts` puts that BOOLEAN dot at the row's right edge.
  */
 import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
@@ -217,23 +218,24 @@ function flip(): void {
       </div>
       <label class="wp-tgr__field">
         <span>Name <em>on the row and its output</em></span>
-        <input :value="t.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="emit('rename', value($event))">
+        <Input size="sm" :model-value="t.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="emit('rename', value($event))" />
       </label>
       <label class="wp-tgr__field">
         <span>Variable <em>true or false, for rules only</em></span>
         <span class="wp-tgr__var-row">
         <span class="wp-vbind-wrap" :class="{ 'wp-vbind-wrap--collision-warn': !!problem }">
           <span class="wp-vbind-prefix">$</span>
-          <input
+          <Input
+            size="sm"
             class="wp-vbind-input"
             :class="t.var ? varColorClass(t.var) : undefined"
-            :value="t.var"
+            :model-value="t.var"
             placeholder="variable_name"
             spellcheck="false"
             data-test="tg-var"
             @keydown.stop
             @change="emit('set-var', value($event).replace(/^\$/, ''))"
-          >
+          />
         </span>
         <span v-tooltip="'Show the $variable under the name in the clean view'" class="wp-tgr__check">
           <Checkbox
@@ -249,14 +251,15 @@ function flip(): void {
       </label>
       <label v-if="pickOne" class="wp-tgr__field">
         <span>Value <em>picked variable gets this, not the name</em></span>
-        <input
-          :value="t.value ?? ''"
+        <Input
+          size="sm"
+          :model-value="t.value ?? ''"
           :placeholder="t.name"
           spellcheck="false"
           data-test="tg-value"
           @keydown.stop
           @change="emit('patch', { value: ($event.target as HTMLInputElement).value || undefined })"
-        >
+        />
       </label>
       <div class="wp-tgr__field">
         <span>Style</span>
@@ -273,11 +276,11 @@ function flip(): void {
       <div v-if="t.style === 'buttons'" class="wp-tgr__two">
         <label class="wp-tgr__field">
           <span>On word</span>
-          <input :value="t.on_label ?? ''" placeholder="On" data-test="tg-on-label" @keydown.stop @change="emit('patch', { on_label: value($event) || undefined })">
+          <Input size="sm" :model-value="t.on_label ?? ''" placeholder="On" data-test="tg-on-label" @keydown.stop @change="emit('patch', { on_label: value($event) || undefined })" />
         </label>
         <label class="wp-tgr__field">
           <span>Off word</span>
-          <input :value="t.off_label ?? ''" placeholder="Off" data-test="tg-off-label" @keydown.stop @change="emit('patch', { off_label: value($event) || undefined })">
+          <Input size="sm" :model-value="t.off_label ?? ''" placeholder="Off" data-test="tg-off-label" @keydown.stop @change="emit('patch', { off_label: value($event) || undefined })" />
         </label>
       </div>
       <div class="wp-tgr__field">

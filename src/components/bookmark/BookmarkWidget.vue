@@ -6,6 +6,7 @@
  */
 import { computed, ref, watch } from "vue";
 import Banner from "@/kit/Banner.vue";
+import Input from "@/kit/Input.vue";
 import ColorField from "@/kit/ColorField.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Button from "@/kit/Button.vue";
@@ -162,9 +163,10 @@ function done(): void {
           data-test="bm-color"
           @update:model-value="(v: string) => patch({ color: v === 'none' ? '' : v.slice(0, 7) })"
         />
-        <input
+        <Input
+          size="sm"
           class="wp-bm__name"
-          :value="title"
+          :model-value="title"
           aria-label="Bookmark name"
           data-test="bm-title"
           @input="onTitle"

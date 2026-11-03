@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Input from "@/kit/Input.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import { computed } from "vue";
 import RichTextInput from "../../../../../manager/components/RichTextInput.vue";
@@ -135,11 +136,11 @@ function onDelete(): void {
       data-test="row-name-wrap"
     >
       <span class="row__name-prefix" data-test="row-name-prefix">$</span>
-      <input
+      <Input
+        size="sm"
         class="row__name"
         data-test="row-name"
-        type="text"
-        :value="row.name"
+        :model-value="row.name"
         :disabled="!row.enabled"
         :aria-label="`Variable name for row ${row.id}`"
         @input="onNameInput"

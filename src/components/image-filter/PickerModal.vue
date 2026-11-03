@@ -16,6 +16,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import WpImageZoom from "@/kit/WpImageZoom.vue";
 import CopyButton from "@/kit/CopyButton.vue";
@@ -834,11 +835,11 @@ const subLine = computed(() => {
                 v-tooltip="`Set by $${run.name}`"
                 :style="valueHue(run.axis ?? -1, run.name)"
               >{{ run.text }}</mark><template v-else>{{ run.text }}</template></template></div>
-              <textarea
+              <Textarea
                 v-else
                 class="wp-ifp__text"
-                :value="textValue(field)"
-                rows="4"
+                :model-value="textValue(field)"
+                :rows="4"
                 spellcheck="false"
                 :aria-label="`${field} prompt`"
                 :data-test="`image-filter-${field}`"
