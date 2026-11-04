@@ -24,8 +24,8 @@ tutorial(
     });
 
     await t.h.step("The dashboard", async () => {
-      await t.say("The manager opens in its own window, on the dashboard.");
       await t.go("/wp/dashboard");
+      await t.say("The manager opens in its own window, on the dashboard.");
       await t.beat(800);
       const quick = page.locator('[data-test="dashboard-quick-create"]');
       await t.callout("quick", quick, "Start a new item", 8);

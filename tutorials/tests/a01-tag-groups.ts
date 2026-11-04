@@ -14,8 +14,8 @@ tutorial(
     const page = t.page;
 
     await t.h.step("Tags in groups", async () => {
-      await t.say("Tags are short words on an option. On their own they filter and steer picks. Put them in groups and they can do more.");
       await t.go("/wp/wildcards/a1b2c3d4/edit");
+      await t.say("Tags are short words on an option. On their own they filter and steer picks. Put them in groups and they can do more.");
       await t.beat(800);
       // The panel opens on its own unless Settings say otherwise.
       if (await page.locator('[data-test="subcat-collapsed"]').isVisible()) {
@@ -48,8 +48,8 @@ tutorial(
     });
 
     const nodes = await t.h.step("Read the rolled tag", async () => {
-      await t.say("On the canvas, pick Hero and Travel gear.");
       await t.go("/");
+      await t.say("On the canvas, pick Hero and Travel gear.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Hero", "Travel gear"]);

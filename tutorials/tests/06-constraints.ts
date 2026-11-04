@@ -13,8 +13,8 @@ tutorial(
     const page = t.page;
 
     await t.h.step("A constraint", async () => {
-      await t.say("Random picks can clash: a street thief in a royal throne room. A constraint changes the odds by what was already rolled.");
       await t.go("/wp/constraints/7ff544c2/edit");
+      await t.say("Random picks can clash: a street thief in a royal throne room. A constraint changes the odds by what was already rolled.");
       await t.beat(600);
       const pickers = [page.locator('[data-test="source-wildcard-select"]'), page.locator('[data-test="target-wildcard-select"]')];
       await t.scrollTo(pickers[0]);
@@ -39,8 +39,8 @@ tutorial(
     });
 
     const nodes = await t.h.step("On the canvas", async () => {
-      await t.say("On the canvas, the constraint goes between the two lists: Hero, the constraint, then Setting.");
       await t.go("/");
+      await t.say("On the canvas, the constraint goes between the two lists: Hero, the constraint, then Setting.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 260 });
       await t.pickModules(ctx, ["Hero", "Hero fits the place", "Setting"]);

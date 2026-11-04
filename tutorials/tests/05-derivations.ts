@@ -13,8 +13,8 @@ tutorial(
     const page = t.page;
 
     await t.h.step("A derivation", async () => {
-      await t.say("A derivation sets a variable by a rule, instead of rolling it. Here is Lighting from time.");
       await t.go("/wp/derivations/5774d2a1/edit");
+      await t.say("A derivation sets a variable by a rule, instead of rolling it. Here is Lighting from time.");
       await t.beat(600);
       await t.click(page.locator('[data-test="rule-0"]').getByText("Rule 1").first());
       await t.beat(800);
@@ -45,8 +45,8 @@ tutorial(
     });
 
     const nodes = await t.h.step("On the canvas", async () => {
-      await t.say("On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.");
       await t.go("/");
+      await t.say("On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Time of day", "Setting", "Lighting from time", "Scene line"]);
