@@ -11,6 +11,12 @@
  * most extensions) stops right there and does nothing. The throw is caught
  * from the window's error event and kept out of the console.
  *
+ * The event also carries the legacy `keyCode` / `which` a real press has:
+ * libraries like hotkeys-js (ComfyUI-Easy-Use binds Alt+0…9 to its node
+ * templates with it) match on `keyCode` alone, and a constructed
+ * KeyboardEvent has 0 there, so without it the probe walked past them and
+ * Suggest handed out keys they take.
+ *
  * What it can't see: a handler that acts without claiming the key, or that
  * claims it only after acting (that one does run once), or that ignores
  * synthetic events. Browser shortcuts never fire for synthetic events, which
@@ -36,6 +42,22 @@ export function codeFor(key: string): string {
   return named[key] ?? key;
 }
 
+const LEGACY_NAMED: Record<string, number> = {
+  Backspace: 8, Tab: 9, Enter: 13, Escape: 27, Space: 32, " ": 32, PageUp: 33, PageDown: 34, End: 35, Home: 36,
+  ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46,
+  ";": 186, "=": 187, ",": 188, "-": 189, ".": 190, "/": 191, "`": 192, "[": 219, "\\": 220, "]": 221, "'": 222,
+};
+
+/** The legacy `keyCode` a real press of `key` carries (`1` → 49, `K` → 75,
+ *  `F5` → 116), 0 when it has none we know. */
+export function keyCodeFor(key: string): number {
+  if (/^[0-9]$/.test(key)) return 48 + Number(key);
+  if (/^[A-Z]$/i.test(key)) return key.toUpperCase().charCodeAt(0);
+  const f = /^F([1-9]|1[0-9]|2[0-4])$/.exec(key);
+  if (f) return 111 + Number(f[1]);
+  return LEGACY_NAMED[key] ?? 0;
+}
+
 function send(type: "keydown" | "keyup", combo: string, target: EventTarget): boolean {
   const p = parseCombo(combo);
   if (!p) return false;
@@ -50,6 +72,9 @@ function send(type: "keydown" | "keyup", combo: string, target: EventTarget): bo
     cancelable: true,
     composed: true,
   });
+  // A constructed event can't set these; real presses always have them.
+  const legacy = keyCodeFor(p.key);
+  for (const name of ["keyCode", "which"] as const) Object.defineProperty(ev, name, { value: legacy, configurable: true });
   probes.add(ev);
   let claimed = false;
   const claim = (): never => {
