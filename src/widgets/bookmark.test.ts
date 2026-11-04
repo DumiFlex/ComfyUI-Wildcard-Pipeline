@@ -313,7 +313,7 @@ describe("The free area only follows the host's layout", () => {
   let pane: HTMLElement;
   /** ComfyUI's layout: the top menu (run bar at the top right), then the
    *  gutter holding the canvas pane, which starts under the menu. */
-  function layout(paneTop: number): void {
+  function layout(paneTop: number, old = false): void {
     for (const e of made.splice(0)) e.remove();
     cv = el<HTMLCanvasElement>("canvas", [0, 0, 1600, 900]);
     Object.assign(canvas, { canvas: cv });
@@ -327,10 +327,14 @@ describe("The free area only follows the host's layout", () => {
     runBar.dataset.testid = "action-bar-card";
     runBar.style.pointerEvents = "auto";
     const gutter = el("div", [8, paneTop, 1592, 892], overlay);
-    gutter.dataset.testid = "graph-canvas-gutter";
     gutter.style.pointerEvents = "none";
     pane = el("div", [8, paneTop, 1592, 892], gutter);
-    pane.id = "graph-canvas-panel";
+    // Frontends before 1.54/1.55: a PrimeVue splitter and only the class.
+    if (old) pane.className = "graph-canvas-panel relative overflow-visible";
+    else {
+      gutter.dataset.testid = "graph-canvas-gutter";
+      pane.id = "graph-canvas-panel";
+    }
     pane.style.pointerEvents = "none";
   }
   afterEach(() => {
@@ -351,6 +355,18 @@ describe("The free area only follows the host's layout", () => {
     jobs.style.pointerEvents = "auto";
     expect(freeArea(cv).free).toEqual(idle.free);
     expect(dockLayoutKey()).toBe(idleKey);
+  });
+
+  it("keeps the same top on older frontends without the pane's id", () => {
+    layout(48, true);
+    const idle = freeArea(cv).free;
+    expect(idle[1]).toBe(48);
+    layout(170, true);
+    const card = el("div", [1237, 48, 1592, 166], column);
+    card.dataset.testid = "error-overlay";
+    card.setAttribute("role", "status");
+    card.style.pointerEvents = "auto";
+    expect(freeArea(cv).free).toEqual(idle);
   });
 
   it("ignores the error card and the inline progress line too", () => {
