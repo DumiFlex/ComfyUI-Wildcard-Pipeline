@@ -1,5 +1,6 @@
 // What the bench and the smoke pack share: the collectors every attempt keeps, and the library
 // reset. See README.md and smoke/README.md.
+import { readFileSync } from "node:fs";
 import { StepError, type Collector, type Helpers } from "watchwright";
 import { trackerFor } from "./bench.js";
 
@@ -129,5 +130,12 @@ export async function resetLibrary(h: Helpers, fixture: string, { backupFirst = 
   await h.wait(3000);
   const after = await h.library();
   h.log(`Imported: ${after.modules.length} modules, ${after.bundles.length} bundle(s), ${after.templates.length} template(s).`);
-  if (after.modules.length < 20) throw new StepError("The bench library didn't import (fewer than 20 modules).");
+  const want = fixtureModuleCount(fixture);
+  if (after.modules.length < want) throw new StepError(`The library didn't import (${after.modules.length} of ${want} modules).`);
+}
+
+/** How many modules a library file holds at its top level (bundle children may add more). */
+function fixtureModuleCount(fixture: string): number {
+  const data = JSON.parse(readFileSync(fixture, "utf8")) as Record<string, unknown>;
+  return ["wildcards", "fixed_values", "combines", "derivations", "constraints"].reduce((n, k) => n + (Array.isArray(data[k]) ? (data[k] as unknown[]).length : 0), 0);
 }
