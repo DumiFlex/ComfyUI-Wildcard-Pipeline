@@ -10,11 +10,15 @@ import { cursorScript } from "./tutorial.js";
 
 const fixture = (packDir: string) => path.join(packDir, "library.json");
 
+// The ComfyUI the takes record. Set WP_TUTORIALS_URL before starting Watchwright to record a
+// clean ComfyUI on another port (see README › Record on a clean ComfyUI).
+const baseURL = process.env.WP_TUTORIALS_URL ?? "http://127.0.0.1:8189/wp/";
+
 export default pack({
   name: "Wildcard Pipeline tutorials",
   description: "Records the video tutorials: the canvas and the manager clicked through with a steady pointer, captions and callouts, one video per tutorial.",
   // The bench's site key: a recording never runs while a bench run changes the library.
-  site: { key: "wildcard-pipeline", baseURL: "http://127.0.0.1:8189/wp/" },
+  site: { key: "wildcard-pipeline", baseURL },
   browser: {
     // Chromium: Firefox's screencast drops frames. 1920 × 1080 is the video's size, since the
     // screencast records CSS pixels (a device scale factor doesn't make it sharper).
