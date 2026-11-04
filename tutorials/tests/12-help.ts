@@ -47,11 +47,12 @@ tutorial(
       await t.click(ours);
       await t.beat(1000);
       await t.waitVoice();
-      await t.say("Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it.");
-      await t.click(dialog.getByText("1 - One image", { exact: true }));
-      await t.beat(2500);
+      await t.callout("examples", dialog.getByText("1 - One image", { exact: true }).locator("xpath=ancestor::*[contains(@class,'grid')][1]"), "Four ready-made workflows", 6);
+      await t.say("Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it. Open one, pick your checkpoint and press Run.");
       await t.waitVoice();
-      await t.say("Pick your checkpoint and press Run. The example workflow videos go through each of them.");
+      await t.uncallout("examples");
+      await t.say("The example workflow videos go through each of them.");
+      await t.press("Escape");
       await t.waitVoice();
     });
 

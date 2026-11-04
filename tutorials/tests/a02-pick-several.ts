@@ -20,7 +20,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero dressed in $colors");
+      await t.type("$hero dressed in $color");
       await t.beat(800);
       await t.waitVoice();
       return { ctx, asm };
@@ -38,9 +38,9 @@ tutorial(
       const pick = modal.locator('[data-test="pool-pick"]');
       await t.callout("pick", pick, "How many to pick", 6);
       await t.say("Pick sets how many options it rolls. Set it to two up to three.");
-      await t.fill(modal.locator('[data-test="pool-pick-max"] input').first(), "3");
+      await t.fill(modal.locator('input[data-test="pool-pick-min"]'), "2");
       await t.press("Tab");
-      await t.fill(modal.locator('[data-test="pool-pick-min"] input').first(), "2");
+      await t.fill(modal.locator('input[data-test="pool-pick-max"]'), "3");
       await t.press("Tab");
       await t.waitVoice();
       await t.uncallout("pick");

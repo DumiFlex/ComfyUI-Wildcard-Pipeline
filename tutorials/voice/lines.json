@@ -17,6 +17,12 @@
   "text": "Each bundle sits in its own frame. Open Character to see what came in.",
   "voice": "af_heart"
  },
+ "03478773fa26": {
+  "ms": 5547,
+  "speed": 1.0,
+  "text": "Ticking only the later one flips it: now the first place is free and the later one obeys.",
+  "voice": "af_heart"
+ },
  "038520e2868f": {
   "ms": 768,
   "speed": 1.0,
@@ -27,6 +33,12 @@
   "ms": 3413,
   "speed": 1.0,
   "text": "Allow repeats stays off, so a color never comes up twice.",
+  "voice": "af_heart"
+ },
+ "05c915f6b8de": {
+  "ms": 9216,
+  "speed": 1.0,
+  "text": "Match is how a model, a LoRA or your own typed text can steer a pack. WP Model Info sets model variables for exactly this.",
   "voice": "af_heart"
  },
  "06b090554805": {
@@ -53,6 +65,18 @@
   "text": "Character holds the Hero list, and three smaller bundles inside it: Look, Outfit and Shared lists.",
   "voice": "af_heart"
  },
+ "087a39502c74": {
+  "ms": 6421,
+  "speed": 1.0,
+  "text": "Tags work on groups. For one pair of options, add an exception: the inventor loves the rooftop garden.",
+  "voice": "af_heart"
+ },
+ "0967156714c8": {
+  "ms": 8512,
+  "speed": 1.0,
+  "text": "The negative preview colors each word like the variable it came from: the armor's words, and the night lighting's. Hover a word to see its variable.",
+  "voice": "af_heart"
+ },
  "0f506d4c8b9f": {
   "ms": 2688,
   "speed": 1.0,
@@ -75,6 +99,18 @@
   "ms": 8256,
   "speed": 1.0,
   "text": "SHOES is an accepts group. Its tags are alternatives: a robe goes with sandals or slippers, and each pick rolls one of them.",
+  "voice": "af_heart"
+ },
+ "11ebce977b47": {
+  "ms": 5269,
+  "speed": 1.0,
+  "text": "Back to Hero fits the place. Each cell of the matrix holds one rule for a pair of tags.",
+  "voice": "af_heart"
+ },
+ "13585180ef78": {
+  "ms": 8299,
+  "speed": 1.0,
+  "text": "An empty option for sometimes none, a fallback for when nothing fits, and per node ticks for one scene. Next: derivations in depth.",
   "voice": "af_heart"
  },
  "13cd23613d87": {
@@ -113,6 +149,12 @@
   "text": "Every setting is here, in groups. The easiest way to try them is the playground at the top.",
   "voice": "af_heart"
  },
+ "19dd0e37d21a": {
+  "ms": 7147,
+  "speed": 1.0,
+  "text": "Wild heroes rarely end up in castles. Click wild and castle, choose Reduce, and set the factor to point two.",
+  "voice": "af_heart"
+ },
  "1a1f38f5c30a": {
   "ms": 4331,
   "speed": 1.0,
@@ -131,16 +173,40 @@
   "text": "lighting becomes moonlight and a warm lantern glow.",
   "voice": "af_heart"
  },
+ "1c0abce3c8ad": {
+  "ms": 6805,
+  "speed": 1.0,
+  "text": "Write a list once, and let other lists read it, all of it, or only the tags you want. Next: reading a pick's parts.",
+  "voice": "af_heart"
+ },
+ "1d7e402b20cb": {
+  "ms": 6272,
+  "speed": 1.0,
+  "text": "This scene needs a thief. Edit Hero on this node and untick everyone else. The library keeps all six.",
+  "voice": "af_heart"
+ },
  "1e5956b48c0b": {
   "ms": 1963,
   "speed": 1.0,
   "text": "Right-click Colors and open Edit.",
   "voice": "af_heart"
  },
+ "1e7ec388893a": {
+  "ms": 5291,
+  "speed": 1.0,
+  "text": "Now only the first place follows the rule. The later one rolls freely, castles included.",
+  "voice": "af_heart"
+ },
  "1f61a094c1b7": {
   "ms": 6123,
   "speed": 1.0,
   "text": "Fixed values hold what never changes, combines build lines you reuse. Next: derivations.",
+  "voice": "af_heart"
+ },
+ "1fd7c34bf60b": {
+  "ms": 4288,
+  "speed": 1.0,
+  "text": "On the canvas, pick Hero, Setting and the Hero fits the place constraint.",
   "voice": "af_heart"
  },
  "2316739f0dc7": {
@@ -153,6 +219,12 @@
   "ms": 3136,
   "speed": 1.0,
   "text": "The manager opens in its own window, on the dashboard.",
+  "voice": "af_heart"
+ },
+ "233326a562de": {
+  "ms": 5653,
+  "speed": 1.0,
+  "text": "The Preview below shows each hero's chance of every place. The ranger's castle chances just fell.",
   "voice": "af_heart"
  },
  "26421a02d89b": {
@@ -179,6 +251,36 @@
   "text": "Every option has a weight. The chance column shows how often each one rolls.",
   "voice": "af_heart"
  },
+ "279f2e36edd3": {
+  "ms": 5248,
+  "speed": 1.0,
+  "text": "And when a list has an accepts group, its tags can be the rows or the columns too. Save.",
+  "voice": "af_heart"
+ },
+ "288d854dd2e0": {
+  "ms": 7573,
+  "speed": 1.0,
+  "text": "Dot a group's name for a tag, dot a number for one pick, dot neg for the negative. Next: holding a value, and matching one.",
+  "voice": "af_heart"
+ },
+ "291076a93a4e": {
+  "ms": 5397,
+  "speed": 1.0,
+  "text": "Only variables the prompt prints send their negatives. Hide a variable, and its words stay out.",
+  "voice": "af_heart"
+ },
+ "2964315ec8ec": {
+  "ms": 2155,
+  "speed": 1.0,
+  "text": "Roll until the armor turns up at night.",
+  "voice": "af_heart"
+ },
+ "2b51a144bf37": {
+  "ms": 4843,
+  "speed": 1.0,
+  "text": "There's the crest, and the eyes are a color. Any other hero keeps the plain Eyes roll.",
+  "voice": "af_heart"
+ },
  "2c5fbd2a1c6e": {
   "ms": 6528,
   "speed": 1.0,
@@ -189,6 +291,18 @@
   "ms": 4288,
   "speed": 1.0,
   "text": "On the canvas it works in the node text boxes, like an Assembler's template.",
+  "voice": "af_heart"
+ },
+ "2e3426ce84c3": {
+  "ms": 3200,
+  "speed": 1.0,
+  "text": "Edit the constraint on this node and set its reach to first.",
+  "voice": "af_heart"
+ },
+ "2e617425b1e4": {
+  "ms": 9323,
+  "speed": 1.0,
+  "text": "Conditions with AND, OR and NOT, text tests and regex, and actions that append, prepend and roll lists. Next: the constraint matrix in depth.",
   "voice": "af_heart"
  },
  "2f6f96c67804": {
@@ -209,6 +323,18 @@
   "text": "Now open Scene.",
   "voice": "af_heart"
  },
+ "31ea4a8e8bda": {
+  "ms": 6421,
+  "speed": 1.0,
+  "text": "Time of day still rolls: dawn, golden hour or night. Edit it, and type wanted time into Match variable.",
+  "voice": "af_heart"
+ },
+ "3207d808b6c6": {
+  "ms": 7509,
+  "speed": 1.0,
+  "text": "Match goes the other way: a pick follows a variable that something else set. Here a Context Injector sets wanted time to night.",
+  "voice": "af_heart"
+ },
  "338d8373eb82": {
   "ms": 3840,
   "speed": 1.0,
@@ -221,10 +347,22 @@
   "text": "Pick your checkpoint and press Run. The example workflow videos go through each of them.",
   "voice": "af_heart"
  },
+ "352420b9e2c1": {
+  "ms": 9792,
+  "speed": 1.0,
+  "text": "Boost, reduce, exclude and only for tag pairs, exceptions for single options, and the Preview to check the odds. Next: how far a constraint reaches.",
+  "voice": "af_heart"
+ },
  "37b3e46e447c": {
   "ms": 4459,
   "speed": 1.0,
   "text": "A combine joins variables into one line you can reuse. Let's make one.",
+  "voice": "af_heart"
+ },
+ "381822cd1a3a": {
+  "ms": 5269,
+  "speed": 1.0,
+  "text": "The second option takes from Travel gear, and only its cold gear: pick cold, then Apply.",
   "voice": "af_heart"
  },
  "3851fb37568b": {
@@ -233,10 +371,34 @@
   "text": "Travel gear has two groups. CLIMATE is descriptive: a coat is cold weather gear, a robe is warm. All of an option's descriptive tags count at once.",
   "voice": "af_heart"
  },
+ "391bc4239318": {
+  "ms": 8896,
+  "speed": 1.0,
+  "text": "Negatives ride with the picks that need them, only reach an Assembler that prints them, and the Cleaner tidies what's left. Next: chaining Contexts.",
+  "voice": "af_heart"
+ },
+ "3b77e02d054e": {
+  "ms": 7787,
+  "speed": 1.0,
+  "text": "Eyes has an empty option. It rolls like the others, and when it comes up, nothing is written: a quarter of the time, no eyes at all.",
+  "voice": "af_heart"
+ },
+ "3bca9eb45595": {
+  "ms": 6443,
+  "speed": 1.0,
+  "text": "Type an at sign and the start of a variable, and pick it with Enter. Colors has no tags, so it goes straight in.",
+  "voice": "af_heart"
+ },
  "3bd0832aeac8": {
   "ms": 6997,
   "speed": 1.0,
   "text": "That's the basics of Wildcard Pipeline. The advanced videos go further: nested lists, LoRAs, loops and more.",
+  "voice": "af_heart"
+ },
+ "3d5e84977e46": {
+  "ms": 896,
+  "speed": 1.0,
+  "text": "Run again.",
   "voice": "af_heart"
  },
  "3f9147194aa7": {
@@ -261,6 +423,12 @@
   "ms": 5803,
   "speed": 1.0,
   "text": "A wildcard picks one option. Sometimes you want two or three: here, the colors a hero wears.",
+  "voice": "af_heart"
+ },
+ "416e4ea8cc52": {
+  "ms": 9344,
+  "speed": 1.0,
+  "text": "A negative belongs to the pick that needs it. In Outfit, plate armor sends rust and broken armor to the negative prompt, only when plate armor is picked.",
   "voice": "af_heart"
  },
  "4198872a7351": {
@@ -299,10 +467,22 @@
   "text": "Save keeps it on this node. Save to library would change the list everywhere.",
   "voice": "af_heart"
  },
+ "464943cb9067": {
+  "ms": 2880,
+  "speed": 1.0,
+  "text": "Give the patched tunic one too: clean, new clothes.",
+  "voice": "af_heart"
+ },
  "46b474c11e16": {
   "ms": 6187,
   "speed": 1.0,
   "text": "The canvas look lives in ComfyUI's Settings, the manager's in its own. Next: autocomplete.",
+  "voice": "af_heart"
+ },
+ "46f9f1715965": {
+  "ms": 5611,
+  "speed": 1.0,
+  "text": "For a clear test, keep only the street thief on this node. City folk are never sent to a castle.",
   "voice": "af_heart"
  },
  "47257e7e68c2": {
@@ -315,6 +495,18 @@
   "ms": 2816,
   "speed": 1.0,
   "text": "From here you can start any new item in one click.",
+  "voice": "af_heart"
+ },
+ "481e358202a5": {
+  "ms": 5867,
+  "speed": 1.0,
+  "text": "A second Context picks the first setting, and a third picks Setting again, renamed to later for this node.",
+  "voice": "af_heart"
+ },
+ "48dd4d0b93ae": {
+  "ms": 6784,
+  "speed": 1.0,
+  "text": "Both must hold, so the join says AND. Click it for OR, when either one is enough. We want AND, so click it back.",
   "voice": "af_heart"
  },
  "4b84f916ede4": {
@@ -335,10 +527,28 @@
   "text": "Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it.",
   "voice": "af_heart"
  },
+ "4df55582631c": {
+  "ms": 5035,
+  "speed": 1.0,
+  "text": "So short hair can be short silver hair, or short copper hair, without writing every pair.",
+  "voice": "af_heart"
+ },
+ "4e10e8c0fb0e": {
+  "ms": 3456,
+  "speed": 1.0,
+  "text": "Type an at sign and the start of a variable. Pick it with Enter.",
+  "voice": "af_heart"
+ },
  "4e308a7941cf": {
   "ms": 3776,
   "speed": 1.0,
   "text": "Back on the canvas, add a Context node and pick Hero and Weather.",
+  "voice": "af_heart"
+ },
+ "4e6d12c41fc8": {
+  "ms": 4907,
+  "speed": 1.0,
+  "text": "Each word still comes once. Dot neg works in combines and derivations too.",
   "voice": "af_heart"
  },
  "4f19b39aaf87": {
@@ -353,10 +563,34 @@
   "text": "On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.",
   "voice": "af_heart"
  },
+ "513655383b1f": {
+  "ms": 5419,
+  "speed": 1.0,
+  "text": "Roll a few seeds: a wool cloak in a new color, or a cold weather coat, never a summer robe.",
+  "voice": "af_heart"
+ },
+ "51aa84e7b234": {
+  "ms": 4395,
+  "speed": 1.0,
+  "text": "Group adds a bracket of conditions, for mixes like this and, this or that.",
+  "voice": "af_heart"
+ },
+ "534a3056f71b": {
+  "ms": 6251,
+  "speed": 1.0,
+  "text": "Dollar gear prints the gear. Dollar gear dot SHOES prints the shoe it rolled, in the group's name, in capitals.",
+  "voice": "af_heart"
+ },
  "5352952d6267": {
   "ms": 4224,
   "speed": 1.0,
   "text": "Pick Character first, then Scene, because the scene's rule reads the hero.",
+  "voice": "af_heart"
+ },
+ "5379178df013": {
+  "ms": 4693,
+  "speed": 1.0,
+  "text": "Only the inventor's row changes. An exception beats the matrix for its pair.",
   "voice": "af_heart"
  },
  "540ace07a36b": {
@@ -369,6 +603,18 @@
   "ms": 4245,
   "speed": 1.0,
   "text": "Every variable from both bundles is ready to use. Roll a few seeds.",
+  "voice": "af_heart"
+ },
+ "57169740a1b1": {
+  "ms": 9536,
+  "speed": 1.0,
+  "text": "Now time is night on every seed. And Lighting, which reads time, gives moonlight every time: a matched pick drives the rules and constraints after it.",
+  "voice": "af_heart"
+ },
+ "57a03de8c3e6": {
+  "ms": 7424,
+  "speed": 1.0,
+  "text": "The repeated masterpiece is gone, and the report says what changed. The blocklist button takes words you never want in a prompt.",
   "voice": "af_heart"
  },
  "57c3de063bbb": {
@@ -407,6 +653,12 @@
   "text": "Edit opens the item right here, with its options and their odds.",
   "voice": "af_heart"
  },
+ "5d70133ed9d5": {
+  "ms": 5952,
+  "speed": 1.0,
+  "text": "For a story, the hero should stay the same. Right-click Hero, Edit, and switch on Hold across run.",
+  "voice": "af_heart"
+ },
  "5d94340b0128": {
   "ms": 5376,
   "speed": 1.0,
@@ -431,6 +683,12 @@
   "text": "Your templates are listed here. Pick one.",
   "voice": "af_heart"
  },
+ "60b0dbad4ed7": {
+  "ms": 6059,
+  "speed": 1.0,
+  "text": "Roll a few seeds. The shoes always suit the gear: boots with a coat, sandals or slippers with a robe.",
+  "voice": "af_heart"
+ },
  "61943d05f9dc": {
   "ms": 2688,
   "speed": 1.0,
@@ -447,6 +705,12 @@
   "ms": 4501,
   "speed": 1.0,
   "text": "Below the preview you can try the warnings too: how long they stay and which ones show.",
+  "voice": "af_heart"
+ },
+ "639c5cde4f09": {
+  "ms": 2176,
+  "speed": 1.0,
+  "text": "Four prompts, and a new hero in each.",
   "voice": "af_heart"
  },
  "64126e13325f": {
@@ -467,6 +731,12 @@
   "text": "Rows are the hero's tags, columns the setting's tags.",
   "voice": "af_heart"
  },
+ "687d0df2c7bf": {
+  "ms": 3776,
+  "speed": 1.0,
+  "text": "Add null puts one in. Its weight sets how often nothing comes up.",
+  "voice": "af_heart"
+ },
  "68da0984793f": {
   "ms": 5312,
   "speed": 1.0,
@@ -479,6 +749,12 @@
   "text": "Your installed LoRAs and embeddings work the same way. Turn on LoRAs.",
   "voice": "af_heart"
  },
+ "6b1cc1acacee": {
+  "ms": 7360,
+  "speed": 1.0,
+  "text": "Dollar color prints both. Dot zero is the first pick, dot one the second. Give one to the hair and one to the eyes.",
+  "voice": "af_heart"
+ },
  "6b28502ca8aa": {
   "ms": 5355,
   "speed": 1.0,
@@ -489,6 +765,18 @@
   "ms": 5952,
   "speed": 1.0,
   "text": "On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.",
+  "voice": "af_heart"
+ },
+ "6cea86fd7562": {
+  "ms": 1771,
+  "speed": 1.0,
+  "text": "Set the count to four, and Run.",
+  "voice": "af_heart"
+ },
+ "6eb0dbefbb7b": {
+  "ms": 2560,
+  "speed": 1.0,
+  "text": "Pick Hero, Travel gear, Colors and Outfit.",
   "voice": "af_heart"
  },
  "6f1da3098da0": {
@@ -515,10 +803,22 @@
   "text": "A combine reads what was rolled above it, so the order matters.",
   "voice": "af_heart"
  },
+ "74adc3cd5613": {
+  "ms": 2197,
+  "speed": 1.0,
+  "text": "Let's make a Cloak list that does the same.",
+  "voice": "af_heart"
+ },
  "7786b4c7decc": {
   "ms": 2304,
   "speed": 1.0,
   "text": "The disk button saves both to the library.",
+  "voice": "af_heart"
+ },
+ "782f0934274a": {
+  "ms": 2880,
+  "speed": 1.0,
+  "text": "The example workflow videos go through each of them.",
   "voice": "af_heart"
  },
  "78d86bb85dc3": {
@@ -533,10 +833,22 @@
   "text": "The roll happens once per run, so $gear.SHOES reads the same everywhere you write it.",
   "voice": "af_heart"
  },
+ "79be925d151e": {
+  "ms": 9109,
+  "speed": 1.0,
+  "text": "Reach is all by default: the constraint covers every Setting after it, in this Context or in the ones it feeds. Neither place is ever a castle.",
+  "voice": "af_heart"
+ },
  "7a3f6b90953b": {
   "ms": 3499,
   "speed": 1.0,
   "text": "Pick sets how many options it rolls. Set it to two up to three.",
+  "voice": "af_heart"
+ },
+ "7c06dc6b574d": {
+  "ms": 2901,
+  "speed": 1.0,
+  "text": "Hover the throne room's chance and click set as fallback.",
   "voice": "af_heart"
  },
  "7d8dcf11971e": {
@@ -549,6 +861,18 @@
   "ms": 5440,
   "speed": 1.0,
   "text": "On the left are the controls; on the right, a live preview with every kind of row and marker.",
+  "voice": "af_heart"
+ },
+ "83260fd05253": {
+  "ms": 3541,
+  "speed": 1.0,
+  "text": "Last, a variable's negative. Add the outfit to the prompt.",
+  "voice": "af_heart"
+ },
+ "83419bb3862c": {
+  "ms": 6165,
+  "speed": 1.0,
+  "text": "A story in two places. The first Context picks the hero and the Hero fits the place constraint.",
   "voice": "af_heart"
  },
  "836924b6e384": {
@@ -569,16 +893,64 @@
   "text": "Every saved template lives on the Templates page of the manager.",
   "voice": "af_heart"
  },
+ "8531117b3a32": {
+  "ms": 6379,
+  "speed": 1.0,
+  "text": "Hold keeps a pick for a run. Match makes a pick follow a variable. Next: what happens when nothing fits.",
+  "voice": "af_heart"
+ },
  "86f91454300a": {
   "ms": 1941,
   "speed": 1.0,
   "text": "Save keeps this on this node only.",
   "voice": "af_heart"
  },
+ "877c129b9eed": {
+  "ms": 4949,
+  "speed": 1.0,
+  "text": "Then: Append to hero, so the crest goes after the pick. Prepend puts text in front.",
+  "voice": "af_heart"
+ },
+ "88781cd34ae9": {
+  "ms": 7083,
+  "speed": 1.0,
+  "text": "The same hero in every frame, while the outfit and the place still change. A new seed picks a new hero for the next run.",
+  "voice": "af_heart"
+ },
  "88f568cd701d": {
   "ms": 6784,
   "speed": 1.0,
   "text": "Only the scene line reaches the template, so hide the other three with their globe buttons. The combine still reads them.",
+  "voice": "af_heart"
+ },
+ "8af2ea8156da": {
+  "ms": 6549,
+  "speed": 1.0,
+  "text": "An option can hold another wildcard. Hair's options read the Colors list: each purple chip rolls a color.",
+  "voice": "af_heart"
+ },
+ "8beb48e0c348": {
+  "ms": 3136,
+  "speed": 1.0,
+  "text": "Debug shows each pick with its tags and its negative.",
+  "voice": "af_heart"
+ },
+ "8c144ede649c": {
+  "ms": 725,
+  "speed": 1.0,
+  "text": "Run it.",
+  "voice": "af_heart"
+ },
+ "8c2b47ac07d2": {
+  "ms": 7851,
+  "speed": 1.0,
+  "text": "But the constraint keeps city folk out of castles, so nothing is left to pick. The fallback steps in: the throne room, on every seed.",
+  "voice": "af_heart"
+ },
+ "8e3dc896fcc0": {
+  "ms": 4395,
+  "speed": 1.0,
+  "text": "And it happens in a castle: in Setting, keep only the two castle places.",
   "voice": "af_heart"
  },
  "8f9e745c682a": {
@@ -605,10 +977,28 @@
   "text": "A noble hero makes a castle four times as likely,",
   "voice": "af_heart"
  },
+ "9414811c8369": {
+  "ms": 6955,
+  "speed": 1.0,
+  "text": "Last, the WP Prompt Cleaner. It tidies a prompt before the sampler. Wire both Assembler outputs into it.",
+  "voice": "af_heart"
+ },
  "94874a0d673f": {
   "ms": 3051,
   "speed": 1.0,
   "text": "The manager has its own Appearance page, under Settings.",
+  "voice": "af_heart"
+ },
+ "94bfc595eefb": {
+  "ms": 3499,
+  "speed": 1.0,
+  "text": "Now the pictures, with WP Debug under the Context.",
+  "voice": "af_heart"
+ },
+ "95044d8eaab8": {
+  "ms": 5739,
+  "speed": 1.0,
+  "text": "When hero matches knight or mage. Matches takes a regular expression: the bar means or.",
   "voice": "af_heart"
  },
  "95fa2308979b": {
@@ -617,10 +1007,22 @@
   "text": "Open the negative box under it, too. A template keeps its negative with it.",
   "voice": "af_heart"
  },
+ "969c54d0b0aa": {
+  "ms": 5824,
+  "speed": 1.0,
+  "text": "Pick lists every Setting the constraint can reach, with its node, so you tick exactly the ones it covers.",
+  "voice": "af_heart"
+ },
  "9719ef12f3b0": {
   "ms": 5803,
   "speed": 1.0,
   "text": "Character brings the Hero list, then Look with the hair, eyes and colors, Outfit, and the Shared lists.",
+  "voice": "af_heart"
+ },
+ "977f761892b5": {
+  "ms": 7552,
+  "speed": 1.0,
+  "text": "Now Setting. A constraint can rule out every option, and then a wildcard has nothing to pick. A fallback is the stand in.",
   "voice": "af_heart"
  },
  "97c73be443a4": {
@@ -641,10 +1043,22 @@
   "text": "That's it: a new prompt for every seed. Next, we'll make a wildcard of our own.",
   "voice": "af_heart"
  },
+ "9934c4337941": {
+  "ms": 2347,
+  "speed": 1.0,
+  "text": "Next N covers the next few, by a count.",
+  "voice": "af_heart"
+ },
  "9963393f5591": {
   "ms": 5845,
   "speed": 1.0,
   "text": "Roll a few seeds. Knights and mages land in castles more often, and the thief stays in the city.",
+  "voice": "af_heart"
+ },
+ "999e03f38e29": {
+  "ms": 5547,
+  "speed": 1.0,
+  "text": "On the canvas, pick Hero, Eyes, Setting and the new rule, which goes after the lists it reads.",
   "voice": "af_heart"
  },
  "99bfb5e4a815": {
@@ -677,6 +1091,12 @@
   "text": "Wildcard Pipeline adds a button to ComfyUI's top bar. It opens the manager, where your library lives.",
   "voice": "af_heart"
  },
+ "9e8624e43986": {
+  "ms": 3776,
+  "speed": 1.0,
+  "text": "Next you can filter it by its tags. Colors has none, so skip.",
+  "voice": "af_heart"
+ },
  "9ec5a72ea990": {
   "ms": 8661,
   "speed": 1.0,
@@ -695,6 +1115,12 @@
   "text": "Next: the Context node itself, and how it can roll for you.",
   "voice": "af_heart"
  },
+ "a1ac4c8feaa5": {
+  "ms": 8875,
+  "speed": 1.0,
+  "text": "First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain. Next: negatives.",
+  "voice": "af_heart"
+ },
  "a31ada13963e": {
   "ms": 4885,
   "speed": 1.0,
@@ -705,6 +1131,12 @@
   "ms": 2624,
   "speed": 1.0,
   "text": "Here are a few of those scenes, run through a model.",
+  "voice": "af_heart"
+ },
+ "a3e14746117e": {
+  "ms": 8341,
+  "speed": 1.0,
+  "text": "Travel gear has two tag groups. Climate describes each option. Shoes is an accepts group: each option lists the shoes it goes with.",
   "voice": "af_heart"
  },
  "a478c7e062d0": {
@@ -725,6 +1157,12 @@
   "text": "Here's what those prompts make, run through a model.",
   "voice": "af_heart"
  },
+ "a958eafe50c2": {
+  "ms": 7488,
+  "speed": 1.0,
+  "text": "On the canvas, pick Hero and Cloak. Colors and Travel gear don't need to be on the node: a reference finds them in the library.",
+  "voice": "af_heart"
+ },
  "a97c81877530": {
   "ms": 2816,
   "speed": 1.0,
@@ -743,6 +1181,12 @@
   "text": "A second action adds a negative, so the night isn't overexposed.",
   "voice": "af_heart"
  },
+ "aa9d4274eb99": {
+  "ms": 7744,
+  "speed": 1.0,
+  "text": "Lists can nest inside lists inside lists. Settings, Canvas, sets how deep, so a list that reads itself can't loop forever.",
+  "voice": "af_heart"
+ },
  "abfdc6de539b": {
   "ms": 4544,
   "speed": 1.0,
@@ -753,6 +1197,24 @@
   "ms": 4352,
   "speed": 1.0,
   "text": "Density sets how much room each row takes. Compact fits more on a node.",
+  "voice": "af_heart"
+ },
+ "b34eb6171e2a": {
+  "ms": 5589,
+  "speed": 1.0,
+  "text": "When the coat rolls, one of its shoes rolls with it. The variable keeps that shoe as a part you can read.",
+  "voice": "af_heart"
+ },
+ "b45748906462": {
+  "ms": 4928,
+  "speed": 1.0,
+  "text": "Let's build a rule: knights and mages wear a royal crest, but not out in the forest.",
+  "voice": "af_heart"
+ },
+ "b8445a581178": {
+  "ms": 7723,
+  "speed": 1.0,
+  "text": "One branch can do several things. Add an action: eyes become a fresh roll of Colors, written with an at reference, like in a list.",
   "voice": "af_heart"
  },
  "b87a218300d1": {
@@ -821,6 +1283,12 @@
   "text": "Random picks can clash: a street thief in a royal throne room. A constraint changes the odds by what was already rolled.",
   "voice": "af_heart"
  },
+ "c23ee9763a47": {
+  "ms": 5077,
+  "speed": 1.0,
+  "text": "Dot neg reads it on its own. Here it goes first in the negative box, before the rest.",
+  "voice": "af_heart"
+ },
  "c240d26a54e8": {
   "ms": 2453,
   "speed": 1.0,
@@ -837,6 +1305,12 @@
   "ms": 5461,
   "speed": 1.0,
   "text": "Once your lists work well together, keep them together. A bundle is a saved set of modules.",
+  "voice": "af_heart"
+ },
+ "c5bfdd49b8ac": {
+  "ms": 4672,
+  "speed": 1.0,
+  "text": "Only turns a row into a list of what's allowed. Set urban and city to Only.",
   "voice": "af_heart"
  },
  "c659646078ad": {
@@ -941,16 +1415,40 @@
   "text": "Its help page opens right over the canvas.",
   "voice": "af_heart"
  },
+ "d53e3a39ce26": {
+  "ms": 9771,
+  "speed": 1.0,
+  "text": "Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it. Open one, pick your checkpoint and press Run.",
+  "voice": "af_heart"
+ },
+ "d6554076490c": {
+  "ms": 8533,
+  "speed": 1.0,
+  "text": "Fixed values and combines take a negative the same way. A derivation has two actions for them: Add to negative, and Replace negative.",
+  "voice": "af_heart"
+ },
  "d6d0bde0a587": {
   "ms": 4501,
   "speed": 1.0,
   "text": "The list shows how often each tag is used. Arrow keys move, Enter picks.",
   "voice": "af_heart"
  },
+ "d7a1a00f6688": {
+  "ms": 4032,
+  "speed": 1.0,
+  "text": "On the canvas, pick Hero, Outfit, Time of day and Lighting from time.",
+  "voice": "af_heart"
+ },
  "d7d63002644a": {
   "ms": 3584,
   "speed": 1.0,
   "text": "Color intensity makes the kind colors softer or stronger.",
+  "voice": "af_heart"
+ },
+ "d9309d89d174": {
+  "ms": 6571,
+  "speed": 1.0,
+  "text": "Now a city hero gets the city, or a place with its own rule in that row. The wilds had none, so they're out.",
   "voice": "af_heart"
  },
  "d969a6f6fab7": {
@@ -971,6 +1469,12 @@
   "text": "Download the tag list once, switch on what you want, per side, and the suggestions follow you everywhere you type.",
   "voice": "af_heart"
  },
+ "db47c0de7ea9": {
+  "ms": 6549,
+  "speed": 1.0,
+  "text": "Boost and reduce multiply the chance by a factor. Exclude sets it to zero. Neutral leaves it alone.",
+  "voice": "af_heart"
+ },
  "dbc29d718c08": {
   "ms": 4288,
   "speed": 1.0,
@@ -987,6 +1491,12 @@
   "ms": 3947,
   "speed": 1.0,
   "text": "It writes a new variable, hero line, from a small template of its own.",
+  "voice": "af_heart"
+ },
+ "deb6a676ed57": {
+  "ms": 7168,
+  "speed": 1.0,
+  "text": "The second option takes from Travel gear. Travel gear has tags, so Enter offers a filter: pick cold, then Apply.",
   "voice": "af_heart"
  },
  "dfde8d0a2019": {
@@ -1007,6 +1517,12 @@
   "text": "In the template, $gear.SHOES prints the shoe that was rolled with the gear.",
   "voice": "af_heart"
  },
+ "e39a28edce60": {
+  "ms": 4096,
+  "speed": 1.0,
+  "text": "Add a second condition. Setting contains forest, and switch on NOT.",
+  "voice": "af_heart"
+ },
  "e3e934d5567e": {
   "ms": 7851,
   "speed": 1.0,
@@ -1025,10 +1541,28 @@
   "text": "Tags sort options into groups, like noble or urban. Rules can read them later.",
   "voice": "af_heart"
  },
+ "e45ec766fcb3": {
+  "ms": 8491,
+  "speed": 1.0,
+  "text": "Without one, the setting would come out empty. WP Debug says fallback used when it kicks in, so you can spot rules that box a pick in.",
+  "voice": "af_heart"
+ },
+ "e4c6d4c92069": {
+  "ms": 7253,
+  "speed": 1.0,
+  "text": "When several constraints cover the same wildcard, they all apply: their factors multiply, and an exclude always wins.",
+  "voice": "af_heart"
+ },
  "e779341f3c23": {
   "ms": 5099,
   "speed": 1.0,
   "text": "Bundles can nest, so you build big sets out of small ones and reuse the small ones anywhere.",
+  "voice": "af_heart"
+ },
+ "e941f947ad27": {
+  "ms": 5568,
+  "speed": 1.0,
+  "text": "Balanced is a safe default: it removes empty brackets, stray commas and repeated tags.",
   "voice": "af_heart"
  },
  "e99c3c741bab": {
@@ -1041,6 +1575,12 @@
   "ms": 6720,
   "speed": 1.0,
   "text": "Wildcard Pipeline fits into ComfyUI. Here is a Context node with three lists, as it looks out of the box.",
+  "voice": "af_heart"
+ },
+ "ed981a9ba2f1": {
+  "ms": 4480,
+  "speed": 1.0,
+  "text": "Plate armor carries a negative, and it lands in the negative prompt by itself.",
   "voice": "af_heart"
  },
  "eef3d826cb31": {
@@ -1061,16 +1601,40 @@
   "text": "Accepts groups also let constraints match tag for tag, and tags filter references inside wildcards. Both come next.",
   "voice": "af_heart"
  },
+ "f2567cdd4908": {
+  "ms": 5931,
+  "speed": 1.0,
+  "text": "A Context Loop runs the workflow several times from one click. Each frame rolls its own picks.",
+  "voice": "af_heart"
+ },
+ "f2d342f41fc5": {
+  "ms": 5440,
+  "speed": 1.0,
+  "text": "Now make Colors pick two for this node: right-click it, Edit, and set the pick to exactly two.",
+  "voice": "af_heart"
+ },
  "f50d114bc4b9": {
   "ms": 9835,
   "speed": 1.0,
   "text": "You can also write several picks right in a template or an option. Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.",
   "voice": "af_heart"
  },
+ "f56a1e6148f6": {
+  "ms": 3541,
+  "speed": 1.0,
+  "text": "Roll until a knight or a mage turns up away from the forest.",
+  "voice": "af_heart"
+ },
  "f5b117624e40": {
   "ms": 2603,
   "speed": 1.0,
   "text": "Change the seed, and every list rolls again.",
+  "voice": "af_heart"
+ },
+ "f642ea732239": {
+  "ms": 1941,
+  "speed": 1.0,
+  "text": "Debug shows what each reference rolled.",
   "voice": "af_heart"
  },
  "f9a5d8143a7c": {
