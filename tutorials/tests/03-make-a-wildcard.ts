@@ -1,6 +1,6 @@
 // Tutorial 3: make your own wildcard. A Weather wildcard in the manager (name, variable, four
 // options, a lower weight), then used on the canvas next to Hero.
-import { showcase, showcasing, tutorial } from "../tutorial.js";
+import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
   "T03",
@@ -84,7 +84,13 @@ tutorial(
       await t.h.step("The pictures", async () => {
         await t.say("Here's what those prompts make, run through a model.");
         const plus = t.node(asm.ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
+        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
+        const dbg = await addDebugUnder(t, asm.ctx);
         await showcase(t, { from: asm.asm, preview: { x: 1340, y: 380, width: 420, height: 610 }, chain: { x: 1820, y: 900 }, between: () => t.click(plus) });
+        await t.callout("picks", t.node(dbg), "What this picture rolled");
+        await t.say("Debug shows the picks behind the last picture, so you can see the prompt change from run to run.");
+        await t.waitVoice();
+        await t.uncallout("picks");
       });
     }
 

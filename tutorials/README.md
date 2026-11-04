@@ -64,7 +64,7 @@ tutorial("T07", { title: "Your next tutorial" }, async (t) => {
 |---|---|---|
 | `reset` | on | Loads `library.json` before the first tutorial. |
 | `showcase` | off | Ends each tutorial by rendering real images from its prompt (needs a GPU and the checkpoint below). Leave it off where no model is installed. |
-| `checkpoint` | `novaCartoonXL_v60` | The checkpoint the showcase uses, without the extension. A missing one stops the take and lists the ones ComfyUI has. |
+| `checkpoint` | `waiIllustriousSDXL_v170` | The checkpoint the showcase uses, without the extension. A missing one stops the take and lists the ones ComfyUI has. |
 | `steps`, `cfg` | 24, 5 | The showcase sampler's steps and CFG. |
 
 ### More helpers

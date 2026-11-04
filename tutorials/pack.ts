@@ -40,7 +40,7 @@ export default pack({
     },
     checkpoint: {
       type: "string",
-      default: "novaCartoonXL_v60",
+      default: "waiIllustriousSDXL_v170",
       description: "The checkpoint the showcase loads, by its file name in models/checkpoints (the .safetensors ending is optional).",
     },
     steps: { type: "number", default: 24, description: "Sampler steps for the showcase." },

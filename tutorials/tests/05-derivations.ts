@@ -1,6 +1,6 @@
 // Tutorial 5: derivations. The Lighting from time rule (IF night THEN moonlight and a negative,
 // ELSE soft light), read in a scene line; new seeds until night rolls and the light follows.
-import { showcase, showcasing, tutorial } from "../tutorial.js";
+import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
   "T05",
@@ -48,13 +48,16 @@ tutorial(
       await t.say("On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.");
       await t.go("/");
       await t.beat(600);
-      const ctx = await t.addNode("WP Context", { x: 520, y: 280 });
+      const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Time of day", "Setting", "Lighting from time", "Scene line"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 260 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("a lone traveler $scene");
       await t.beat(1000);
+      await t.say("Only the scene line reaches the template, so hide the other three with their globe buttons. The combine still reads them.");
+      await t.hide(ctx, ["Time of day", "Setting", "Lighting from time"]);
+      await t.waitVoice();
       return { ctx, asm };
     });
 
@@ -76,7 +79,13 @@ tutorial(
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
         await t.say("Here are a few of those scenes, run through a model.");
-        await showcase(t, { from: nodes.asm, preview: { x: 1560, y: 440, width: 340, height: 500 }, chain: { x: 1820, y: 960 }, between: () => t.click(plus) });
+        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
+        const dbg = await addDebugUnder(t, nodes.ctx);
+        await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, between: () => t.click(plus) });
+        await t.callout("picks", t.node(dbg), "What this picture rolled");
+        await t.say("Debug shows the picks behind the last picture, so you can see the prompt change from run to run.");
+        await t.waitVoice();
+        await t.uncallout("picks");
       });
     }
 

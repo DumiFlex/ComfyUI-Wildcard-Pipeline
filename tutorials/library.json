@@ -1169,6 +1169,97 @@
    "community_post_slug": null,
    "community_version_number": null,
    "content_rating": "safe"
+  },
+  {
+   "id": "a1b2c3d4",
+   "type": "wildcard",
+   "name": "Travel gear",
+   "description": "Tag groups: CLIMATE describes the option, SHOES is an accepts axis read as $gear.SHOES.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "gear",
+    "sub_categories": [
+     "cold",
+     "warm",
+     "boots",
+     "sandals",
+     "slippers"
+    ],
+    "tag_groups": {
+     "CLIMATE": [
+      "cold",
+      "warm"
+     ],
+     "SHOES": [
+      "boots",
+      "sandals",
+      "slippers"
+     ]
+    },
+    "tag_group_kinds": {
+     "SHOES": "accepts"
+    },
+    "options": [
+     {
+      "id": "5e1a0001",
+      "value": "a hooded leather coat",
+      "weight": 1,
+      "sub_categories": [
+       "cold",
+       "boots"
+      ]
+     },
+     {
+      "id": "5e1a0002",
+      "value": "a fur-lined cloak",
+      "weight": 1,
+      "sub_categories": [
+       "cold",
+       "boots"
+      ]
+     },
+     {
+      "id": "5e1a0003",
+      "value": "a light linen robe",
+      "weight": 1,
+      "sub_categories": [
+       "warm",
+       "sandals",
+       "slippers"
+      ]
+     },
+     {
+      "id": "5e1a0004",
+      "value": "a silk kimono",
+      "weight": 1,
+      "sub_categories": [
+       "warm",
+       "sandals",
+       "slippers"
+      ]
+     },
+     {
+      "id": "5e1a0005",
+      "value": "a ranger's jerkin",
+      "weight": 1,
+      "sub_categories": [
+       "warm",
+       "boots",
+       "sandals"
+      ]
+     }
+    ]
+   },
+   "payload_hash": "edb0992f6d9e888b6dd95c18f6cf15bb647ab79dcb149dd2577e8068cc59ca7b",
+   "snapshot_fingerprint": "0d09ac05",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298581Z",
+   "updated_at": "2026-11-04T10:12:51.298581Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
   }
  ],
  "fixed_values": [

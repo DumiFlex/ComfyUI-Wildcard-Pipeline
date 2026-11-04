@@ -64,10 +64,14 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 
 
 export class Tutor {
   readonly page: Page;
+  /** WP Debug's node id once addDebugUnder placed it. */
+  debugId: string | null = null;
   private readonly lines: Record<string, VoiceLine>;
   private readonly t0 = Date.now();
   private pos: Point = { x: 960, y: 560 };
   private busyUntil = 0;
+  /** The first move after a line waits until then, so the hand acts as the voice says it, not ahead of it. */
+  private leadUntil = 0;
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
   /** The caption on screen and when it goes, so a page load can put it back. */
   private caption: { text: string; until: number } | null = null;
@@ -77,6 +81,8 @@ export class Tutor {
   startAt = 0;
   /** When the sync mark went up (render.mjs finds it in the video). */
   markAt = 0;
+  /** Every sync mark (ms): render.mjs lines the video up at each, since the recorder's clock drifts under load. */
+  marks: number[] = [];
 
   constructor(
     readonly h: Helpers,
@@ -104,11 +110,24 @@ export class Tutor {
     const id = lineId(text);
     const known = this.lines[id];
     const ms = known?.ms ?? estimate(text);
-    this.cues.push({ id, text, at: this.now(), ms, voiced: !!known });
+    const at = this.now();
+    this.cues.push({ id, text, at, ms, voiced: !!known });
+    // Each line also flashes the sync mark (render.mjs paints it out), so the voice can't drift from the picture.
+    const mark = at - (this.marks[this.marks.length - 1] ?? -Infinity) > 900;
+    if (mark) this.marks.push(at);
     this.busyUntil = Date.now() + ms + 350;
+    this.leadUntil = Date.now() + Math.min(ms * 0.45, 2200);
     if (this.hideTimer) clearTimeout(this.hideTimer);
     this.caption = { text, until: Date.now() + ms + 500 };
-    await this.page.evaluate((t) => window.__tut?.caption(t), text).catch(() => undefined);
+    await this.page
+      .evaluate(
+        ({ t, mark }) => {
+          window.__tut?.caption(t);
+          if (mark) window.__tut?.mark(400);
+        },
+        { t: text, mark },
+      )
+      .catch(() => undefined);
     this.hideTimer = setTimeout(() => {
       this.caption = null;
       void this.page.evaluate(() => window.__tut?.caption("")).catch(() => undefined);
@@ -135,35 +154,62 @@ export class Tutor {
     await this.page.evaluate(() => window.__tut?.clear()).catch(() => undefined);
     await sleep(900);
     const missing = this.cues.filter((c) => !c.voiced).length;
+    await this.syncMark();
     if (missing) this.h.note(`${missing} line(s) have no voice yet: run python tutorials/voice/speak.py and record again.`);
-    await this.h.file("cues.json", JSON.stringify({ t0: this.t0, mark: this.markAt, start: this.startAt, cues: this.cues, fast: this.fast, ended: this.now() }, null, 1), "application/json");
+    await this.h.file("cues.json", JSON.stringify({ t0: this.t0, mark: this.markAt, start: this.startAt, cues: this.cues, fast: this.fast, marks: this.marks, ended: this.now() }, null, 1), "application/json");
   }
 
   /** Marks the start of the tutorial: the video before it (loading the page) is cut. */
   async begin(): Promise<void> {
     await this.page.mouse.move(this.pos.x, this.pos.y);
     await sleep(500);
-    this.markAt = this.now();
-    await this.page.evaluate(() => window.__tut?.mark(400));
-    await sleep(700);
+    await this.syncMark();
+    this.markAt = this.marks[0] ?? 0;
+    await sleep(300);
     this.startAt = this.now();
     await sleep(600);
   }
 
+  /** Flashes the sync mark and notes when; render.mjs finds each one in the video. */
+  async syncMark(): Promise<void> {
+    const last = this.marks[this.marks.length - 1];
+    if (last !== undefined) await sleep(Math.max(0, last + 900 - this.now()));
+    this.marks.push(this.now());
+    await this.page.evaluate(() => window.__tut?.mark(400)).catch(() => undefined);
+    await sleep(400 + 600);
+  }
+
   /** Runs `fn`; the final video plays that part `speed` times faster (a long wait, a model run). */
-  async fastForward<T>(fn: () => Promise<T>, speed = 6): Promise<T> {
+  async fastForward<T>(fn: () => Promise<T>, speed = 6, { waitVoice = true }: { waitVoice?: boolean } = {}): Promise<T> {
+    // A caption still on screen would flash past at this speed in the video, so let it finish first.
+    // A page load doesn't wait: the voice plays on over it (render.mjs starts the fast part after the
+    // line, so the load plays at normal speed under it) and the hand goes on as it speaks.
+    if (waitVoice) {
+      await this.waitVoice();
+      if (this.caption) await sleep(Math.max(0, this.caption.until - Date.now()));
+    }
     const from = this.now();
     try {
       return await fn();
     } finally {
+      // A mark inside the sped-up part, where nobody sees it, re-lines the voice up after every wait.
+      await this.syncMark();
       this.fast.push({ from, to: this.now(), speed });
     }
   }
 
   // ---- the hand ------------------------------------------------------------------------------
 
+  /** Holds the first action after a line until the voice is partway into it. */
+  private async lead(): Promise<void> {
+    const left = this.leadUntil - Date.now();
+    this.leadUntil = 0;
+    if (left > 0) await sleep(left);
+  }
+
   /** Moves the pointer to a point along a gentle curve, about as fast as a hand. */
   async moveTo(to: Point, { speed = 1 }: { speed?: number } = {}): Promise<void> {
+    await this.lead();
     const from = this.pos;
     const dx = to.x - from.x;
     const dy = to.y - from.y;
@@ -193,15 +239,16 @@ export class Tutor {
   }
 
   /** Moves to the target and clicks it. */
-  async click(target: Locator | Point, { double = false }: { double?: boolean } = {}): Promise<void> {
+  async click(target: Locator | Point, { double = false, right = false }: { double?: boolean; right?: boolean } = {}): Promise<void> {
     const isPoint = "x" in target && "y" in target && typeof target.x === "number";
     if (!isPoint) await this.bringIntoView(target as Locator);
     const at = isPoint ? (target as Point) : await this.centre(target as Locator);
     await this.moveTo(at);
     await sleep(140);
-    await this.page.mouse.down();
+    const button = right ? "right" : "left";
+    await this.page.mouse.down({ button });
     await sleep(70);
-    await this.page.mouse.up();
+    await this.page.mouse.up({ button });
     if (double) {
       await sleep(90);
       await this.page.mouse.down();
@@ -213,6 +260,8 @@ export class Tutor {
 
   /** Scrolls a part into view first when it sits under the page's edges (a sticky footer, the caption). */
   private async bringIntoView(target: Locator): Promise<void> {
+    // On the ComfyUI canvas the wheel zooms instead of scrolling, so leave the view alone there.
+    if (!this.inManager()) return;
     await target.waitFor({ state: "attached", timeout: 15_000 });
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     const box = await target.boundingBox();
@@ -239,11 +288,13 @@ export class Tutor {
 
   /** Types like a person: one key at a time. */
   async type(text: string, { cps = 22 }: { cps?: number } = {}): Promise<void> {
+    await this.lead();
     await this.page.keyboard.type(text, { delay: Math.round(1000 / cps) });
     await sleep(300);
   }
 
   async press(key: string): Promise<void> {
+    await this.lead();
     await sleep(120);
     await this.page.keyboard.press(key);
     await sleep(250);
@@ -261,7 +312,13 @@ export class Tutor {
    * Scrolls with the wheel, the pointer over the part that scrolls, until `target`'s top sits in
    * the upper part of the screen (`at`, a share of the height). Already there: no scroll.
    */
+  /** Whether the page is the manager (`/wp/…`), where the wheel scrolls; on the canvas it zooms. */
+  private inManager(): boolean {
+    return new URL(this.page.url()).pathname.startsWith("/wp");
+  }
+
   async scrollTo(target: Locator, { at = 0.22 }: { at?: number } = {}): Promise<void> {
+    if (!this.inManager()) return;
     await target.waitFor({ state: "attached", timeout: 15_000 });
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     let first = await target.boundingBox();
@@ -301,7 +358,7 @@ export class Tutor {
         await sleep(400);
       }
       await this.page.mouse.move(this.pos.x, this.pos.y);
-    }, 12);
+    }, 12, { waitVoice: false });
     const c = this.caption;
     if (c && c.until > Date.now()) await this.page.evaluate((t) => window.__tut?.caption(t), c.text).catch(() => undefined);
     await sleep(300);
@@ -393,6 +450,46 @@ export class Tutor {
     await sleep(250);
   }
 
+  /** A module row on a Context node, by the module's name. */
+  moduleRow(ctxId: string, name: string): Locator {
+    const exact = new RegExp(`^\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`);
+    return this.node(ctxId).locator(".wp-module").filter({ has: this.page.locator(".wp-module-name", { hasText: exact }) }).first();
+  }
+
+  /** Clicks the globe on these module rows, so their variables stay out of the prompt. */
+  /** Opens folded bundle frames on a Context node (sub-bundles too), or only inside the bundle `name`. */
+  async expandBundles(ctxId: string, name?: string): Promise<void> {
+    const scope = name ? this.bundleFrame(ctxId, name) : this.node(ctxId);
+    for (let i = 0; i < 12; i++) {
+      const fold = scope.getByRole("button", { name: "Expand bundle" }).first();
+      if (!(await fold.count())) return;
+      await this.click(fold);
+      await sleep(450);
+    }
+  }
+
+  /** Folds the bundle `name` on a Context node when it is open. */
+  async foldBundle(ctxId: string, name: string): Promise<void> {
+    const header = this.node(ctxId).locator(".wp-bundle-header").filter({ hasText: name }).first();
+    const btn = header.getByRole("button", { name: "Collapse bundle" });
+    if (await btn.count()) {
+      await this.click(btn.first());
+      await sleep(500);
+    }
+  }
+
+  /** The frame of a bundle (or sub-bundle) on a Context node, by its name. */
+  bundleFrame(ctxId: string, name: string): Locator {
+    return this.node(ctxId).locator(".wp-bundle").filter({ has: this.page.locator(".wp-bundle-header").filter({ hasText: name }) }).last();
+  }
+
+  async hide(ctxId: string, names: string[]): Promise<void> {
+    for (const name of names) {
+      await this.click(this.moduleRow(ctxId, name).locator('[data-test="row-action-internal"]'));
+      await sleep(450);
+    }
+  }
+
   /** Node ids on the canvas now. */
   private async nodeIds(): Promise<string[]> {
     return this.page.evaluate(() => (window.app?.graph?.nodes ?? []).map((n) => String(n.id)));
@@ -404,8 +501,17 @@ export class Tutor {
    */
   async addNode(search: string, at: Point): Promise<string> {
     const before = new Set(await this.nodeIds());
+    // The search box opens on a double click on empty canvas; when the click is taken for something
+    // else (a click just before it), try once more rather than typing into the canvas.
+    const searchOpen = () => this.page.evaluate(() => document.activeElement?.tagName === "INPUT");
     await this.click(at, { double: true });
     await sleep(500);
+    if (!(await searchOpen())) {
+      await sleep(600);
+      await this.click(at, { double: true });
+      await sleep(600);
+      if (!(await searchOpen())) throw new StepError(`The node search didn't open at ${Math.round(at.x)}, ${Math.round(at.y)}.`);
+    }
     await this.type(search, { cps: 16 });
     await sleep(700);
     await this.press("Enter");
@@ -499,6 +605,65 @@ async function toGraph(page: Page, p: Point): Promise<[number, number]> {
   }, [p.x, p.y] as const);
 }
 
+/**
+ * Adds a WP Debug node under a Context node and wires the Context into it, the way a person does,
+ * so each run shows the picks that went into its picture. Returns the Debug node's id.
+ */
+export async function addDebugUnder(t: Tutor, ctxId: string): Promise<string> {
+  const view = t.page.viewportSize() ?? { width: 1920, height: 1080 };
+  let box = await t.node(ctxId).boundingBox();
+  // A tall Context leaves no room under it: fold its rows (Debug shows the picks anyway).
+  if (box && box.y + box.height > view.height - 470) {
+    await t.click(t.node(ctxId).getByRole("button", { name: "Collapse all modules" }).first());
+    await sleep(600);
+    box = await t.node(ctxId).boundingBox();
+  }
+  const x = box ? box.x + box.width / 2 : 520;
+  const below = box ? box.y + box.height + 40 : 600;
+  const y = Math.min(below + 100, view.height - 320);
+  const dbg = await t.addNode("WP Debug", { x, y });
+  // Snug under the Context (the drop point centres it, which can leave a gap or overlap).
+  await t.page.evaluate(
+    ({ ctxId, dbg }) => {
+      type N = { pos: [number, number]; size: [number, number] };
+      const app = window.app as unknown as { graph: { getNodeById(id: string | number): N | null }; canvas: { setDirty(a: boolean, b: boolean): void } };
+      const get = (id: string) => app.graph.getNodeById(id) ?? app.graph.getNodeById(Number(id));
+      const c = get(ctxId);
+      const d = get(dbg);
+      if (!c || !d) return;
+      d.pos = [c.pos[0], c.pos[1] + c.size[1] + 70];
+      app.canvas.setDirty(true, true);
+    },
+    { ctxId, dbg },
+  );
+  await sleep(300);
+  await t.wire(ctxId, "context", dbg, "context");
+  t.debugId = dbg;
+  await fitDebug(t);
+  return dbg;
+}
+
+/** Keeps WP Debug's bottom above the caption; a run fills it with rows and it grows, so showcase calls this after each run (it scrolls inside). */
+export async function fitDebug(t: Tutor): Promise<void> {
+  const dbg = t.debugId;
+  if (!dbg) return;
+  const view = t.page.viewportSize() ?? { width: 1920, height: 1080 };
+  const top = (await t.node(dbg).boundingBox())?.y;
+  if (top === undefined) return;
+  const room = view.height - 165 - top;
+  await t.page.evaluate(
+    ({ id, room }) => {
+      const app = window.app as unknown as { graph: { getNodeById(id: string | number): { size: [number, number] } | null }; canvas: { ds: { scale: number }; setDirty(a: boolean, b: boolean): void } };
+      const n = app.graph.getNodeById(id) ?? app.graph.getNodeById(Number(id));
+      if (!n) return;
+      n.size = [n.size[0], Math.max(130, room / app.canvas.ds.scale)];
+      app.canvas.setDirty(true, true);
+    },
+    { id: dbg, room },
+  );
+  await sleep(300);
+}
+
 /** Whether takes make real images (the pack's `showcase` setting; it needs a model, so it's off in the cloud). */
 export function showcasing(t: Tutor): boolean {
   return t.params.showcase === true;
@@ -587,14 +752,23 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
           const apart = px + pw <= n.pos[0] || n.pos[0] + n.size[0] <= px || py + ph <= top || bottom <= py - title;
           if (apart) continue;
           moved = true;
+          // Beside it or under it, whichever shows the (square-ish) image bigger.
           const right = n.pos[0] + n.size[0] + 30;
-          if (viewRight - right >= 300) {
-            // Beside it, narrower if needed.
+          const sideW = Math.min(pw, viewRight - right);
+          const sideH = Math.min(viewBottom - py, (ph * sideW) / pw);
+          const belowY = bottom + title + 30;
+          const belowW = Math.min(Math.max(pw, n.size[0]), viewRight - n.pos[0]);
+          const belowH = Math.min(ph, viewBottom - belowY);
+          if (sideW >= 220 && Math.min(sideW, sideH) >= Math.min(belowW, belowH)) {
             px = right;
-            const w = Math.min(pw, viewRight - right);
-            ph = Math.round((ph * w) / pw);
-            pw = w;
-          } else py = bottom + title + 30;
+            pw = sideW;
+            ph = Math.round(Math.max(220, sideH));
+          } else {
+            px = n.pos[0];
+            py = belowY;
+            pw = Math.round(belowW);
+            ph = Math.round(Math.max(220, belowH));
+          }
         }
         if (!moved) break;
       }
@@ -626,6 +800,7 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
   for (let i = 0; i < runs; i++) {
     if (i > 0 && o.between) await o.between(i);
     await t.fastForward(() => t.run(), 8);
+    await fitDebug(t);
     await t.beat(1800);
   }
   return previewId;

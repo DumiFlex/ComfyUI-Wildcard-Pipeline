@@ -5,10 +5,40 @@
   "text": "Change the seed, and the weather rolls with the hero.",
   "voice": "af_heart"
  },
+ "0302fe1cacea": {
+  "ms": 4117,
+  "speed": 1.0,
+  "text": "Each bundle sits in its own frame. Open Character to see what came in.",
+  "voice": "af_heart"
+ },
  "038520e2868f": {
   "ms": 768,
   "speed": 1.0,
   "text": "Save it.",
+  "voice": "af_heart"
+ },
+ "06b090554805": {
+  "ms": 9387,
+  "speed": 1.0,
+  "text": "Randomize, the default, gives every run a new seed. Fixed keeps the same one, and plus one steps through seeds in order, so you can come back to any of them.",
+  "voice": "af_heart"
+ },
+ "07326b46d038": {
+  "ms": 5163,
+  "speed": 1.0,
+  "text": "Open it to rename it, edit the text, or give it a category, tags and a favourite star.",
+  "voice": "af_heart"
+ },
+ "07b61ad32f1b": {
+  "ms": 5163,
+  "speed": 1.0,
+  "text": "First, add WP Debug under the Context, so every run shows what it rolled.",
+  "voice": "af_heart"
+ },
+ "082ff98fe74f": {
+  "ms": 5888,
+  "speed": 1.0,
+  "text": "Character holds the Hero list, and three smaller bundles inside it: Look, Outfit and Shared lists.",
   "voice": "af_heart"
  },
  "106c4c910925": {
@@ -23,10 +53,22 @@
   "text": "Now the template only needs two names.",
   "voice": "af_heart"
  },
+ "110fa7b0e3e9": {
+  "ms": 8256,
+  "speed": 1.0,
+  "text": "SHOES is an accepts group. Its tags are alternatives: a robe goes with sandals or slippers, and each pick rolls one of them.",
+  "voice": "af_heart"
+ },
  "13cd23613d87": {
   "ms": 4693,
   "speed": 1.0,
   "text": "Each one rolls one option and keeps it in a variable: hero, outfit and setting.",
+  "voice": "af_heart"
+ },
+ "13feee187e63": {
+  "ms": 1899,
+  "speed": 1.0,
+  "text": "Click the lock again to let it roll.",
   "voice": "af_heart"
  },
  "1577b8b81b7d": {
@@ -45,6 +87,18 @@
   "ms": 2347,
   "speed": 1.0,
   "text": "Drag a wire from context to context.",
+  "voice": "af_heart"
+ },
+ "1a1f38f5c30a": {
+  "ms": 4331,
+  "speed": 1.0,
+  "text": "Roll again. The hero stays, and the outfit and the setting keep changing.",
+  "voice": "af_heart"
+ },
+ "1a54b7f2b666": {
+  "ms": 2667,
+  "speed": 1.0,
+  "text": "This button sets what the seed does after each run.",
   "voice": "af_heart"
  },
  "1b4ab1b8b262": {
@@ -95,6 +149,24 @@
   "text": "Every option has a weight. The chance column shows how often each one rolls.",
   "voice": "af_heart"
  },
+ "2c5fbd2a1c6e": {
+  "ms": 6528,
+  "speed": 1.0,
+  "text": "Switch the street thief off. This change is only for this node: the Hero list in your library stays as it is.",
+  "voice": "af_heart"
+ },
+ "2f6f96c67804": {
+  "ms": 5973,
+  "speed": 1.0,
+  "text": "The badge marks a row that differs from the library. Reset overrides in the same window puts it back.",
+  "voice": "af_heart"
+ },
+ "30b3d8aa3fa0": {
+  "ms": 1152,
+  "speed": 1.0,
+  "text": "Now open Scene.",
+  "voice": "af_heart"
+ },
  "338d8373eb82": {
   "ms": 3840,
   "speed": 1.0,
@@ -105,6 +177,18 @@
   "ms": 4459,
   "speed": 1.0,
   "text": "A combine joins variables into one line you can reuse. Let's make one.",
+  "voice": "af_heart"
+ },
+ "3851fb37568b": {
+  "ms": 9877,
+  "speed": 1.0,
+  "text": "Travel gear has two groups. CLIMATE is descriptive: a coat is cold weather gear, a robe is warm. All of an option's descriptive tags count at once.",
+  "voice": "af_heart"
+ },
+ "3bd0832aeac8": {
+  "ms": 6997,
+  "speed": 1.0,
+  "text": "That's the basics of Wildcard Pipeline. The advanced videos go further: nested lists, LoRAs, loops and more.",
   "voice": "af_heart"
  },
  "3f9efb813688": {
@@ -119,10 +203,28 @@
   "text": "Save it, and it's in your library.",
   "voice": "af_heart"
  },
+ "424fa9c34f31": {
+  "ms": 2795,
+  "speed": 1.0,
+  "text": "Right-click a row for everything else you can do with it.",
+  "voice": "af_heart"
+ },
+ "42ebae052f5d": {
+  "ms": 1877,
+  "speed": 1.0,
+  "text": "Fold both to keep the node small.",
+  "voice": "af_heart"
+ },
  "4593f77bfe49": {
   "ms": 3989,
   "speed": 1.0,
   "text": "Change the seed until the time rolls night, and watch the lighting follow.",
+  "voice": "af_heart"
+ },
+ "461526b748c8": {
+  "ms": 4267,
+  "speed": 1.0,
+  "text": "Save keeps it on this node. Save to library would change the list everywhere.",
   "voice": "af_heart"
  },
  "4743c9d8a71d": {
@@ -143,10 +245,28 @@
   "text": "Back on the canvas, add a Context node and pick Hero and Weather.",
   "voice": "af_heart"
  },
+ "50f6f768cab2": {
+  "ms": 5013,
+  "speed": 1.0,
+  "text": "On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.",
+  "voice": "af_heart"
+ },
+ "5352952d6267": {
+  "ms": 4224,
+  "speed": 1.0,
+  "text": "Pick Character first, then Scene, because the scene's rule reads the hero.",
+  "voice": "af_heart"
+ },
  "540ace07a36b": {
   "ms": 3413,
   "speed": 1.0,
   "text": "Next, a WP Prompt Assembler. It writes the prompt.",
+  "voice": "af_heart"
+ },
+ "55117a514962": {
+  "ms": 4245,
+  "speed": 1.0,
+  "text": "Every variable from both bundles is ready to use. Roll a few seeds.",
   "voice": "af_heart"
  },
  "57c3de063bbb": {
@@ -161,10 +281,28 @@
   "text": "The Assembler shows the prompt it will write, before you run anything.",
   "voice": "af_heart"
  },
+ "58f52078d54c": {
+  "ms": 5781,
+  "speed": 1.0,
+  "text": "Fold a frame, switch it off with its checkbox, or open an item to change it for this node only.",
+  "voice": "af_heart"
+ },
  "590497dcb5ec": {
   "ms": 3797,
   "speed": 1.0,
   "text": "Now the options: one per line. Each prompt rolls one of them.",
+  "voice": "af_heart"
+ },
+ "5cf5da21ae39": {
+  "ms": 3755,
+  "speed": 1.0,
+  "text": "Edit opens the item right here, with its options and their odds.",
+  "voice": "af_heart"
+ },
+ "5d94340b0128": {
+  "ms": 5376,
+  "speed": 1.0,
+  "text": "Now press Run a few times. Randomize gives each run a new seed, no clicking needed.",
   "voice": "af_heart"
  },
  "5dfbe441b399": {
@@ -179,10 +317,28 @@
   "text": "Tick Hero, Outfit and Setting, then add them.",
   "voice": "af_heart"
  },
+ "6018cd8bb8fc": {
+  "ms": 2261,
+  "speed": 1.0,
+  "text": "Your templates are listed here. Pick one.",
+  "voice": "af_heart"
+ },
+ "61943d05f9dc": {
+  "ms": 2688,
+  "speed": 1.0,
+  "text": "Give it a name. The preview shows what gets saved.",
+  "voice": "af_heart"
+ },
  "61ac7f7d4a2f": {
   "ms": 5739,
   "speed": 1.0,
   "text": "Wildcard Pipeline builds random prompts from lists you keep in a library. Let's make a first one.",
+  "voice": "af_heart"
+ },
+ "64126e13325f": {
+  "ms": 2176,
+  "speed": 1.0,
+  "text": "Each option lists the shoes it goes with.",
   "voice": "af_heart"
  },
  "66d3bbeafd33": {
@@ -209,16 +365,58 @@
   "text": "On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.",
   "voice": "af_heart"
  },
+ "6f1da3098da0": {
+  "ms": 5931,
+  "speed": 1.0,
+  "text": "Roll on every run, lock what you like, and change an item for one node without touching your library.",
+  "voice": "af_heart"
+ },
+ "70108787aaf0": {
+  "ms": 4736,
+  "speed": 1.0,
+  "text": "Lost? Select any Wildcard Pipeline node and press the question mark above it.",
+  "voice": "af_heart"
+ },
  "7427fca97898": {
   "ms": 3307,
   "speed": 1.0,
   "text": "A combine reads what was rolled above it, so the order matters.",
   "voice": "af_heart"
  },
+ "7786b4c7decc": {
+  "ms": 2304,
+  "speed": 1.0,
+  "text": "The disk button saves both to the library.",
+  "voice": "af_heart"
+ },
+ "78e1b769f478": {
+  "ms": 4885,
+  "speed": 1.0,
+  "text": "The roll happens once per run, so $gear.SHOES reads the same everywhere you write it.",
+  "voice": "af_heart"
+ },
+ "7d8dcf11971e": {
+  "ms": 4608,
+  "speed": 1.0,
+  "text": "Write a prompt once, save it, and load it into any Assembler. Next: bundles.",
+  "voice": "af_heart"
+ },
  "836924b6e384": {
   "ms": 3243,
   "speed": 1.0,
   "text": "And here they are as pictures: every hero where they belong.",
+  "voice": "af_heart"
+ },
+ "85104ac21a40": {
+  "ms": 3819,
+  "speed": 1.0,
+  "text": "Every saved template lives on the Templates page of the manager.",
+  "voice": "af_heart"
+ },
+ "88f568cd701d": {
+  "ms": 6784,
+  "speed": 1.0,
+  "text": "Only the scene line reaches the template, so hide the other three with their globe buttons. The combine still reads them.",
   "voice": "af_heart"
  },
  "92997cc71a53": {
@@ -233,6 +431,18 @@
   "text": "A noble hero makes a castle four times as likely,",
   "voice": "af_heart"
  },
+ "95fa2308979b": {
+  "ms": 4437,
+  "speed": 1.0,
+  "text": "Open the negative box under it, too. A template keeps its negative with it.",
+  "voice": "af_heart"
+ },
+ "9719ef12f3b0": {
+  "ms": 5803,
+  "speed": 1.0,
+  "text": "Character brings the Hero list, then Look with the hair, eyes and colors, Outfit, and the Shared lists.",
+  "voice": "af_heart"
+ },
  "98fcdd0a1bd9": {
   "ms": 4843,
   "speed": 1.0,
@@ -245,10 +455,34 @@
   "text": "Roll a few seeds. Knights and mages land in castles more often, and the thief stays in the city.",
   "voice": "af_heart"
  },
+ "99bfb5e4a815": {
+  "ms": 6037,
+  "speed": 1.0,
+  "text": "Edit it, hold it for a whole batch, push it to the library, duplicate it, wrap it into a bundle, or move it.",
+  "voice": "af_heart"
+ },
+ "9b7236360017": {
+  "ms": 8256,
+  "speed": 1.0,
+  "text": "The scene line already reads the setting, the time and the lighting, and the hair list reads the colors. Hide those four with their globe buttons.",
+  "voice": "af_heart"
+ },
+ "9c72f8c561d4": {
+  "ms": 2432,
+  "speed": 1.0,
+  "text": "On the canvas, pick Hero and Travel gear.",
+  "voice": "af_heart"
+ },
  "9c736b37c1b1": {
   "ms": 6976,
   "speed": 1.0,
   "text": "Wildcard Pipeline adds a button to ComfyUI's top bar. It opens the manager, where your library lives.",
+  "voice": "af_heart"
+ },
+ "9ec5a72ea990": {
+  "ms": 8661,
+  "speed": 1.0,
+  "text": "Randomize gives every run a new seed. Fixed keeps the same one, and plus one steps through seeds in order, so you can come back to any of them.",
   "voice": "af_heart"
  },
  "9f69ea64d8b9": {
@@ -263,6 +497,12 @@
   "text": "Here are a few of those scenes, run through a model.",
   "voice": "af_heart"
  },
+ "a478c7e062d0": {
+  "ms": 6144,
+  "speed": 1.0,
+  "text": "Hero and Outfit only feed the hero line now. Click the globe on their rows to hide them from the prompt.",
+  "voice": "af_heart"
+ },
  "a687e71df23a": {
   "ms": 4139,
   "speed": 1.0,
@@ -273,6 +513,18 @@
   "ms": 2560,
   "speed": 1.0,
   "text": "Here's what those prompts make, run through a model.",
+  "voice": "af_heart"
+ },
+ "a97c81877530": {
+  "ms": 2816,
+  "speed": 1.0,
+  "text": "Pick Randomize, so every run rolls something new.",
+  "voice": "af_heart"
+ },
+ "a99e66d4c58c": {
+  "ms": 5504,
+  "speed": 1.0,
+  "text": "It fills in the template and the negative. Edit it here freely: the saved copy doesn't change.",
   "voice": "af_heart"
  },
  "aa69b4ebf7ef": {
@@ -293,10 +545,22 @@
   "text": "If the time rolled night,",
   "voice": "af_heart"
  },
+ "ba2b54b678b8": {
+  "ms": 3712,
+  "speed": 1.0,
+  "text": "Each bundle sits in its own frame. Open them to see what came in.",
+  "voice": "af_heart"
+ },
  "bc3eac1bb4b5": {
   "ms": 5483,
   "speed": 1.0,
   "text": "Constraints never block a run. They only change the odds, so your prompts make sense more often.",
+  "voice": "af_heart"
+ },
+ "be215f0c5bb0": {
+  "ms": 2304,
+  "speed": 1.0,
+  "text": "Fold both bundles to keep the node small.",
   "voice": "af_heart"
  },
  "be416c6e5a2c": {
@@ -317,10 +581,28 @@
   "text": "Hero is a list of heroes. Open it to see its options.",
   "voice": "af_heart"
  },
+ "c4a44182cabc": {
+  "ms": 5461,
+  "speed": 1.0,
+  "text": "Once your lists work well together, keep them together. A bundle is a saved set of modules.",
+  "voice": "af_heart"
+ },
  "c659646078ad": {
   "ms": 3285,
   "speed": 1.0,
   "text": "Run through a model, every picture keeps the painted style.",
+  "voice": "af_heart"
+ },
+ "c70902e4d7fb": {
+  "ms": 2347,
+  "speed": 1.0,
+  "text": "The switch on the group's header sets its kind.",
+  "voice": "af_heart"
+ },
+ "c9aeb816d168": {
+  "ms": 3883,
+  "speed": 1.0,
+  "text": "Like this hero? Lock it. The lock button keeps the seed it rolled.",
   "voice": "af_heart"
  },
  "cacfd5b6844f": {
@@ -329,10 +611,34 @@
   "text": "and an urban hero never gets a castle at all.",
   "voice": "af_heart"
  },
+ "ce6940f32ead": {
+  "ms": 4757,
+  "speed": 1.0,
+  "text": "Scene brings the setting, the time of day, the lighting rule, the scene line and the style.",
+  "voice": "af_heart"
+ },
  "d0a2ac7b1137": {
   "ms": 5312,
   "speed": 1.0,
   "text": "Your own lists work just like the ones you install. Next: fixed values and combines.",
+  "voice": "af_heart"
+ },
+ "d0cf8fcede6d": {
+  "ms": 5760,
+  "speed": 1.0,
+  "text": "The combine still reads them, so the prompt stays the same. On their own, they no longer print anywhere.",
+  "voice": "af_heart"
+ },
+ "d2292d43a7b7": {
+  "ms": 6720,
+  "speed": 1.0,
+  "text": "Tags are short words on an option. On their own they filter and steer picks. Put them in groups and they can do more.",
+  "voice": "af_heart"
+ },
+ "d29089a454c9": {
+  "ms": 4821,
+  "speed": 1.0,
+  "text": "Roll a few seeds. The shoes always fit the gear: never sandals with a fur cloak.",
   "voice": "af_heart"
  },
  "d2d2087d49e9": {
@@ -341,10 +647,34 @@
   "text": "A Context node holds the lists that roll. Add module picks them from your library.",
   "voice": "af_heart"
  },
+ "d36a98b741ac": {
+  "ms": 7872,
+  "speed": 1.0,
+  "text": "Each bundle sits in its own frame. Fold it, switch it off with its checkbox, or open it to change one item for this node only.",
+  "voice": "af_heart"
+ },
+ "d48848da457b": {
+  "ms": 5035,
+  "speed": 1.0,
+  "text": "Now a second Assembler. Wire it to the same Context and open the folder button.",
+  "voice": "af_heart"
+ },
  "d4eef3de5ae2": {
   "ms": 5717,
   "speed": 1.0,
   "text": "Let's make a wildcard for the weather. In the manager, open Wildcards and press New Wildcard.",
+  "voice": "af_heart"
+ },
+ "d50e0a5da117": {
+  "ms": 2560,
+  "speed": 1.0,
+  "text": "Its help page opens right over the canvas.",
+  "voice": "af_heart"
+ },
+ "d969a6f6fab7": {
+  "ms": 3712,
+  "speed": 1.0,
+  "text": "Debug shows what each run rolled. No street thief, on this node.",
   "voice": "af_heart"
  },
  "d9e69f144151": {
@@ -353,10 +683,28 @@
   "text": "That's the tour. Next, we'll make a wildcard of our own.",
   "voice": "af_heart"
  },
+ "dbc29d718c08": {
+  "ms": 4288,
+  "speed": 1.0,
+  "text": "So far we rolled by clicking plus. The Context node can roll for you.",
+  "voice": "af_heart"
+ },
+ "dc55de5e786a": {
+  "ms": 5504,
+  "speed": 1.0,
+  "text": "The scene line reads the setting, the time and the lighting, so hide those three too, and fold Scene.",
+  "voice": "af_heart"
+ },
  "de9f4c1999b3": {
   "ms": 3947,
   "speed": 1.0,
   "text": "It writes a new variable, hero line, from a small template of its own.",
+  "voice": "af_heart"
+ },
+ "e3269bd8e7cc": {
+  "ms": 3989,
+  "speed": 1.0,
+  "text": "In the template, $gear.SHOES prints the shoe that was rolled with the gear.",
   "voice": "af_heart"
  },
  "e443a24ea63a": {
@@ -371,10 +719,28 @@
   "text": "Tags sort options into groups, like noble or urban. Rules can read them later.",
   "voice": "af_heart"
  },
+ "e779341f3c23": {
+  "ms": 5099,
+  "speed": 1.0,
+  "text": "Bundles can nest, so you build big sets out of small ones and reuse the small ones anywhere.",
+  "voice": "af_heart"
+ },
+ "e99c3c741bab": {
+  "ms": 5397,
+  "speed": 1.0,
+  "text": "Debug shows the picks behind the last picture, so you can see the prompt change from run to run.",
+  "voice": "af_heart"
+ },
  "ef02a1e32300": {
   "ms": 4544,
   "speed": 1.0,
   "text": "Type a template. Each dollar-sign name is replaced by what its list rolled.",
+  "voice": "af_heart"
+ },
+ "f0f12a8d4482": {
+  "ms": 7851,
+  "speed": 1.0,
+  "text": "Accepts groups also let constraints match tag for tag, and tags filter references inside wildcards. Both come next.",
   "voice": "af_heart"
  },
  "f5b117624e40": {
@@ -395,10 +761,22 @@
   "text": "This one sets style to a painting look, and it carries a negative too.",
   "voice": "af_heart"
  },
+ "fbd797ce07e7": {
+  "ms": 5291,
+  "speed": 1.0,
+  "text": "A template is the sentence the Assembler fills in. Once you like one, keep it in your library.",
+  "voice": "af_heart"
+ },
  "fc506693480a": {
   "ms": 3029,
   "speed": 1.0,
   "text": "Debug lists every variable and the option it rolled.",
+  "voice": "af_heart"
+ },
+ "fe48b0868bdd": {
+  "ms": 5760,
+  "speed": 1.0,
+  "text": "The hair list already reads the colors, so hide Colors with its globe button. Then fold the frame.",
   "voice": "af_heart"
  }
 }
