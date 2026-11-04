@@ -207,8 +207,6 @@ export async function giveBack(h: Helpers, state: PackState): Promise<void> {
 export interface LifecycleOptions {
   /** The bench library to load on a new run, when `reset` is on, from the pack's folder. */
   fixture: (packDir: string) => string;
-  /** Refuse `reset` unless this says yes (the smoke pack only resets on the fake server). */
-  canReset?: (h: Helpers) => Promise<boolean>;
 }
 
 /** Setup's part: run it after the pack's own checks. */
@@ -238,7 +236,9 @@ export async function lifecycleSetup(
     state.set(K.holds, "run");
   } else state.delete(K.holds);
   if (params.reset === true) {
-    if (opts.canReset && !(await opts.canReset(h))) throw new StepError("reset would empty a real library here. Turn reset off, or start the fake server.");
+    // With putBack on, the person's library is already saved above; with it off, save it anyway
+    // (pinned), so a reset on a real ComfyUI never loses a library.
+    if (params.putBack === false) h.log(`Saved your library first as backup ${await backup(h, state, `${NOTE}: your library before the bench library (run ${run.id})`, { pin: true })} (pinned).`);
     await loadBenchLibrary(h, state, opts.fixture(ctx.packDir));
   }
   ctx.info("Library", params.reset === true ? "bench library" : "as it was");
@@ -287,7 +287,10 @@ async function report(h: Helpers, state: PackState): Promise<string> {
   return lines.join("\n");
 }
 
-/** The tasks every pack of the bench gets. */
+/**
+ * The tasks every pack of the bench gets. They don't run the pack's setup, so they work on a real
+ * ComfyUI as well as on the fake server.
+ */
 export function lifecycleTasks(fixture: (packDir: string) => string): Record<string, TaskDefinition> {
   return {
     "restore-mine": {
@@ -301,7 +304,7 @@ export function lifecycleTasks(fixture: (packDir: string) => string): Record<str
     },
     "bench-library": {
       title: "Load the bench library",
-      description: "Backs your library up (pinned), then loads bench-library.json: from its pinned backup when the fixture hasn't changed, else by importing it. Put my library back undoes it.",
+      description: `Backs your library up (pinned), then loads bench-library.json: from its pinned backup when the fixture hasn't changed, else by importing it. Put my library back undoes it.`,
       run: async ({ h, state, run, packDir }) => {
         if (state.get(K.holds) !== "run") {
           state.set(K.original, await backup(h, state, `${NOTE}: your library before Load the bench library`, { pin: true }));

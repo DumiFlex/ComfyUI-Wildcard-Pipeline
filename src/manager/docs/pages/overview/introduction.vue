@@ -100,7 +100,8 @@ import StarterButton from "../../../components/docs/StarterButton.vue";
         Select any WP node and ComfyUI's selection toolbar (the bar over the node) shows our buttons
         on an indigo dot, so you can tell them from ComfyUI's own: <b>?</b> opens that node's page of
         these docs in a window over the canvas, with the search and every other page beside it
-        (<b>Open in manager</b> takes it to a full tab), and on WP Toggles, WP Note and WP Bookmark a
+        (<b>Open in manager</b> takes it to a full tab, and <b>Ask about this page</b> opens it there
+        with the assistant chat ready to ask), and on WP Toggles, WP Note and WP Bookmark a
         <b>pencil</b> opens or closes the node's editor. Both work in the classic canvas and in Nodes 2.0.
       </p>
       <p>

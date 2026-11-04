@@ -14,7 +14,7 @@ or on a real ComfyUI with this extension. Add this folder in Watchwright under *
 
 | Setting | What it does |
 |---|---|
-| `reset` | Off by default. Loads the bench library (`../bench-library.json`) first. Fake server only. |
+| `reset` | Off by default. Loads the bench library (`../bench-library.json`) first, after backing your library up. |
 | `putBack` | On by default. Puts the library back when the run ends ([Putting your library back](../README.md#putting-your-library-back)). |
 
 Each test deletes the backups it made, unpins what it pinned, removes its marker wildcard and puts **Backups to keep** back. The pack's teardown restores your library on top of that. The site key is the bench's, so it never runs while a bench or smoke run changes the library.
@@ -31,7 +31,7 @@ Each test deletes the backups it made, unpins what it pinned, removes its marker
 | D6 | Restoring a backup that isn't there answers 404, a name with a path in it is refused, and the library stays as it was. |
 | D7 | Library health shows a group for each kind of finding the scan returns. |
 
-`check-failed` (finding) names the check that failed. The tasks on the pack page are the bench's ([the list](../README.md#putting-your-library-back)).
+`check-failed` (finding) names the check that failed. The pack has the bench's tasks ([the list](../README.md#putting-your-library-back)). They work on a real ComfyUI as well as on the fake server.
 
 ## Change it
 

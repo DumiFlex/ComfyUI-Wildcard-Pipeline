@@ -30,7 +30,7 @@ export default pack({
     reset: {
       type: "boolean",
       default: true,
-      description: "Load the bench library (bench-library.json) before the first test. Only on the fake server: on a real ComfyUI it refuses, so turn it off there.",
+      description: "Load the bench library (bench-library.json) before the first test. Your library is backed up first and, with putBack on, put back when the run ends, so it is safe on a real ComfyUI too.",
     },
     putBack: { type: "boolean", default: true, description: "Put the library and AI settings back when the run ends." },
     format: {
@@ -91,7 +91,7 @@ export default pack({
     info("AI model", fake ? "fake (bench/dev/serve.py)" : `${String(cfg.provider ?? "?")} · ${String(cfg.model ?? "?")}`);
     if (params.fake === true && !fake) throw new StepError("fake is on, but the manager isn't bench/dev/serve.py (no /fake/script). Start it, or turn fake off for a real model.");
     // The library and AI settings saved (teardown puts them back), then the bench library.
-    await lifecycleSetup(ctx, { fixture, canReset: fakeUp });
+    await lifecycleSetup(ctx, { fixture });
     await h.setAiConfig({ allow_delete: false, auto_apply: false, tool_format: params.format });
     info("Tool format", String(params.format));
   },
