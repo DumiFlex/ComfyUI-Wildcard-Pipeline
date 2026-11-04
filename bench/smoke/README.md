@@ -14,16 +14,16 @@ python bench/dev/serve.py
 
 Add this folder in Watchwright under **Packs › Add pack** and press **New run**. The defaults (`fake` on, `reset` on) fit the fake server. A run takes about 6 minutes.
 
-On a real ComfyUI with a model set up under **Settings › AI assistant**, turn `fake` and `reset` off. `reset` refuses to run on anything but the fake server, because it empties the library.
+On a real ComfyUI with a model set up under **Settings › AI assistant**, turn `fake` off. `reset` works there too: your library is backed up (pinned) before the bench library goes in, and with `putBack` on it comes back when the run ends.
 
 | Setting | What it does |
 |---|---|
 | `fake` | The manager is `bench/dev/serve.py`. Off, the scripted tests skip. |
-| `reset` | Loads the bench library (`../bench-library.json`) before the first test. Fake server only. |
+| `reset` | Loads the bench library (`../bench-library.json`) before the first test, after backing your library up. |
 | `putBack` | On by default. Puts the library and AI settings back when the run ends, like the bench ([Putting your library back](../README.md#putting-your-library-back)). |
 | `format` | The chat's tool format: Auto, Native tool calls or JSON steps. Run the chat tests once with each. |
 
-The site key is the bench's, so a smoke run and a bench run never change the library at the same time. Attempts keep a video only when they fail or break, and the pack has the bench's tasks (**Back up now**, **Put my library back**, **Library report** and the rest). They work on a real ComfyUI too, except **Load the bench library**, which, like `reset`, runs only on the fake server. The **Dashboard** tab shows pass rate, a test-by-run grid and pass rate per section for each tool format, failures and flaky tests.
+The site key is the bench's, so a smoke run and a bench run never change the library at the same time. Attempts keep a video only when they fail or break, and the pack has the bench's tasks (**Back up now**, **Put my library back**, **Library report** and the rest). They work on a real ComfyUI as well as on the fake server. The **Dashboard** tab shows pass rate, a test-by-run grid and pass rate per section for each tool format, failures and flaky tests.
 
 ## The tests
 

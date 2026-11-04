@@ -88,7 +88,7 @@ All three packs have these tasks on their **Tasks** tab. A task doesn't run the 
 | Task | What it does |
 |---|---|
 | Put my library back | Restores the library from before the latest run. A run that is mid-way keeps its library for when it goes on. |
-| Load the bench library | Backs your library up, then loads the bench library. **Put my library back** undoes it. In the smoke and library packs it runs only on the fake server, like their `reset`. |
+| Load the bench library | Backs your library up, then loads the bench library. **Put my library back** undoes it. |
 | Back up now | A pinned, noted backup of the library as it is. |
 | Library report | What is in the library, whose library is live, the backups (and which the pack made) and the AI settings. |
 | Put the AI settings back | Deleting, auto-apply and the tool format as before the latest run. |

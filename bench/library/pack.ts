@@ -7,7 +7,6 @@ import { pack } from "watchwright";
 import { benchHelpers } from "../bench.js";
 import { consoleErrors, failedRequests } from "../shared.js";
 import { lifecycleAfterTask, lifecycleSetup, lifecycleTasks, lifecycleTeardown } from "../lifecycle.js";
-import { fakeUp } from "../smoke/smoke.js";
 
 const fixture = (packDir: string) => path.join(packDir, "..", "bench-library.json");
 
@@ -25,7 +24,7 @@ export default pack({
     reset: {
       type: "boolean",
       default: false,
-      description: "Load the bench library first (fake server only: on a real ComfyUI it refuses). Off, the tests run on the library as it is.",
+      description: "Load the bench library first. Your library is backed up first and, with putBack on, put back when the run ends. Off, the tests run on the library as it is.",
     },
     putBack: { type: "boolean", default: true, description: "Put the library back when the run ends." },
   },
@@ -46,9 +45,9 @@ export default pack({
     context.on("page", (p) => p.on("dialog", (d) => void d.accept().catch(() => undefined)));
     h.page.on("dialog", (d) => void d.accept().catch(() => undefined));
     await h.visit("wildcards");
-    await lifecycleSetup(ctx, { fixture, canReset: fakeUp });
+    await lifecycleSetup(ctx, { fixture });
   },
   teardown: lifecycleTeardown,
   afterTask: lifecycleAfterTask,
-  tasks: lifecycleTasks(fixture, { canReset: fakeUp }),
+  tasks: lifecycleTasks(fixture),
 });
