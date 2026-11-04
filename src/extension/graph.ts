@@ -765,8 +765,9 @@ export function collectUpstreamWildcardUuids(
  * Walk upstream from `node` and return the module list of every chain
  * `WP_Context`, ordered upstream-first → downstream-last. Used by the
  * assembler preview to POST the chain to `/wp/api/preview/resolve` —
- * the engine then runs each step's PipelineEngine with a stable seed
- * so the preview matches what the user gets at queue time.
+ * the engine then runs each step's PipelineEngine on that step's own
+ * seed (`opts.seeds`) so the preview matches what the user gets at
+ * queue time.
  *
  * Skips non-Context nodes (boundary proxies and the assembler itself).
  * The returned arrays are the raw module dicts straight from each
@@ -779,8 +780,11 @@ export function collectUpstreamChain(
   /** `modelSteps`: also emit a one-module step per WP_ModelInfo node carrying
    *  its known values, so a server preview's derivations can branch on
    *  `$model_variant`. Off by default: other callers zip steps with the
-   *  chain's Context nodes by index. */
-  opts: { modelSteps?: boolean } = {},
+   *  chain's Context nodes by index.
+   *  `seeds`: filled with one entry per returned step, the Context's own
+   *  `seed` widget (null for a model / toggles step, or a seed it can't
+   *  read), so the preview rolls each step on the seed the run will use. */
+  opts: { modelSteps?: boolean; seeds?: (number | null)[] } = {},
 ): unknown[][] {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
@@ -802,10 +806,12 @@ export function collectUpstreamChain(
   for (const n of upstreamFirst) {
     if (opts.modelSteps && n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
       out.push(modelInfoPreviewModules(n));
+      opts.seeds?.push(null);
       continue;
     }
     if (opts.modelSteps && n.type === TOGGLES_NODE && !isSkippedMode(n)) {
       out.push(togglesPreviewModules(n));
+      opts.seeds?.push(null);
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -814,6 +820,8 @@ export function collectUpstreamChain(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
+    const seed = widgetNumber(n, "seed");
+    opts.seeds?.push(Number.isSafeInteger(seed) ? seed : null);
     // Apply the bundle gate before posting to `/wp/api/preview/resolve`.
     // The server runs each step as a flat module list — it doesn't see
     // bundles[] — so we mask `enabled=false` on any child whose

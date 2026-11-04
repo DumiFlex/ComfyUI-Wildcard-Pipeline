@@ -12,6 +12,7 @@ import {
   collectUpstreamResolved,
   findRootGraph,
   internalVarNames,
+  resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
@@ -19,6 +20,7 @@ import { reactiveFromGraph } from "../extension/reactive";
 import { pushToast } from "../components/shared/toast-store";
 import { templateInsertAtCaret } from "../extension/_stashes";
 import type { NegativesTable } from "../extension/negatives";
+import { applySeedLocks, deriveLoopSeeds } from "../components/shared/seed-derive";
 
 const PREVIEW_SEED = 42;
 
@@ -113,6 +115,8 @@ interface UpstreamSnapshot {
    *  the fetch trigger and the fetch body share a single source of
    *  truth; the snapshot recomputes whenever the host graph changes. */
   chain: unknown[][];
+  /** One seed per chain step (null = the preview's own), see `previewSeeds`. */
+  seeds: (number | null)[];
   /** Sync fallback: client-side option-[0] resolution. Shown until
    *  the API resolves OR when the API is unreachable. */
   fallbackResolved: Record<string, ResolvedValue>;
@@ -272,6 +276,24 @@ function hashChain(chain: unknown[][]): string {
   return `${s.length}-${h.toString(16)}`;
 }
 
+/** The seed each chain step rolls at run time, so the preview shows what
+ *  Run will print and changes with the Context's seed: its own `seed`
+ *  widget, or frame 0 of a Context Loop upstream that overrides seeds.
+ *  Null steps (model / toggles, or an unreadable seed) use PREVIEW_SEED. */
+function previewSeeds(
+  g: LiteGraphLike,
+  node: LiteNodeLike,
+  widgetSeeds: (number | null)[],
+): (number | null)[] {
+  const loop = resolveUpstreamLoopSeed(g, node);
+  if (!loop?.overrideSeed) return widgetSeeds;
+  const first = applySeedLocks(
+    deriveLoopSeeds(loop.baseSeed, loop.count, loop.strategy),
+    loop.seedLocks,
+  )[0];
+  return widgetSeeds.map((s) => (s === null ? null : (first ?? s)));
+}
+
 export function mountHelper(node: AssemblerNode) {
   // State-driven minWidth, updated by AssemblerHelper's
   // `requestMinWidth` emit. Initial value covers the chip-strip +
@@ -330,7 +352,9 @@ export function mountHelper(node: AssemblerNode) {
             (node as unknown as { graph?: LiteGraphLike }).graph
             ?? (app.graph as unknown as LiteGraphLike);
           const g = findRootGraph(startGraph);
-          const chain = collectUpstreamChain(g, node, { modelSteps: true });
+          const seeds: (number | null)[] = [];
+          const chain = collectUpstreamChain(g, node, { modelSteps: true, seeds });
+          const stepSeeds = previewSeeds(g, node, seeds);
           // `collectUpstreamResolved` now returns the full ctx,
           // including user-flagged internal vars (engine commit a345bd4
           // propagates them across socket boundaries; only the prompt
@@ -360,8 +384,9 @@ export function mountHelper(node: AssemblerNode) {
             }
           }
           return {
-            chainKey: hashChain(chain),
+            chainKey: `${hashChain(chain)}:${stepSeeds.join(",")}`,
             chain,
+            seeds: stepSeeds,
             fallbackResolved,
             varAxes,
             injectorKeys: collectUpstreamInjectorBindings(g, node),
@@ -407,7 +432,7 @@ export function mountHelper(node: AssemblerNode) {
         fetch("/wp/api/preview/resolve", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chain, seed: PREVIEW_SEED }),
+          body: JSON.stringify({ chain, seed: PREVIEW_SEED, seeds: snapshot.value.seeds }),
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((body: {

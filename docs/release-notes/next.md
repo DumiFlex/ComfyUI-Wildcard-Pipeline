@@ -151,6 +151,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 - **Constraints hold on multi-picks.** `{2$$…}` picks and `2-3` picks no longer bring back options a constraint or a weight of 0 shut out.
 - **Wire dots sit beside their fields.** The optional text inputs on Label & Grid, Model Info, Prompt Cleaner and Context Loop no longer add labelled rows at the top of the node. Like a built-in widget's, each dot sits at the left edge beside the field it feeds and shows when you hover that field or wire it. The Assembler's prompt and negative dots work the same way, and the negative's dot still follows it when you fold it.
 - **Clear template clears the negative too** on the Assembler.
+- **The Assembler preview follows the seed.** It rolled every Context on seed 42, so changing a Context's seed changed nothing in the preview. It now rolls each Context on its own seed (frame 1's seed under a Context Loop that sets seeds), so the preview is the prompt Run prints and changes as you change the seed.
 - **Cleaner prompts when a variable is empty.** The Assembler drops leftover commas, dangling joining words and doubled articles.
 - **`!warm` and `{2$$a|b|c}` work** the way other tools write them.
 - **Rules and runs.** A linked-picks rule no longer empties a wildcard that links onward, a bundle inserted twice keeps each copy's constraints to itself, a held wildcard stays put over a Loop, and a later derivation rule reads what an earlier one wrote.
