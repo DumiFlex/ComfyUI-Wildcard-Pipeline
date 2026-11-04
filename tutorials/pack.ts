@@ -1,0 +1,47 @@
+// Video tutorials, recorded by Watchwright: each test is one tutorial and its video. A test drives
+// the real ComfyUI canvas and manager with a visible pointer, captions and callouts (tutorial.ts),
+// and saves its narration cues; render.mjs turns the take into the finished MP4 with the voice
+// (voice/speak.py), subtitles and chapters. See README.md.
+import path from "node:path";
+import { pack } from "watchwright";
+import { benchHelpers } from "../bench/bench.js";
+import { lifecycleAfterTask, lifecycleSetup, lifecycleTasks, lifecycleTeardown } from "../bench/lifecycle.js";
+import { cursorScript } from "./tutorial.js";
+
+const fixture = (packDir: string) => path.join(packDir, "library.json");
+
+export default pack({
+  name: "Wildcard Pipeline tutorials",
+  description: "Records the video tutorials: the canvas and the manager clicked through with a steady pointer, captions and callouts, one video per tutorial.",
+  // The bench's site key: a recording never runs while a bench run changes the library.
+  site: { key: "wildcard-pipeline", baseURL: "http://127.0.0.1:8189/wp/" },
+  browser: {
+    // Chromium: Firefox's screencast drops frames. 1920 × 1080 is the video's size, since the
+    // screencast records CSS pixels (a device scale factor doesn't make it sharper).
+    name: "chromium",
+    viewport: { width: 1920, height: 1080 },
+    context: { colorScheme: "dark" },
+  },
+  params: {
+    reset: {
+      type: "boolean",
+      default: true,
+      description: "Load the tutorial library (library.json) first, so every take starts from the same items. Your library is backed up first and put back after.",
+    },
+    putBack: { type: "boolean", default: true, description: "Put your library back when the run ends." },
+  },
+  // One take per tutorial, every take keeps its video, no robot labels in the picture.
+  run: { video: "always", showActions: false, chapters: false, frameQuality: 92, trace: "problems", pauseLimitMinutes: 5, testTimeout: 15 * 60_000 },
+  helpers: benchHelpers,
+
+  async setup(ctx) {
+    const { h, context } = ctx;
+    await context.addInitScript({ path: cursorScript(ctx.packDir) });
+    h.page.on("dialog", (d) => void d.accept().catch(() => undefined));
+    await h.visit("wildcards");
+    await lifecycleSetup(ctx, { fixture });
+  },
+  teardown: lifecycleTeardown,
+  afterTask: lifecycleAfterTask,
+  tasks: lifecycleTasks(fixture),
+});

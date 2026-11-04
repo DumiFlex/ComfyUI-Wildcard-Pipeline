@@ -1,0 +1,1588 @@
+{
+ "schema_version": 9,
+ "exported_at": "2026-11-04T10:16:16.837278Z",
+ "bundles": [
+  {
+   "id": "37af0127",
+   "name": "Look",
+   "description": "",
+   "color": "#9b6bff",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "children": [
+    {
+     "id": "4facf8ce",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Hair",
+      "library_name": "Hair",
+      "description": "Uses the Colors list through an @{} reference."
+     },
+     "entries": [],
+     "payload": {
+      "var_binding": "hair",
+      "sub_categories": [],
+      "options": [
+       {
+        "id": "a3ff1986",
+        "value": "short @{bc15a82d#Colors} hair",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "e6d04f1d",
+        "value": "long braided @{bc15a82d#Colors} hair",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "28356404",
+        "value": "messy @{bc15a82d#Colors} hair",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "5e455e15",
+        "value": "a shaved head",
+        "weight": 1,
+        "sub_categories": []
+       }
+      ]
+     },
+     "payload_hash": "0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f"
+    },
+    {
+     "id": "38c1b584",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Eyes",
+      "library_name": "Eyes",
+      "description": "Has an empty option: sometimes the eyes aren't mentioned."
+     },
+     "entries": [],
+     "payload": {
+      "var_binding": "eyes",
+      "sub_categories": [],
+      "options": [
+       {
+        "id": "fdffc693",
+        "value": "@{bc15a82d#Colors} eyes",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "c6e9202c",
+        "value": "piercing eyes",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "8313f6dc",
+        "value": "tired eyes",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "d8dda0e3",
+        "value": "",
+        "weight": 1,
+        "sub_categories": [],
+        "is_null": true
+       }
+      ]
+     },
+     "payload_hash": "10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0"
+    }
+   ],
+   "payload_hash": "c7bbf167fb4ee005c5b9599e42ddc52523c8ea143bc910580190823381c77ca6",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.295335Z",
+   "updated_at": "2026-11-04T10:12:51.295335Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "3faee950",
+   "name": "LoRA swaps",
+   "description": "",
+   "color": "#d0508a",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "children": [
+    {
+     "id": "dd2bee53",
+     "type": "derivation",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Character LoRA",
+      "library_name": "Character LoRA",
+      "description": "While the LoRA character toggle is on: its words replace $hero, and the rolled hair and eyes step aside."
+     },
+     "entries": [],
+     "payload": {
+      "rules": [
+       {
+        "branches": [
+         {
+          "condition": {
+           "var": "lora_character",
+           "op": "equals",
+           "value": "true"
+          },
+          "action": {
+           "target_var": "hero",
+           "mode": "replace",
+           "value": "$lora_hero_words"
+          },
+          "extra_actions": [
+           {
+            "target_var": "hair",
+            "mode": "replace",
+            "value": ""
+           },
+           {
+            "target_var": "eyes",
+            "mode": "replace",
+            "value": ""
+           }
+          ]
+         }
+        ],
+        "id": "0420af2a"
+       }
+      ]
+     },
+     "payload_hash": "404b1613ac87aad0af31ac53ded2e1113069194a5b1c1c0a5de30275b48f69dd"
+    },
+    {
+     "id": "435b5087",
+     "type": "derivation",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Its own clothes",
+      "library_name": "Its own clothes",
+      "description": "While 'Use its own clothes' is on: the LoRA's outfit words replace $outfit."
+     },
+     "entries": [],
+     "payload": {
+      "rules": [
+       {
+        "branches": [
+         {
+          "condition": {
+           "var": "lora_clothes",
+           "op": "equals",
+           "value": "true"
+          },
+          "action": {
+           "target_var": "outfit",
+           "mode": "replace",
+           "value": "$lora_outfit_words"
+          }
+         }
+        ],
+        "id": "7cf35a83"
+       }
+      ]
+     },
+     "payload_hash": "40a85f944f35041eec92671611711864d5cec3f3be8c1b0c5a568200fd0f087e"
+    },
+    {
+     "id": "804fee67",
+     "type": "derivation",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Style LoRA",
+      "library_name": "Style LoRA",
+      "description": "While the Style LoRA toggle is on: its words go after $style."
+     },
+     "entries": [],
+     "payload": {
+      "rules": [
+       {
+        "branches": [
+         {
+          "condition": {
+           "var": "style_lora",
+           "op": "equals",
+           "value": "true"
+          },
+          "action": {
+           "target_var": "style",
+           "mode": "append",
+           "value": ", $lora_style_words"
+          }
+         }
+        ],
+        "id": "ddfcd524"
+       }
+      ]
+     },
+     "payload_hash": "6c318478ad2c1ec1d0b260d576c98fb0b76add95e471658f65dc504a32f8cc36"
+    }
+   ],
+   "payload_hash": "4d94eaf2579dc56c4392c59a79bb8b5bf570ce14355bfa2b51824f96205db122",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.295795Z",
+   "updated_at": "2026-11-04T10:12:51.295795Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "7e3d3ec2",
+   "name": "Character",
+   "description": "",
+   "color": "#4f8cff",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "children": [
+    {
+     "id": "808878ba",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Hero",
+      "library_name": "Hero",
+      "description": "Who the picture is about. The tags drive the Scene constraint."
+     },
+     "entries": [],
+     "payload": {
+      "var_binding": "hero",
+      "sub_categories": [
+       "noble",
+       "wild",
+       "urban"
+      ],
+      "options": [
+       {
+        "id": "c8fc80d0",
+        "value": "a knight",
+        "weight": 1,
+        "sub_categories": [
+         "noble"
+        ]
+       },
+       {
+        "id": "c243437e",
+        "value": "a court mage",
+        "weight": 1,
+        "sub_categories": [
+         "noble"
+        ]
+       },
+       {
+        "id": "784f4138",
+        "value": "a forest ranger",
+        "weight": 1,
+        "sub_categories": [
+         "wild"
+        ]
+       },
+       {
+        "id": "e291d944",
+        "value": "a desert nomad",
+        "weight": 1,
+        "sub_categories": [
+         "wild"
+        ]
+       },
+       {
+        "id": "dd612ba4",
+        "value": "a street thief",
+        "weight": 1,
+        "sub_categories": [
+         "urban"
+        ]
+       },
+       {
+        "id": "422b5317",
+        "value": "an inventor",
+        "weight": 1,
+        "sub_categories": [
+         "urban"
+        ]
+       }
+      ]
+     },
+     "payload_hash": "25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed"
+    },
+    {
+     "id": "37af0127",
+     "type": "bundle",
+     "name": "Look",
+     "color": "#9b6bff"
+    },
+    {
+     "id": "b748104b",
+     "type": "bundle",
+     "name": "Outfit",
+     "color": "#e0a030"
+    },
+    {
+     "id": "805bdfa4",
+     "type": "bundle",
+     "name": "Shared lists",
+     "color": "#7a7f8a"
+    }
+   ],
+   "payload_hash": "6182ffec280798815be12a78f27426ea7e133ff346cab48f2aa0f37222f5fce1",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.295153Z",
+   "updated_at": "2026-11-04T10:12:51.295153Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "805bdfa4",
+   "name": "Shared lists",
+   "description": "",
+   "color": "#7a7f8a",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "children": [
+    {
+     "id": "bc15a82d",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Colors",
+      "library_name": "Colors",
+      "description": "Switched off: only read through @{} references."
+     },
+     "entries": [],
+     "payload": {
+      "var_binding": "color",
+      "sub_categories": [],
+      "options": [
+       {
+        "id": "7d1e78ef",
+        "value": "auburn",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "6c3528de",
+        "value": "silver",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "e6eda3f2",
+        "value": "jet black",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "645b75a6",
+        "value": "copper",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "c7331bc4",
+        "value": "pale blonde",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "5693e178",
+        "value": "emerald",
+        "weight": 1,
+        "sub_categories": []
+       }
+      ]
+     },
+     "payload_hash": "74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77"
+    }
+   ],
+   "payload_hash": "8c84c4fdc3d7781cacafa859b37b055a3b0265189c1394b36bccb7714cc96839",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.295495Z",
+   "updated_at": "2026-11-04T10:12:51.295495Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "86360bc3",
+   "name": "Scene",
+   "description": "",
+   "color": "#2fb380",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "children": [
+    {
+     "id": "7ff544c2",
+     "type": "constraint",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Hero fits the place",
+      "library_name": "Hero fits the place",
+      "description": "Reads the Hero picked in the first Context and re-weights the Setting."
+     },
+     "entries": [],
+     "payload": {
+      "source_wildcard_id": "808878ba",
+      "target_wildcard_id": "aa76ada8",
+      "source_wildcard_name": "Hero",
+      "target_wildcard_name": "Setting",
+      "exceptions": [],
+      "matrix": {
+       "noble": {
+        "castle": {
+         "mode": "boost",
+         "factor": 4
+        },
+        "wilds": {
+         "mode": "reduce",
+         "factor": 0.3
+        }
+       },
+       "wild": {
+        "wilds": {
+         "mode": "boost",
+         "factor": 4
+        },
+        "city": {
+         "mode": "reduce",
+         "factor": 0.3
+        }
+       },
+       "urban": {
+        "city": {
+         "mode": "boost",
+         "factor": 4
+        },
+        "castle": {
+         "mode": "exclude",
+         "factor": 0
+        }
+       }
+      }
+     },
+     "payload_hash": "33a422a0e0c3dc191cb58b1089cc9175e997cfc6aa387a92b765c6169cd9019d"
+    },
+    {
+     "id": "aa76ada8",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Setting",
+      "library_name": "Setting"
+     },
+     "entries": [],
+     "payload": {
+      "var_binding": "setting",
+      "sub_categories": [
+       "castle",
+       "wilds",
+       "city"
+      ],
+      "options": [
+       {
+        "id": "ee9e1c67",
+        "value": "a torch-lit throne room",
+        "weight": 1,
+        "sub_categories": [
+         "castle"
+        ]
+       },
+       {
+        "id": "dee3f9da",
+        "value": "castle ramparts",
+        "weight": 1,
+        "sub_categories": [
+         "castle"
+        ]
+       },
+       {
+        "id": "7b51b895",
+        "value": "an ancient pine forest",
+        "weight": 1,
+        "sub_categories": [
+         "wilds"
+        ]
+       },
+       {
+        "id": "ade62889",
+        "value": "a windswept canyon",
+        "weight": 1,
+        "sub_categories": [
+         "wilds"
+        ]
+       },
+       {
+        "id": "4e80731f",
+        "value": "a crowded market street",
+        "weight": 1,
+        "sub_categories": [
+         "city"
+        ]
+       },
+       {
+        "id": "d61c40b7",
+        "value": "a rooftop garden above the city",
+        "weight": 1,
+        "sub_categories": [
+         "city"
+        ]
+       }
+      ]
+     },
+     "payload_hash": "56fb6858c6d5f7f1a2588df19e3bd1208669eaba42486fe5f28c749cd1af3e95"
+    },
+    {
+     "id": "49cac59c",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Time of day",
+      "library_name": "Time of day"
+     },
+     "entries": [],
+     "payload": {
+      "var_binding": "time",
+      "sub_categories": [],
+      "options": [
+       {
+        "id": "7c740b5b",
+        "value": "dawn",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "7ddc9c86",
+        "value": "golden hour",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "a681b8ca",
+        "value": "night",
+        "weight": 1,
+        "sub_categories": []
+       }
+      ]
+     },
+     "payload_hash": "5a4acb1f8e5bdd5fa5d70365a0fbc5eca38af96db6578b89e502694d5b9bc776"
+    },
+    {
+     "id": "5774d2a1",
+     "type": "derivation",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Lighting from time",
+      "library_name": "Lighting from time",
+      "description": "Night gets lantern light (and a negative); else soft light."
+     },
+     "entries": [],
+     "payload": {
+      "rules": [
+       {
+        "branches": [
+         {
+          "condition": {
+           "var": "time",
+           "op": "equals",
+           "value": "night"
+          },
+          "action": {
+           "target_var": "lighting",
+           "mode": "replace",
+           "value": "moonlight, warm lantern glow"
+          },
+          "extra_actions": [
+           {
+            "target_var": "lighting",
+            "mode": "negative",
+            "value": "overexposed, harsh sunlight"
+           }
+          ]
+         }
+        ],
+        "else": {
+         "action": {
+          "target_var": "lighting",
+          "mode": "replace",
+          "value": "soft natural light"
+         }
+        },
+        "id": "e751ba3a"
+       }
+      ]
+     },
+     "payload_hash": "e5b549fb4ac497a054a1fe2faf89c26fe9427460af2842f811e7d0aab5c8df05"
+    },
+    {
+     "id": "5d75075f",
+     "type": "combine",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Scene line",
+      "library_name": "Scene line"
+     },
+     "entries": [],
+     "payload": {
+      "template": "in $setting at $time, $lighting",
+      "output_var": "scene",
+      "input_vars": [
+       "setting",
+       "time",
+       "lighting"
+      ]
+     },
+     "payload_hash": "a5b688137b629aedc42362a5dbd9a91ffe9e884084fba9ef4c3fd82bfa94cb52"
+    },
+    {
+     "id": "c32f16d6",
+     "type": "fixed_values",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Style",
+      "library_name": "Style",
+      "description": "A fixed value with its own negative words."
+     },
+     "entries": [],
+     "payload": {
+      "values": [
+       {
+        "id": "9af7bf95",
+        "name": "style",
+        "value": "digital painting, detailed, painterly brushwork",
+        "negative": "photo, 3d render, blurry"
+       }
+      ]
+     },
+     "payload_hash": "e9971ee9ccbf2f5249b67987e2021e5a3f9b3a9e5dc041747c3121c505415020"
+    }
+   ],
+   "payload_hash": "c7e151509f195ed388e97c40ce6144e204cd4f662e3a95dfb20119b8ccb481d7",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.295651Z",
+   "updated_at": "2026-11-04T10:12:51.295651Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "b748104b",
+   "name": "Outfit",
+   "description": "",
+   "color": "#e0a030",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "children": [
+    {
+     "id": "195238e2",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Outfit",
+      "library_name": "Outfit",
+      "description": "Options carry negative words; the tunic is the fallback."
+     },
+     "entries": [],
+     "payload": {
+      "var_binding": "outfit",
+      "sub_categories": [
+       "armor",
+       "travel",
+       "formal"
+      ],
+      "options": [
+       {
+        "id": "72f8e1d7",
+        "value": "polished plate armor",
+        "weight": 1,
+        "sub_categories": [
+         "armor"
+        ],
+        "negative": "rust, broken armor"
+       },
+       {
+        "id": "b553cc92",
+        "value": "a hooded leather coat",
+        "weight": 1,
+        "sub_categories": [
+         "travel"
+        ]
+       },
+       {
+        "id": "1955f005",
+        "value": "a flowing robe with gold trim",
+        "weight": 1,
+        "sub_categories": [
+         "formal"
+        ]
+       },
+       {
+        "id": "9f7a6c18",
+        "value": "a patched linen tunic",
+        "weight": 1,
+        "sub_categories": [
+         "travel"
+        ],
+        "fallback": true
+       }
+      ]
+     },
+     "payload_hash": "3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755"
+    }
+   ],
+   "payload_hash": "f8303f325c67ff3759248361b0d71e96d7b3024ce9773119d6778f06c3f3e8b8",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.295419Z",
+   "updated_at": "2026-11-04T10:12:51.295419Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "wildcards": [
+  {
+   "id": "49cac59c",
+   "type": "wildcard",
+   "name": "Time of day",
+   "description": "",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "time",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "7c740b5b",
+      "value": "dawn",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "7ddc9c86",
+      "value": "golden hour",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "a681b8ca",
+      "value": "night",
+      "weight": 1,
+      "sub_categories": []
+     }
+    ]
+   },
+   "payload_hash": "5a4acb1f8e5bdd5fa5d70365a0fbc5eca38af96db6578b89e502694d5b9bc776",
+   "snapshot_fingerprint": "f816f674",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298581Z",
+   "updated_at": "2026-11-04T10:12:51.298581Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "aa76ada8",
+   "type": "wildcard",
+   "name": "Setting",
+   "description": "",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "setting",
+    "sub_categories": [
+     "castle",
+     "wilds",
+     "city"
+    ],
+    "options": [
+     {
+      "id": "ee9e1c67",
+      "value": "a torch-lit throne room",
+      "weight": 1,
+      "sub_categories": [
+       "castle"
+      ]
+     },
+     {
+      "id": "dee3f9da",
+      "value": "castle ramparts",
+      "weight": 1,
+      "sub_categories": [
+       "castle"
+      ]
+     },
+     {
+      "id": "7b51b895",
+      "value": "an ancient pine forest",
+      "weight": 1,
+      "sub_categories": [
+       "wilds"
+      ]
+     },
+     {
+      "id": "ade62889",
+      "value": "a windswept canyon",
+      "weight": 1,
+      "sub_categories": [
+       "wilds"
+      ]
+     },
+     {
+      "id": "4e80731f",
+      "value": "a crowded market street",
+      "weight": 1,
+      "sub_categories": [
+       "city"
+      ]
+     },
+     {
+      "id": "d61c40b7",
+      "value": "a rooftop garden above the city",
+      "weight": 1,
+      "sub_categories": [
+       "city"
+      ]
+     }
+    ]
+   },
+   "payload_hash": "56fb6858c6d5f7f1a2588df19e3bd1208669eaba42486fe5f28c749cd1af3e95",
+   "snapshot_fingerprint": "70c60cca",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298427Z",
+   "updated_at": "2026-11-04T10:12:51.298427Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "bc15a82d",
+   "type": "wildcard",
+   "name": "Colors",
+   "description": "Switched off: only read through @{} references.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "color",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "7d1e78ef",
+      "value": "auburn",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "6c3528de",
+      "value": "silver",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "e6eda3f2",
+      "value": "jet black",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "645b75a6",
+      "value": "copper",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "c7331bc4",
+      "value": "pale blonde",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "5693e178",
+      "value": "emerald",
+      "weight": 1,
+      "sub_categories": []
+     }
+    ]
+   },
+   "payload_hash": "74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77",
+   "snapshot_fingerprint": "a7e1d307",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298234Z",
+   "updated_at": "2026-11-04T10:12:51.298234Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "195238e2",
+   "type": "wildcard",
+   "name": "Outfit",
+   "description": "Options carry negative words; the tunic is the fallback.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "outfit",
+    "sub_categories": [
+     "armor",
+     "travel",
+     "formal"
+    ],
+    "options": [
+     {
+      "id": "72f8e1d7",
+      "value": "polished plate armor",
+      "weight": 1,
+      "sub_categories": [
+       "armor"
+      ],
+      "negative": "rust, broken armor"
+     },
+     {
+      "id": "b553cc92",
+      "value": "a hooded leather coat",
+      "weight": 1,
+      "sub_categories": [
+       "travel"
+      ]
+     },
+     {
+      "id": "1955f005",
+      "value": "a flowing robe with gold trim",
+      "weight": 1,
+      "sub_categories": [
+       "formal"
+      ]
+     },
+     {
+      "id": "9f7a6c18",
+      "value": "a patched linen tunic",
+      "weight": 1,
+      "sub_categories": [
+       "travel"
+      ],
+      "fallback": true
+     }
+    ]
+   },
+   "payload_hash": "3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755",
+   "snapshot_fingerprint": "bca208b3",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298073Z",
+   "updated_at": "2026-11-04T10:12:51.298073Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "38c1b584",
+   "type": "wildcard",
+   "name": "Eyes",
+   "description": "Has an empty option: sometimes the eyes aren't mentioned.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "eyes",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "fdffc693",
+      "value": "@{bc15a82d#Colors} eyes",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "c6e9202c",
+      "value": "piercing eyes",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "8313f6dc",
+      "value": "tired eyes",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "d8dda0e3",
+      "value": "",
+      "weight": 1,
+      "sub_categories": [],
+      "is_null": true
+     }
+    ]
+   },
+   "payload_hash": "10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0",
+   "snapshot_fingerprint": "d165d84e",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.297951Z",
+   "updated_at": "2026-11-04T10:12:51.297951Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "4facf8ce",
+   "type": "wildcard",
+   "name": "Hair",
+   "description": "Uses the Colors list through an @{} reference.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "hair",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "a3ff1986",
+      "value": "short @{bc15a82d#Colors} hair",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "e6d04f1d",
+      "value": "long braided @{bc15a82d#Colors} hair",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "28356404",
+      "value": "messy @{bc15a82d#Colors} hair",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "5e455e15",
+      "value": "a shaved head",
+      "weight": 1,
+      "sub_categories": []
+     }
+    ]
+   },
+   "payload_hash": "0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f",
+   "snapshot_fingerprint": "fd0a61b9",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.297775Z",
+   "updated_at": "2026-11-04T10:12:51.297775Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "808878ba",
+   "type": "wildcard",
+   "name": "Hero",
+   "description": "Who the picture is about. The tags drive the Scene constraint.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "var_binding": "hero",
+    "sub_categories": [
+     "noble",
+     "wild",
+     "urban"
+    ],
+    "options": [
+     {
+      "id": "c8fc80d0",
+      "value": "a knight",
+      "weight": 1,
+      "sub_categories": [
+       "noble"
+      ]
+     },
+     {
+      "id": "c243437e",
+      "value": "a court mage",
+      "weight": 1,
+      "sub_categories": [
+       "noble"
+      ]
+     },
+     {
+      "id": "784f4138",
+      "value": "a forest ranger",
+      "weight": 1,
+      "sub_categories": [
+       "wild"
+      ]
+     },
+     {
+      "id": "e291d944",
+      "value": "a desert nomad",
+      "weight": 1,
+      "sub_categories": [
+       "wild"
+      ]
+     },
+     {
+      "id": "dd612ba4",
+      "value": "a street thief",
+      "weight": 1,
+      "sub_categories": [
+       "urban"
+      ]
+     },
+     {
+      "id": "422b5317",
+      "value": "an inventor",
+      "weight": 1,
+      "sub_categories": [
+       "urban"
+      ]
+     }
+    ]
+   },
+   "payload_hash": "25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed",
+   "snapshot_fingerprint": "9b0946d8",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.295886Z",
+   "updated_at": "2026-11-04T10:12:51.295886Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "fixed_values": [
+  {
+   "id": "c32f16d6",
+   "type": "fixed_values",
+   "name": "Style",
+   "description": "A fixed value with its own negative words.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "values": [
+     {
+      "id": "9af7bf95",
+      "name": "style",
+      "value": "digital painting, detailed, painterly brushwork",
+      "negative": "photo, 3d render, blurry"
+     }
+    ]
+   },
+   "payload_hash": "e9971ee9ccbf2f5249b67987e2021e5a3f9b3a9e5dc041747c3121c505415020",
+   "snapshot_fingerprint": "8c197335",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298741Z",
+   "updated_at": "2026-11-04T10:12:51.298741Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "combines": [
+  {
+   "id": "5d75075f",
+   "type": "combine",
+   "name": "Scene line",
+   "description": "",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "template": "in $setting at $time, $lighting",
+    "output_var": "scene",
+    "input_vars": [
+     "setting",
+     "time",
+     "lighting"
+    ]
+   },
+   "payload_hash": "a5b688137b629aedc42362a5dbd9a91ffe9e884084fba9ef4c3fd82bfa94cb52",
+   "snapshot_fingerprint": "6bfcc7a6",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298844Z",
+   "updated_at": "2026-11-04T10:12:51.298844Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "derivations": [
+  {
+   "id": "5b008dc7",
+   "type": "derivation",
+   "name": "Settings per model",
+   "description": "Reads $model_family from WP Model Info: $size, $sampler and $cfg.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "model_family",
+         "op": "equals",
+         "value": "sd15"
+        },
+        "action": {
+         "target_var": "size",
+         "mode": "replace",
+         "value": "512x768"
+        },
+        "extra_actions": [
+         {
+          "target_var": "sampler",
+          "mode": "replace",
+          "value": "euler ancestral"
+         },
+         {
+          "target_var": "cfg",
+          "mode": "replace",
+          "value": "7"
+         }
+        ]
+       },
+       {
+        "condition": {
+         "var": "model_family",
+         "op": "equals",
+         "value": "sdxl"
+        },
+        "action": {
+         "target_var": "size",
+         "mode": "replace",
+         "value": "832x1216"
+        },
+        "extra_actions": [
+         {
+          "target_var": "sampler",
+          "mode": "replace",
+          "value": "dpmpp 2m"
+         },
+         {
+          "target_var": "cfg",
+          "mode": "replace",
+          "value": "6"
+         }
+        ]
+       },
+       {
+        "condition": {
+         "var": "model_family",
+         "op": "equals",
+         "value": "flux"
+        },
+        "action": {
+         "target_var": "size",
+         "mode": "replace",
+         "value": "896x1152"
+        },
+        "extra_actions": [
+         {
+          "target_var": "sampler",
+          "mode": "replace",
+          "value": "euler"
+         },
+         {
+          "target_var": "cfg",
+          "mode": "replace",
+          "value": "1"
+         }
+        ]
+       }
+      ],
+      "else": {
+       "action": {
+        "target_var": "size",
+        "mode": "replace",
+        "value": "1024x1024"
+       },
+       "extra_actions": [
+        {
+         "target_var": "sampler",
+         "mode": "replace",
+         "value": "euler"
+        },
+        {
+         "target_var": "cfg",
+         "mode": "replace",
+         "value": "5"
+        }
+       ]
+      },
+      "id": "e4788601"
+     }
+    ]
+   },
+   "payload_hash": "c0984a832695df2fe5a9023ea6495102b3a2fbb4cf05c92d376078c0f1ae4fe4",
+   "snapshot_fingerprint": "60a31a8e",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.299473Z",
+   "updated_at": "2026-11-04T10:12:51.299473Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "804fee67",
+   "type": "derivation",
+   "name": "Style LoRA",
+   "description": "While the Style LoRA toggle is on: its words go after $style.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "style_lora",
+         "op": "equals",
+         "value": "true"
+        },
+        "action": {
+         "target_var": "style",
+         "mode": "append",
+         "value": ", $lora_style_words"
+        }
+       }
+      ],
+      "id": "ddfcd524"
+     }
+    ]
+   },
+   "payload_hash": "6c318478ad2c1ec1d0b260d576c98fb0b76add95e471658f65dc504a32f8cc36",
+   "snapshot_fingerprint": "64b57a4b",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.299356Z",
+   "updated_at": "2026-11-04T10:12:51.299356Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "435b5087",
+   "type": "derivation",
+   "name": "Its own clothes",
+   "description": "While 'Use its own clothes' is on: the LoRA's outfit words replace $outfit.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "lora_clothes",
+         "op": "equals",
+         "value": "true"
+        },
+        "action": {
+         "target_var": "outfit",
+         "mode": "replace",
+         "value": "$lora_outfit_words"
+        }
+       }
+      ],
+      "id": "7cf35a83"
+     }
+    ]
+   },
+   "payload_hash": "40a85f944f35041eec92671611711864d5cec3f3be8c1b0c5a568200fd0f087e",
+   "snapshot_fingerprint": "19611293",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.299261Z",
+   "updated_at": "2026-11-04T10:12:51.299261Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "dd2bee53",
+   "type": "derivation",
+   "name": "Character LoRA",
+   "description": "While the LoRA character toggle is on: its words replace $hero, and the rolled hair and eyes step aside.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "lora_character",
+         "op": "equals",
+         "value": "true"
+        },
+        "action": {
+         "target_var": "hero",
+         "mode": "replace",
+         "value": "$lora_hero_words"
+        },
+        "extra_actions": [
+         {
+          "target_var": "hair",
+          "mode": "replace",
+          "value": ""
+         },
+         {
+          "target_var": "eyes",
+          "mode": "replace",
+          "value": ""
+         }
+        ]
+       }
+      ],
+      "id": "0420af2a"
+     }
+    ]
+   },
+   "payload_hash": "404b1613ac87aad0af31ac53ded2e1113069194a5b1c1c0a5de30275b48f69dd",
+   "snapshot_fingerprint": "de245686",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.299113Z",
+   "updated_at": "2026-11-04T10:12:51.299113Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  },
+  {
+   "id": "5774d2a1",
+   "type": "derivation",
+   "name": "Lighting from time",
+   "description": "Night gets lantern light (and a negative); else soft light.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "time",
+         "op": "equals",
+         "value": "night"
+        },
+        "action": {
+         "target_var": "lighting",
+         "mode": "replace",
+         "value": "moonlight, warm lantern glow"
+        },
+        "extra_actions": [
+         {
+          "target_var": "lighting",
+          "mode": "negative",
+          "value": "overexposed, harsh sunlight"
+         }
+        ]
+       }
+      ],
+      "else": {
+       "action": {
+        "target_var": "lighting",
+        "mode": "replace",
+        "value": "soft natural light"
+       }
+      },
+      "id": "e751ba3a"
+     }
+    ]
+   },
+   "payload_hash": "e5b549fb4ac497a054a1fe2faf89c26fe9427460af2842f811e7d0aab5c8df05",
+   "snapshot_fingerprint": "5b117f47",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.298946Z",
+   "updated_at": "2026-11-04T10:12:51.298946Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "constraints": [
+  {
+   "id": "7ff544c2",
+   "type": "constraint",
+   "name": "Hero fits the place",
+   "description": "Reads the Hero picked in the first Context and re-weights the Setting.",
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "payload": {
+    "source_wildcard_id": "808878ba",
+    "target_wildcard_id": "aa76ada8",
+    "source_wildcard_name": "Hero",
+    "target_wildcard_name": "Setting",
+    "exceptions": [],
+    "matrix": {
+     "noble": {
+      "castle": {
+       "mode": "boost",
+       "factor": 4
+      },
+      "wilds": {
+       "mode": "reduce",
+       "factor": 0.3
+      }
+     },
+     "wild": {
+      "wilds": {
+       "mode": "boost",
+       "factor": 4
+      },
+      "city": {
+       "mode": "reduce",
+       "factor": 0.3
+      }
+     },
+     "urban": {
+      "city": {
+       "mode": "boost",
+       "factor": 4
+      },
+      "castle": {
+       "mode": "exclude",
+       "factor": 0
+      }
+     }
+    }
+   },
+   "payload_hash": "33a422a0e0c3dc191cb58b1089cc9175e997cfc6aa387a92b765c6169cd9019d",
+   "snapshot_fingerprint": "292a47aa",
+   "version": 1,
+   "created_at": "2026-11-04T10:12:51.299681Z",
+   "updated_at": "2026-11-04T10:12:51.299681Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe"
+  }
+ ],
+ "categories": [],
+ "templates": []
+}

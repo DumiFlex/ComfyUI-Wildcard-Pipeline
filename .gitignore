@@ -77,3 +77,8 @@ wp-settings.json
 # Playwright MCP session artifacts (page snapshots, console logs).
 .playwright-mcp/
 theme-audit-out/
+
+# Tutorial videos: the voice model, spoken lines and rendered videos are made locally
+tutorials/voice/cache/
+tutorials/voice/models/
+tutorials/out/
