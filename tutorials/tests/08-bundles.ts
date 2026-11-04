@@ -14,8 +14,8 @@ tutorial(
     const page = t.page;
 
     await t.h.step("A bundle", async () => {
-      await t.say("Once your lists work well together, keep them together. A bundle is a saved set of modules.");
       await t.go("/wp/bundles/7e3d3ec2/edit");
+      await t.say("Once your lists work well together, keep them together. A bundle is a saved set of modules.");
       await t.beat(800);
       const children = page.locator('[data-test="bundle-children-list"]');
       await t.scrollTo(children);
@@ -28,8 +28,8 @@ tutorial(
     });
 
     const nodes = await t.h.step("Add bundles to a Context", async () => {
-      await t.say("On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.");
       await t.go("/");
+      await t.say("On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       for (const id of ["7e3d3ec2", "86360bc3"]) {

@@ -15,8 +15,8 @@ tutorial(
     const value = (i: number) => row(i).locator(".wp-rt__host").first();
 
     await t.h.step("A new wildcard", async () => {
-      await t.say("Let's make a wildcard for the weather. In the manager, open Wildcards and press New Wildcard.");
       await t.go("/wp/wildcards");
+      await t.say("Let's make a wildcard for the weather. In the manager, open Wildcards and press New Wildcard.");
       await t.beat(600);
       await t.click(page.getByRole("button", { name: /New Wildcard/ }).first());
       await t.beat(900);
@@ -60,8 +60,8 @@ tutorial(
     });
 
     const asm = await t.h.step("Use it in a prompt", async () => {
-      await t.say("Back on the canvas, add a Context node and pick Hero and Weather.");
       await t.go("/");
+      await t.say("Back on the canvas, add a Context node and pick Hero and Weather.");
       await t.beat(800);
       const ctx = await t.addNode("WP Context", { x: 520, y: 200 });
       await t.pickModules(ctx, ["Hero", "Weather"]);

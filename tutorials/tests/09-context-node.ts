@@ -14,8 +14,8 @@ tutorial(
     const page = t.page;
 
     const nodes = await t.h.step("The seed", async () => {
-      await t.say("So far we rolled by clicking plus. The Context node can roll for you.");
       await t.go("/");
+      await t.say("So far we rolled by clicking plus. The Context node can roll for you.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Hero", "Outfit", "Setting"]);

@@ -106,7 +106,9 @@ function vt(ms) {
   return s + vl - sl;
 }
 
-const start = vt(take.start);
+// A take that opens a page first starts after that load, not on the page the last take left.
+const opening = (take.fast ?? []).find((f) => f.speed === 0 && f.from - take.start < 3000 && f.to > take.start);
+const start = vt(opening ? opening.to : take.start);
 const end = vt(take.ended);
 // The parts to keep, with their speed: the fast-forward ranges sped up, the rest as recorded.
 const parts = [];

@@ -13,8 +13,8 @@ tutorial(
     const page = t.page;
 
     await t.h.step("A fixed value", async () => {
-      await t.say("Not everything should roll. A fixed value always writes the same text.");
       await t.go("/wp/fixed-values/c32f16d6/edit");
+      await t.say("Not everything should roll. A fixed value always writes the same text.");
       await t.beat(600);
       const row = page.locator('[data-test="fv-row-0"]');
       await t.scrollTo(row);
@@ -25,8 +25,8 @@ tutorial(
     });
 
     await t.h.step("A combine", async () => {
-      await t.say("A combine joins variables into one line you can reuse. Let's make one.");
       await t.go("/wp/combines/new");
+      await t.say("A combine joins variables into one line you can reuse. Let's make one.");
       await t.beat(600);
       await t.fill(page.locator('[data-test="identity-name"]'), "Hero line");
       await t.say("It writes a new variable, hero line, from a small template of its own.");
@@ -47,8 +47,8 @@ tutorial(
     });
 
     const nodes = await t.h.step("Use them", async () => {
-      await t.say("On the canvas, a Context node picks Hero and Outfit first, then Style and the new Hero line.");
       await t.go("/");
+      await t.say("On the canvas, a Context node picks Hero and Outfit first, then Style and the new Hero line.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Hero", "Outfit", "Style", "Hero line"]);

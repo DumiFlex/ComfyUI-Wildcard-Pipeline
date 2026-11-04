@@ -14,8 +14,8 @@ tutorial(
     const page = t.page;
 
     const nodes = await t.h.step("Write a template", async () => {
-      await t.say("A template is the sentence the Assembler fills in. Once you like one, keep it in your library.");
       await t.go("/");
+      await t.say("A template is the sentence the Assembler fills in. Once you like one, keep it in your library.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 400, y: 300 });
       await t.pickModules(ctx, ["Hero", "Outfit", "Setting"]);
@@ -69,8 +69,8 @@ tutorial(
     });
 
     await t.h.step("Templates in the manager", async () => {
-      await t.say("Every saved template lives on the Templates page of the manager.");
       await t.go("/wp/templates");
+      await t.say("Every saved template lives on the Templates page of the manager.");
       await t.beat(800);
       const listed = page.getByText("Hero portrait", { exact: true }).first();
       await t.callout("listed", listed, "Hero portrait", 8);
