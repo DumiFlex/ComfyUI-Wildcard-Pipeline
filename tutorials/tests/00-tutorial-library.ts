@@ -51,11 +51,17 @@ tutorial(
         await t.beat(600);
         await t.click(page.locator('[data-test="import-picker-continue"]'));
         await t.beat(1500);
+        // With an empty library nothing clashes, so Continue imports straight away; a clash opens a
+        // dialog with its own Import button.
+        const commit = page.locator('[data-test="commit-btn"]');
+        if (await commit.isVisible().catch(() => false)) await t.click(commit);
+        await t.beat(1200);
+        const toast = page.getByText("Import committed").first();
+        const shown = await toast.isVisible().catch(() => false);
+        if (shown) await t.callout("done", toast, "Imported, with Undo", 5);
+        await t.say("Nothing clashes with an empty library, so it goes straight in. The message has Undo, in case you change your mind.");
         await t.waitVoice();
-        await t.say("Nothing here clashes with your library, so import it.");
-        await t.click(page.locator('[data-test="commit-btn"], [data-test*="commit"]').last());
-        await t.beat(2500);
-        await t.waitVoice();
+        if (shown) await t.uncallout("done");
       });
 
       await t.h.step("The items", async () => {

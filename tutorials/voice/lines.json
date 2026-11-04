@@ -1019,6 +1019,12 @@
   "text": "Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it.",
   "voice": "af_heart"
  },
+ "4d8f3edf98cb": {
+  "ms": 7019,
+  "speed": 1.0,
+  "text": "Nothing clashes with an empty library, so it goes straight in. The message has Undo, in case you change your mind.",
+  "voice": "af_heart"
+ },
  "4df55582631c": {
   "ms": 5035,
   "speed": 1.0,
