@@ -47,6 +47,12 @@
   "text": "Randomize, the default, gives every run a new seed. Fixed keeps the same one, and plus one steps through seeds in order, so you can come back to any of them.",
   "voice": "af_heart"
  },
+ "06cfe67bbae8": {
+  "ms": 4843,
+  "speed": 1.0,
+  "text": "Wire the Injector into a Context's upstream, so its variables join the picks there.",
+  "voice": "af_heart"
+ },
  "07326b46d038": {
   "ms": 5163,
   "speed": 1.0,
@@ -57,6 +63,12 @@
   "ms": 5163,
   "speed": 1.0,
   "text": "First, add WP Debug under the Context, so every run shows what it rolled.",
+  "voice": "af_heart"
+ },
+ "081d577824c7": {
+  "ms": 9131,
+  "speed": 1.0,
+  "text": "Put it first, so every Context after it can read the model. This one runs Settings per model, which sets a size, sampler and CFG per family.",
   "voice": "af_heart"
  },
  "082ff98fe74f": {
@@ -77,6 +89,12 @@
   "text": "The negative preview colors each word like the variable it came from: the armor's words, and the night lighting's. Hover a word to see its variable.",
   "voice": "af_heart"
  },
+ "0ac5d7ddd817": {
+  "ms": 14421,
+  "speed": 1.0,
+  "text": "The LoRA swaps bundle has two more rules like it: the LoRA's own clothes in place of the outfit, and style words added after the style. The first example workflow wires all three to LoRA loaders and switches.",
+  "voice": "af_heart"
+ },
  "0f506d4c8b9f": {
   "ms": 2688,
   "speed": 1.0,
@@ -87,6 +105,12 @@
   "ms": 5184,
   "speed": 1.0,
   "text": "On the canvas, the constraint goes between the two lists: Hero, the constraint, then Setting.",
+  "voice": "af_heart"
+ },
+ "109c892a3765": {
+  "ms": 10475,
+  "speed": 1.0,
+  "text": "Anything you can wire, you can name and use in a template. For choices that should follow it, use Match variable from Hold and match. Next: LoRA trigger words.",
   "voice": "af_heart"
  },
  "110fa32584ae": {
@@ -227,10 +251,22 @@
   "text": "The Preview below shows each hero's chance of every place. The ranger's castle chances just fell.",
   "voice": "af_heart"
  },
+ "254589a79f80": {
+  "ms": 8832,
+  "speed": 1.0,
+  "text": "Chain Contexts to split a prompt into parts, hide what only feeds other items, and change items per node. Next: the Context Injector.",
+  "voice": "af_heart"
+ },
  "26421a02d89b": {
   "ms": 6763,
   "speed": 1.0,
   "text": "Derivations set a variable by a rule, constraints keep picks that clash apart, and bundles group items together.",
+  "voice": "af_heart"
+ },
+ "26523fbfeff1": {
+  "ms": 2411,
+  "speed": 1.0,
+  "text": "Run, and each Var node shows what it read.",
   "voice": "af_heart"
  },
  "2660c2190195": {
@@ -281,6 +317,12 @@
   "text": "There's the crest, and the eyes are a color. Any other hero keeps the plain Eyes roll.",
   "voice": "af_heart"
  },
+ "2b81d7fb3a94": {
+  "ms": 9707,
+  "speed": 1.0,
+  "text": "Pony and Illustrious are both SDXL inside, so the family can't tell them apart. The variant rules read the file name for that, and you can add your own.",
+  "voice": "af_heart"
+ },
  "2c5fbd2a1c6e": {
   "ms": 6528,
   "speed": 1.0,
@@ -305,10 +347,22 @@
   "text": "Conditions with AND, OR and NOT, text tests and regex, and actions that append, prepend and roll lists. Next: the constraint matrix in depth.",
   "voice": "af_heart"
  },
+ "2f278d9f46ea": {
+  "ms": 2752,
+  "speed": 1.0,
+  "text": "It also takes a negative, like any other source.",
+  "voice": "af_heart"
+ },
  "2f6f96c67804": {
   "ms": 5973,
   "speed": 1.0,
   "text": "The badge marks a row that differs from the library. Reset overrides in the same window puts it back.",
+  "voice": "af_heart"
+ },
+ "2f810a8c9885": {
+  "ms": 8043,
+  "speed": 1.0,
+  "text": "They leave the Assembler's list, but Scene line, and any later Context, still reads them. Hidden means not offered to templates, not gone.",
   "voice": "af_heart"
  },
  "30a3a1a5181b": {
@@ -353,6 +407,18 @@
   "text": "Boost, reduce, exclude and only for tag pairs, exceptions for single options, and the Preview to check the odds. Next: how far a constraint reaches.",
   "voice": "af_heart"
  },
+ "365e7e8b5674": {
+  "ms": 10048,
+  "speed": 1.0,
+  "text": "WP Var → Int takes a number out of a variable. Pick size: eight thirty two by twelve sixteen. Index zero is the first number, the width.",
+  "voice": "af_heart"
+ },
+ "377dd7af8289": {
+  "ms": 9024,
+  "speed": 1.0,
+  "text": "Trigger words become a variable, and a rule decides when they replace a roll. Next: the Var nodes, which turn variables into numbers and settings.",
+  "voice": "af_heart"
+ },
  "37b3e46e447c": {
   "ms": 4459,
   "speed": 1.0,
@@ -369,6 +435,12 @@
   "ms": 9877,
   "speed": 1.0,
   "text": "Travel gear has two groups. CLIMATE is descriptive: a coat is cold weather gear, a robe is warm. All of an option's descriptive tags count at once.",
+  "voice": "af_heart"
+ },
+ "38dce7cf65ba": {
+  "ms": 7232,
+  "speed": 1.0,
+  "text": "Rules can set more than words. Settings per model sets a size, a sampler and a CFG for each model family.",
   "voice": "af_heart"
  },
  "391bc4239318": {
@@ -557,6 +629,12 @@
   "text": "Changed your mind? Reset all to defaults puts everything back.",
   "voice": "af_heart"
  },
+ "507dce35c337": {
+  "ms": 9301,
+  "speed": 1.0,
+  "text": "Here an Injector says the model is sdxl. In a real workflow, WP Model Info reads it from your checkpoint: that's the next tutorial.",
+  "voice": "af_heart"
+ },
  "50f6f768cab2": {
   "ms": 5013,
   "speed": 1.0,
@@ -567,6 +645,12 @@
   "ms": 5419,
   "speed": 1.0,
   "text": "Roll a few seeds: a wool cloak in a new color, or a cold weather coat, never a summer robe.",
+  "voice": "af_heart"
+ },
+ "517182170871": {
+  "ms": 3883,
+  "speed": 1.0,
+  "text": "Wire it into the Injector. A row appears for it: name it outfit.",
   "voice": "af_heart"
  },
  "51aa84e7b234": {
@@ -603,6 +687,12 @@
   "ms": 4245,
   "speed": 1.0,
   "text": "Every variable from both bundles is ready to use. Roll a few seeds.",
+  "voice": "af_heart"
+ },
+ "56f794b38a10": {
+  "ms": 6891,
+  "speed": 1.0,
+  "text": "Now a Context with the hero, hair and eyes, and the Character LoRA rule from the LoRA swaps bundle.",
   "voice": "af_heart"
  },
  "57169740a1b1": {
@@ -719,6 +809,12 @@
   "text": "Each option lists the shoes it goes with.",
   "voice": "af_heart"
  },
+ "643d98108dcf": {
+  "ms": 7872,
+  "speed": 1.0,
+  "text": "Roll a few seeds. A later Context can also set a variable again: the last one wins, and the node shows a small note when it does.",
+  "voice": "af_heart"
+ },
  "65ff3e617888": {
   "ms": 5355,
   "speed": 1.0,
@@ -729,6 +825,12 @@
   "ms": 3072,
   "speed": 1.0,
   "text": "Rows are the hero's tags, columns the setting's tags.",
+  "voice": "af_heart"
+ },
+ "672e78f93b5e": {
+  "ms": 3755,
+  "speed": 1.0,
+  "text": "Untick the switch row, and the rolled hero, hair and eyes come back.",
   "voice": "af_heart"
  },
  "687d0df2c7bf": {
@@ -747,6 +849,18 @@
   "ms": 4800,
   "speed": 1.0,
   "text": "Your installed LoRAs and embeddings work the same way. Turn on LoRAs.",
+  "voice": "af_heart"
+ },
+ "6a1d71dfcdc9": {
+  "ms": 8299,
+  "speed": 1.0,
+  "text": "Then a switch: a template row named lora character, set to true. A WP Toggles switch can drive this too, as in Switches.",
+  "voice": "af_heart"
+ },
+ "6b0ed43017b7": {
+  "ms": 11136,
+  "speed": 1.0,
+  "text": "The Context Injector turns any value on the canvas into a variable. Here, a text box. It could as well be a caption from an LLM node, a LoRA name or a number.",
   "voice": "af_heart"
  },
  "6b1cc1acacee": {
@@ -863,6 +977,18 @@
   "text": "On the left are the controls; on the right, a live preview with every kind of row and marker.",
   "voice": "af_heart"
  },
+ "7f1f79c3d1d1": {
+  "ms": 6357,
+  "speed": 1.0,
+  "text": "A character LoRA comes with trigger words. Put them in a text box, next to your LoRA loader.",
+  "voice": "af_heart"
+ },
+ "7f4767a01db5": {
+  "ms": 4757,
+  "speed": 1.0,
+  "text": "Time, setting and lighting only feed the scene line. Hide them with their globe buttons.",
+  "voice": "af_heart"
+ },
  "83260fd05253": {
   "ms": 3541,
   "speed": 1.0,
@@ -917,16 +1043,34 @@
   "text": "The same hero in every frame, while the outfit and the place still change. A new seed picks a new hero for the next run.",
   "voice": "af_heart"
  },
+ "8892ef3cc03c": {
+  "ms": 6848,
+  "speed": 1.0,
+  "text": "A template row builds a variable from others. Add one, name it look, then right-click it, Edit, and write its template.",
+  "voice": "af_heart"
+ },
  "88f568cd701d": {
   "ms": 6784,
   "speed": 1.0,
   "text": "Only the scene line reaches the template, so hide the other three with their globe buttons. The combine still reads them.",
   "voice": "af_heart"
  },
+ "897cd29565ae": {
+  "ms": 8555,
+  "speed": 1.0,
+  "text": "While the switch is on, the rule puts the trigger words in place of the hero, and the rolled hair and eyes step aside, so they don't fight the LoRA.",
+  "voice": "af_heart"
+ },
  "8af2ea8156da": {
   "ms": 6549,
   "speed": 1.0,
   "text": "An option can hold another wildcard. Hair's options read the Colors list: each purple chip rolls a color.",
+  "voice": "af_heart"
+ },
+ "8b8f43018df7": {
+  "ms": 14805,
+  "speed": 1.0,
+  "text": "Any rule can branch on these: quality words per family, Pony's score tags only for Pony. A derivation's LoRA by model button builds one rule per model for you. A wildcard with Match variable can follow the variant too.",
   "voice": "af_heart"
  },
  "8beb48e0c348": {
@@ -951,6 +1095,12 @@
   "ms": 4395,
   "speed": 1.0,
   "text": "And it happens in a castle: in Setting, keep only the two castle places.",
+  "voice": "af_heart"
+ },
+ "8ebadf027b42": {
+  "ms": 5675,
+  "speed": 1.0,
+  "text": "A big prompt reads better in parts. One Context for the character: Hero, Hair and Eyes.",
   "voice": "af_heart"
  },
  "8f9e745c682a": {
@@ -1121,6 +1271,12 @@
   "text": "First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain. Next: negatives.",
   "voice": "af_heart"
  },
+ "a2f48bda015d": {
+  "ms": 9067,
+  "speed": 1.0,
+  "text": "Wire the checkpoint's model into it. It writes three variables: model family, from the model itself, model variant, from the file name, and model name.",
+  "voice": "af_heart"
+ },
  "a31ada13963e": {
   "ms": 4885,
   "speed": 1.0,
@@ -1143,6 +1299,12 @@
   "ms": 6144,
   "speed": 1.0,
   "text": "Hero and Outfit only feed the hero line now. Click the globe on their rows to hide them from the prompt.",
+  "voice": "af_heart"
+ },
+ "a4817fb1ace3": {
+  "ms": 5803,
+  "speed": 1.0,
+  "text": "Everything set upstream flows down the chain. The Assembler offers variables from both Contexts.",
   "voice": "af_heart"
  },
  "a687e71df23a": {
@@ -1199,6 +1361,18 @@
   "text": "Density sets how much room each row takes. Compact fits more on a node.",
   "voice": "af_heart"
  },
+ "b1f1eb689728": {
+  "ms": 11243,
+  "speed": 1.0,
+  "text": "WP Var → Choice fills a drop-down. Pick sampler, and wire it into a sampler list. It matches loosely, so dpmpp 2m finds the right entry.",
+  "voice": "af_heart"
+ },
+ "b2a828ad0340": {
+  "ms": 12181,
+  "speed": 1.0,
+  "text": "One pack rarely suits every model. Pony wants its score tags, Illustrious other LoRAs, Flux plain sentences. WP Model Info tells the pipeline which model is loaded.",
+  "voice": "af_heart"
+ },
  "b34eb6171e2a": {
   "ms": 5589,
   "speed": 1.0,
@@ -1209,6 +1383,12 @@
   "ms": 4928,
   "speed": 1.0,
   "text": "Let's build a rule: knights and mages wear a royal crest, but not out in the forest.",
+  "voice": "af_heart"
+ },
+ "b5f07dcbc4c2": {
+  "ms": 7232,
+  "speed": 1.0,
+  "text": "The hero and the place still roll. The outfit is whatever the text box says, so change the text and the prompt follows.",
   "voice": "af_heart"
  },
  "b8445a581178": {
@@ -1229,6 +1409,12 @@
   "text": "Your installed LoRAs and embeddings work the same way, once you have some.",
   "voice": "af_heart"
  },
+ "b9e95a7bc276": {
+  "ms": 5909,
+  "speed": 1.0,
+  "text": "You can change an item for one node without touching the library. Edit Hair on the character Context.",
+  "voice": "af_heart"
+ },
  "b9fa2a9a7498": {
   "ms": 1323,
   "speed": 1.0,
@@ -1245,6 +1431,12 @@
   "ms": 3712,
   "speed": 1.0,
   "text": "Each bundle sits in its own frame. Open them to see what came in.",
+  "voice": "af_heart"
+ },
+ "ba459e0fe5b6": {
+  "ms": 4544,
+  "speed": 1.0,
+  "text": "The row shows its new name. Every other node, and the library, keep the original.",
   "voice": "af_heart"
  },
  "bb7b58731e51": {
@@ -1307,10 +1499,22 @@
   "text": "Once your lists work well together, keep them together. A bundle is a saved set of modules.",
   "voice": "af_heart"
  },
+ "c53a1d9414ca": {
+  "ms": 7147,
+  "speed": 1.0,
+  "text": "A second Context for the scene, wired into the first one's upstream: Time of day, Setting, the lighting rule and Scene line.",
+  "voice": "af_heart"
+ },
  "c5bfdd49b8ac": {
   "ms": 4672,
   "speed": 1.0,
   "text": "Only turns a row into a list of what's allowed. Set urban and city to Only.",
+  "voice": "af_heart"
+ },
+ "c624bd09f9af": {
+  "ms": 11157,
+  "speed": 1.0,
+  "text": "Var → Float does the same for decimals, like a CFG, and Var → Bool for on and off switches. Hide the variables they read, so the numbers don't print in your prompt.",
   "voice": "af_heart"
  },
  "c659646078ad": {
@@ -1335,6 +1539,12 @@
   "ms": 3883,
   "speed": 1.0,
   "text": "Like this hero? Lock it. The lock button keeps the seed it rolled.",
+  "voice": "af_heart"
+ },
+ "c9c5871e2167": {
+  "ms": 8384,
+  "speed": 1.0,
+  "text": "With Var nodes, your rules can set sizes, samplers, CFG and switches, not just words. Next: prompts that follow the model.",
   "voice": "af_heart"
  },
  "cacfd5b6844f": {
@@ -1391,6 +1601,12 @@
   "text": "A Context node holds the lists that roll. Add module picks them from your library.",
   "voice": "af_heart"
  },
+ "d3075e1161d6": {
+  "ms": 2517,
+  "speed": 1.0,
+  "text": "A second one with index one would give the height.",
+  "voice": "af_heart"
+ },
  "d36a98b741ac": {
   "ms": 7872,
   "speed": 1.0,
@@ -1431,6 +1647,12 @@
   "ms": 4501,
   "speed": 1.0,
   "text": "The list shows how often each tag is used. Arrow keys move, Enter picks.",
+  "voice": "af_heart"
+ },
+ "d6fb8d2d7dd5": {
+  "ms": 3285,
+  "speed": 1.0,
+  "text": "Run it. The model loads, and the prompt shows what was read.",
   "voice": "af_heart"
  },
  "d7a1a00f6688": {
@@ -1499,10 +1721,22 @@
   "text": "The second option takes from Travel gear. Travel gear has tags, so Enter offers a filter: pick cold, then Apply.",
   "voice": "af_heart"
  },
+ "df828f030366": {
+  "ms": 5824,
+  "speed": 1.0,
+  "text": "Rename it here and untick the shaved head. Reset overrides would bring back the library's version.",
+  "voice": "af_heart"
+ },
  "dfde8d0a2019": {
   "ms": 3029,
   "speed": 1.0,
   "text": "And for anything else, the Discord button is right next to it.",
+  "voice": "af_heart"
+ },
+ "e007ee864011": {
+  "ms": 3371,
+  "speed": 1.0,
+  "text": "Wire it into an Injector and name it lora hero words.",
   "voice": "af_heart"
  },
  "e146cf8f8ae6": {
@@ -1551,6 +1785,12 @@
   "ms": 7253,
   "speed": 1.0,
   "text": "When several constraints cover the same wildcard, they all apply: their factors multiply, and an exclude always wins.",
+  "voice": "af_heart"
+ },
+ "e68524598f2b": {
+  "ms": 5845,
+  "speed": 1.0,
+  "text": "WP Model Info names the model, and your rules follow it. Next: loops and seeds.",
   "voice": "af_heart"
  },
  "e779341f3c23": {
@@ -1659,6 +1899,12 @@
   "ms": 3029,
   "speed": 1.0,
   "text": "Debug lists every variable and the option it rolled.",
+  "voice": "af_heart"
+ },
+ "fd6c1efc349f": {
+  "ms": 3669,
+  "speed": 1.0,
+  "text": "Change the checkpoint, and the same pack writes the right words for it.",
   "voice": "af_heart"
  },
  "fe0d8098b56e": {

@@ -76,7 +76,7 @@ tutorial(
       const inj = await t.addNode("WP Context Injector", { x: 160, y: 170 });
       await t.click(t.node(inj).locator('[data-test="inj-add-general"]'));
       await t.beat(500);
-      await t.type("wanted_time", { cps: 14 });
+      await t.fill(t.node(inj).locator('[data-test="inj-row-binding"] input').last(), "wanted_time", { cps: 14 });
       await t.press("Tab");
       await t.beat(400);
       await t.click(t.node(inj).locator('[data-test="inj-row-summary"]').first(), { right: true });
