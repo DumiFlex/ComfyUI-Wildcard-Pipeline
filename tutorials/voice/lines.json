@@ -23,6 +23,12 @@
   "text": "First, add WP Debug under the Context, so every run shows what it rolled.",
   "voice": "af_heart"
  },
+ "082ff98fe74f": {
+  "ms": 5888,
+  "speed": 1.0,
+  "text": "Character holds the Hero list, and three smaller bundles inside it: Look, Outfit and Shared lists.",
+  "voice": "af_heart"
+ },
  "106c4c910925": {
   "ms": 5184,
   "speed": 1.0,
@@ -119,6 +125,12 @@
   "text": "A combine joins variables into one line you can reuse. Let's make one.",
   "voice": "af_heart"
  },
+ "3bd0832aeac8": {
+  "ms": 6997,
+  "speed": 1.0,
+  "text": "That's the basics of Wildcard Pipeline. The advanced videos go further: nested lists, LoRAs, loops and more.",
+  "voice": "af_heart"
+ },
  "3f9efb813688": {
   "ms": 4331,
   "speed": 1.0,
@@ -129,6 +141,12 @@
   "ms": 1813,
   "speed": 1.0,
   "text": "Save it, and it's in your library.",
+  "voice": "af_heart"
+ },
+ "42ebae052f5d": {
+  "ms": 1877,
+  "speed": 1.0,
+  "text": "Fold both to keep the node small.",
   "voice": "af_heart"
  },
  "4593f77bfe49": {
@@ -155,10 +173,28 @@
   "text": "Back on the canvas, add a Context node and pick Hero and Weather.",
   "voice": "af_heart"
  },
+ "50f6f768cab2": {
+  "ms": 5013,
+  "speed": 1.0,
+  "text": "On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.",
+  "voice": "af_heart"
+ },
+ "5352952d6267": {
+  "ms": 4224,
+  "speed": 1.0,
+  "text": "Pick Character first, then Scene, because the scene's rule reads the hero.",
+  "voice": "af_heart"
+ },
  "540ace07a36b": {
   "ms": 3413,
   "speed": 1.0,
   "text": "Next, a WP Prompt Assembler. It writes the prompt.",
+  "voice": "af_heart"
+ },
+ "55117a514962": {
+  "ms": 4245,
+  "speed": 1.0,
+  "text": "Every variable from both bundles is ready to use. Roll a few seeds.",
   "voice": "af_heart"
  },
  "57c3de063bbb": {
@@ -377,6 +413,12 @@
   "text": "Hero is a list of heroes. Open it to see its options.",
   "voice": "af_heart"
  },
+ "c4a44182cabc": {
+  "ms": 5461,
+  "speed": 1.0,
+  "text": "Once your lists work well together, keep them together. A bundle is a saved set of modules.",
+  "voice": "af_heart"
+ },
  "c659646078ad": {
   "ms": 3285,
   "speed": 1.0,
@@ -405,6 +447,12 @@
   "ms": 4971,
   "speed": 1.0,
   "text": "A Context node holds the lists that roll. Add module picks them from your library.",
+  "voice": "af_heart"
+ },
+ "d36a98b741ac": {
+  "ms": 7872,
+  "speed": 1.0,
+  "text": "Each bundle sits in its own frame. Fold it, switch it off with its checkbox, or open it to change one item for this node only.",
   "voice": "af_heart"
  },
  "d48848da457b": {
@@ -441,6 +489,12 @@
   "ms": 4843,
   "speed": 1.0,
   "text": "Tags sort options into groups, like noble or urban. Rules can read them later.",
+  "voice": "af_heart"
+ },
+ "e779341f3c23": {
+  "ms": 5099,
+  "speed": 1.0,
+  "text": "Bundles can nest, so you build big sets out of small ones and reuse the small ones anywhere.",
   "voice": "af_heart"
  },
  "e99c3c741bab": {

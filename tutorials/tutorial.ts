@@ -516,9 +516,23 @@ export async function addDebugUnder(t: Tutor, ctxId: string): Promise<string> {
   const view = t.page.viewportSize() ?? { width: 1920, height: 1080 };
   const x = box ? box.x + box.width / 2 : 520;
   const below = box ? box.y + box.height + 40 : 600;
-  const y = Math.min(below + 120, view.height - 300);
+  const y = Math.min(below + 100, view.height - 320);
   const dbg = await t.addNode("WP Debug", { x, y });
   await t.wire(ctxId, "context", dbg, "context");
+  // Keep its bottom above the caption, even once a run fills it with rows (it scrolls inside).
+  const top = (await t.node(dbg).boundingBox())?.y ?? y - 120;
+  const room = view.height - 210 - top;
+  await t.page.evaluate(
+    ({ id, room }) => {
+      const app = window.app as unknown as { graph: { getNodeById(id: string | number): { size: [number, number] } | null }; canvas: { ds: { scale: number }; setDirty(a: boolean, b: boolean): void } };
+      const n = app.graph.getNodeById(id) ?? app.graph.getNodeById(Number(id));
+      if (!n) return;
+      n.size = [n.size[0], Math.max(160, room / app.canvas.ds.scale - 30)];
+      app.canvas.setDirty(true, true);
+    },
+    { id: dbg, room },
+  );
+  await sleep(300);
   return dbg;
 }
 
