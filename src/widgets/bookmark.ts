@@ -281,33 +281,56 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
 }
 
 // ── the free part of the canvas ───────────────────────────────────────
+//
+// Where the dock sits and where bookmarks land is worked out from the host's
+// LAYOUT only: the window, the side, right and bottom panels, the workflow
+// tabs, the top menu's bars, and the floating pieces the viewer turned on
+// (minimap, zoom controls, a floating run bar). Anything that comes and goes
+// on its own (the job progress panel, the error card, toasts, menus,
+// tooltips, dialogs, the selection toolbox) never moves either of them; it
+// floats over the canvas like a toast. Audit:
+// docs/bookmark-dock-placement.md.
 
 /** Not the host's chrome, so never a bar or a box to keep clear of: nodes'
  *  DOM widgets, the Vue renderer's nodes, our own dock and toasts,
- *  ComfyUI's selection toolbox and ComfyUI's toasts. The toolbox floats over
- *  the selected node and moves with it, so keeping a jump clear of it pushed
- *  a selected bookmark further down on every press. A toast (the reka
- *  viewport, or PrimeVue's on older frontends) comes and goes, and read as a
- *  bar it moved the dock and the jump spot while it showed. */
+ *  ComfyUI's selection toolbox (it floats over the selected node and moves
+ *  with it). */
 const GRAPH_CONTENT = ".dom-widget, [data-node-id], .lg-node, .wp-widget, #wp-bookmark-dock-root, .wp-toast-stack, "
-  + ".selection-toolbox, [data-testid=\"selection-toolbox\"], .selection-overlay-container, "
-  + "[data-testid=\"toast-viewport\"], [data-testid=\"toast\"], .p-toast";
+  + ".selection-toolbox, [data-testid=\"selection-toolbox\"], .selection-overlay-container";
 
-/** True when nothing but the graph (or one of `skip`) covers this screen
- *  point. */
-function isFreeAt(canvasEl: Element, x: number, y: number, skip: readonly Element[] = []): boolean {
-  if (typeof document.elementsFromPoint !== "function") return true;
+/** Host pieces that come and go on their own: ComfyUI's job progress panel
+ *  and inline progress, the error card, toasts (reka and PrimeVue),
+ *  notification popups, menus, popovers, tooltips, dialogs, the node
+ *  search box and title editor. Counted as a bar they moved the dock and
+ *  the jump spot while they showed. */
+export const TRANSIENT = [
+  "[data-testid=\"queue-progress-overlay\"]", "[data-testid=\"queue-inline-progress\"]", "[data-testid=\"error-overlay\"]",
+  "[data-testid=\"toast-viewport\"]", "[data-testid=\"toast\"]", ".p-toast",
+  "[role=\"status\"]", "[role=\"alert\"]", "[role=\"dialog\"]", "[role=\"alertdialog\"]", "[aria-modal=\"true\"]",
+  "[role=\"menu\"]", "[role=\"listbox\"]", "[role=\"tooltip\"]",
+  "[data-reka-popper-content-wrapper]", "[data-radix-popper-content-wrapper]",
+  ".p-popover", ".p-contextmenu", ".p-tooltip", ".p-dialog-mask", ".p-overlay-mask", ".p-select-overlay",
+  ".litecontextmenu", ".litesearchbox", ".graphdialog", ".comfy-modal", ".node-tooltip", ".node-title-editor",
+].join(", ");
+
+/** Never an obstacle: graph content or something that comes and goes. */
+const IGNORED = `${GRAPH_CONTENT}, ${TRANSIENT}`;
+
+/** The first thing over the graph at this screen point (not graph content,
+ *  not transient, not one of `skip`), or null when the canvas shows. */
+function coverAt(canvasEl: Element, x: number, y: number, skip: readonly Element[] = []): Element | null {
+  if (typeof document.elementsFromPoint !== "function") return null;
   for (const el of document.elementsFromPoint(x, y)) {
-    if (el === canvasEl) return true;
-    if (el.closest(GRAPH_CONTENT)) continue;
+    if (el === canvasEl) return null;
+    if (el.closest(IGNORED)) continue;
     if (skip.some((s) => s.contains(el))) continue;
-    return false;
+    return el;
   }
-  return true;
+  return null;
 }
 
 /** ComfyUI's pane for the canvas: what the side panel and the bottom panel
- *  (console, shortcuts) leave, below the floating toolbar. */
+ *  (console, shortcuts) leave, below the top menu. */
 const CANVAS_PANEL = "#graph-canvas-panel";
 
 function visible(el: Element): boolean {
@@ -315,25 +338,54 @@ function visible(el: Element): boolean {
   return cs.display !== "none" && cs.visibility !== "hidden" && cs.opacity !== "0";
 }
 
+function takesPointer(el: Element): boolean {
+  return getComputedStyle(el).pointerEvents !== "none";
+}
+
 /**
- * The host's floating pieces inside the canvas pane (the minimap, the zoom
- * controls, the selection toolbox): the first element down each branch that
- * takes the pointer and has a size. Containers that let clicks through
- * (`pointer-events: none`) are looked into, not counted; graph content is
- * skipped.
+ * The pieces under `root`: the first element down each branch that takes
+ * the pointer and has a size. Containers that let clicks through
+ * (`pointer-events: none`, like ComfyUI's full-width rows) are looked into,
+ * not counted; graph content and transient pieces are skipped.
  */
-function paneOverlays(pane: Element): Element[] {
+function pieces(root: Element, keep: (el: Element) => boolean = () => true): Element[] {
   const out: Element[] = [];
   const look = (el: Element, depth: number): void => {
     for (const child of Array.from(el.children)) {
-      if (child.matches(GRAPH_CONTENT) || !visible(child)) continue;
+      if (child.matches(IGNORED) || !visible(child)) continue;
       const r = child.getBoundingClientRect();
-      if (getComputedStyle(child).pointerEvents !== "none" && r.width > 0 && r.height > 0) out.push(child);
-      else if (depth < 6) look(child, depth + 1);
+      if (takesPointer(child) && r.width > 0 && r.height > 0) {
+        if (keep(child)) out.push(child);
+      } else if (depth < 6) look(child, depth + 1);
     }
   };
-  look(pane, 0);
+  look(root, 0);
   return out;
+}
+
+/** The host's floating pieces inside the canvas pane the viewer turned on
+ *  (the minimap, the zoom controls). */
+function paneOverlays(pane: Element): Element[] {
+  return pieces(pane);
+}
+
+/** Space ComfyUI keeps between the top menu's bars and the canvas pane. */
+const MENU_GAP = 4;
+
+/**
+ * The pane's top edge as the top menu's BARS put it (breadcrumb, run bar).
+ * ComfyUI stacks the job progress panel, the inline progress line and the
+ * error card in the same column under the run bar, and the column is in
+ * the page flow: while a workflow runs the menu grows and pushes the pane
+ * down. A floating run bar (`position: fixed`) is no bar of the menu.
+ */
+function paneTop(pane: Element, paneBox: DOMRect): number {
+  const menu = pane.closest("[data-testid=\"graph-canvas-gutter\"]")?.previousElementSibling;
+  if (!menu) return paneBox.top;
+  const bars = pieces(menu, (el) => getComputedStyle(el).position !== "fixed");
+  if (!bars.length) return paneBox.top;
+  const bottom = Math.max(...bars.map((b) => b.getBoundingClientRect().bottom));
+  return Math.min(paneBox.top, bottom + MENU_GAP);
 }
 
 /** The free part of the canvas, in page px. */
@@ -344,35 +396,45 @@ export interface FreeArea {
   avoid: ScreenBox[];
 }
 
-/**
- * Where bookmarks land and the dock sits. ComfyUI's canvas pane gives what
- * the side panel, the bottom panel and the floating toolbar leave, and moves
- * with them; inside it the minimap and zoom controls float and are boxes to
- * keep clear of. Bars the pane doesn't know (another extension's toolbar, an
- * older frontend without the pane) are found by walking in from each edge
- * with `elementsFromPoint` until bare canvas.
- */
-export function freeArea(canvasEl: Element | undefined): FreeArea {
-  if (!canvasEl) return { free: [0, 0, 0, 0], avoid: [] };
+function boxOf(el: Element): ScreenBox {
+  const b = el.getBoundingClientRect();
+  return [b.left, b.top, b.right, b.bottom];
+}
+
+/** The canvas box less ComfyUI's pane (side, right and bottom panels, top
+ *  menu bars), before the edge walk. */
+function paneFrame(canvasEl: Element): { left: number; top: number; right: number; bottom: number; pane: Element | null } {
   const r = canvasEl.getBoundingClientRect();
   const pane = document.querySelector(CANVAS_PANEL);
   const p = pane?.getBoundingClientRect();
-  const usable = p && p.width > 40 && p.height > 40;
-  const base = {
-    left: usable ? Math.max(r.left, p.left) : r.left,
-    top: usable ? Math.max(r.top, p.top) : r.top,
-    right: usable ? Math.min(r.right, p.right) : r.right,
-    bottom: usable ? Math.min(r.bottom, p.bottom) : r.bottom,
+  if (!pane || !p || p.width <= 40 || p.height <= 40) return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, pane: null };
+  return {
+    left: Math.max(r.left, p.left),
+    top: Math.max(r.top, paneTop(pane, p)),
+    right: Math.min(r.right, p.right),
+    bottom: Math.min(r.bottom, p.bottom),
+    pane,
   };
-  const overlays = usable && pane ? paneOverlays(pane) : [];
-  const [il, it, ir, ib] = walkInsets(canvasEl, base, overlays);
-  const box = (el: Element): ScreenBox => {
-    const b = el.getBoundingClientRect();
-    return [b.left, b.top, b.right, b.bottom];
-  };
+}
+
+/**
+ * Where bookmarks land and the dock sits. ComfyUI's canvas pane gives what
+ * the side panel, the bottom panel and the top menu's bars leave, and moves
+ * with them; inside it the minimap and zoom controls float and are boxes to
+ * keep clear of. Bars the pane doesn't know (another extension's toolbar, an
+ * older frontend without the pane) are found by walking in from each edge
+ * with `elementsFromPoint` until bare canvas; only a piece that spans most
+ * of the edge is a bar, a smaller one is a box to keep clear of.
+ */
+export function freeArea(canvasEl: Element | undefined): FreeArea {
+  if (!canvasEl) return { free: [0, 0, 0, 0], avoid: [] };
+  const base = paneFrame(canvasEl);
+  const overlays = base.pane ? paneOverlays(base.pane) : [];
+  const walked = walkInsets(canvasEl, base, overlays);
+  const [il, it, ir, ib] = walked.insets;
   return {
     free: [base.left + il, base.top + it, base.right - ir, base.bottom - ib],
-    avoid: overlays.map(box),
+    avoid: [...overlays, ...walked.floating].map(boxOf),
   };
 }
 
@@ -388,19 +450,45 @@ export function freeInsets(canvasEl: Element | undefined): [number, number, numb
   return [free[0] - r.left, free[1] - r.top, r.right - free[2], r.bottom - free[3]];
 }
 
-/** Walks in from each edge of `base` to the deepest covered point (see
- *  `freeArea`). */
+/** The whole piece an element under the pointer belongs to: up through the
+ *  parents that take the pointer, short of the page, the canvas's own
+ *  containers and anything filling the canvas. */
+function pieceOf(el: Element, canvasEl: Element, area: number): Element {
+  let p = el;
+  for (let parent = p.parentElement; parent && parent !== document.body && !parent.contains(canvasEl); parent = p.parentElement) {
+    if (!takesPointer(parent)) break;
+    const r = parent.getBoundingClientRect();
+    if (r.width * r.height >= 0.6 * area) break;
+    p = parent;
+  }
+  return p;
+}
+
+/** Walks in from each edge of `r` to the deepest point a bar covers (see
+ *  `freeArea`); smaller pieces met on the way come back as `floating`. */
 function walkInsets(
   canvasEl: Element,
   r: { left: number; top: number; right: number; bottom: number },
   skip: readonly Element[],
-): [number, number, number, number] {
+): { insets: [number, number, number, number]; floating: Element[] } {
   const width = r.right - r.left;
   const height = r.bottom - r.top;
-  if (width <= 0 || height <= 0) return [0, 0, 0, 0];
+  if (width <= 0 || height <= 0) return { insets: [0, 0, 0, 0], floating: [] };
   const STEP = 6;
+  const floating = new Set<Element>();
+  const bars = new Map<Element, boolean>();
+  // A bar spans at least half the side it sits on.
+  const isBar = (piece: Element, horizontal: boolean): boolean => {
+    let v = bars.get(piece);
+    if (v === undefined) {
+      const b = piece.getBoundingClientRect();
+      v = horizontal ? b.width >= 0.5 * width : b.height >= 0.5 * height;
+      bars.set(piece, v);
+    }
+    return v;
+  };
   // Walk in from the edge along `dir` across a band (25 % of the side) and
-  // return how far the deepest covered point reaches. Not the first free
+  // return how far the deepest bar-covered point reaches. Not the first free
   // point: bars stack with gaps of bare canvas between them (the tab strip,
   // then a floating toolbar a few px below it). A band with nothing free at
   // all is something filling the canvas, not a bar: count it as 0.
@@ -408,8 +496,11 @@ function walkInsets(
     let deepest = 0;
     let free = false;
     for (let d = 0; d <= limit; d += STEP) {
-      if (isFreeAt(canvasEl, x0 + dx * d, y0 + dy * d, skip)) free = true;
-      else deepest = d + STEP;
+      const hit = coverAt(canvasEl, x0 + dx * d, y0 + dy * d, skip);
+      if (!hit) { free = true; continue; }
+      const piece = pieceOf(hit, canvasEl, width * height);
+      if (isBar(piece, dy !== 0)) deepest = d + STEP;
+      else floating.add(piece);
     }
     return free ? deepest : 0;
   };
@@ -418,7 +509,7 @@ function walkInsets(
   const right = Math.max(...along([0.3, 0.5, 0.7], height, r.top).map((y) => walk(r.right - 1, y, -1, 0, width * 0.25)));
   const top = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], width, r.left).map((x) => walk(x, r.top + 1, 0, 1, height * 0.25)));
   const bottom = Math.max(...along([0.06, 0.3, 0.5, 0.7, 0.94], width, r.left).map((x) => walk(x, r.bottom - 1, 0, -1, height * 0.25)));
-  return [left, top, right, bottom];
+  return { insets: [left, top, right, bottom], floating: [...floating] };
 }
 
 /** The open dock as a box to keep bookmarks out from under, relative to the
@@ -976,17 +1067,18 @@ export function readDockPrefs(): DockPrefs {
   }
 }
 
-/** What moves the dock when it changes: the canvas pane's box and the
- *  floating pieces in it (the minimap shown or hidden). Cheap: no
- *  `elementsFromPoint`. */
+/** What moves the dock when it changes: the pane's frame (side, right and
+ *  bottom panels, the top menu's bars) and the floating pieces in it the
+ *  viewer turned on (the minimap shown or hidden). Cheap: no
+ *  `elementsFromPoint`. Built from the same frame the dock is placed in, so
+ *  the job panel growing the top menu doesn't change it. */
 export function dockLayoutKey(): string {
+  const el = canvasElement() ?? document.querySelector(".graph-canvas-container");
   const pane = document.querySelector(CANVAS_PANEL);
-  if (!pane) return `${window.innerWidth}x${window.innerHeight}`;
-  const rect = (el: Element): string => {
-    const b = el.getBoundingClientRect();
-    return [b.left, b.top, b.right, b.bottom].map(Math.round).join(",");
-  };
-  return [rect(pane), ...paneOverlays(pane).map(rect)].join(";");
+  if (!el) return `${window.innerWidth}x${window.innerHeight}`;
+  const f = paneFrame(el);
+  const r = (b: ScreenBox): string => b.map(Math.round).join(",");
+  return [r([f.left, f.top, f.right, f.bottom]), ...(pane ? paneOverlays(pane).map((o) => r(boxOf(o))) : [])].join(";");
 }
 
 export function writeDockPrefs(next: DockPrefs): void {

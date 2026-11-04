@@ -4,6 +4,8 @@ import { bookmarkCells } from "../extension/_stashes";
 import { defaultBookmarkConfig, type BookmarkConfig } from "../extension/bookmarks";
 import {
   BOOKMARK_NODE_TYPE,
+  dockLayoutKey,
+  freeArea,
   installBookmarkKeys,
   installHiddenFilter,
   jumpBack,
@@ -290,6 +292,131 @@ describe("Bookmark jumps around the host's floating pieces", () => {
     jumpTo(b);
     expect(at()[0]).toBeCloseTo(24);
     expect(at()[1]).toBeCloseTo(24);
+  });
+});
+
+
+describe("The free area only follows the host's layout", () => {
+  const made: Element[] = [];
+  function el<T extends HTMLElement>(tag: string, box: [number, number, number, number], parent: Element = document.body): T {
+    const e = document.createElement(tag) as T;
+    const [left, top, right, bottom] = box;
+    e.getBoundingClientRect = (): DOMRect =>
+      ({ left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+    parent.appendChild(e);
+    if (parent === document.body) made.push(e);
+    return e;
+  }
+  let cv: HTMLCanvasElement;
+  let menu: HTMLElement;
+  let column: HTMLElement;
+  let pane: HTMLElement;
+  /** ComfyUI's layout: the top menu (run bar at the top right), then the
+   *  gutter holding the canvas pane, which starts under the menu. */
+  function layout(paneTop: number): void {
+    for (const e of made.splice(0)) e.remove();
+    cv = el<HTMLCanvasElement>("canvas", [0, 0, 1600, 900]);
+    Object.assign(canvas, { canvas: cv });
+    const overlay = el("div", [0, 0, 1600, 900]);
+    overlay.style.pointerEvents = "none";
+    menu = el("div", [0, 0, 1600, paneTop], overlay);
+    menu.style.pointerEvents = "none";
+    column = el("div", [1100, 8, 1592, paneTop], menu);
+    column.style.pointerEvents = "none";
+    const runBar = el("div", [1100, 8, 1592, 44], column);
+    runBar.dataset.testid = "action-bar-card";
+    runBar.style.pointerEvents = "auto";
+    const gutter = el("div", [8, paneTop, 1592, 892], overlay);
+    gutter.dataset.testid = "graph-canvas-gutter";
+    gutter.style.pointerEvents = "none";
+    pane = el("div", [8, paneTop, 1592, 892], gutter);
+    pane.id = "graph-canvas-panel";
+    pane.style.pointerEvents = "none";
+  }
+  afterEach(() => {
+    for (const e of made.splice(0)) e.remove();
+    Object.assign(canvas, { canvas: undefined });
+  });
+
+  it("keeps the same top while the job panel grows the top menu", () => {
+    layout(48);
+    const idle = freeArea(cv);
+    const idleKey = dockLayoutKey();
+    expect(idle.free[1]).toBe(48);
+    // A run: the job progress panel opens under the run bar, in the menu's
+    // flow, and the pane starts 110 px lower.
+    layout(158);
+    const jobs = el("div", [1240, 48, 1592, 150], column);
+    jobs.dataset.testid = "queue-progress-overlay";
+    jobs.style.pointerEvents = "auto";
+    expect(freeArea(cv).free).toEqual(idle.free);
+    expect(dockLayoutKey()).toBe(idleKey);
+  });
+
+  it("ignores the error card and the inline progress line too", () => {
+    layout(48);
+    const idle = freeArea(cv).free;
+    layout(140);
+    const card = el("div", [1200, 48, 1592, 120], column);
+    card.dataset.testid = "error-overlay";
+    card.style.pointerEvents = "auto";
+    const line = el("div", [1400, 124, 1592, 136], column);
+    line.setAttribute("role", "status");
+    expect(freeArea(cv).free).toEqual(idle);
+  });
+
+  it("does not take a floating run bar for a bar of the menu", () => {
+    layout(48);
+    const idle = freeArea(cv).free;
+    const floating = el("div", [600, 400, 900, 440], menu);
+    floating.style.position = "fixed";
+    floating.style.pointerEvents = "auto";
+    expect(freeArea(cv).free).toEqual(idle);
+  });
+
+  it("keeps clear of a small piece at an edge instead of treating it as a bar", () => {
+    layout(48);
+    const piece = el("div", [700, 48, 900, 120]);
+    const orig = document.elementsFromPoint;
+    document.elementsFromPoint = (x: number, y: number): Element[] =>
+      x >= 700 && x <= 900 && y >= 48 && y <= 120 ? [piece, cv] : [cv];
+    try {
+      const a = freeArea(cv);
+      expect(a.free[1]).toBe(48);
+      expect(a.avoid).toContainEqual([700, 48, 900, 120]);
+    } finally {
+      document.elementsFromPoint = orig;
+    }
+  });
+
+  it("still counts another extension's full-width bar", () => {
+    layout(48);
+    const bar = el("div", [8, 48, 1592, 80]);
+    const orig = document.elementsFromPoint;
+    document.elementsFromPoint = (_x: number, y: number): Element[] => (y <= 80 ? [bar, cv] : [cv]);
+    try {
+      expect(freeArea(cv).free[1]).toBeGreaterThanOrEqual(80);
+    } finally {
+      document.elementsFromPoint = orig;
+    }
+  });
+
+  it("ignores a menu, a tooltip or a dialog open at an edge", () => {
+    layout(48);
+    const idle = freeArea(cv).free;
+    for (const role of ["menu", "tooltip", "dialog", "listbox"]) {
+      const pop = el("div", [8, 48, 1592, 300]);
+      pop.setAttribute("role", role);
+      const inner = el("button", [8, 48, 200, 80], pop);
+      const orig = document.elementsFromPoint;
+      document.elementsFromPoint = (_x: number, y: number): Element[] => (y <= 300 ? [inner, pop, cv] : [cv]);
+      try {
+        expect(freeArea(cv).free).toEqual(idle);
+      } finally {
+        document.elementsFromPoint = orig;
+        pop.remove();
+      }
+    }
   });
 });
 

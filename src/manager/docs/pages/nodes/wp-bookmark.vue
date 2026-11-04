@@ -85,6 +85,8 @@ const clashes = [
         asks the page: when you record a key or press the bolt, it sends a pretend key press and
         watches for anything that claims it. A key something answers is listed as taken and the bolt
         skips it. The pretend press stops a handler at the moment it claims the key, so nothing runs.
+        It carries the same key codes a real press does, so extensions that only read those (like
+        ComfyUI-Easy-Use's Alt+0–9 node template keys) are found too.
       </p>
       <Banner tone="warn" note>
         A handler that acts without claiming the key can't be seen this way. If an extension still
@@ -99,7 +101,9 @@ const clashes = [
         The bookmark button in the top bar shows or hides the dock. It also opens by itself in a
         workflow with bookmarks, unless you closed it. It sits in the free part of the canvas, clear
         of the side panel, the bottom panel, the minimap and the zoom controls, and moves when they
-        open or close. It is see-through until you point at it (more so when folded).
+        open or close. What pops up on its own (the job progress panel while a workflow runs, the
+        error card, toasts, menus, tooltips) never moves it or where bookmarks land; it floats over
+        them. It is see-through until you point at it (more so when folded).
       </p>
       <DocImage
         src="images/docs/wp-bookmark-dock.png"

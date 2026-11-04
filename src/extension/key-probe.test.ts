@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { codeFor, isProbeEvent, probeCombo } from "./key-probe";
+import { codeFor, isProbeEvent, keyCodeFor, probeCombo } from "./key-probe";
 
 describe("key probe", () => {
   const added: Array<[EventTarget, (e: Event) => void, boolean]> = [];
@@ -41,6 +41,29 @@ describe("key probe", () => {
     listen(window, (e) => { probe = isProbeEvent(e); });
     probeCombo("Alt+5");
     expect(probe).toBe(true);
+  });
+
+  it("finds a hotkeys-js style handler that matches on keyCode only", () => {
+    // ComfyUI-Easy-Use binds alt+0..9 (node templates) with hotkeys-js,
+    // which reads keyCode || which and nothing else, then preventDefaults
+    // before it looks at its own setting.
+    listen(document, (e) => {
+      const code = e.keyCode || e.which;
+      if (e.altKey && code >= 48 && code <= 57) e.preventDefault();
+    });
+    expect(probeCombo("Alt+1")).toBe(true);
+    expect(probeCombo("Alt+9")).toBe(true);
+    expect(probeCombo("Alt+K")).toBe(false);
+  });
+
+  it("gives the legacy key code a real press carries", () => {
+    expect(keyCodeFor("1")).toBe(49);
+    expect(keyCodeFor("0")).toBe(48);
+    expect(keyCodeFor("k")).toBe(75);
+    expect(keyCodeFor("F5")).toBe(116);
+    expect(keyCodeFor("Space")).toBe(32);
+    expect(keyCodeFor("-")).toBe(189);
+    expect(keyCodeFor("Nope")).toBe(0);
   });
 
   it("names the physical key", () => {
