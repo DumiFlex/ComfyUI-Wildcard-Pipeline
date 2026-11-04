@@ -11,6 +11,12 @@
   "text": "Save it.",
   "voice": "af_heart"
  },
+ "07326b46d038": {
+  "ms": 5163,
+  "speed": 1.0,
+  "text": "Open it to rename it, edit the text, or give it a category, tags and a favourite star.",
+  "voice": "af_heart"
+ },
  "07b61ad32f1b": {
   "ms": 5163,
   "speed": 1.0,
@@ -185,6 +191,18 @@
   "text": "Tick Hero, Outfit and Setting, then add them.",
   "voice": "af_heart"
  },
+ "6018cd8bb8fc": {
+  "ms": 2261,
+  "speed": 1.0,
+  "text": "Your templates are listed here. Pick one.",
+  "voice": "af_heart"
+ },
+ "61943d05f9dc": {
+  "ms": 2688,
+  "speed": 1.0,
+  "text": "Give it a name. The preview shows what gets saved.",
+  "voice": "af_heart"
+ },
  "61ac7f7d4a2f": {
   "ms": 5739,
   "speed": 1.0,
@@ -221,10 +239,28 @@
   "text": "A combine reads what was rolled above it, so the order matters.",
   "voice": "af_heart"
  },
+ "7786b4c7decc": {
+  "ms": 2304,
+  "speed": 1.0,
+  "text": "The disk button saves both to the library.",
+  "voice": "af_heart"
+ },
+ "7d8dcf11971e": {
+  "ms": 4608,
+  "speed": 1.0,
+  "text": "Write a prompt once, save it, and load it into any Assembler. Next: bundles.",
+  "voice": "af_heart"
+ },
  "836924b6e384": {
   "ms": 3243,
   "speed": 1.0,
   "text": "And here they are as pictures: every hero where they belong.",
+  "voice": "af_heart"
+ },
+ "85104ac21a40": {
+  "ms": 3819,
+  "speed": 1.0,
+  "text": "Every saved template lives on the Templates page of the manager.",
   "voice": "af_heart"
  },
  "92997cc71a53": {
@@ -237,6 +273,12 @@
   "ms": 3243,
   "speed": 1.0,
   "text": "A noble hero makes a castle four times as likely,",
+  "voice": "af_heart"
+ },
+ "95fa2308979b": {
+  "ms": 4437,
+  "speed": 1.0,
+  "text": "Open the negative box under it, too. A template keeps its negative with it.",
   "voice": "af_heart"
  },
  "98fcdd0a1bd9": {
@@ -285,6 +327,12 @@
   "ms": 2560,
   "speed": 1.0,
   "text": "Here's what those prompts make, run through a model.",
+  "voice": "af_heart"
+ },
+ "a99e66d4c58c": {
+  "ms": 5504,
+  "speed": 1.0,
+  "text": "It fills in the template and the negative. Edit it here freely: the saved copy doesn't change.",
   "voice": "af_heart"
  },
  "aa69b4ebf7ef": {
@@ -359,6 +407,12 @@
   "text": "A Context node holds the lists that roll. Add module picks them from your library.",
   "voice": "af_heart"
  },
+ "d48848da457b": {
+  "ms": 5035,
+  "speed": 1.0,
+  "text": "Now a second Assembler. Wire it to the same Context and open the folder button.",
+  "voice": "af_heart"
+ },
  "d4eef3de5ae2": {
   "ms": 5717,
   "speed": 1.0,
@@ -417,6 +471,12 @@
   "ms": 3904,
   "speed": 1.0,
   "text": "This one sets style to a painting look, and it carries a negative too.",
+  "voice": "af_heart"
+ },
+ "fbd797ce07e7": {
+  "ms": 5291,
+  "speed": 1.0,
+  "text": "A template is the sentence the Assembler fills in. Once you like one, keep it in your library.",
   "voice": "af_heart"
  },
  "fc506693480a": {
