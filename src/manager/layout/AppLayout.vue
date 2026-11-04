@@ -15,6 +15,7 @@ import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useAiChat } from "../composables/useAiChat";
+import { useAskHandoff } from "../composables/useAskHandoff";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
 import { useStaleStore } from "../stores/staleStore";
@@ -43,6 +44,8 @@ const aiConfig = useAiConfig();
 // it when the assistant is off.
 const AiChatDrawer = defineAsyncComponent(() => import("../components/ai/AiChatDrawer.vue"));
 const AiSelectionChip = defineAsyncComponent(() => import("../components/ai/AiSelectionChip.vue"));
+// "Ask about this page" in the canvas help frame lands here (`?ask=`).
+useAskHandoff();
 const commandIndex = useCommandIndex();
 const recent = useRecentStore();
 const stale = useStaleStore();

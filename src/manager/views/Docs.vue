@@ -12,6 +12,7 @@ import { useAiConfig } from "../composables/useAiConfig";
 import { useAiChat } from "../composables/useAiChat";
 import { explainPrompt, selectedText } from "../composables/useSelectionAsk";
 import { docExplainPrompt } from "../utils/chat-starters";
+import { askInManagerUrl, FRAMED } from "../router/frame-mode";
 
 const props = defineProps<{ page?: string }>();
 
@@ -20,15 +21,23 @@ const chat = useAiChat();
 
 /** Open the assistant chat with a question about this page (or the text the
  *  user selected on it), ready to send or edit. The question names the page,
- *  so it still asks about this one when the user moves on before sending. */
+ *  so it still asks about this one when the user moves on before sending.
+ *  The canvas help frame has no chat (`FrameLayout`), so there the question
+ *  goes to the full manager in a new tab, on this same page. */
 function askAssistant(): void {
   const picked = selectedText();
   const title = activeMeta.value?.title;
-  chat.input.value = picked ? explainPrompt(picked)
+  const text = picked ? explainPrompt(picked)
     : title ? docExplainPrompt(title) : "Explain this page in simpler words";
+  if (FRAMED) {
+    window.open(askInManagerUrl(window.location.origin, route.path, route.hash, text), "_blank", "noopener");
+    return;
+  }
+  chat.input.value = text;
   chat.open.value = true;
 }
 
+const framed = FRAMED;
 const contentEl = ref<HTMLElement | null>(null);
 const route = useRoute();
 const router = useRouter();
@@ -209,7 +218,9 @@ watch(
           icon="pi-microchip-ai"
           class="wp-doc__ask"
           data-test="doc-ask-ai"
-          hint="Ask about this page. Select text on it first to ask about just that part"
+          :hint="framed
+            ? 'Ask the assistant about this page in the manager (opens a new tab). Select text on it first to ask about just that part'
+            : 'Ask about this page. Select text on it first to ask about just that part'"
           @mousedown.prevent
           @click="askAssistant"
         >Ask about this page</Button>

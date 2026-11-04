@@ -215,7 +215,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         It answers questions about Wildcard Pipeline from these docs and names the page it used. It
         doesn't guess: if the docs don't cover something, it says so. On any docs page, <b>Ask about
         this page</b> (top right, it stays there as you scroll) puts a question naming the page in
-        the chat box, so it still asks about that page if you move on before sending.
+        the chat box, so it still asks about that page if you move on before sending. In the help
+        window over the canvas (the <b>?</b> on a selected node) it opens the manager in a new tab
+        on the same page, with the chat open and the question in its box.
       </p>
       <p>
         Select text anywhere in the manager and a small bar appears: <b>Explain</b> sends it to the
