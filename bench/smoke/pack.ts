@@ -98,7 +98,7 @@ export default pack({
 
   teardown: lifecycleTeardown,
   afterTask: lifecycleAfterTask,
-  tasks: lifecycleTasks(fixture),
+  tasks: lifecycleTasks(fixture, { canReset: fakeUp }),
 
   async beforeAttempt({ h, params }) {
     if (params.fake === true) await clearScript(h);

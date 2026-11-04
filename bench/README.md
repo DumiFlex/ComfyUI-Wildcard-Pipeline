@@ -83,12 +83,12 @@ The bench changes the library, so the pack puts yours back. All three packs here
 - **When the run ends** your AI settings and your library come back, and the pins come off. A run that was **stopped** keeps its library as a pinned backup first, so a resume gets it back.
 - **While a run is paused**, press **Put my library back** on the pack's **Tasks** tab to use the app with your own library. When the run goes on, it gets its library back, and your library as it was then is the one put back at the end.
 
-The tasks on the pack page:
+All three packs have these tasks on their **Tasks** tab. A task doesn't run the pack's setup, so it works on a real ComfyUI as well as on the fake server, with or without a run going:
 
 | Task | What it does |
 |---|---|
 | Put my library back | Restores the library from before the latest run. A run that is mid-way keeps its library for when it goes on. |
-| Load the bench library | Backs your library up, then loads the bench library. **Put my library back** undoes it. |
+| Load the bench library | Backs your library up, then loads the bench library. **Put my library back** undoes it. In the smoke and library packs it runs only on the fake server, like their `reset`. |
 | Back up now | A pinned, noted backup of the library as it is. |
 | Library report | What is in the library, whose library is live, the backups (and which the pack made) and the AI settings. |
 | Put the AI settings back | Deleting, auto-apply and the tool format as before the latest run. |

@@ -50,5 +50,5 @@ export default pack({
   },
   teardown: lifecycleTeardown,
   afterTask: lifecycleAfterTask,
-  tasks: lifecycleTasks(fixture),
+  tasks: lifecycleTasks(fixture, { canReset: fakeUp }),
 });

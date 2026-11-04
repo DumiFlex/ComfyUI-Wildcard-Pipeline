@@ -287,8 +287,13 @@ async function report(h: Helpers, state: PackState): Promise<string> {
   return lines.join("\n");
 }
 
-/** The tasks every pack of the bench gets. */
-export function lifecycleTasks(fixture: (packDir: string) => string): Record<string, TaskDefinition> {
+/**
+ * The tasks every pack of the bench gets. They don't run the pack's setup, so they work on a real
+ * ComfyUI as well as on the fake server. `canReset` gates Load the bench library the way the pack
+ * gates `reset` (the smoke and library packs: fake server only); the backup, report and put-back
+ * tasks always run.
+ */
+export function lifecycleTasks(fixture: (packDir: string) => string, { canReset }: { canReset?: (h: Helpers) => Promise<boolean> } = {}): Record<string, TaskDefinition> {
   return {
     "restore-mine": {
       title: "Put my library back",
@@ -301,8 +306,9 @@ export function lifecycleTasks(fixture: (packDir: string) => string): Record<str
     },
     "bench-library": {
       title: "Load the bench library",
-      description: "Backs your library up (pinned), then loads bench-library.json: from its pinned backup when the fixture hasn't changed, else by importing it. Put my library back undoes it.",
+      description: `Backs your library up (pinned), then loads bench-library.json: from its pinned backup when the fixture hasn't changed, else by importing it. Put my library back undoes it.${canReset ? " Like the pack's reset, only on the fake server (bench/dev/serve.py)." : ""}`,
       run: async ({ h, state, run, packDir }) => {
+        if (canReset && !(await canReset(h))) throw new StepError("This pack loads the bench library only on the fake server (bench/dev/serve.py), like its reset. Use the bench pack's task for a real ComfyUI.");
         if (state.get(K.holds) !== "run") {
           state.set(K.original, await backup(h, state, `${NOTE}: your library before Load the bench library`, { pin: true }));
           state.set(K.holds, "run");

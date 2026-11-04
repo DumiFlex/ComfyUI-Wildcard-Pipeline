@@ -31,7 +31,7 @@ Each test deletes the backups it made, unpins what it pinned, removes its marker
 | D6 | Restoring a backup that isn't there answers 404, a name with a path in it is refused, and the library stays as it was. |
 | D7 | Library health shows a group for each kind of finding the scan returns. |
 
-`check-failed` (finding) names the check that failed. The tasks on the pack page are the bench's ([the list](../README.md#putting-your-library-back)).
+`check-failed` (finding) names the check that failed. The pack has the bench's tasks ([the list](../README.md#putting-your-library-back)). They work on a real ComfyUI too, except **Load the bench library**, which, like `reset`, runs only on the fake server.
 
 ## Change it
 
