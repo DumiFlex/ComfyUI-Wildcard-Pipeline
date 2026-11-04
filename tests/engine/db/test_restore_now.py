@@ -87,7 +87,7 @@ def test_restore_now_migrates_an_older_backup(lib):
     head = mig.head_version()
     _edit_backup(lib, snap["name"],
                  "DROP TABLE health_ignored",
-                 f"DELETE FROM migrations WHERE version >= 22")
+                 "DELETE FROM migrations WHERE version >= 22")
 
     bk.restore_now(lib, snap["name"])
 
