@@ -200,7 +200,8 @@ def test_graph_wired_items_get_the_adult_pass():
         pack.wired_payload(plan, age, {})
     # A safe graph is left alone.
     safe = pack.compile_graph_plan({**g, "rating": "safe"})
-    assert pack.wired_payload(safe, tpl, {})["payload"]["negative_template"] == "bad anatomy"
+    neg = pack.wired_payload(safe, tpl, {})["payload"]["negative_template"]
+    assert neg == "bad anatomy, $negatives"
 
 
 def test_a_graph_built_from_minor_words_loses_them_everywhere():

@@ -203,3 +203,37 @@ describe("RELEVANT_INSTANCE_KEYS — tier 2 cache invalidation", () => {
     expect("bundle_origin" in bare).toBe(false);
   });
 });
+
+describe("negatives opt-in on load", () => {
+  const node = (value: unknown) => ({
+    id: 1,
+    widgets: [{ name: "negative_template", value }],
+    properties: {} as Record<string, unknown>,
+  });
+  const neg = (n: ReturnType<typeof node>) => n.widgets[0]?.value;
+
+  it("a node saved before the change gets $negatives, so it prints the same", async () => {
+    const { migrateNegativeOptIn, NEG_SLOT_PROP } = await import("./assembler");
+    const empty = node("");
+    migrateNegativeOptIn(empty as never, { properties: {} });
+    expect(neg(empty)).toBe("$negatives");
+    expect(empty.properties[NEG_SLOT_PROP]).toBe(true);
+    const text = node("lowres, watermark");
+    migrateNegativeOptIn(text as never, {});
+    expect(neg(text)).toBe("lowres, watermark, $negatives");
+  });
+
+  it("a node saved after the change keeps its box, even an empty one", async () => {
+    const { migrateNegativeOptIn, NEG_SLOT_PROP } = await import("./assembler");
+    const n = node("");
+    migrateNegativeOptIn(n as never, { properties: { [NEG_SLOT_PROP]: true } });
+    expect(neg(n)).toBe("");
+  });
+
+  it("a new node is marked", async () => {
+    const { markNegativeOptIn, NEG_SLOT_PROP } = await import("./assembler");
+    const n = node("$negatives");
+    markNegativeOptIn(n as never);
+    expect(n.properties[NEG_SLOT_PROP]).toBe(true);
+  });
+});

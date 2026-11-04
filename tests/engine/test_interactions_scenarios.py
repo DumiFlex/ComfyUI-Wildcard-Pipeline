@@ -161,7 +161,7 @@ def _payload(ctx: dict, seed: int = 0) -> ContextPayload:
 
 
 def _assemble(source: dict | ContextPayload, template: str,
-              negative_template: str = "") -> tuple[str, str]:
+              negative_template: str = "$negatives") -> tuple[str, str]:
     """Render through the real WP_PromptAssembler, across the socket."""
     payload = source if isinstance(source, ContextPayload) else _payload(source)
     out = WPPromptAssembler.execute(
@@ -886,10 +886,9 @@ def test_negatives_of_an_internal_variable_follow_a_public_reader():
         # A detailer Assembler that renders only $face gets only face words.
         assert _assemble(ctx, "$face")[1] == face_neg
         # Asking for the internal variable's negatives by name still works.
-        # (A negative template without $negatives gets the collected words
-        # appended.)
+        # (Without $negatives the box is only its own text.)
         want = ", ".join(t for t in (hair_neg, face_neg) if t)
-        assert _assemble(ctx, "$face", "$hair.neg")[1] == want
+        assert _assemble(ctx, "$face", "$hair.neg")[1] == hair_neg
         assert _assemble(ctx, "$face", "$hair.neg, $negatives")[1] == want
         assert _assemble(ctx, "$hair", "$hair.neg")[1] == hair_neg
 

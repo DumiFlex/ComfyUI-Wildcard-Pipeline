@@ -69,7 +69,7 @@ def _texts(ctx, name):
     return [e["text"] for e in negatives.get_entries(ctx, name)]
 
 
-def _assemble(ctx, template, negative_template=""):
+def _assemble(ctx, template, negative_template="$negatives"):
     rctx = with_resolver_tables(strip_internals(ctx), ctx)
     reads: list = []
     prompt = resolve_variables(template, rctx, reads=reads)
@@ -299,12 +299,24 @@ def test_assembler_follows_usage_and_dedupes():
     assert neg == "blonde, lowres, torn clothes"
 
 
-def test_assembler_negative_template_slot_and_append():
+def test_assembler_negative_template_slot_is_opt_in():
     ctx = _run([_wc("hair", [_opt(0, "red hair", "blonde, lowres")])])
     _, neg = _assemble(ctx, "$hair", "worst quality, $negatives, lowres")
     assert neg == "worst quality, blonde, lowres"
+    # Without the slot the negative is only the box's own text...
     _, neg2 = _assemble(ctx, "$hair", "worst quality")
-    assert neg2 == "worst quality, blonde, lowres"
+    assert neg2 == "worst quality"
+    # ...and an empty box is an empty negative.
+    _, neg3 = _assemble(ctx, "$hair", "")
+    assert neg3 == ""
+
+
+def test_with_slot_keeps_older_boxes_printing_the_same():
+    assert negatives.with_slot("") == "$negatives"
+    assert negatives.with_slot(None) == "$negatives"
+    assert negatives.with_slot("lowres, watermark") == "lowres, watermark, $negatives"
+    assert negatives.with_slot("lowres, ") == "lowres, $negatives"
+    assert negatives.with_slot("$negatives, lowres") == "$negatives, lowres"
 
 
 def test_negative_template_vars_add_text_not_negatives():

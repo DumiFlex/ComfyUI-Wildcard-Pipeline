@@ -275,7 +275,7 @@ def test_a_template_pick_becomes_its_first_branch():
     out = text_items.compile_template({"template": "$hero, {red|blue} cloak, {2$$ $$a|b|c}",
                                        "negative": "{lowres|blurry}"})
     assert out["payload"] == {"template_string": "$hero, red cloak, a",
-                              "negative_template": "lowres"}
+                              "negative_template": "lowres, $negatives"}
     assert sum("Assembler can't pick" in w for w in out["warnings"]) == 3
     with pytest.raises(ValueError, match="empty"):
         text_items.compile_template({"template": "{|}"})

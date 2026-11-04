@@ -57,7 +57,9 @@ const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 const templateString = ref("");
-const negativeTemplate = ref("");
+// A new template starts with the slot, like a new Assembler: negatives are
+// opt-in, so without `$negatives` the variables' negatives are left out.
+const negativeTemplate = ref(isEdit.value ? "" : "$negatives");
 /** The row's stored negative. `null` = saved before negatives existed; kept
  *  null on save while the field stays empty, so loading that template still
  *  leaves the Assembler's negative box alone. */

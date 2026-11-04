@@ -1059,7 +1059,8 @@ def test_the_negatives_setting_reaches_the_graph_build():
     auto = pack.compile_item(plan, race, {}, answer)
     assert auto["payload"]["options"][0].get("negative") == "pointy ears missing"
     assert "Leave every negative" not in pg.slot_request(plan, race)["user"]
-    assert pg.wired_payload(plan, tpl, {})["payload"]["negative_template"] == "bad anatomy"
+    neg = pg.wired_payload(plan, tpl, {})["payload"]["negative_template"]
+    assert neg == "bad anatomy, $negatives"
     plan["settings"] = {**(plan.get("settings") or {}), "negatives": "template"}
     off = pack.compile_item(plan, race, {}, answer)
     assert not any("negative" in o for o in off["payload"]["options"])

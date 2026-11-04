@@ -114,9 +114,9 @@ const rules = [
         caption="The Assembler's negative preview and output next to the prompt."
       />
       <ul>
-        <li><VarToken>$negatives</VarToken> marks where the collected words go, e.g. <code>lowres, bad anatomy, $negatives</code>.</li>
-        <li>An empty template outputs just the collected words.</li>
-        <li>Without <VarToken>$negatives</VarToken>, the collected words go at the end.</li>
+        <li><VarToken>$negatives</VarToken> marks where the collected words go, e.g. <code>lowres, bad anatomy, $negatives</code>. New Assemblers start with it.</li>
+        <li>Without <VarToken>$negatives</VarToken> the collected words are left out: the negative is only your own text, and an empty template is an empty negative.</li>
+        <li>Workflows and saved templates from before negatives were opt-in get <VarToken>$negatives</VarToken> added when they load.</li>
       </ul>
       <p>
         Repeated words are dropped, also when written differently: <code>(blurry:1.2)</code> counts

@@ -115,7 +115,8 @@
    }
   ],
   "properties": {
-   "Node name for S&R": "WP_PromptAssembler"
+   "Node name for S&R": "WP_PromptAssembler",
+   "wp_negatives_opt_in": true
   },
   "widgets_values": [
    "$hero, $hair, $eyes, wearing $outfit, $scene, $style",

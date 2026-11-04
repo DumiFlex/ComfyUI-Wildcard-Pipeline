@@ -137,7 +137,7 @@ def test_standing_negative_never_bans_a_pick():
     plan = pg.compile_graph_plan(g)
     built = _build(plan)
     tpl = next(built[i["key"]]["payload"] for i in plan["items"] if i["kind"] == "template")
-    assert tpl["negative_template"] == "lowres"
+    assert tpl["negative_template"] == "lowres, $negatives"
 
 
 def test_negative_only_fixed_value_is_kept():
