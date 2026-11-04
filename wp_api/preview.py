@@ -9,8 +9,13 @@ queue without porting Python's MT19937 to JS.
 Body shape:
     {
       "chain": [<modules-list-step-1>, <modules-list-step-2>, ...],
-      "seed": <int, default 42>
+      "seed": <int, default 42>,
+      "seeds": [<int | null per step>, ...]   (optional)
     }
+
+`seeds[i]` is step i's own seed (the Assembler sends each Context's seed
+widget, so the preview is what Run prints and follows a seed change);
+a missing or null entry uses `seed`.
 
 Each `modules-list-step-N` is the same list shape ContextWidget
 serialises into a node's `modules` widget value: list of module dicts
@@ -37,6 +42,7 @@ from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.log_once import log_once
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.pipeline import PipelineEngine
+from engine.seed_derive import MAX_SAFE_SEED
 from engine.syntax.types import ListVar
 from wp_api._helpers import json_error, json_ok
 
@@ -158,15 +164,26 @@ async def resolve_preview(request: web.Request) -> web.Response:
     except (TypeError, ValueError):
         return json_error("seed must be an integer", status=400)
 
+    # Optional per-step seeds (the Assembler sends each Context's own seed so
+    # the preview is what Run prints); a missing / null / bad entry falls back
+    # to `seed`. Masked to 50 bits like `effective_chain_seed`.
+    raw_seeds = body.get("seeds")
+    step_seeds: list[int] = []
+    if isinstance(raw_seeds, list):
+        for v in raw_seeds:
+            ok = isinstance(v, int) and not isinstance(v, bool)
+            step_seeds.append((v & MAX_SAFE_SEED) if ok else seed)
+
     # Walk chain steps upstream → downstream; each step's modules run
-    # in their own PipelineEngine.run() with the supplied seed. Earlier
+    # in their own PipelineEngine.run() with its step seed. Earlier
     # ctx feeds the next step as upstream. Catalog accumulates wildcards
     # from every step + their nested refs from the live DB.
     ctx: dict[str, Any] = {}
     accum_catalog: dict[str, dict[str, Any]] = {}
-    for step in chain:
+    for i, step in enumerate(chain):
         if not isinstance(step, list):
             continue
+        step_seed = step_seeds[i] if i < len(step_seeds) else seed
         modules = [m for m in step if isinstance(m, dict)]
         accum_catalog.update(_build_catalog(modules))
         # Re-expand each step so newly-introduced wildcards pull their
@@ -174,7 +191,7 @@ async def resolve_preview(request: web.Request) -> web.Response:
         accum_catalog = _expand_with_db(accum_catalog, modules)
         ctx["__wp_catalog__"] = accum_catalog
         try:
-            ctx = PipelineEngine().run(modules, ctx=ctx, seed=seed)
+            ctx = PipelineEngine().run(modules, ctx=ctx, seed=step_seed)
         except Exception as e:
             # Previews run on every keystroke: one traceback per distinct error.
             log_once(logger, logging.ERROR, ("preview", type(e).__name__, str(e)),
