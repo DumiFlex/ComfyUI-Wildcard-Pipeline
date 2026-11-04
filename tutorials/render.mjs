@@ -74,8 +74,11 @@ const end = vt(take.ended);
 // The parts to keep, with their speed: the fast-forward ranges sped up, the rest as recorded.
 const parts = [];
 let at = start;
+// A sped-up part starts only once every caption shown at its start has ended, or the caption (drawn
+// in the page) would flash past. Takes recorded since fastForward waits for the voice never overlap.
+const cueEnd = (ms) => Math.max(ms, ...(take.cues ?? []).filter((c) => c.at <= ms && c.at + c.ms + 500 > ms).map((c) => c.at + c.ms + 500));
 for (const f of [...(take.fast ?? [])].sort((a, b) => a.from - b.from)) {
-  const a = Math.max(vt(f.from), at);
+  const a = Math.max(vt(cueEnd(f.from)), at);
   const b = Math.min(vt(f.to), end);
   if (b - a < 1) continue;
   if (a > at) parts.push({ a: at, b: a, speed: 1 });
