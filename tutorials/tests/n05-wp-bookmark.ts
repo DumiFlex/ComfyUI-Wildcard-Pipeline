@@ -48,6 +48,7 @@ tutorial(
       await t.waitVoice();
     });
 
+    let shortcut = "";
     await t.h.step("Add a bookmark", async () => {
       await t.say("Add a WP Bookmark at the top left of the part you want. Give it a name.");
       const bm = await t.addNode("WP Bookmark", { x: 260, y: 140 });
@@ -59,9 +60,10 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("land");
       await t.callout("key", t.node(bm).locator('[data-test="bm-record"]'), "Its shortcut", 4);
-      await t.say("Each bookmark gets a shortcut: Alt 1 for this one. Press it to record another.");
+      await t.say("Each bookmark gets a shortcut key, shown here. Press it to record another.");
       await t.waitVoice();
       await t.uncallout("key");
+      shortcut = ((await t.node(bm).locator('[data-test="bm-record"]').innerText().catch(() => "")) || "").trim();
       await t.click(t.node(bm).locator('[data-test="bm-done"]'));
       await t.beat(900);
       await t.say("Done leaves a small pill on the canvas.");
@@ -80,7 +82,7 @@ tutorial(
       await t.beat(1500);
       await t.say("Or, from anywhere, press its shortcut.");
       await pan(1400, -700);
-      await t.press("Alt+1");
+      await t.press(shortcut || "Alt+1");
       await t.beat(1500);
       await t.waitVoice();
     });
