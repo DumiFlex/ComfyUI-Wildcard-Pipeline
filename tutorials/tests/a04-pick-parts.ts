@@ -100,7 +100,9 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("neg");
       await t.say("Dot neg reads it on its own. Here it goes first in the negative box, before the rest.");
-      await t.click(t.node(nodes.asm).locator('[data-test="neg-template-toggle"]'));
+      // Open the negative box unless it already is (it starts open or folded depending on its text).
+      const negToggle = t.node(nodes.asm).locator('[data-test="neg-template-toggle"]');
+      if ((await negToggle.getAttribute("aria-expanded")) !== "true") await t.click(negToggle);
       await t.beat(500);
       await t.click(t.node(nodes.asm).locator('[data-test="neg-template-box"] [contenteditable="true"], [data-test="neg-template-box"] textarea').first());
       await t.press("ControlOrMeta+a");

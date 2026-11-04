@@ -25,7 +25,9 @@ tutorial(
       await t.type("$hero wearing $outfit, standing in $setting");
       await t.beat(800);
       await t.say("Open the negative box under it, too. A template keeps its negative with it.");
-      await t.click(t.node(asm).locator('[data-test="neg-template-toggle"]'));
+      // Open the negative box unless it already is (it starts open or folded depending on its text).
+      const negToggle = t.node(asm).locator('[data-test="neg-template-toggle"]');
+      if ((await negToggle.getAttribute("aria-expanded")) !== "true") await t.click(negToggle);
       await t.beat(500);
       await t.click(t.node(asm).locator('[data-test="neg-template-box"] [contenteditable="true"], [data-test="neg-template-box"] textarea').first());
       await t.say("It starts with dollar negatives, where the variables' negatives go. Keep it, and add your own words.");
