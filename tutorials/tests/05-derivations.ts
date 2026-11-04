@@ -55,6 +55,9 @@ tutorial(
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("a lone traveler $scene");
       await t.beat(1000);
+      await t.say("Only the scene line reaches the template, so hide the other three with their globe buttons. The combine still reads them.");
+      await t.hide(ctx, ["Time of day", "Setting", "Lighting from time"]);
+      await t.waitVoice();
       return { ctx, asm };
     });
 

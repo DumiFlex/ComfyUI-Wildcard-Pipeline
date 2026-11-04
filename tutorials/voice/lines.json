@@ -11,6 +11,12 @@
   "text": "Save it.",
   "voice": "af_heart"
  },
+ "06b090554805": {
+  "ms": 9387,
+  "speed": 1.0,
+  "text": "Randomize, the default, gives every run a new seed. Fixed keeps the same one, and plus one steps through seeds in order, so you can come back to any of them.",
+  "voice": "af_heart"
+ },
  "07326b46d038": {
   "ms": 5163,
   "speed": 1.0,
@@ -41,10 +47,22 @@
   "text": "Now the template only needs two names.",
   "voice": "af_heart"
  },
+ "110fa7b0e3e9": {
+  "ms": 8256,
+  "speed": 1.0,
+  "text": "SHOES is an accepts group. Its tags are alternatives: a robe goes with sandals or slippers, and each pick rolls one of them.",
+  "voice": "af_heart"
+ },
  "13cd23613d87": {
   "ms": 4693,
   "speed": 1.0,
   "text": "Each one rolls one option and keeps it in a variable: hero, outfit and setting.",
+  "voice": "af_heart"
+ },
+ "13feee187e63": {
+  "ms": 1899,
+  "speed": 1.0,
+  "text": "Click the lock again to let it roll.",
   "voice": "af_heart"
  },
  "1577b8b81b7d": {
@@ -63,6 +81,18 @@
   "ms": 2347,
   "speed": 1.0,
   "text": "Drag a wire from context to context.",
+  "voice": "af_heart"
+ },
+ "1a1f38f5c30a": {
+  "ms": 4331,
+  "speed": 1.0,
+  "text": "Roll again. The hero stays, and the outfit and the setting keep changing.",
+  "voice": "af_heart"
+ },
+ "1a54b7f2b666": {
+  "ms": 2667,
+  "speed": 1.0,
+  "text": "This button sets what the seed does after each run.",
   "voice": "af_heart"
  },
  "1b4ab1b8b262": {
@@ -113,6 +143,18 @@
   "text": "Every option has a weight. The chance column shows how often each one rolls.",
   "voice": "af_heart"
  },
+ "2c5fbd2a1c6e": {
+  "ms": 6528,
+  "speed": 1.0,
+  "text": "Switch the street thief off. This change is only for this node: the Hero list in your library stays as it is.",
+  "voice": "af_heart"
+ },
+ "2f6f96c67804": {
+  "ms": 5973,
+  "speed": 1.0,
+  "text": "The badge marks a row that differs from the library. Reset overrides in the same window puts it back.",
+  "voice": "af_heart"
+ },
  "338d8373eb82": {
   "ms": 3840,
   "speed": 1.0,
@@ -123,6 +165,12 @@
   "ms": 4459,
   "speed": 1.0,
   "text": "A combine joins variables into one line you can reuse. Let's make one.",
+  "voice": "af_heart"
+ },
+ "3851fb37568b": {
+  "ms": 9877,
+  "speed": 1.0,
+  "text": "Travel gear has two groups. CLIMATE is descriptive: a coat is cold weather gear, a robe is warm. All of an option's descriptive tags count at once.",
   "voice": "af_heart"
  },
  "3bd0832aeac8": {
@@ -143,6 +191,12 @@
   "text": "Save it, and it's in your library.",
   "voice": "af_heart"
  },
+ "424fa9c34f31": {
+  "ms": 2795,
+  "speed": 1.0,
+  "text": "Right-click a row for everything else you can do with it.",
+  "voice": "af_heart"
+ },
  "42ebae052f5d": {
   "ms": 1877,
   "speed": 1.0,
@@ -153,6 +207,12 @@
   "ms": 3989,
   "speed": 1.0,
   "text": "Change the seed until the time rolls night, and watch the lighting follow.",
+  "voice": "af_heart"
+ },
+ "461526b748c8": {
+  "ms": 4267,
+  "speed": 1.0,
+  "text": "Save keeps it on this node. Save to library would change the list everywhere.",
   "voice": "af_heart"
  },
  "4743c9d8a71d": {
@@ -209,10 +269,28 @@
   "text": "The Assembler shows the prompt it will write, before you run anything.",
   "voice": "af_heart"
  },
+ "58f52078d54c": {
+  "ms": 5781,
+  "speed": 1.0,
+  "text": "Fold a frame, switch it off with its checkbox, or open an item to change it for this node only.",
+  "voice": "af_heart"
+ },
  "590497dcb5ec": {
   "ms": 3797,
   "speed": 1.0,
   "text": "Now the options: one per line. Each prompt rolls one of them.",
+  "voice": "af_heart"
+ },
+ "5cf5da21ae39": {
+  "ms": 3755,
+  "speed": 1.0,
+  "text": "Edit opens the item right here, with its options and their odds.",
+  "voice": "af_heart"
+ },
+ "5d94340b0128": {
+  "ms": 5376,
+  "speed": 1.0,
+  "text": "Now press Run a few times. Randomize gives each run a new seed, no clicking needed.",
   "voice": "af_heart"
  },
  "5dfbe441b399": {
@@ -245,6 +323,12 @@
   "text": "Wildcard Pipeline builds random prompts from lists you keep in a library. Let's make a first one.",
   "voice": "af_heart"
  },
+ "64126e13325f": {
+  "ms": 2176,
+  "speed": 1.0,
+  "text": "Each option lists the shoes it goes with.",
+  "voice": "af_heart"
+ },
  "66d3bbeafd33": {
   "ms": 3072,
   "speed": 1.0,
@@ -269,6 +353,18 @@
   "text": "On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.",
   "voice": "af_heart"
  },
+ "6f1da3098da0": {
+  "ms": 5931,
+  "speed": 1.0,
+  "text": "Roll on every run, lock what you like, and change an item for one node without touching your library.",
+  "voice": "af_heart"
+ },
+ "70108787aaf0": {
+  "ms": 4736,
+  "speed": 1.0,
+  "text": "Lost? Select any Wildcard Pipeline node and press the question mark above it.",
+  "voice": "af_heart"
+ },
  "7427fca97898": {
   "ms": 3307,
   "speed": 1.0,
@@ -279,6 +375,12 @@
   "ms": 2304,
   "speed": 1.0,
   "text": "The disk button saves both to the library.",
+  "voice": "af_heart"
+ },
+ "78e1b769f478": {
+  "ms": 4885,
+  "speed": 1.0,
+  "text": "The roll happens once per run, so $gear.SHOES reads the same everywhere you write it.",
   "voice": "af_heart"
  },
  "7d8dcf11971e": {
@@ -299,6 +401,12 @@
   "text": "Every saved template lives on the Templates page of the manager.",
   "voice": "af_heart"
  },
+ "88f568cd701d": {
+  "ms": 6784,
+  "speed": 1.0,
+  "text": "Only the scene line reaches the template, so hide the other three with their globe buttons. The combine still reads them.",
+  "voice": "af_heart"
+ },
  "92997cc71a53": {
   "ms": 1536,
   "speed": 1.0,
@@ -317,6 +425,12 @@
   "text": "Open the negative box under it, too. A template keeps its negative with it.",
   "voice": "af_heart"
  },
+ "9719ef12f3b0": {
+  "ms": 5803,
+  "speed": 1.0,
+  "text": "Character brings the Hero list, then Look with the hair, eyes and colors, Outfit, and the Shared lists.",
+  "voice": "af_heart"
+ },
  "98fcdd0a1bd9": {
   "ms": 4843,
   "speed": 1.0,
@@ -327,6 +441,24 @@
   "ms": 5845,
   "speed": 1.0,
   "text": "Roll a few seeds. Knights and mages land in castles more often, and the thief stays in the city.",
+  "voice": "af_heart"
+ },
+ "99bfb5e4a815": {
+  "ms": 6037,
+  "speed": 1.0,
+  "text": "Edit it, hold it for a whole batch, push it to the library, duplicate it, wrap it into a bundle, or move it.",
+  "voice": "af_heart"
+ },
+ "9b7236360017": {
+  "ms": 8256,
+  "speed": 1.0,
+  "text": "The scene line already reads the setting, the time and the lighting, and the hair list reads the colors. Hide those four with their globe buttons.",
+  "voice": "af_heart"
+ },
+ "9c72f8c561d4": {
+  "ms": 2432,
+  "speed": 1.0,
+  "text": "On the canvas, pick Hero and Travel gear.",
   "voice": "af_heart"
  },
  "9c736b37c1b1": {
@@ -389,10 +521,22 @@
   "text": "If the time rolled night,",
   "voice": "af_heart"
  },
+ "ba2b54b678b8": {
+  "ms": 3712,
+  "speed": 1.0,
+  "text": "Each bundle sits in its own frame. Open them to see what came in.",
+  "voice": "af_heart"
+ },
  "bc3eac1bb4b5": {
   "ms": 5483,
   "speed": 1.0,
   "text": "Constraints never block a run. They only change the odds, so your prompts make sense more often.",
+  "voice": "af_heart"
+ },
+ "be215f0c5bb0": {
+  "ms": 2304,
+  "speed": 1.0,
+  "text": "Fold both bundles to keep the node small.",
   "voice": "af_heart"
  },
  "be416c6e5a2c": {
@@ -425,10 +569,28 @@
   "text": "Run through a model, every picture keeps the painted style.",
   "voice": "af_heart"
  },
+ "c70902e4d7fb": {
+  "ms": 2347,
+  "speed": 1.0,
+  "text": "The switch on the group's header sets its kind.",
+  "voice": "af_heart"
+ },
+ "c9aeb816d168": {
+  "ms": 3883,
+  "speed": 1.0,
+  "text": "Like this hero? Lock it. The lock button keeps the seed it rolled.",
+  "voice": "af_heart"
+ },
  "cacfd5b6844f": {
   "ms": 2837,
   "speed": 1.0,
   "text": "and an urban hero never gets a castle at all.",
+  "voice": "af_heart"
+ },
+ "ce6940f32ead": {
+  "ms": 4757,
+  "speed": 1.0,
+  "text": "Scene brings the setting, the time of day, the lighting rule, the scene line and the style.",
   "voice": "af_heart"
  },
  "d0a2ac7b1137": {
@@ -441,6 +603,18 @@
   "ms": 5760,
   "speed": 1.0,
   "text": "The combine still reads them, so the prompt stays the same. On their own, they no longer print anywhere.",
+  "voice": "af_heart"
+ },
+ "d2292d43a7b7": {
+  "ms": 6720,
+  "speed": 1.0,
+  "text": "Tags are short words on an option. On their own they filter and steer picks. Put them in groups and they can do more.",
+  "voice": "af_heart"
+ },
+ "d29089a454c9": {
+  "ms": 4821,
+  "speed": 1.0,
+  "text": "Roll a few seeds. The shoes always fit the gear: never sandals with a fur cloak.",
   "voice": "af_heart"
  },
  "d2d2087d49e9": {
@@ -467,16 +641,46 @@
   "text": "Let's make a wildcard for the weather. In the manager, open Wildcards and press New Wildcard.",
   "voice": "af_heart"
  },
+ "d50e0a5da117": {
+  "ms": 2560,
+  "speed": 1.0,
+  "text": "Its help page opens right over the canvas.",
+  "voice": "af_heart"
+ },
+ "d969a6f6fab7": {
+  "ms": 3712,
+  "speed": 1.0,
+  "text": "Debug shows what each run rolled. No street thief, on this node.",
+  "voice": "af_heart"
+ },
  "d9e69f144151": {
   "ms": 3221,
   "speed": 1.0,
   "text": "That's the tour. Next, we'll make a wildcard of our own.",
   "voice": "af_heart"
  },
+ "dbc29d718c08": {
+  "ms": 4288,
+  "speed": 1.0,
+  "text": "So far we rolled by clicking plus. The Context node can roll for you.",
+  "voice": "af_heart"
+ },
+ "dc55de5e786a": {
+  "ms": 5504,
+  "speed": 1.0,
+  "text": "The scene line reads the setting, the time and the lighting, so hide those three too, and fold Scene.",
+  "voice": "af_heart"
+ },
  "de9f4c1999b3": {
   "ms": 3947,
   "speed": 1.0,
   "text": "It writes a new variable, hero line, from a small template of its own.",
+  "voice": "af_heart"
+ },
+ "e3269bd8e7cc": {
+  "ms": 3989,
+  "speed": 1.0,
+  "text": "In the template, $gear.SHOES prints the shoe that was rolled with the gear.",
   "voice": "af_heart"
  },
  "e443a24ea63a": {
@@ -509,6 +713,12 @@
   "text": "Type a template. Each dollar-sign name is replaced by what its list rolled.",
   "voice": "af_heart"
  },
+ "f0f12a8d4482": {
+  "ms": 7851,
+  "speed": 1.0,
+  "text": "Accepts groups also let constraints match tag for tag, and tags filter references inside wildcards. Both come next.",
+  "voice": "af_heart"
+ },
  "f5b117624e40": {
   "ms": 2603,
   "speed": 1.0,
@@ -537,6 +747,12 @@
   "ms": 3029,
   "speed": 1.0,
   "text": "Debug lists every variable and the option it rolled.",
+  "voice": "af_heart"
+ },
+ "fe48b0868bdd": {
+  "ms": 5760,
+  "speed": 1.0,
+  "text": "The hair list already reads the colors, so hide Colors with its globe button. Then fold the frame.",
   "voice": "af_heart"
  }
 }

@@ -64,6 +64,8 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 
 
 export class Tutor {
   readonly page: Page;
+  /** WP Debug's node id once addDebugUnder placed it. */
+  debugId: string | null = null;
   private readonly lines: Record<string, VoiceLine>;
   private readonly t0 = Date.now();
   private pos: Point = { x: 960, y: 560 };
@@ -152,6 +154,9 @@ export class Tutor {
 
   /** Runs `fn`; the final video plays that part `speed` times faster (a long wait, a model run). */
   async fastForward<T>(fn: () => Promise<T>, speed = 6): Promise<T> {
+    // A caption still on screen would flash past at this speed in the video, so let it finish first.
+    await this.waitVoice();
+    if (this.caption) await sleep(Math.max(0, this.caption.until - Date.now()));
     const from = this.now();
     try {
       return await fn();
@@ -193,15 +198,16 @@ export class Tutor {
   }
 
   /** Moves to the target and clicks it. */
-  async click(target: Locator | Point, { double = false }: { double?: boolean } = {}): Promise<void> {
+  async click(target: Locator | Point, { double = false, right = false }: { double?: boolean; right?: boolean } = {}): Promise<void> {
     const isPoint = "x" in target && "y" in target && typeof target.x === "number";
     if (!isPoint) await this.bringIntoView(target as Locator);
     const at = isPoint ? (target as Point) : await this.centre(target as Locator);
     await this.moveTo(at);
     await sleep(140);
-    await this.page.mouse.down();
+    const button = right ? "right" : "left";
+    await this.page.mouse.down({ button });
     await sleep(70);
-    await this.page.mouse.up();
+    await this.page.mouse.up({ button });
     if (double) {
       await sleep(90);
       await this.page.mouse.down();
@@ -401,6 +407,35 @@ export class Tutor {
     await sleep(250);
   }
 
+  /** A module row on a Context node, by the module's name. */
+  moduleRow(ctxId: string, name: string): Locator {
+    const exact = new RegExp(`^\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`);
+    return this.node(ctxId).locator(".wp-module").filter({ has: this.page.locator(".wp-module-name", { hasText: exact }) }).first();
+  }
+
+  /** Clicks the globe on these module rows, so their variables stay out of the prompt. */
+  /** Opens every folded bundle frame on a Context node (sub-bundles too), so the video shows what's inside. */
+  async expandBundles(ctxId: string): Promise<void> {
+    for (let i = 0; i < 12; i++) {
+      const fold = this.node(ctxId).getByRole("button", { name: "Expand bundle" }).first();
+      if (!(await fold.count())) return;
+      await this.click(fold);
+      await sleep(450);
+    }
+  }
+
+  /** The frame of a bundle (or sub-bundle) on a Context node, by its name. */
+  bundleFrame(ctxId: string, name: string): Locator {
+    return this.node(ctxId).locator(".wp-bundle").filter({ has: this.page.locator(".wp-bundle-header").filter({ hasText: name }) }).last();
+  }
+
+  async hide(ctxId: string, names: string[]): Promise<void> {
+    for (const name of names) {
+      await this.click(this.moduleRow(ctxId, name).locator('[data-test="row-action-internal"]'));
+      await sleep(450);
+    }
+  }
+
   /** Node ids on the canvas now. */
   private async nodeIds(): Promise<string[]> {
     return this.page.evaluate(() => (window.app?.graph?.nodes ?? []).map((n) => String(n.id)));
@@ -512,16 +547,32 @@ async function toGraph(page: Page, p: Point): Promise<[number, number]> {
  * so each run shows the picks that went into its picture. Returns the Debug node's id.
  */
 export async function addDebugUnder(t: Tutor, ctxId: string): Promise<string> {
-  const box = await t.node(ctxId).boundingBox();
   const view = t.page.viewportSize() ?? { width: 1920, height: 1080 };
+  let box = await t.node(ctxId).boundingBox();
+  // A tall Context leaves no room under it: fold its rows (Debug shows the picks anyway).
+  if (box && box.y + box.height > view.height - 470) {
+    await t.click(t.node(ctxId).getByRole("button", { name: "Collapse all modules" }).first());
+    await sleep(600);
+    box = await t.node(ctxId).boundingBox();
+  }
   const x = box ? box.x + box.width / 2 : 520;
   const below = box ? box.y + box.height + 40 : 600;
   const y = Math.min(below + 100, view.height - 320);
   const dbg = await t.addNode("WP Debug", { x, y });
   await t.wire(ctxId, "context", dbg, "context");
-  // Keep its bottom above the caption, even once a run fills it with rows (it scrolls inside).
-  const top = (await t.node(dbg).boundingBox())?.y ?? y - 120;
-  const room = view.height - 210 - top;
+  t.debugId = dbg;
+  await fitDebug(t);
+  return dbg;
+}
+
+/** Keeps WP Debug's bottom above the caption; a run fills it with rows and it grows, so showcase calls this after each run (it scrolls inside). */
+export async function fitDebug(t: Tutor): Promise<void> {
+  const dbg = t.debugId;
+  if (!dbg) return;
+  const view = t.page.viewportSize() ?? { width: 1920, height: 1080 };
+  const top = (await t.node(dbg).boundingBox())?.y;
+  if (top === undefined) return;
+  const room = view.height - 230 - top;
   await t.page.evaluate(
     ({ id, room }) => {
       const app = window.app as unknown as { graph: { getNodeById(id: string | number): { size: [number, number] } | null }; canvas: { ds: { scale: number }; setDirty(a: boolean, b: boolean): void } };
@@ -533,7 +584,6 @@ export async function addDebugUnder(t: Tutor, ctxId: string): Promise<string> {
     { id: dbg, room },
   );
   await sleep(300);
-  return dbg;
 }
 
 /** Whether takes make real images (the pack's `showcase` setting; it needs a model, so it's off in the cloud). */
@@ -663,6 +713,7 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
   for (let i = 0; i < runs; i++) {
     if (i > 0 && o.between) await o.between(i);
     await t.fastForward(() => t.run(), 8);
+    await fitDebug(t);
     await t.beat(1800);
   }
   return previewId;

@@ -45,20 +45,36 @@ tutorial(
         await t.click(row);
         await t.beat(900);
       }
-      await t.callout("frames", t.node(ctx), "Each bundle in its own frame", 4);
-      await t.say("Each bundle sits in its own frame. Fold it, switch it off with its checkbox, or open it to change one item for this node only.");
+      await t.say("Each bundle sits in its own frame. Open them to see what came in.");
+      await t.expandBundles(ctx);
       await t.waitVoice();
-      await t.uncallout("frames");
-      await t.say("Fold both to keep the node small.");
-      for (const name of ["Scene", "Character"]) {
+      const fold = async (name: string) => {
         const header = t.node(ctx).locator(".wp-bundle-header").filter({ hasText: name }).first();
         await t.click(header.locator(".wp-bundle-collapse"));
         await t.beat(500);
-      }
+      };
+      await t.callout("character", t.bundleFrame(ctx, "Character"), "Hero plus three sub-bundles", 4);
+      await t.say("Character brings the Hero list, then Look with the hair, eyes and colors, Outfit, and the Shared lists.");
+      await t.waitVoice();
+      await t.uncallout("character");
+      await t.say("The hair list already reads the colors, so hide Colors with its globe button. Then fold the frame.");
+      await t.hide(ctx, ["Colors"]);
+      await fold("Character");
+      await t.waitVoice();
+      await t.callout("scene", t.bundleFrame(ctx, "Scene"), "The whole scene", 4);
+      await t.say("Scene brings the setting, the time of day, the lighting rule, the scene line and the style.");
+      await t.waitVoice();
+      await t.uncallout("scene");
+      await t.say("The scene line reads the setting, the time and the lighting, so hide those three too, and fold Scene.");
+      await t.hide(ctx, ["Setting", "Time of day", "Lighting from time"]);
+      await fold("Scene");
+      await t.waitVoice();
+      await t.say("Fold a frame, switch it off with its checkbox, or open an item to change it for this node only.");
+      await t.waitVoice();
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 220 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$style, $hero wearing $outfit, $scene");
+      await t.type("$style, $hero with $hair and $eyes, wearing $outfit, $scene");
       await t.beat(1000);
       await t.say("Every variable from both bundles is ready to use. Roll a few seeds.");
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();

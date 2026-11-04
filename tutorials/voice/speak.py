@@ -70,7 +70,7 @@ def ensure_models() -> None:
 
 def spoken_text(text: str) -> str:
     """What the voice reads: `$hero` reads as "hero", "WP" as letters."""
-    t = re.sub(r"\$(\w+)", r"\1", text)
+    t = re.sub(r"\$(\w+)((?:\.\w+)*)", lambda m: m.group(1) + m.group(2).replace(".", " dot ").lower(), text)
     t = re.sub(r"\bWP\b", "W P", t)
     return t
 
