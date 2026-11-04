@@ -39,9 +39,13 @@ export interface CtlNode {
   graph?: CtlGraph | null;
   subgraph?: { nodes?: CtlNode[] } | null;
   isVirtualNode?: boolean;
+  properties?: Record<string, unknown>;
 }
 export interface CtlGroup {
   title?: string;
+  /** `[w, h]`; older litegraph keeps it in `_bounding[2..3]`. */
+  size?: ArrayLike<number>;
+  _bounding?: ArrayLike<number>;
   recomputeInsideNodes?: () => void;
   _children?: Iterable<unknown>;
   nodes?: Iterable<unknown>;
@@ -84,13 +88,102 @@ export function expandTargets(start: CtlNode | null, seen = new Set<CtlNode>()):
   if (!start || seen.has(start)) return [];
   seen.add(start);
   if (!isPassThrough(start)) return [start];
-  return (start.inputs ?? []).flatMap((inp) => expandTargets(originOf(start, inp), seen));
+  const wired = (start.inputs ?? []).flatMap((inp) => expandTargets(originOf(start, inp), seen));
+  if (start.type !== NODE_GROUP_TYPE || wired.some((n) => !n.isVirtualNode)) return wired;
+  // Nothing real wired in (a WP Mode Relay driving it doesn't count): a WP
+  // Node Group inside a canvas group stands for every node of that group,
+  // like rgthree's Repeater. Nodes it gathers are followed the same way.
+  const groups = coveredGroupsOf(start);
+  if (!groups.length) return wired;
+  // Nodes a wired-in relay watches stay out, so the relay never sets the
+  // mode it reads (a "muted → run" relay would flip forever).
+  for (const r of wired) for (const inp of r.inputs ?? []) {
+    const w = originOf(r, inp);
+    if (w) seen.add(w);
+  }
+  return [...wired, ...coveredNodes(start, groups).flatMap((n) => expandTargets(n, seen))];
 }
 
 function nodesOfGroup(group: CtlGroup): CtlNode[] {
   group.recomputeInsideNodes?.();
   const kids = [...(group._children ?? group.nodes ?? [])];
   return kids.filter((k): k is CtlNode => !!k && typeof k === "object" && "id" in k && "mode" in k);
+}
+
+function groupArea(group: CtlGroup): number {
+  const w = group.size?.[0] ?? group._bounding?.[2] ?? Infinity;
+  const h = group.size?.[1] ?? group._bounding?.[3] ?? Infinity;
+  return w * h;
+}
+
+/**
+ * Which canvas groups an unwired WP Node Group covers
+ * (`node.properties.wp_covers`):
+ * - `smallest` (default): the smallest group it sits in, nested groups included;
+ * - `all`: every group it sits in;
+ * - `own`: the smallest group, minus the nodes of groups nested in it.
+ */
+export type GroupCovers = "smallest" | "all" | "own";
+export const COVERS_PROP = "wp_covers";
+
+export function coversOf(node: CtlNode): GroupCovers {
+  const v = node.properties?.[COVERS_PROP];
+  return v === "all" || v === "own" ? v : "smallest";
+}
+
+function graphGroups(node: CtlNode): CtlGroup[] {
+  return node.graph?.groups ?? node.graph?._groups ?? [];
+}
+
+/** Canvas groups `node` sits in, smallest first. */
+export function groupsAround(node: CtlNode): CtlGroup[] {
+  return graphGroups(node)
+    .filter((g) => nodesOfGroup(g).includes(node))
+    .sort((a, b) => groupArea(a) - groupArea(b));
+}
+
+/** The smallest canvas group `node` sits in, or null. */
+export function innermostGroupOf(node: CtlNode): CtlGroup | null {
+  return groupsAround(node)[0] ?? null;
+}
+
+function coveredGroupsOf(node: CtlNode): CtlGroup[] {
+  const around = groupsAround(node);
+  return coversOf(node) === "all" ? around : around.slice(0, 1);
+}
+
+/** The nodes of `groups` the group node covers, `own` leaving out nested groups' nodes. */
+function coveredNodes(node: CtlNode, groups: readonly CtlGroup[]): CtlNode[] {
+  const found = new Set<CtlNode>();
+  for (const g of groups) for (const n of nodesOfGroup(g)) found.add(n);
+  if (coversOf(node) !== "own" || !groups[0]) return [...found];
+  const outer = groups[0];
+  const area = groupArea(outer);
+  const inner = graphGroups(node).filter((h) => h !== outer && groupArea(h) < area);
+  const nested = new Set<CtlNode>();
+  for (const h of inner) {
+    const kids = nodesOfGroup(h);
+    // A group nested in this one: all its nodes sit in this one too.
+    if (kids.length && kids.every((k) => found.has(k))) for (const k of kids) nested.add(k);
+  }
+  return [...found].filter((n) => !nested.has(n));
+}
+
+/**
+ * The canvas groups a WP Node Group stands for when nothing real is wired
+ * into it (see `coversOf`), smallest first. Empty otherwise.
+ */
+export function canvasGroupsOf(node: CtlNode): CtlGroup[] {
+  if (node.type !== NODE_GROUP_TYPE) return [];
+  const seen = new Set<CtlNode>([node]);
+  const wired = (node.inputs ?? []).flatMap((inp) => expandTargets(originOf(node, inp), seen));
+  if (wired.some((n) => !n.isVirtualNode)) return [];
+  return coveredGroupsOf(node);
+}
+
+/** The first group of `canvasGroupsOf`, or null. */
+export function canvasGroupOf(node: CtlNode): CtlGroup | null {
+  return canvasGroupsOf(node)[0] ?? null;
 }
 
 /** Canvas groups of `graph` by title (several may share one). */
@@ -137,17 +230,37 @@ export function setMode(n: CtlNode, mode: number): number {
 /**
  * Bring every controlled toggle's targets in line with `cfg`: on → mode 0,
  * off → its control's mode. `only` limits it to some toggles. Returns how
- * many nodes changed.
+ * many nodes changed. `onlyNodes` limits it to some targets.
  */
-export function applyControl(node: CtlNode, cfg: TogglesConfig, only?: ReadonlySet<string>): number {
+export function applyControl(
+  node: CtlNode,
+  cfg: TogglesConfig,
+  only?: ReadonlySet<string>,
+  onlyNodes?: ReadonlySet<CtlNode>,
+): number {
   const eff = effectiveToggles(cfg);
-  let changed = 0;
+  // Off wins: a node several toggles drive runs only while every one of
+  // them lets it run; mute beats bypass. So the result never depends on
+  // which toggle flipped last.
+  const wanted = new Map<CtlNode, number>();
+  const touched = new Set<CtlNode>();
   for (const t of toggleRows(cfg)) {
-    if (!t.control || (only && !only.has(t.id))) continue;
+    if (!t.control) continue;
     const mode = drivesOff(!!eff.get(t.id), t.invert) ? offMode(t.control) : MODE_ALWAYS;
-    for (const target of toggleTargets(node, t.id, t.groups)) changed += setMode(target, mode);
+    for (const target of toggleTargets(node, t.id, t.groups)) {
+      wanted.set(target, strongerMode(wanted.get(target), mode));
+      if ((!only || only.has(t.id)) && (!onlyNodes || onlyNodes.has(target))) touched.add(target);
+    }
   }
+  let changed = 0;
+  for (const target of touched) changed += setMode(target, wanted.get(target) ?? MODE_ALWAYS);
   return changed;
+}
+
+/** Of two wanted modes, the one that keeps the node off: mute, then bypass, then run. */
+export function strongerMode(a: number | undefined, b: number): number {
+  const rank = (m: number | undefined): number => (m === MODE_NEVER ? 2 : m === MODE_BYPASS ? 1 : 0);
+  return a !== undefined && rank(a) >= rank(b) ? a : b;
 }
 
 /** Let nodes a toggle stops driving run again, when they still have the

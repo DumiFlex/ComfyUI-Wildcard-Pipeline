@@ -3,6 +3,9 @@ import {
   applyControl,
   controlState,
   drivesOff,
+  canvasGroupOf,
+  canvasGroupsOf,
+  strongerMode,
   ctlInputName,
   groupTitles,
   releaseTargets,
@@ -232,5 +235,129 @@ describe("WP Mode Relay", () => {
     expect(member.mode).toBe(4);
     expect(relay(relayNode, "on", { muted: "mute", bypassed: "bypass", on: "nothing" })).toBe(0);
     expect(relay(relayNode, null, parseRelayMap(null))).toBe(0);
+  });
+});
+
+describe("WP Node Group standing for its canvas group", () => {
+  it("gathers every node of the canvas group it sits in when nothing is wired in", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const a = g.add(2);
+    const b = g.add(3);
+    const note = g.add(4, { isVirtualNode: true });
+    g.add(5); // outside the group
+    g.graph.groups.push({ title: "Upscale", _children: new Set([n, a, b, note]), size: [400, 300] });
+    expect(canvasGroupOf(n)?.title).toBe("Upscale");
+    expect(members(n)).toEqual([a, b]);
+    expect(setMembersMode(n, 4)).toBe(2);
+    expect([a.mode, b.mode]).toEqual([4, 4]);
+  });
+
+  it("picks the smallest group when groups nest", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const inner = g.add(2);
+    const outer = g.add(3);
+    g.graph.groups.push({ title: "Outer", _children: new Set([n, inner, outer]), size: [900, 900] });
+    g.graph.groups.push({ title: "Inner", _children: new Set([n, inner]), _bounding: [0, 0, 300, 200] });
+    expect(canvasGroupOf(n)?.title).toBe("Inner");
+    expect(members(n)).toEqual([inner]);
+  });
+
+  it("drives only its wired nodes once anything real is wired in", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const a = g.add(2);
+    const b = g.add(3);
+    g.graph.groups.push({ title: "G", _children: new Set([n, a, b]) });
+    g.wire(a, n, "node_1");
+    expect(canvasGroupOf(n)).toBeNull();
+    expect(members(n)).toEqual([a]);
+  });
+
+  it("does nothing outside any group", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    g.add(2);
+    expect(canvasGroupOf(n)).toBeNull();
+    expect(members(n)).toEqual([]);
+  });
+
+  it("still stands for the group with only a relay wired in, leaving out what the relay watches", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const relayNode = g.add(2, { type: "WP_ModeRelay", isVirtualNode: true });
+    const watchedNode = g.add(3);
+    const member = g.add(4);
+    g.wire(watchedNode, relayNode, "node_1");
+    g.wire(relayNode, n, "node_1");
+    g.graph.groups.push({ title: "G", _children: new Set([n, relayNode, watchedNode, member]) });
+    expect(canvasGroupOf(n)?.title).toBe("G");
+    expect(members(n)).toEqual([member]);
+  });
+
+  it("lets a toggle drive the whole group through the group node, never itself", () => {
+    const g = makeGraph();
+    const toggles = g.add(1, { type: "WP_Toggles" });
+    const n = g.add(2, { type: "WP_NodeGroup", isVirtualNode: true });
+    const a = g.add(3);
+    g.wire(n, toggles, ctlInputName("t1"));
+    g.graph.groups.push({ title: "G", _children: new Set([toggles, n, a]) });
+    expect(toggleTargets(toggles, "t1")).toEqual([a]);
+  });
+});
+
+describe("nested canvas groups (Dumi's layout)", () => {
+  function layout() {
+    const g = makeGraph();
+    const toggles = g.add(1, { type: "WP_Toggles" });
+    const outerNg = g.add(2, { type: "WP_NodeGroup", isVirtualNode: true });
+    const innerNg = g.add(3, { type: "WP_NodeGroup", isVirtualNode: true });
+    const outerText = g.add(4);
+    const innerText = g.add(5);
+    g.graph.groups.push({ title: "Outer", _children: new Set([outerNg, innerNg, outerText, innerText]), size: [900, 600] });
+    g.graph.groups.push({ title: "Inner", _children: new Set([innerNg, innerText]), size: [480, 400] });
+    g.wire(innerNg, toggles, ctlInputName("t1"));
+    g.wire(outerNg, toggles, ctlInputName("t2"));
+    return { g, toggles, outerNg, innerNg, outerText, innerText };
+  }
+
+  it("each group node takes its smallest group; the outer one includes the inner group", () => {
+    const { outerNg, innerNg, outerText, innerText } = layout();
+    expect(members(innerNg as GroupHostNode)).toEqual([innerText]);
+    expect(new Set(members(outerNg as GroupHostNode))).toEqual(new Set([outerText, innerText]));
+  });
+
+  it("'Not inner' leaves out the inner group's nodes", () => {
+    const { outerNg, outerText } = layout();
+    outerNg.properties = { wp_covers: "own" };
+    expect(members(outerNg as GroupHostNode)).toEqual([outerText]);
+  });
+
+  it("'Every group' covers outer groups too", () => {
+    const { innerNg, outerText, innerText } = layout();
+    innerNg.properties = { wp_covers: "all" };
+    expect(canvasGroupsOf(innerNg).map((x) => x.title)).toEqual(["Inner", "Outer"]);
+    expect(new Set(members(innerNg as GroupHostNode))).toEqual(new Set([innerText, outerText]));
+  });
+
+  it("off wins: the inner text stays bypassed while either toggle is off, in any order", () => {
+    const { toggles, outerText, innerText } = layout();
+    const rows = [tog("t1", { control: "bypass", on: true }), tog("t2", { control: "bypass", on: false })];
+    applyControl(toggles, cfg(rows));
+    expect([outerText.mode, innerText.mode]).toEqual([4, 4]);
+    applyControl(toggles, cfg([...rows].reverse()));
+    expect([outerText.mode, innerText.mode]).toEqual([4, 4]);
+    applyControl(toggles, cfg(rows), new Set(["t1"]));
+    expect(innerText.mode).toBe(4);
+    applyControl(toggles, cfg([tog("t1", { control: "bypass", on: true }), tog("t2", { control: "bypass", on: true })]));
+    expect([outerText.mode, innerText.mode]).toEqual([0, 0]);
+  });
+
+  it("mute beats bypass", () => {
+    expect(strongerMode(undefined, 0)).toBe(0);
+    expect(strongerMode(0, 4)).toBe(4);
+    expect(strongerMode(4, 2)).toBe(2);
+    expect(strongerMode(2, 4)).toBe(2);
   });
 });

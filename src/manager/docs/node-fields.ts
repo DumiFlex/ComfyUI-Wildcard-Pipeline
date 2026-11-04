@@ -186,6 +186,8 @@ export const NODE_FIELDS = {
     controls: [
       { term: "node dots (in)", pin: "in:node_*", desc: "Wire any node's output in. A new free dot appears as you wire; a freed one goes. Each shows its node's title." },
       { term: "nodes (out)", pin: "out:*", desc: "Wire it into a WP Toggles control dot: that toggle then mutes or bypasses every node here." },
+      { term: "Whole group", desc: "With nothing wired into its dots (a WP Mode Relay doesn't count), the node gathers every node of the canvas group it sits in, the smallest one when groups nest, and the bar names that group. Nodes a wired-in relay watches stay out. Wire any node in and it goes back to only the wired ones." },
+      { term: "Covers", pin: "css:[aria-label='Which canvas groups it covers']@right", desc: "Shown while it stands for a canvas group. Its group: the smallest group it sits in, inner groups included. Not inner: that group, leaving out the nodes of groups inside it. Every group: every group it sits in, outer ones too." },
       { term: "Run / Mute / Bypass", pin: "css:[aria-label='Set every node']@right", desc: "Set every node in the group at once." },
       { term: "Mode chip", pin: "css:[data-test^=ng-mode-]@right", desc: "Each row's chip shows its node's mode. Click it to go Runs → Muted → Bypassed." },
     ],
@@ -257,7 +259,7 @@ export const NODE_FIELDS = {
       { term: "Style", desc: "Switch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name)." },
       { term: "Value (Pick one)", desc: "What the picked variable gets when this toggle is picked, instead of its name. It can read $variables from upstream." },
       { term: "Needs", desc: "Another toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on." },
-      { term: "When off", desc: "Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run." },
+      { term: "When off", desc: "Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run. When several toggles drive one node, off wins: it runs only while all of them let it (Mute beats Bypass)." },
       { term: "Invert", desc: "Mute or bypass while the toggle is ON instead, for a node used only as a switchboard." },
       { term: "Canvas groups", desc: "Groups on the canvas whose nodes When off also covers, by title. No wires needed." },
       { term: "Upstream can set it", desc: "When the upstream Context holds this toggle's variable as a yes/no word (true, yes, on, 1, false, no, off, 0), that value sets the switch for the run." },

@@ -8,6 +8,9 @@
  * drives every member (`toggle-control.ts:expandTargets` follows it, nested
  * groups included). Muting or bypassing the group node itself repeats that
  * mode to its members; setting it back to always lets them run again.
+ * With nothing real wired in, a group node that sits inside a canvas group
+ * stands for every node of the smallest such group (rgthree's Repeater
+ * does the same; `toggle-control.ts:canvasGroupOf`).
  *
  * Virtual: never in the prompt, and `getInputLink` answers nothing so the
  * prompt builder never follows it to a member either.

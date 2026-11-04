@@ -182,7 +182,10 @@ export function create(node: TogglesHostNode, inputName: string) {
           if (!t.control) continue;
           const old = new Set(was.get(t.id) ?? []);
           const cur = new Set(now.get(t.id) ?? []);
-          releaseTargets([...old].filter((n) => !cur.has(n)), t.control);
+          const gone = [...old].filter((n) => !cur.has(n));
+          releaseTargets(gone, t.control);
+          // Another toggle may still hold a let-go node off (off wins).
+          if (gone.length) applyControl(ctlNode, config.value, undefined, new Set(gone));
           if ([...cur].some((n) => !old.has(n))) applyControl(ctlNode, config.value, new Set([t.id]));
         }
       });
