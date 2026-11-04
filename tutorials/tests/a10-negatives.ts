@@ -24,7 +24,7 @@ tutorial(
       await t.say("Give the patched tunic one too: clean, new clothes.");
       await t.click(T("wc-opt-neg-3-add"));
       await t.beat(500);
-      await t.click(page.getByLabel("Negative for this option").last());
+      await t.click(T("wc-opt-neg-3").getByLabel("Negative for this option"));
       await t.type("pristine, brand new clothes", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
@@ -69,7 +69,7 @@ tutorial(
       const cl = await t.addNode("WP Prompt Cleaner", { x: 1410, y: 170 });
       await t.wire(nodes.asm, "prompt", cl, "prompt");
       await t.wire(nodes.asm, "negative", cl, "negative");
-      const text = await t.addNode("Preview as Text", { x: 1410, y: 720 });
+      const text = await t.addNode("Preview as Text", { x: 1410, y: 880 });
       await t.wire(cl, "prompt", text, "source");
       await t.waitVoice();
       await t.callout("mode", t.node(cl), "Gentle, Balanced or Aggressive", 4);
