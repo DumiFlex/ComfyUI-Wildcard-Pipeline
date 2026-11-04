@@ -17,6 +17,7 @@ File teach future Claude (and human) contributors load-bearing conventions of co
 - `tests/` — Python tests. Use `conftest.py` sys.path shim.
 - `scripts/` — Node helpers (bundle-size gate, size-delta diff, release helpers).
 - `bench/` — the AI bench as a Watchwright test pack (`bench/README.md`); `meta.json` is the bench's test list (titles, prompts, attempts per model). Not linted by `pnpm lint`/`typecheck` and not shipped (`.comfyignore`). `python bench/dev/serve.py` runs the manager on a fake model to check its clicks. `bench/smoke/` is the pass/fail AI smoke pack: it scripts the fake's answers (`POST /fake/script`) and checks cards, Apply, Undo and the safety guard.
+- `tutorials/` — the video tutorials as a Watchwright pack (`tutorials/README.md`): one test per video, driven through the real canvas and manager by `tutorial.ts` (steady pointer, captions, callouts, `addNode` / `wire` / `run`); `voice/speak.py` speaks the `t.say` lines with Kokoro, `render.mjs` makes the MP4 + subtitles + chapters. Not shipped (`.comfyignore`).
 - `docs/widget-context-contract.md` — single canonical engine ↔ widget JSON shape doc. Update both Python (`engine/modules.py`) + TS (`src/widgets/_shared.ts`) sides in one PR when shape change.
 - `docs/superpowers/{specs,plans}/` — gitignored per-contributor design docs + impl plans.
 

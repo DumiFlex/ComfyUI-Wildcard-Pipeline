@@ -15,6 +15,7 @@ src/
 # --- tests ---
 tests/
 bench/
+tutorials/
 conftest.py
 pytest.ini
 
