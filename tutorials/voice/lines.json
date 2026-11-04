@@ -5,6 +5,12 @@
   "text": "Change the seed, and the weather rolls with the hero.",
   "voice": "af_heart"
  },
+ "01d6e4950b31": {
+  "ms": 7275,
+  "speed": 1.0,
+  "text": "There is light mode, your own accent color, density, and an icons-only sidebar too. I'll go back to the defaults.",
+  "voice": "af_heart"
+ },
  "0302fe1cacea": {
   "ms": 4117,
   "speed": 1.0,
@@ -39,6 +45,12 @@
   "ms": 5888,
   "speed": 1.0,
   "text": "Character holds the Hero list, and three smaller bundles inside it: Look, Outfit and Shared lists.",
+  "voice": "af_heart"
+ },
+ "0f506d4c8b9f": {
+  "ms": 2688,
+  "speed": 1.0,
+  "text": "Control and slash shows every keyboard shortcut.",
   "voice": "af_heart"
  },
  "106c4c910925": {
@@ -87,6 +99,12 @@
   "ms": 2347,
   "speed": 1.0,
   "text": "Drag a wire from context to context.",
+  "voice": "af_heart"
+ },
+ "187905cfc2b9": {
+  "ms": 5205,
+  "speed": 1.0,
+  "text": "Every setting is here, in groups. The easiest way to try them is the playground at the top.",
   "voice": "af_heart"
  },
  "1a1f38f5c30a": {
@@ -155,10 +173,22 @@
   "text": "Switch the street thief off. This change is only for this node: the Hero list in your library stays as it is.",
   "voice": "af_heart"
  },
+ "2d904b53d83f": {
+  "ms": 4288,
+  "speed": 1.0,
+  "text": "On the canvas it works in the node text boxes, like an Assembler's template.",
+  "voice": "af_heart"
+ },
  "2f6f96c67804": {
   "ms": 5973,
   "speed": 1.0,
   "text": "The badge marks a row that differs from the library. Reset overrides in the same window puts it back.",
+  "voice": "af_heart"
+ },
+ "30a3a1a5181b": {
+  "ms": 5397,
+  "speed": 1.0,
+  "text": "Search finds any page; the AI assistant reads these pages too, if you set one up.",
   "voice": "af_heart"
  },
  "30b3d8aa3fa0": {
@@ -171,6 +201,12 @@
   "ms": 3840,
   "speed": 1.0,
   "text": "The sidebar lists your modules: the pieces a prompt is built from.",
+  "voice": "af_heart"
+ },
+ "3522eba415f6": {
+  "ms": 4949,
+  "speed": 1.0,
+  "text": "Pick your checkpoint and press Run. The example workflow videos go through each of them.",
   "voice": "af_heart"
  },
  "37b3e46e447c": {
@@ -189,6 +225,12 @@
   "ms": 6997,
   "speed": 1.0,
   "text": "That's the basics of Wildcard Pipeline. The advanced videos go further: nested lists, LoRAs, loops and more.",
+  "voice": "af_heart"
+ },
+ "3f9147194aa7": {
+  "ms": 4309,
+  "speed": 1.0,
+  "text": "And Control K opens the command palette: type what you want, and go there.",
   "voice": "af_heart"
  },
  "3f9efb813688": {
@@ -215,6 +257,12 @@
   "text": "Fold both to keep the node small.",
   "voice": "af_heart"
  },
+ "43e6d7968ac9": {
+  "ms": 6656,
+  "speed": 1.0,
+  "text": "How it looks on the canvas is up to you. Open ComfyUI's Settings and find Wildcard Pipeline at the bottom.",
+  "voice": "af_heart"
+ },
  "4593f77bfe49": {
   "ms": 3989,
   "speed": 1.0,
@@ -225,6 +273,12 @@
   "ms": 4267,
   "speed": 1.0,
   "text": "Save keeps it on this node. Save to library would change the list everywhere.",
+  "voice": "af_heart"
+ },
+ "46b474c11e16": {
+  "ms": 6187,
+  "speed": 1.0,
+  "text": "The canvas look lives in ComfyUI's Settings, the manager's in its own. Next: autocomplete.",
   "voice": "af_heart"
  },
  "4743c9d8a71d": {
@@ -239,10 +293,28 @@
   "text": "Night brings the moonlight, and the negative output gets the rule's negative.",
   "voice": "af_heart"
  },
+ "4bb1af9ed209": {
+  "ms": 7765,
+  "speed": 1.0,
+  "text": "Tag suggestions need a tag list first. Download fetches it once, about five megabytes, and nothing else ever goes online.",
+  "voice": "af_heart"
+ },
+ "4d2c51c1d88c": {
+  "ms": 6827,
+  "speed": 1.0,
+  "text": "Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it.",
+  "voice": "af_heart"
+ },
  "4e308a7941cf": {
   "ms": 3776,
   "speed": 1.0,
   "text": "Back on the canvas, add a Context node and pick Hero and Weather.",
+  "voice": "af_heart"
+ },
+ "4f19b39aaf87": {
+  "ms": 3477,
+  "speed": 1.0,
+  "text": "Changed your mind? Reset all to defaults puts everything back.",
   "voice": "af_heart"
  },
  "50f6f768cab2": {
@@ -293,6 +365,12 @@
   "text": "Now the options: one per line. Each prompt rolls one of them.",
   "voice": "af_heart"
  },
+ "59dc58ae8ecf": {
+  "ms": 4288,
+  "speed": 1.0,
+  "text": "Pick a colour theme: Nebula is violet, Tide is blue, Ember is warm.",
+  "voice": "af_heart"
+ },
  "5cf5da21ae39": {
   "ms": 3755,
   "speed": 1.0,
@@ -335,10 +413,22 @@
   "text": "Wildcard Pipeline builds random prompts from lists you keep in a library. Let's make a first one.",
   "voice": "af_heart"
  },
+ "631bc4847822": {
+  "ms": 4501,
+  "speed": 1.0,
+  "text": "Below the preview you can try the warnings too: how long they stay and which ones show.",
+  "voice": "af_heart"
+ },
  "64126e13325f": {
   "ms": 2176,
   "speed": 1.0,
   "text": "Each option lists the shoes it goes with.",
+  "voice": "af_heart"
+ },
+ "65ff3e617888": {
+  "ms": 5355,
+  "speed": 1.0,
+  "text": "Start a LoRA with angle bracket, lora, colon, and the list shows your LoRAs.",
   "voice": "af_heart"
  },
  "66d3bbeafd33": {
@@ -351,6 +441,12 @@
   "ms": 5312,
   "speed": 1.0,
   "text": "Snow should be rare, so give it a weight of a half. Its chance drops, and the others share the rest.",
+  "voice": "af_heart"
+ },
+ "6922c805698c": {
+  "ms": 4800,
+  "speed": 1.0,
+  "text": "Your installed LoRAs and embeddings work the same way. Turn on LoRAs.",
   "voice": "af_heart"
  },
  "6b28502ca8aa": {
@@ -377,6 +473,12 @@
   "text": "Lost? Select any Wildcard Pipeline node and press the question mark above it.",
   "voice": "af_heart"
  },
+ "733b17d4073c": {
+  "ms": 3008,
+  "speed": 1.0,
+  "text": "And the state markers can be badges, or small dots.",
+  "voice": "af_heart"
+ },
  "7427fca97898": {
   "ms": 3307,
   "speed": 1.0,
@@ -401,10 +503,22 @@
   "text": "Write a prompt once, save it, and load it into any Assembler. Next: bundles.",
   "voice": "af_heart"
  },
+ "7e26b5fe3294": {
+  "ms": 5440,
+  "speed": 1.0,
+  "text": "On the left are the controls; on the right, a live preview with every kind of row and marker.",
+  "voice": "af_heart"
+ },
  "836924b6e384": {
   "ms": 3243,
   "speed": 1.0,
   "text": "And here they are as pictures: every hero where they belong.",
+  "voice": "af_heart"
+ },
+ "84e824df63c4": {
+  "ms": 5675,
+  "speed": 1.0,
+  "text": "A look changes everything but the colour: corners, type and borders. Try Soft, or Terminal.",
   "voice": "af_heart"
  },
  "85104ac21a40": {
@@ -419,6 +533,18 @@
   "text": "Only the scene line reaches the template, so hide the other three with their globe buttons. The combine still reads them.",
   "voice": "af_heart"
  },
+ "8f9e745c682a": {
+  "ms": 3947,
+  "speed": 1.0,
+  "text": "Type style shows each row's kind as a chip, an icon, or both.",
+  "voice": "af_heart"
+ },
+ "8ff93e4882d0": {
+  "ms": 3520,
+  "speed": 1.0,
+  "text": "Click Done, close Settings, and your real node has the new look.",
+  "voice": "af_heart"
+ },
  "92997cc71a53": {
   "ms": 1536,
   "speed": 1.0,
@@ -431,6 +557,12 @@
   "text": "A noble hero makes a castle four times as likely,",
   "voice": "af_heart"
  },
+ "94874a0d673f": {
+  "ms": 3051,
+  "speed": 1.0,
+  "text": "The manager has its own Appearance page, under Settings.",
+  "voice": "af_heart"
+ },
  "95fa2308979b": {
   "ms": 4437,
   "speed": 1.0,
@@ -441,6 +573,12 @@
   "ms": 5803,
   "speed": 1.0,
   "text": "Character brings the Hero list, then Look with the hair, eyes and colors, Outfit, and the Shared lists.",
+  "voice": "af_heart"
+ },
+ "98a27fe5fd6f": {
+  "ms": 5568,
+  "speed": 1.0,
+  "text": "Want to see it all working together? There are four example workflows, in ComfyUI's Templates.",
   "voice": "af_heart"
  },
  "98fcdd0a1bd9": {
@@ -459,6 +597,12 @@
   "ms": 6037,
   "speed": 1.0,
   "text": "Edit it, hold it for a whole batch, push it to the library, duplicate it, wrap it into a bundle, or move it.",
+  "voice": "af_heart"
+ },
+ "9a25e3720cb9": {
+  "ms": 6592,
+  "speed": 1.0,
+  "text": "This button opens the manager. Its Documentation covers every node and every module, with examples.",
   "voice": "af_heart"
  },
  "9b7236360017": {
@@ -489,6 +633,18 @@
   "ms": 3093,
   "speed": 1.0,
   "text": "Add a Prompt Assembler, wire it up, and write the template.",
+  "voice": "af_heart"
+ },
+ "9fb7e1f21902": {
+  "ms": 3477,
+  "speed": 1.0,
+  "text": "Next: the Context node itself, and how it can roll for you.",
+  "voice": "af_heart"
+ },
+ "a31ada13963e": {
+  "ms": 4885,
+  "speed": 1.0,
+  "text": "After an update, the megaphone gets a dot. It shows what changed in each version.",
   "voice": "af_heart"
  },
  "a3aa31d03653": {
@@ -533,10 +689,28 @@
   "text": "A second action adds a negative, so the night isn't overexposed.",
   "voice": "af_heart"
  },
+ "abfdc6de539b": {
+  "ms": 4544,
+  "speed": 1.0,
+  "text": "That's the basics. The advanced videos take each part further, one at a time.",
+  "voice": "af_heart"
+ },
+ "b1066e8446ac": {
+  "ms": 4352,
+  "speed": 1.0,
+  "text": "Density sets how much room each row takes. Compact fits more on a node.",
+  "voice": "af_heart"
+ },
  "b87a218300d1": {
   "ms": 7168,
   "speed": 1.0,
   "text": "Wildcards are lists to roll from. Fixed values always say the same thing. Combines join variables into a line.",
+  "voice": "af_heart"
+ },
+ "b8bbc06e0217": {
+  "ms": 4416,
+  "speed": 1.0,
+  "text": "Your installed LoRAs and embeddings work the same way, once you have some.",
   "voice": "af_heart"
  },
  "b9fa2a9a7498": {
@@ -545,16 +719,34 @@
   "text": "If the time rolled night,",
   "voice": "af_heart"
  },
+ "ba07e8089faf": {
+  "ms": 2773,
+  "speed": 1.0,
+  "text": "This was only a try, so cancel and discard it.",
+  "voice": "af_heart"
+ },
  "ba2b54b678b8": {
   "ms": 3712,
   "speed": 1.0,
   "text": "Each bundle sits in its own frame. Open them to see what came in.",
   "voice": "af_heart"
  },
+ "bb7b58731e51": {
+  "ms": 5824,
+  "speed": 1.0,
+  "text": "Last in the basics: where to look when you're stuck. Every Wildcard Pipeline node has its own help.",
+  "voice": "af_heart"
+ },
  "bc3eac1bb4b5": {
   "ms": 5483,
   "speed": 1.0,
   "text": "Constraints never block a run. They only change the odds, so your prompts make sense more often.",
+  "voice": "af_heart"
+ },
+ "bd55a94c9036": {
+  "ms": 8277,
+  "speed": 1.0,
+  "text": "Each source has two switches. Manager is for these pages, Canvas is for the nodes in ComfyUI. Turn tags on for both.",
   "voice": "af_heart"
  },
  "be215f0c5bb0": {
@@ -575,6 +767,12 @@
   "text": "Random picks can clash: a street thief in a royal throne room. A constraint changes the odds by what was already rolled.",
   "voice": "af_heart"
  },
+ "c240d26a54e8": {
+  "ms": 2453,
+  "speed": 1.0,
+  "text": "Select it and press the question mark above it.",
+  "voice": "af_heart"
+ },
  "c43be75daabb": {
   "ms": 3392,
   "speed": 1.0,
@@ -593,6 +791,12 @@
   "text": "Run through a model, every picture keeps the painted style.",
   "voice": "af_heart"
  },
+ "c6756a77c5f1": {
+  "ms": 5696,
+  "speed": 1.0,
+  "text": "Don't want the pop-up somewhere? Switch that side off again. I'll turn everything off for the next videos.",
+  "voice": "af_heart"
+ },
  "c70902e4d7fb": {
   "ms": 2347,
   "speed": 1.0,
@@ -609,6 +813,18 @@
   "ms": 2837,
   "speed": 1.0,
   "text": "and an urban hero never gets a castle at all.",
+  "voice": "af_heart"
+ },
+ "cbc811aff39b": {
+  "ms": 4181,
+  "speed": 1.0,
+  "text": "Now try it in a new wildcard. Type the start of a tag in an option.",
+  "voice": "af_heart"
+ },
+ "cca08052c78c": {
+  "ms": 10432,
+  "speed": 1.0,
+  "text": "Wildcard Pipeline can suggest tags, LoRAs and embeddings while you type. It's all off until you turn it on, here in the manager's Settings, under Autocomplete.",
   "voice": "af_heart"
  },
  "ce6940f32ead": {
@@ -671,6 +887,18 @@
   "text": "Its help page opens right over the canvas.",
   "voice": "af_heart"
  },
+ "d6d0bde0a587": {
+  "ms": 4501,
+  "speed": 1.0,
+  "text": "The list shows how often each tag is used. Arrow keys move, Enter picks.",
+  "voice": "af_heart"
+ },
+ "d7d63002644a": {
+  "ms": 3584,
+  "speed": 1.0,
+  "text": "Color intensity makes the kind colors softer or stronger.",
+  "voice": "af_heart"
+ },
  "d969a6f6fab7": {
   "ms": 3712,
   "speed": 1.0,
@@ -681,6 +909,12 @@
   "ms": 3221,
   "speed": 1.0,
   "text": "That's the tour. Next, we'll make a wildcard of our own.",
+  "voice": "af_heart"
+ },
+ "db0e076ef627": {
+  "ms": 6592,
+  "speed": 1.0,
+  "text": "Download the tag list once, switch on what you want, per side, and the suggestions follow you everywhere you type.",
   "voice": "af_heart"
  },
  "dbc29d718c08": {
@@ -701,10 +935,28 @@
   "text": "It writes a new variable, hero line, from a small template of its own.",
   "voice": "af_heart"
  },
+ "dfde8d0a2019": {
+  "ms": 3029,
+  "speed": 1.0,
+  "text": "And for anything else, the Discord button is right next to it.",
+  "voice": "af_heart"
+ },
+ "e146cf8f8ae6": {
+  "ms": 3947,
+  "speed": 1.0,
+  "text": "Its page opens over the canvas: what each part does, with a picture.",
+  "voice": "af_heart"
+ },
  "e3269bd8e7cc": {
   "ms": 3989,
   "speed": 1.0,
   "text": "In the template, $gear.SHOES prints the shoe that was rolled with the gear.",
+  "voice": "af_heart"
+ },
+ "e3e934d5567e": {
+  "ms": 7851,
+  "speed": 1.0,
+  "text": "Roll on every run, lock what you like, and change an item for one node without touching your library. Next: make it look your way.",
   "voice": "af_heart"
  },
  "e443a24ea63a": {
@@ -729,6 +981,18 @@
   "ms": 5397,
   "speed": 1.0,
   "text": "Debug shows the picks behind the last picture, so you can see the prompt change from run to run.",
+  "voice": "af_heart"
+ },
+ "ed33c3eb3873": {
+  "ms": 6720,
+  "speed": 1.0,
+  "text": "Wildcard Pipeline fits into ComfyUI. Here is a Context node with three lists, as it looks out of the box.",
+  "voice": "af_heart"
+ },
+ "eef3d826cb31": {
+  "ms": 5056,
+  "speed": 1.0,
+  "text": "Here it is. The list on the left has how-tos, guides, each node and each module.",
   "voice": "af_heart"
  },
  "ef02a1e32300": {
@@ -777,6 +1041,12 @@
   "ms": 5760,
   "speed": 1.0,
   "text": "The hair list already reads the colors, so hide Colors with its globe button. Then fold the frame.",
+  "voice": "af_heart"
+ },
+ "ff5604c85535": {
+  "ms": 7424,
+  "speed": 1.0,
+  "text": "Below are the details. Write tags with spaces turns blue underscore hair into blue hair, which reads better in a prompt.",
   "voice": "af_heart"
  }
 }

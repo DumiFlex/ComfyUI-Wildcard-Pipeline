@@ -296,6 +296,17 @@ export class Tutor {
     await sleep(250);
   }
 
+  /**
+   * Picks an option in a native drop-down. Its own pop-up list isn't in the recording, so the hand
+   * goes to it and the value changes in place.
+   */
+  async choose(select: Locator, value: string): Promise<void> {
+    await this.moveTo(await this.centre(select));
+    await sleep(250);
+    await select.selectOption(value);
+    await sleep(600);
+  }
+
   /** Clicks a field, clears it and types `text` into it. */
   async fill(target: Locator, text: string, { cps = 22 }: { cps?: number } = {}): Promise<void> {
     await this.click(target);
