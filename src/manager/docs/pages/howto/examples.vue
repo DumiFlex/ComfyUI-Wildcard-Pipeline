@@ -27,7 +27,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
           the trigger words from the Context Injector into the prompt, and another switches the
           group that reads the image size, sampler and CFG from the loaded model (a Mode Relay
           passes it on to a Node Group).</li>
-        <li><b>2 - Batches and grids</b>: a WP Context Loop sweeps three lenses against three
+        <li><b>2 - Batches and grids</b>: a WP Context Loop sweeps three shots against three
           lights on one held person, a second Assembler writes the labels and WP Label &amp; Grid lays the images out as
           an XY plot. WP Toggles in Pick one mode chooses Quick or Full: its value sets the steps
           through WP Var → Int, and WP Var → Bool picks a smaller image for Quick.</li>
@@ -51,19 +51,19 @@ import VarToken from "../../../components/docs/VarToken.vue";
 
     <DocSection title="The packs">
       <p>
-        All four share one family of photorealistic packs, each a bundle with sub-bundles:
+        All four share one family of packs, each a bundle with sub-bundles. They describe people in plain words and name no style, so they suit anime, illustration and photo models alike:
         <b>Person</b> (gender, age, heritage, build, skin, hair, eyes, makeup or facial hair),
         <b>Location</b> (place and time of day), <b>Wardrobe</b> (an outfit that fits the place,
-        with shoes it accepts), <b>Light</b>, <b>Camera</b> (shot, angle, lens, film look) and
+        with shoes it accepts), <b>Light</b>, <b>Camera</b> (shot, angle, focus, colour palette) and
         <b>Direction</b> (pose and expression). Constraints keep them coherent: the place picks
-        the time and the light, the shot picks the lens and leaves out poses it can't see.
+        the time and the light, the shot picks the focus and leaves out poses it can't see.
       </p>
       <p>
         <b>Render</b> reads <VarToken>$model_variant</VarToken> and
-        <VarToken>$model_family</VarToken> from WP Model Info and writes the head,
-        tail and negative for the loaded model: Pony's score tags, Illustrious quality tags, a
-        plain sentence for Flux and other sentence models, or the realistic SDXL words when it
-        can't tell.
+        <VarToken>$model_family</VarToken> from WP Model Info and writes only the quality
+        words and their negative for the loaded model: Illustrious / NoobAI quality tags by
+        default, Pony's score tags, or nothing for Flux and other sentence models. Your style
+        (anime, photo, painting) goes in the template.
       </p>
     </DocSection>
 

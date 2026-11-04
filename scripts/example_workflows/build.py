@@ -120,8 +120,9 @@ def sets_and_stories() -> None:
         "| Key | Jump to |\n|---|---|\n| `Alt+1` | Every frame different |\n"
         "| `Alt+2` | Photo shoot |\n| `Alt+3` | Storyboard |\n\n"
         ":pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\n\n"
-        ":pi-lightbulb:{#22c55e} Made for realistic SDXL models (Juggernaut, RealVis, epiCRealism). "
-        "**WP Model Info** in each group rewrites the prompt for Pony realism or Flux.\n\n"
+        ":pi-lightbulb:{#22c55e} The lists name no style, so they suit any model. **WP Model "
+        "Info** in each group sets the quality words: Illustrious / NoobAI by default, Pony's "
+        "score tags, none for Flux. Add your style to the template.\n\n"
         ":pi-lock: Want this for your own lists? [Keep something the same](docs:howto-keep-steady)"
         "{button pi-lock} explains **Hold across run**, the switch the photo shoot and the "
         "storyboard lean on." + LINKS_FOOTER,
@@ -158,8 +159,8 @@ def sets_and_stories() -> None:
             cam = photo.camera(hold_film=True)
             shot = cam.children[0]
             assert isinstance(shot, Module) and shot.name == "Shot"
-            order = ["wide environmental", "full-body", "three-quarter length", "waist-up",
-                     "head-and-shoulders", "close-up portrait"]
+            order = ["wide shot", "full body", "cowboy shot", "upper body",
+                     "portrait", "close-up"]
             shot.iteration_overrides = {
                 str(i): {"enabled_options": [shot.option_id(v)]} for i, v in enumerate(order)
             }
@@ -233,8 +234,8 @@ def sets_and_stories() -> None:
         lat = wf.add("EmptyLatentImage", (3420, y + 720), (300, 110), mode=muted,
                      widgets={"width": 832, "height": 1216, "batch_size": 1})
         ks = wf.add("KSampler", (3880, y + 320), (300, 280), mode=muted, widgets={
-            "seed": 42 + gi, "control_after_generate": "fixed", "steps": 30, "cfg": 4.5,
-            "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1})
+            "seed": 42 + gi, "control_after_generate": "fixed", "steps": 28, "cfg": 5.5,
+            "sampler_name": "euler_ancestral", "scheduler": "normal", "denoise": 1})
         dec = wf.add("VAEDecode", (4240, y + 320), (200, 50), mode=muted)
         filt = wf.add("WP_ImageFilter", (4500, y + 320), (490, 430), mode=muted,
                       widgets={"wp_image_filter": FILTER})

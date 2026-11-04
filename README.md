@@ -71,13 +71,14 @@ walks through a fuller example.
 Prefer to start from something that already runs? Open **Workflow › Browse
 Templates** and pick **Wildcard Pipeline**. Four workflows ship in
 [`example_workflows/`](example_workflows/), all built on one family of
-photorealistic packs (Person, Location, Wardrobe, Light, Camera, Direction and
-a Render pack that writes the prompt for SDXL, Pony, Illustrious or Flux):
+packs that describe people in plain words and name no style, so they suit any
+model (Person, Location, Wardrobe, Light, Camera, Direction, and a Render pack
+that writes the quality words for Illustrious / NoobAI by default, Pony or Flux):
 
 | Workflow | Shows |
 |---|---|
 | **1 - One image** | The core chain, WP Debug, and WP Toggles as the switchboard: LoRA switches that bypass their loaders and swap in trigger words (Context Injector, derivations), and a switch for the group that reads size, sampler and CFG from the model (Model Info, Var → Int / Float / Choice, passed on by a Mode Relay to a Node Group). |
-| **2 - Batches and grids** | A Context Loop sweep (3 lenses × 3 lights, one held person) laid out as an XY plot with Label & Grid, a Quick / Full pick in WP Toggles that sets the steps (Var → Int) and the image size (Var → Bool, If/Else Switch), and an optional Seed List. |
+| **2 - Batches and grids** | A Context Loop sweep (3 shots × 3 lights, one held person) laid out as an XY plot with Label & Grid, a Quick / Full pick in WP Toggles that sets the steps (Var → Int) and the image size (Var → Bool, If/Else Switch), and an optional Seed List. |
 | **3 - Pick and refine** | Four drafts of one held person, a pause at Image Filter to pick the keepers, then an upscale and a second pass on the picks only. |
 | **4 - Sets and stories** | One loop, three ways, picked in WP Toggles (Pick one mutes the other canvas groups): every frame different, a photo shoot (one held person, outfit and place, a shot list per frame) and a storyboard (four six-beat scripts written by a derivation on `$story` and `$iteration`), each pausing at Image Filter so you pick what goes on the sheet. |
 

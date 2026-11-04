@@ -1,6 +1,6 @@
 """Examples 1-3: One image, Batches and grids, Pick and refine.
 
-All three draw on the photo pack family (`photo.py`).
+All three draw on the people pack family (`photo.py`).
 """
 
 from __future__ import annotations
@@ -15,10 +15,11 @@ from packs import Bundle, branch, derivation, eq, put, rule, uid_of
 from photo import S
 
 SUGGESTED = (
-    ":pi-star:{#f59e0b} Made for realistic SDXL checkpoints: "
-    "[Juggernaut XL](https://civitai.com/models/133005/juggernaut-xl){button pi-download #3b82f6} "
-    "[RealVisXL](https://civitai.com/models/139562/realvisxl-v50){button pi-download #3b82f6} "
-    "[epiCRealism XL](https://civitai.com/models/277058/epicrealism-xl){button pi-download #3b82f6}"
+    ":pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they "
+    "work with any model. **Render** writes quality tags for Illustrious and NoobAI by default "
+    "and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. "
+    "[Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious)"
+    "{button pi-search #3b82f6}"
 )
 PACKS_TABLE = (
     "| Pack | What it picks |\n|---|---|\n"
@@ -26,7 +27,7 @@ PACKS_TABLE = (
     "| **Location** | the place and the time of day |\n"
     "| **Wardrobe** | an outfit, its shoes, 0-2 accessories |\n"
     "| **Light** | a light setup that fits the place and time |\n"
-    "| **Camera** | shot, angle, lens, film look |\n"
+    "| **Camera** | shot, angle, focus, colour palette |\n"
     "| **Direction** | pose and expression |\n"
     "| **Render** | the words your model family wants at the start and end |"
 )
@@ -45,8 +46,8 @@ def _image_chain(wf: Workflow, x: float, y: float, ckpt: dict, cln: dict, *, mod
         wf.link(ckpt, "CLIP", enc, "clip")
         wf.link(cln, out, enc, "text")
     ks = wf.add("KSampler", (x + 460, y), (300, 280), mode=mode, widgets={
-        "seed": seed, "control_after_generate": control, "steps": 30, "cfg": 4.5,
-        "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1})
+        "seed": seed, "control_after_generate": control, "steps": 28, "cfg": 5.5,
+        "sampler_name": "euler_ancestral", "scheduler": "normal", "denoise": 1})
     dec = wf.add("VAEDecode", (x + 820, y), (200, 50), mode=mode)
     wf.link(ckpt, "MODEL", ks, "model")
     wf.link(pos, "CONDITIONING", ks, "positive")
@@ -72,8 +73,8 @@ lora_swaps = [
         desc="While 'Use its own clothes' is on: the LoRA's outfit words replace $outfit.",
         scope=S),
     derivation("Style LoRA", [rule("lora-style", [branch(
-        eq("style_lora", "true"), put("film", ", $lora_style_words", mode="append"))])],
-        desc="While the Style LoRA toggle is on: its words go after $film.", scope=S),
+        eq("style_lora", "true"), put("palette", ", $lora_style_words", mode="append"))])],
+        desc="While the Style LoRA toggle is on: its words go after $palette.", scope=S),
 ]
 
 
@@ -86,7 +87,7 @@ def one_image() -> None:
 
     wf.add("WP_Note", (-760, 0), (620, 1080), title="Start here", widgets={"wp_note": note_value(
         "### One image, step by step\n\n"
-        "Every run rolls a new photo: a person, what they wear, where they are, the light and "
+        "Every run rolls a new picture: a person, what they wear, where they are, the light and "
         "the camera, all from the lists in the **WP Context** nodes. Nothing has to be in your "
         "library: the lists come with this workflow.\n\n"
         "[Add this workflow's lists to my library](wp:library){button pi-download}\n\n"
@@ -130,8 +131,8 @@ def one_image() -> None:
     wf.add("WP_Note", (1280, 0), (520, 270), title="Write the prompt", widgets={
         "wp_note": note_value(
             "Type `$` in the **Assembler** to add a variable; the preview shows the last run.\n\n"
-            "`$negatives` collects the negative words picked options bring (black-and-white film "
-            "adds *colour, saturated*). The **Cleaner** tidies the commas a list with nothing to "
+            "`$negatives` collects the negative words picked options bring (a monochrome "
+            "palette adds *colourful, saturated*). The **Cleaner** tidies the commas a list with nothing to "
             "say leaves behind.\n\n"
             "[Prompt Assembler](docs:wp-prompt-assembler){button pi-book} "
             "[Negatives](docs:negatives){button pi-minus-circle}",
@@ -182,7 +183,7 @@ def one_image() -> None:
                "1. Pick a LoRA in a **Load LoRA** node and type its trigger words in the boxes.\n"
                "2. Switch it on. The switch un-bypasses its loader *and* tells the **LoRA swaps** "
                "bundle to use the words: a character's replace `$subject` (and, with *Use its own "
-               "clothes*, `$outfit`), a style's go after `$film`.\n"
+               "clothes*, `$outfit`), a style's go after `$palette`.\n"
                "3. *Settings from the model* switches that whole group.\n\n"
                "> The toggles write `$lora_character`… as true / false; the **Injector** writes "
                "the words to their own variables (`$lora_hero_words`…), so a switch never "
@@ -198,7 +199,7 @@ def one_image() -> None:
                               "Style trigger words")):
         words.append(wf.add("PrimitiveStringMultiline", (0, 1880 + i * 150), (560, 120),
                             title=name, widgets={"value": ("ohwx person", "ohwx outfit",
-                                                           "film still style")[i]}))
+                                                           "watercolor style")[i]}))
     inj = wf.add("WP_ContextInjector", (620, 1320), (570, 320),
                  title="WP Context Injector · LoRA words", widgets={"wp_rows": json.dumps({
                      "version": 1, "rows": [
@@ -274,7 +275,7 @@ def one_image() -> None:
         ("WP_VarToInt", "Width", "$size", {"index": 0, "default": 832}),
         ("WP_VarToInt", "Height", "$size", {"index": 1, "default": 1216}),
         ("WP_VarToFloat", "CFG", "$cfg", {"index": 0, "default": 4.5}),
-        ("WP_VarToChoice", "Sampler", "$sampler", {"match": "loose", "fallback": "dpmpp_2m",
+        ("WP_VarToChoice", "Sampler", "$sampler", {"match": "loose", "fallback": "euler_ancestral",
                                                    "if_no_match": "use fallback"}),
     )):
         n = wf.add(kind, (3860, 1320 + i * 250), (420, 220 if kind == "WP_VarToChoice" else 180),
@@ -307,8 +308,7 @@ def _relink(wf: Workflow, node: dict, inp: str, src: dict, out: str) -> None:
 
 # ── 2 - Batches and grids ────────────────────────────────────────────────
 
-SWEEP_LENSES = ["24mm wide-angle lens at f/5.6", "50mm lens at f/1.8, shallow depth of field",
-                "135mm lens at f/2, compressed background"]
+SWEEP_SHOTS = ["full body", "cowboy shot", "portrait"]
 SWEEP_LIGHTS = ["Rembrandt lighting", "soft window light", "backlit by the setting sun, lens flare"]
 
 
@@ -322,9 +322,9 @@ def batches_and_grids() -> None:
 
     wf.add("WP_Note", (-760, 0), (620, 760), title="Start here", widgets={"wp_note": note_value(
         "### Batches and grids\n\n"
-        "One **Run** makes nine photos of the **same person in the same place**: three lenses "
+        "One **Run** makes nine images of the **same person in the same place**: three shots "
         "against three kinds of light, laid out as a labelled XY plot. A quick way to see what "
-        "the camera and the light do. The lists come with this workflow.\n\n"
+        "the framing and the light do. The lists come with this workflow.\n\n"
         "[Add this workflow's lists to my library](wp:library){button pi-download}\n\n"
         "| Key | Step |\n|---|---|\n| `Alt+1` | Sweep every combination |\n"
         "| `Alt+2` | A prompt and a label per frame |\n| `Alt+3` | One click, nine images |\n"
@@ -333,21 +333,21 @@ def batches_and_grids() -> None:
         ":pi-images: More ways to batch: [Make variations](docs:howto-variations)"
         "{button pi-images}" + LINKS_FOOTER, tone="icon", icon="flag")})
 
-    lens = photo.lens
+    shot = photo.shot
     light = photo.light
     salt = "grid"
     sweep = {"enabled": True, "limit": 64, "hold_others": True, "axes": [
-        {"uid": uid_of(lens, salt), "label": "Lens",
-         "option_ids": [lens.option_id(v) for v in SWEEP_LENSES]},
+        {"uid": uid_of(shot, salt), "label": "Shot",
+         "option_ids": [shot.option_id(v) for v in SWEEP_SHOTS]},
         {"uid": uid_of(light, salt), "label": "Light",
          "option_ids": [light.option_id(v) for v in SWEEP_LIGHTS]},
     ]}
     wf.add("WP_Note", (0, 0), (560, 250), title="Sweep every combination", widgets={
         "wp_note": note_value(
             "The **Context Loop** runs everything after it once per frame. Its **Sweep "
-            "combinations** walks *Lens* (3 options) against *Light* (3): 9 frames, and **count** "
+            "combinations** walks *Shot* (3 options) against *Light* (3): 9 frames, and **count** "
             "follows it.\n\n**Hold other picks** keeps the same person, outfit, place, pose and "
-            "shot on every frame, so only the swept lists change.\n\n"
+            "angle on every frame, so only the swept lists change.\n\n"
             "[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}",
             step=1, bookmark=view(1820, 580, 0.4, "Alt+1", 1))})
     loop = wf.add("WP_ContextLoop", (0, 420), (400, 440), widgets={
@@ -363,7 +363,7 @@ def batches_and_grids() -> None:
                  salt=salt, h=620)
     scene = ctx(wf, (1100, 300), "WP Context · Scene", 2, photo.location(), photo.wardrobe(),
                 Bundle("Light", "#d4b33a", [light], scope=S),
-                Bundle("Camera", "#5a7fc9", [photo.shot, photo.angle, lens, photo.film,
+                Bundle("Camera", "#5a7fc9", [photo.shot, photo.angle, photo.shot_lens_rule, photo.lens, photo.film,
                                              photo.framing_rule], scope=S),
                 photo.direction(), salt=salt, h=620)
     wf.link(loop, "context", person, "upstream")
@@ -371,7 +371,7 @@ def batches_and_grids() -> None:
     wf.add("WP_Note", (1600, 0), (560, 200), title="A prompt and a label per frame", widgets={
         "wp_note": note_value(
             "The first **Assembler** writes the prompt. The second writes the label "
-            "`$lens · $light`: **Label & Grid** reads its two parts as the grid's rows and "
+            "`$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and "
             "columns.\n\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}",
             step=2, bookmark=view(1820, 580, 0.4, "Alt+2", 2))})
     asm = wf.add("WP_PromptAssembler", (1760, 300), (480, 460),
@@ -379,7 +379,7 @@ def batches_and_grids() -> None:
     cln = wf.add("WP_PromptCleaner", (2300, 300), (480, 500), widgets={"wp_cleaner": CLEANER})
     lab = wf.add("WP_PromptAssembler", (2840, 300), (480, 360),
                  title="WP Prompt Assembler · grid labels",
-                 widgets={"template": "$lens · $light", "negative_template": ""})
+                 widgets={"template": "$shot · $light", "negative_template": ""})
     wf.link(scene, "context", asm, "context")
     wf.link(scene, "context", lab, "context")
     wf.link(asm, "prompt", cln, "prompt")
@@ -446,7 +446,7 @@ def batches_and_grids() -> None:
         "label": "", "position": "none", "align": "center", "font": "default", "font_size": 0,
         "text_color": "#ffffff", "label_color": "#000000", "grid": True, "arrange": "auto",
         "columns": 0, "rows_from": "part:1", "row_headers": "", "columns_from": "part:2",
-        "column_headers": "", "title": "Same person and place: three lenses × three lights",
+        "column_headers": "", "title": "Same person and place: three shots × three lights",
         "gap": 8, "margin": 16, "background": "#ffffff", "header_color": "#000000",
         "cell_width": 512})})
     save = wf.add("SaveImage", (2520, 1320), (1100, 900), widgets={"filename_prefix": "wp-examples/grid"})
@@ -579,8 +579,8 @@ def pick_and_refine() -> None:
     up = wf.add("LatentUpscaleBy", (3120, 1580), (300, 90),
                 widgets={"upscale_method": "nearest-exact", "scale_by": 1.5})
     ks2 = wf.add("KSampler", (3720, 1320), (300, 280), title="KSampler · refine", widgets={
-        "seed": 5, "control_after_generate": "fixed", "steps": 20, "cfg": 4.5,
-        "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 0.5})
+        "seed": 5, "control_after_generate": "fixed", "steps": 20, "cfg": 5.5,
+        "sampler_name": "euler_ancestral", "scheduler": "normal", "denoise": 0.5})
     dec2 = wf.add("VAEDecode", (4080, 1320), (200, 50))
     wf.link(filt, "latent", up, "samples")
     wf.link(ckpt, "MODEL", ks2, "model")

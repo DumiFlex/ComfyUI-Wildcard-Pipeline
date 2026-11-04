@@ -1,6 +1,7 @@
-"""The photo pack family shared by every example workflow.
+"""The people pack family shared by every example workflow.
 
-One coherent set of lists for photorealistic people: who (Person), what they
+One coherent set of lists for people, in plain words any model style reads
+(anime, illustration or photo): who (Person), what they
 wear and where (Wardrobe, Location), how it is lit and shot (Light, Camera),
 what they do (Direction), and how the prompt is written for the model in use
 (Render). Each workflow embeds the bundles it needs.
@@ -65,7 +66,7 @@ age = wildcard(
     opts("23-year-old", "26-year-old", "29-year-old", "32-year-old", "35-year-old",
          "38-year-old", "42-year-old", "46-year-old")
     + opts("53-year-old", "61-year-old", w=0.5),
-    desc="Adults only, written as a number: realistic models read it well.", scope=S,
+    desc="Adults only, written as a number.", scope=S,
 )
 heritage = wildcard(
     "Heritage", "heritage",
@@ -86,11 +87,11 @@ build = wildcard(
 )
 skin = wildcard(
     "Skin", "skin",
-    opts("natural skin texture with visible pores", "light freckles across the nose",
-         "sun-kissed skin", "faint laugh lines", "a small beauty mark on the cheek",
-         "dewy skin", "matte, even skin", "a light dusting of freckles on the shoulders",
-         "weathered skin", "subtle dark circles under the eyes"),
-    desc="Texture words: the main lever against the plastic AI look.", scope=S,
+    opts("light freckles across the nose", "sun-kissed skin", "a small beauty mark on the cheek",
+         "rosy cheeks", "a light dusting of freckles on the shoulders",
+         "a small scar through one eyebrow", "a tattoo sleeve on one arm")
+    + [NULL(w=4)],
+    desc="One small detail, or nothing (null option).", scope=S,
 )
 hair = wildcard(
     "Hair", "hair",
@@ -155,7 +156,7 @@ def person(hold: bool = False) -> Bundle:
 
 place = wildcard(
     "Place", "place",
-    [O("in a photo studio against a seamless grey backdrop", tags=["studio"]),
+    [O("in a studio against a plain grey backdrop", tags=["studio"]),
      O("in a studio with a warm beige paper backdrop", tags=["studio"]),
      O("in front of a textured plaster wall in a studio", tags=["studio"]),
      O("in a sunlit loft apartment", tags=["home"]),
@@ -322,8 +323,8 @@ def lighting(hold: bool = False) -> Bundle:
 # ── Camera ───────────────────────────────────────────────────────────────
 
 SHOTS = [
-    ("full-body", "full"), ("wide environmental", "full"), ("three-quarter length", "half"),
-    ("waist-up", "half"), ("head-and-shoulders", "close"), ("close-up portrait", "close"),
+    ("full body", "full"), ("wide shot", "full"), ("cowboy shot", "half"),
+    ("upper body", "half"), ("portrait", "close"), ("close-up", "close"),
 ]
 shot = wildcard(
     "Shot", "shot",
@@ -338,35 +339,34 @@ angle = wildcard(
     scope=S,
 )
 lens = wildcard(
-    "Lens", "lens",
-    [O("85mm lens at f/1.4, creamy bokeh", tags=["tele"]),
-     O("135mm lens at f/2, compressed background", tags=["tele"]),
-     O("50mm lens at f/1.8, shallow depth of field", tags=["normal"]),
-     O("50mm lens at f/4", tags=["normal"]),
-     O("35mm lens at f/2.8, environmental", tags=["wide"]),
-     O("24mm wide-angle lens at f/5.6", w=0.5, tags=["wide"])],
-    scope=S,
+    "Focus", "focus",
+    [O("depth of field, blurry background", tags=["tele"]),
+     O("bokeh", tags=["tele"]),
+     O("sharp focus", tags=["normal"]),
+     O("soft focus", tags=["normal"]),
+     O("detailed background", tags=["wide"]),
+     O("scenery", w=0.5, tags=["wide"])],
+    desc="How much of the background shows: tight shots blur it, wide ones show it.", scope=S,
 )
 shot_lens_rule = constraint(
-    "Shot → Lens", shot, lens,
+    "Shot → Focus", shot, lens,
     {"close": {"tele": ("boost", 4), "wide": ("exclude", 0)},
      "half": {"normal": ("boost", 3)},
      "full": {"wide": ("boost", 3), "tele": ("reduce", 0.3)}},
-    desc="Portrait lenses for tight shots, wide lenses for the full body.", scope=S,
+    desc="A blurred background for tight shots, the scenery for the full body.", scope=S,
 )
 film = wildcard(
-    "Film look", "film",
-    [O("shot on Kodak Portra 400, soft film grain"), O("Fujifilm Pro 400H colours"),
-     O("Kodak Gold 200, warm tones"),
-     O("Cinestill 800T, halation around the lights"),
-     O("Ilford HP5 black-and-white film", w=0.5, neg="colour, saturated"),
-     O("digital photo, crisp detail, natural colours", w=2, neg="film grain")],
-    desc="Some looks carry a negative of their own (option negatives).", scope=S,
+    "Palette", "palette",
+    [O("warm colours"), O("muted colours"), O("vibrant colours"), O("soft pastel colours"),
+     O("high contrast"), O("cool tones"),
+     O("monochrome", w=0.5, neg="colourful, saturated"),
+     O("natural colours", w=2, neg="oversaturated")],
+    desc="Some palettes carry a negative of their own (option negatives).", scope=S,
 )
 framing_rule = derivation(
     "Framing hides details", [
         rule("framing", [
-            branch(any_of(has("shot", "full-body"), has("shot", "wide")),
+            branch(any_of(has("shot", "full body"), has("shot", "wide")),
                    put("makeup", ""), put("skin", "")),
         ], put("shoes_line", "")),
     ],
@@ -376,15 +376,15 @@ framing_rule = derivation(
 
 
 lens_from_shot = derivation(
-    "Lens from shot", [
-        rule("lens", [
-            branch(any_of(has("shot", "close-up"), has("shot", "head-and-shoulders")),
-                   put("lens", "85mm lens at f/1.4, creamy bokeh")),
-            branch(any_of(has("shot", "full-body"), has("shot", "wide")),
-                   put("lens", "35mm lens at f/2.8, environmental")),
-        ], put("lens", "50mm lens at f/1.8, shallow depth of field")),
+    "Focus from shot", [
+        rule("focus", [
+            branch(any_of(has("shot", "close-up"), has("shot", "portrait")),
+                   put("focus", "depth of field, blurry background")),
+            branch(any_of(has("shot", "full body"), has("shot", "wide")),
+                   put("focus", "detailed background")),
+        ], put("focus", "sharp focus")),
     ],
-    desc="When the shot is written by a rule (the storyboard), the lens follows it here.",
+    desc="When the shot is written by a rule (the storyboard), the focus follows it here.",
     scope=S,
 )
 
@@ -428,32 +428,27 @@ def direction() -> Bundle:
 
 # ── Render (prompt style + settings per model) ───────────────────────────
 
-SDXL_NEG = ("cartoon, illustration, painting, 3d render, plastic skin, airbrushed, lowres, blurry, "
-            "watermark, text, deformed hands, extra fingers")
+QUALITY_NEG = "worst quality, low quality, bad anatomy, bad hands, extra digits, watermark, text"
 render_style = derivation(
     "Prompt style per model", [
         rule("style", [
             branch(eq("model_variant", "pony"),
-                   put("head", "score_9, score_8_up, score_7_up, photo, realistic,"),
-                   put("tail", ""),
-                   put("neg_base", "score_4, score_5, score_6, cartoon, anime, 3d, painting")),
-            branch(any_of(eq("model_variant", "illustrious"), eq("model_variant", "noobai")),
-                   put("head", "masterpiece, best quality, photorealistic, realistic,"),
-                   put("tail", ""),
-                   put("neg_base", "worst quality, low quality, anime, cartoon, painting, sketch")),
+                   put("head", "score_9, score_8_up, score_7_up,"), put("tail", ""),
+                   put("neg_base", "score_4, score_5, score_6, " + QUALITY_NEG)),
             branch(any_of(eq("model_family", "flux"), eq("model_family", "zimage"),
                           eq("model_family", "qwen_image"), eq("model_family", "hidream"),
                           eq("model_family", "chroma")),
-                   put("head", "A photograph:"), put("tail", ""), put("neg_base", "")),
+                   put("head", ""), put("tail", ""), put("neg_base", "")),
             branch(eq("model_family", "sd15"),
-                   put("head", "RAW photo,"), put("tail", ", film grain, 8k uhd"),
-                   put("neg_base", "cartoon, painting, illustration, worst quality, low quality, "
-                                   "deformed, bad hands")),
-        ], put("head", "RAW photo,"), put("tail", ", sharp focus, highly detailed"),
-           put("neg_base", SDXL_NEG)),
+                   put("head", "best quality,"), put("tail", ""),
+                   put("neg_base", QUALITY_NEG)),
+        ], put("head", "masterpiece, best quality, amazing quality,"), put("tail", ""),
+           put("neg_base", QUALITY_NEG)),
     ],
-    desc="Reads $model_variant / $model_family from WP Model Info. Pony needs its score tags, "
-         "sentence models (Flux, Z-Image, Qwen) none; without Model Info it writes for SDXL.",
+    desc="Reads $model_variant / $model_family from WP Model Info and writes only quality words, "
+         "never a style: Illustrious / NoobAI tags by default, Pony's score tags, nothing for "
+         "sentence models (Flux, Z-Image, Qwen). Add your style (anime, photo, painting) to "
+         "$head here or in the template.",
     scope=S,
 )
 render_settings = derivation(
@@ -466,9 +461,9 @@ render_settings = derivation(
                    put("size", "896x1152"), put("sampler", "euler"), put("cfg", "1")),
             branch(eq("model_variant", "pony"),
                    put("size", "832x1216"), put("sampler", "euler ancestral"), put("cfg", "6")),
-        ], put("size", "832x1216"), put("sampler", "dpmpp 2m"), put("cfg", "4.5")),
+        ], put("size", "832x1216"), put("sampler", "euler ancestral"), put("cfg", "5.5")),
     ],
-    desc="$size, $sampler and $cfg for the Var nodes. Realistic SDXL merges like a low CFG.",
+    desc="$size, $sampler and $cfg for the Var nodes. The default suits Illustrious and NoobAI.",
     scope=S,
 )
 
@@ -484,8 +479,8 @@ def render(settings: bool = True) -> Bundle:
 
 LOOK = "$subject, $build, $skin, $hair, $facial_hair, $eyes, $makeup"
 PROMPT = (
-    "$head $shot photo of " + LOOK
+    "$head $shot, " + LOOK
     + ", wearing $outfit $shoes_line, $accessories, $pose, $expression, $place $time, "
-    "$light, $angle, $lens, $film$tail"
+    "$light, $angle, $focus, $palette$tail"
 )
 NEGATIVE = "$neg_base, $negatives"

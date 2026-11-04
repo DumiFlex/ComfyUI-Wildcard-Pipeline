@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -264,7 +265,9 @@ def _sets_and_stories() -> tuple[Graph, dict[str, tuple[dict[str, Any], dict[str
 
 
 def _subject(prompt: str) -> str:
-    return prompt.split(" photo of ", 1)[1].split(",", 1)[0]
+    found = re.search(r"\ban? \d+-year-old [^,]+", prompt)
+    assert found, prompt
+    return found.group(0)
 
 
 def test_sets_and_stories_modes_hold_what_they_say():
@@ -276,9 +279,9 @@ def test_sets_and_stories_modes_hold_what_they_say():
     loop, asm = groups["Photo shoot"]
     shots = graph.run_frames(loop, asm)
     assert len({_subject(p) for p in shots}) == 1, shots
-    order = ["wide environmental", "full-body", "three-quarter length", "waist-up",
-             "head-and-shoulders", "close-up portrait"]
-    assert [next(s for s in order if f" {s} photo of" in p) for p in shots] == order
+    order = ["wide shot", "full body", "cowboy shot", "upper body",
+             "portrait", "close-up"]
+    assert [next(s for s in order if f", {s}, " in p) for p in shots] == order
 
     loop, asm = groups["Storyboard"]
     beats = graph.run_frames(loop, asm)
