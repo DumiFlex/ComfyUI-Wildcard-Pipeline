@@ -408,3 +408,45 @@ describe("WildcardEditor negatives (send-to-negative)", () => {
     wrap.unmount();
   });
 });
+
+describe("WildcardEditor — typing a weight", () => {
+  async function weightField() {
+    apiMod.get.mockResolvedValue({
+      id: "wc_w", name: "weather", description: "", category_id: null,
+      tags: [], type: "wildcard", payload: { options: [{ id: "o1", value: "snow", weight: 1 }] },
+      version: 1, created_at: "", updated_at: "", is_favorite: false,
+    });
+    const wrap = mount(WildcardEditor, { props: { id: "wc_w" }, global: { plugins: [makeRouter()] }, attachTo: document.body });
+    await flushPromises();
+    const input = wrap.find('input[aria-label="Option weight"]');
+    return { wrap, input, el: input.element as HTMLInputElement };
+  }
+
+  it("types 0.5 one key at a time without the 0 turning into the 0.01 floor", async () => {
+    const { wrap, input, el } = await weightField();
+    // The first key: the field must keep the 0 (it used to become 0.01, so 0.5 ended as 0.015).
+    el.value = "0";
+    await input.trigger("input");
+    await flushPromises();
+    expect(el.value).toBe("0");
+    el.value = "0.5";
+    await input.trigger("input");
+    await input.trigger("blur");
+    await flushPromises();
+    expect(el.value).toBe("0.5");
+    wrap.unmount();
+  });
+
+  it("floors a weight left at 0 to 0.01, and keeps the old weight when emptied", async () => {
+    const { wrap, input, el } = await weightField();
+    el.value = "0";
+    await input.trigger("input");
+    await input.trigger("blur");
+    expect(el.value).toBe("0.01");
+    el.value = "";
+    await input.trigger("input");
+    await input.trigger("blur");
+    expect(el.value).toBe("0.01");
+    wrap.unmount();
+  });
+});

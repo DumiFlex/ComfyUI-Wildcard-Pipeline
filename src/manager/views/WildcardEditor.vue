@@ -1111,6 +1111,24 @@ function removeTagFromSelected(tag: string): void {
     o.sub_categories = (o.sub_categories ?? []).filter((s) => s !== tag);
   }
 }
+/**
+ * A weight typed in an option row. Weight 0 or less never picks (probability normalises it
+ * away), so the editor floors at 0.01 and a typo can't silently disable an option; to switch an
+ * option off, use the per-instance toggle on the Context node. The floor waits until the field
+ * is left: while typing, a 0 is only the start of 0.5, and flooring it then rewrote the field to
+ * 0.01, so typing 0.5 saved 0.015.
+ */
+function typeWeight(o: WildcardOption, v: unknown): void {
+  const n = Number(v);
+  if (Number.isFinite(n) && n > 0) o.weight = n;
+}
+function leaveWeight(o: WildcardOption, e: FocusEvent): void {
+  const el = e.target as HTMLInputElement;
+  if (Number(el.value) > 0) return;
+  // Emptied: keep the weight it had. 0 or less: the 0.01 floor.
+  if (el.value !== "") o.weight = 0.01;
+  el.value = String(o.weight);
+}
 function setWeightSelected(weight: number): void {
   bulkNote.value = "";
   // Floor at 0.01 like the per-row weight input — weight 0 never picks.
@@ -1825,15 +1843,8 @@ defineExpose({
                 :min="0.01"
                 :step="0.1"
                 aria-label="Option weight"
-                @update:model-value="(v) => {
-                  // Clamp to >0 — weight 0 or negative never picks
-                  // (probability normalises away). Editor floors at
-                  // 0.01 so a typo can't silently disable an option.
-                  // To disable an option, use the per-instance toggle
-                  // in the Context node (engine respects that).
-                  const n = Number(v);
-                  o.weight = Number.isFinite(n) && n > 0 ? n : 0.01;
-                }"
+                @update:model-value="(v) => typeWeight(o, v)"
+                @blur="(e: FocusEvent) => leaveWeight(o, e)"
               />
             </td>
             <td>
