@@ -17,11 +17,11 @@ tutorial(
     const nodes = await t.h.step("Any value, as a variable", async () => {
       await t.go("/");
       await t.say("The Context Injector turns any value on the canvas into a variable. Here, a text box. It could as well be a caption from an LLM node, a LoRA name or a number.");
-      const txt = await t.addNode("Text (Multiline)", { x: 270, y: 560 });
+      const txt = await t.addNode("Text (Multiline)", { x: 470, y: 560 });
       await t.click(t.node(txt).locator("textarea").first());
       await t.type("a red hoodie and ripped jeans", { cps: 16 });
       await t.beat(500);
-      const inj = await t.addNode("WP Context Injector", { x: 275, y: 200 });
+      const inj = await t.addNode("WP Context Injector", { x: 475, y: 200 });
       await t.waitVoice();
       await t.say("Wire it into the Injector. A row appears for it: name it outfit.");
       await t.wire(txt, "STRING", inj, "input_0");
@@ -59,10 +59,10 @@ tutorial(
 
     await t.h.step("Into a Context", async () => {
       await t.say("Wire the Injector into a Context's upstream, so its variables join the picks there.");
-      const ctx = await t.addNode("WP Context", { x: 800, y: 200 });
+      const ctx = await t.addNode("WP Context", { x: 1010, y: 200 });
       await t.wire(nodes.inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Hero", "Setting"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1350, y: 200 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero in $look, $setting", { cps: 16 });
