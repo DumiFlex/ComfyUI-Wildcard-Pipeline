@@ -263,6 +263,12 @@
   "text": "Here are a few of those scenes, run through a model.",
   "voice": "af_heart"
  },
+ "a478c7e062d0": {
+  "ms": 6144,
+  "speed": 1.0,
+  "text": "Hero and Outfit only feed the hero line now. Click the globe on their rows to hide them from the prompt.",
+  "voice": "af_heart"
+ },
  "a687e71df23a": {
   "ms": 4139,
   "speed": 1.0,
@@ -333,6 +339,12 @@
   "ms": 5312,
   "speed": 1.0,
   "text": "Your own lists work just like the ones you install. Next: fixed values and combines.",
+  "voice": "af_heart"
+ },
+ "d0cf8fcede6d": {
+  "ms": 5760,
+  "speed": 1.0,
+  "text": "The combine still reads them, so the prompt stays the same. On their own, they no longer print anywhere.",
   "voice": "af_heart"
  },
  "d2d2087d49e9": {

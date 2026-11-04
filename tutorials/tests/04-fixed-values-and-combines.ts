@@ -70,6 +70,19 @@ tutorial(
         await t.beat(900);
       }
       await t.uncallout("out");
+
+      await t.say("Hero and Outfit only feed the hero line now. Click the globe on their rows to hide them from the prompt.");
+      const rowOf = (name: string) =>
+        t.node(ctx).locator(".wp-module").filter({ has: t.page.locator(".wp-module-name", { hasText: new RegExp(`^\\s*${name}\\s*$`) }) }).first();
+      for (const name of ["Hero", "Outfit"]) {
+        await t.click(rowOf(name).locator('[data-test="row-action-internal"]'));
+        await t.beat(500);
+      }
+      const hidden = ["Hero", "Outfit"].map(rowOf);
+      await t.callout("hidden", hidden, "Hidden from the prompt", 4);
+      await t.say("The combine still reads them, so the prompt stays the same. On their own, they no longer print anywhere.");
+      await t.waitVoice();
+      await t.uncallout("hidden");
       return { ctx, asm, plus };
     });
 
