@@ -30,10 +30,15 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Lists and quote**: Puts - , 1. or > before each selected line (press again to take it off).
 - **Link** (Ctrl+K): A Docs page (type to find any page of these docs, then pick a section or the whole page), a Web address, a Library button (below) or a Community pack (owner/pack, or paste the pack's address), drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.
 - **Icon**: Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is.
+- **Pictures**: Add a picture from a file, or paste or drop one into the text; it goes on a line of its own where the caret is. Or pick one the extension ships (the node toolbar with its ? help button). The panel lists the note's pictures with a Width slider (a share of the note), Own size and Remove.
 - **Preview (eye)**: Shows the note as it will read.
 <!-- fields:end -->
 
 Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
+
+## Pictures
+
+Open **Pictures** in the bar and press **Add a picture…**, or paste or drop a picture into the text. Or pick the picture the extension ships of the node toolbar with its **?** help button. A picture is never wider than the note: its width is a share of the note's (the **Width** slider), or **Own size** up to the note's width, so it never makes the note bigger. Pasted and dropped pictures are saved in the workflow, made smaller first (at most 1280 px, about 400 KB, camera and location data dropped); a note holds up to six and 2 MB. Pictures never load from a web address.
 
 ## Add to library
 
@@ -62,5 +67,8 @@ Turn on **Also a bookmark** at the bottom of the editor and the note joins the *
 | `[Add these](wp:library#node-12){button}` | The same for one WP Context (its node id) |
 | `[Get the pack](wp:community/owner/pack)` | That published pack in the Community tab |
 | `:pi-heart:` / `:pi-heart:{#ef4444}` | An icon, optionally coloured |
+| `![What it shows](wp:image/1a2b3c4d)` | A picture saved in the note (the Pictures panel, a paste or a drop writes it) |
+| `![The ? button](wp:asset/toolbar-help)` | A picture the extension ships |
+| `![What it shows](wp:image/1a2b3c4d){width=60%}` | The picture as wide as 60% of the note (10 to 100); without it, its own size, never wider than the note |
 
 Any other kind of link shows as plain text.

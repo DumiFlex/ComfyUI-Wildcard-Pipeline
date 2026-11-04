@@ -12,9 +12,14 @@ import WpSelect from "@/kit/WpSelect.vue";
 import CATALOG from "../../extension/docs-catalog.json";
 import IconPicker from "@/kit/IconPicker.vue";
 import NoteMarkdown from "./note-markdown";
+import Slider from "@/kit/Slider.vue";
 import {
-  communityTarget, docsTarget, iconMarkdown, insert, libraryTarget, linkMarkdown, prefixLines, wrap, type Edit,
+  assetImageTarget, assetUrl, communityTarget, docsTarget, findImages, iconMarkdown, imageMarkdown, insert, libraryTarget,
+  linkMarkdown, NOTE_ASSETS, prefixLines, removeImage, savedImageTarget, setImageWidth, wrap, type Edit, type ImageRef,
 } from "./note-format";
+import { ACCEPTED_TYPES, capProblem, dataUrlBytes, encodePicture, newImageId, pictureFile, PictureError } from "./note-images";
+import { pushToast } from "../shared/toast-store";
+import type { NoteImage } from "../../extension/note";
 import { NOTE_CONTEXTS } from "./note-actions";
 import { TextHistory, historyKey, kindOf, type ChangeKind, type Snapshot } from "./note-history";
 
@@ -23,12 +28,21 @@ import { TextHistory, historyKey, kindOf, type ChangeKind, type Snapshot } from 
  * The bar writes the syntax for you (bold, lists, links, icons); Preview
  * shows the note as it will read. The source stays plain Markdown.
  */
-const props = defineProps<{ modelValue: string; hint: string }>();
-const emit = defineEmits<{ (e: "update:modelValue", v: string): void }>();
+const props = withDefaults(defineProps<{
+  modelValue: string;
+  hint: string;
+  /** The note's saved pictures (NoteConfig.images). */
+  images?: Record<string, NoteImage>;
+}>(), { images: () => ({}) });
+const emit = defineEmits<{
+  (e: "update:modelValue", v: string): void;
+  /** A new picture: its data and the text naming it, in one change. */
+  (e: "picture", v: { text: string; images: Record<string, NoteImage> }): void;
+}>();
 
 const area = ref<HTMLTextAreaElement | null>(null);
 const mode = ref<"write" | "preview">("write");
-const panel = ref<"" | "link" | "icon">("");
+const panel = ref<"" | "link" | "icon" | "image">("");
 // Where the text goes: the textarea's last selection. Kept up to date
 // while a panel is open (focus moves into the panel, and the user may click
 // back into the text to pick another spot before inserting).
@@ -104,13 +118,19 @@ function onInput(ev: Event): void {
   remember();
 }
 
-/** A toolbar edit: one undo step of its own. */
-function apply(e: Edit, before: Snapshot = current()): void {
+/** A toolbar edit: one undo step of its own. `images`: a picture came
+ *  with it, sent together with the text. `stay`: keep the view (Preview). */
+function apply(e: Edit, before: Snapshot = current(), images?: Record<string, NoteImage>, stay = false): void {
   hist.record(before, "edit");
   steps.value++;
+  if (images) {
+    sent = e.value;
+    emit("picture", { text: e.value, images });
+  } else {
+    send(e.value);
+  }
   // The buttons write into the textarea, so they bring it back from Preview.
-  send(e.value);
-  select(e.start, e.end);
+  if (!stay) select(e.start, e.end);
 }
 function onWrap(mark: string, placeholder: string): void {
   const c = current();
@@ -120,7 +140,7 @@ function onPrefix(prefix: "- " | "1. " | "> "): void {
   const c = current();
   apply(prefixLines(c.value, c.start, c.end, prefix));
 }
-function openPanel(p: "link" | "icon"): void {
+function openPanel(p: "link" | "icon" | "image"): void {
   if (panel.value === p) { panel.value = ""; return; }
   mode.value = "write";
   const c = current();
@@ -239,6 +259,106 @@ function insertLink(): void {
   insertText(linkMarkdown(linkText.value || fallback, target, { button, icon: button ? linkIcon.value : "", color }));
 }
 
+// ── pictures ───────────────────────────────────────────────────────────
+const pictureAlt = ref("");
+const fileInput = ref<HTMLInputElement | null>(null);
+const busy = ref(false);
+const shown = computed(() => findImages(props.modelValue));
+function refSrc(r: ImageRef): string | null {
+  if (r.target.kind === "saved") return props.images[r.target.id]?.src ?? null;
+  if (r.target.kind === "asset") return assetUrl(r.target.id, typeof window === "undefined" ? "" : window.location.origin);
+  return null;
+}
+/** Puts a picture's Markdown at the caret, on a line of its own. */
+function pictureEdit(markdown: string): Edit {
+  const at = sel.start;
+  const before = sent.slice(0, at);
+  const after = sent.slice(sel.end);
+  const lead = before && !before.endsWith("\n") ? "\n\n" : before && !before.endsWith("\n\n") ? "\n" : "";
+  const tail = after && !after.startsWith("\n") ? "\n\n" : "";
+  return insert(sent, at, sel.end, `${lead}${markdown}${tail}`);
+}
+async function addFile(file: File | null): Promise<void> {
+  if (!file || busy.value) return;
+  const early = capProblem(props.images, 0);
+  if (early) { pushToast(early, { severity: "warning" }); return; }
+  busy.value = true;
+  const before = { value: sent, start: sel.start, end: sel.end };
+  try {
+    const pic = await encodePicture(file);
+    const problem = capProblem(props.images, dataUrlBytes(pic.src));
+    if (problem) { pushToast(problem, { severity: "warning" }); return; }
+    const id = newImageId(props.images);
+    const alt = pictureAlt.value.trim() || file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || "Picture";
+    panel.value = "";
+    pictureAlt.value = "";
+    apply(pictureEdit(imageMarkdown(alt, savedImageTarget(id))), before, { ...props.images, [id]: pic });
+  } catch (err) {
+    pushToast(err instanceof PictureError ? err.message : "That picture couldn't be added.", { severity: "warning" });
+  } finally {
+    busy.value = false;
+  }
+}
+function onFile(ev: Event): void {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  input.value = "";
+  void addFile(file);
+}
+function insertAsset(id: string, label: string): void {
+  const before = { value: sent, start: sel.start, end: sel.end };
+  panel.value = "";
+  const alt = pictureAlt.value.trim() || label;
+  pictureAlt.value = "";
+  apply(pictureEdit(imageMarkdown(alt, assetImageTarget(id))), before);
+}
+// Paste or drop a picture straight into the text.
+function onPaste(ev: ClipboardEvent): void {
+  const file = pictureFile(ev.clipboardData);
+  if (!file) return;
+  // Ours: ComfyUI would also paste it onto the canvas as a Load Image node.
+  ev.preventDefault();
+  ev.stopPropagation();
+  remember();
+  void addFile(file);
+}
+function onDragOver(ev: DragEvent): void {
+  if (Array.from(ev.dataTransfer?.items ?? []).some((i) => i.kind === "file")) {
+    ev.preventDefault();
+    // ComfyUI would load a dropped picture as a workflow / Load Image node.
+    ev.stopPropagation();
+  }
+}
+function onDrop(ev: DragEvent): void {
+  const file = pictureFile(ev.dataTransfer);
+  if (!file) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  remember();
+  void addFile(file);
+}
+// One drag of a width slider is one undo step.
+let widthRun = -1;
+function onWidth(index: number, w: number | null): void {
+  const r = shown.value[index];
+  if (!r) return;
+  const next = setImageWidth(sent, r, w);
+  if (next === sent) return;
+  const c = { value: sent, start: sel.start, end: sel.end };
+  if (widthRun !== index) hist.record(c, "edit");
+  widthRun = index;
+  steps.value++;
+  send(next);
+}
+function endWidth(): void { widthRun = -1; hist.breakRun(); }
+function onRemove(index: number): void {
+  const r = shown.value[index];
+  if (!r) return;
+  widthRun = -1;
+  apply({ value: removeImage(sent, r), start: r.start, end: r.start }, current(), undefined, true);
+}
+const pct = (v: number): string => `${v}%`;
+
 // ── icon panel ─────────────────────────────────────────────────────────
 const iconColor = ref("none");
 function insertIcon(name: string): void {
@@ -283,6 +403,17 @@ function insertIcon(name: string): void {
         :pressed="panel === 'icon'"
         data-test="note-fmt-icon"
         @click="openPanel('icon')"
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        class="wp-note-ed__fmt"
+        icon="pi-image"
+        hint="Pictures: add one, or change their size"
+        aria-label="Pictures"
+        :pressed="panel === 'image'"
+        data-test="note-fmt-image"
+        @click="openPanel('image')"
       />
       <Button
         variant="ghost"
@@ -434,6 +565,71 @@ function insertIcon(name: string): void {
       />
     </div>
 
+    <!-- Pictures -->
+    <div v-if="panel === 'image'" class="wp-note-ed__panel" data-test="note-image-panel">
+      <Input v-model="pictureAlt" size="sm" aria-label="Describe the picture" placeholder="What it shows (optional, read aloud and shown on hover)" data-test="note-image-alt" />
+      <div class="wp-note-ed__row">
+        <Button size="sm" variant="secondary" icon="pi-upload" :loading="busy" data-test="note-image-file" @click="fileInput?.click()">Add a picture…</Button>
+        <span class="wp-note-ed__hint">or paste or drop one into the text</span>
+        <input ref="fileInput" class="wp-note-ed__file" type="file" :accept="ACCEPTED_TYPES.join(',')" tabindex="-1" aria-hidden="true" data-test="note-image-input" @change="onFile" />
+      </div>
+      <span class="wp-note-ed__label">From the extension</span>
+      <div class="wp-note-ed__assets">
+        <Button
+          v-for="a in NOTE_ASSETS"
+          :key="a.id"
+          variant="secondary"
+          size="sm"
+          class="wp-note-ed__asset"
+          :hint="`Insert: ${a.label}`"
+          :data-test="`note-asset-${a.id}`"
+          @click="insertAsset(a.id, a.label)"
+        >
+          <img :src="assetUrl(a.id, '') ?? ''" alt="" :width="a.w" :height="a.h" draggable="false" />
+          <span>{{ a.label }}</span>
+        </Button>
+      </div>
+      <template v-if="shown.length">
+        <span class="wp-note-ed__label">In this note</span>
+        <ul class="wp-note-ed__pics" data-test="note-image-list">
+          <li v-for="(r, i) in shown" :key="`${r.start}:${r.src}`" class="wp-note-ed__pic" data-test="note-image-row">
+            <img v-if="refSrc(r)" class="wp-note-ed__thumb" :src="refSrc(r) ?? ''" alt="" draggable="false" />
+            <i v-else class="pi pi-image wp-note-ed__thumb wp-note-ed__thumb--none" aria-hidden="true"></i>
+            <div class="wp-note-ed__picbody">
+              <span class="wp-note-ed__picname">{{ r.alt || "Picture" }}</span>
+              <div class="wp-note-ed__row wp-note-ed__picsize">
+                <Slider
+                  class="wp-note-ed__slider"
+                  :model-value="r.width ?? 100"
+                  :min="10"
+                  :max="100"
+                  :step="5"
+                  size="sm"
+                  :format="pct"
+                  show-value
+                  :aria-label="`Width of ${r.alt || 'the picture'}, in percent of the note`"
+                  data-test="note-image-width"
+                  @update:model-value="(v: number | [number, number]) => onWidth(i, typeof v === 'number' ? v : v[1])"
+                  @pointerup="endWidth"
+                  @keyup="endWidth"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  :pressed="r.width === null"
+                  hint="Its own size, never wider than the note"
+                  data-test="note-image-own"
+                  @click="onWidth(i, null); endWidth()"
+                >Own size</Button>
+                <Button size="sm" variant="ghost" icon="pi-trash" hint="Take the picture out" :aria-label="`Remove ${r.alt || 'the picture'}`" data-test="note-image-remove" @click="onRemove(i)" />
+              </div>
+            </div>
+          </li>
+        </ul>
+      </template>
+      <p class="wp-note-ed__hint">Pictures are saved in the workflow, made smaller (at most 1280 px, about 400 KB each). Width is a share of the note, so a picture never makes the note bigger.</p>
+    </div>
+
     <Textarea
       v-show="mode === 'write'"
       :ref="(c) => (area = textareaEl(c))"
@@ -450,9 +646,12 @@ function insertIcon(name: string): void {
       @mouseup="remember(); hist.breakRun()"
       @select="remember"
       @blur="remember"
+      @paste="onPaste"
+      @dragover="onDragOver"
+      @drop="onDrop"
     />
     <div v-if="mode === 'preview'" class="wp-note-ed__preview" data-test="note-preview">
-      <NoteMarkdown v-if="modelValue.trim()" :text="modelValue" />
+      <NoteMarkdown v-if="modelValue.trim()" :text="modelValue" :images="images" />
       <p v-else class="wp-note-ed__hint">Nothing written yet.</p>
     </div>
   </div>
@@ -500,6 +699,45 @@ function insertIcon(name: string): void {
 .wp-note-ed__actions { display: flex; justify-content: flex-end; gap: 6px; }
 .wp-note-ed__iconpick.wp-btn { font-size: 12px; text-transform: capitalize; }
 .wp-note-ed__chev { font-size: 9px; color: var(--wp-text-dim); }
+.wp-note-ed__file { display: none; }
+.wp-note-ed__assets { display: flex; flex-wrap: wrap; gap: 6px; }
+/* A kit Button holding a thumbnail: taller than a control, the picture over its name. */
+.wp-note-ed__asset.wp-btn {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  height: auto;
+  max-width: 100%;
+  padding: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+.wp-note-ed__asset :deep(.wp-btn__label) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: visible;
+  white-space: normal;
+  line-height: 14px;
+}
+.wp-note-ed__asset img { display: block; width: 100%; max-width: 280px; height: auto; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
+.wp-note-ed__pics { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wp-note-ed__pic { display: flex; gap: 8px; align-items: center; }
+.wp-note-ed__thumb {
+  flex: none;
+  width: 48px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  border: 1px solid var(--wp-border);
+}
+.wp-note-ed__thumb--none { display: flex; align-items: center; justify-content: center; color: var(--wp-text-dim); }
+.wp-note-ed__picbody { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wp-note-ed__picname { font-size: 12px; color: var(--wp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-note-ed__picsize { flex-wrap: nowrap; gap: 4px; }
+.wp-note-ed__slider { flex: 1 1 auto; min-width: 0; }
 .wp-note-ed__preview {
   min-height: 60px;
   padding: 6px 8px;

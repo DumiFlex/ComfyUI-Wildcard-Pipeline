@@ -19,6 +19,8 @@
  * Links, images and HTML are never made: `![](url)` would have the browser
  * fetch a URL carrying chat data with no click. A link keeps its text (the
  * address goes in a tooltip), an image its alt text, and HTML stays text.
+ * (WP Note asks for `img` nodes with `{ images: true }` and loads only its
+ * own pictures, see components/note/note-format.ts.)
  * `__name__` stays as written because it is wildcard syntax, not bold.
  */
 
@@ -45,7 +47,10 @@ export type Inline =
   | { t: "code"; v: string }
   | { t: "ref"; v: string }
   /** Shown as its text only; `href` goes in a tooltip, never followed. */
-  | { t: "link"; c: Inline[]; href: string };
+  | { t: "link"; c: Inline[]; href: string }
+  /** Only with `parseMarkdown(text, { images: true })`; `src` is as written
+   *  and must be checked by the caller before it is ever loaded. */
+  | { t: "img"; alt: string; src: string };
 
 export type Tone = "tip" | "warn";
 
@@ -73,13 +78,13 @@ const INLINE = new RegExp([
   /\\([!-/:-@[-`{-~])/.source, // 1 escape
   /(`+)([^`\n]|[^`\n][\s\S]*?[^`\n])\2(?!`)/.source, // 2,3 code span
   /\[\[([^[\]\n]{1,80})\]\]/.source, // 4 mention
-  /!\[([^\]\n]*)\]\([^)\s]*(?:\s+"[^"\n]*")?\)/.source, // 5 image
-  /\[([^\]\n]+)\]\(([^)\s]*)(?:\s+"[^"\n]*")?\)/.source, // 6,7 link
-  /\*\*\*(?!\s)([^*\n]+?)\*\*\*/.source, // 8 bold italic
-  /\*\*(?!\s)(.+?)\*\*/.source, // 9 bold
-  /~~(?!\s)([^~\n]+?)~~/.source, // 10 struck
-  /(?<![\w*])\*(?!\s)([^*\n]+?)\*(?![\w*])/.source, // 11 italic
-  /(?<![\w_])_(?![\s_])([^_\n]+?)_(?![\w_])/.source, // 12 italic
+  /!\[([^\]\n]*)\]\(([^)\s]*)(?:\s+"[^"\n]*")?\)/.source, // 5,6 image
+  /\[([^\]\n]+)\]\(([^)\s]*)(?:\s+"[^"\n]*")?\)/.source, // 7,8 link
+  /\*\*\*(?!\s)([^*\n]+?)\*\*\*/.source, // 9 bold italic
+  /\*\*(?!\s)(.+?)\*\*/.source, // 10 bold
+  /~~(?!\s)([^~\n]+?)~~/.source, // 11 struck
+  /(?<![\w*])\*(?!\s)([^*\n]+?)\*(?![\w*])/.source, // 12 italic
+  /(?<![\w_])_(?![\s_])([^_\n]+?)_(?![\w_])/.source, // 13 italic
 ].join("|"), "g");
 
 export function parseInline(text: string): Inline[] {
@@ -102,12 +107,16 @@ export function parseInline(text: string): Inline[] {
       const ref = /^\[\[([^[\]\n]{1,80})\]\]$/.exec(v.trim());
       out.push(ref ? { t: "ref", v: ref[1].trim() } : { t: "code", v });
     } else if (m[4] !== undefined) out.push({ t: "ref", v: m[4].trim() });
-    else if (m[5] !== undefined) push(m[5]);
-    else if (m[6] !== undefined) out.push({ t: "link", c: parseInline(m[6]), href: m[7] ?? "" });
-    else if (m[8] !== undefined) out.push({ t: "b", c: [{ t: "i", c: parseInline(m[8]) }] });
-    else if (m[9] !== undefined) out.push({ t: "b", c: parseInline(m[9]) });
-    else if (m[10] !== undefined) out.push({ t: "s", c: parseInline(m[10]) });
-    else out.push({ t: "i", c: parseInline(m[11] ?? m[12] ?? "") });
+    else if (m[5] !== undefined) {
+      // Only a caller that asked for images gets one (and resolves `src`
+      // itself); the chat keeps the alt text.
+      if (withImages) out.push({ t: "img", alt: m[5], src: m[6] ?? "" });
+      else push(m[5]);
+    } else if (m[7] !== undefined) out.push({ t: "link", c: parseInline(m[7]), href: m[8] ?? "" });
+    else if (m[9] !== undefined) out.push({ t: "b", c: [{ t: "i", c: parseInline(m[9]) }] });
+    else if (m[10] !== undefined) out.push({ t: "b", c: parseInline(m[10]) });
+    else if (m[11] !== undefined) out.push({ t: "s", c: parseInline(m[11]) });
+    else out.push({ t: "i", c: parseInline(m[12] ?? m[13] ?? "") });
   }
   if (last < text.length) push(text.slice(last));
   return out;
@@ -196,9 +205,25 @@ function stripIndent(line: string, n: number): string {
   return line.slice(i);
 }
 
-export function parseMarkdown(text: string): Block[] {
+export interface ParseOptions {
+  /** Emit `![alt](src)` as an `img` node instead of its alt text. The
+   *  caller decides which `src` it will ever load (WP Note: only pictures
+   *  saved in the workflow and ones the extension ships). Off for the chat. */
+  images?: boolean;
+}
+
+// Read by parseInline; set for one parseMarkdown call.
+let withImages = false;
+
+export function parseMarkdown(text: string, opts: ParseOptions = {}): Block[] {
   const lines = stripInvisible(text ?? "").replace(/\r\n?/g, "\n").replace(/\t/g, "    ").split("\n");
-  return parseBlocks(lines, 0);
+  const was = withImages;
+  withImages = opts.images === true;
+  try {
+    return parseBlocks(lines, 0);
+  } finally {
+    withImages = was;
+  }
 }
 
 /** `inItem`: a list item's body, where a bold line stays bold text. */
