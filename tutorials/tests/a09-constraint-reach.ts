@@ -92,7 +92,7 @@ tutorial(
       await t.click(modal.locator('[data-test="reach-mode-first"]'));
       await t.beat(400);
       await t.waitVoice();
-      await t.click(modal.locator('[data-test="wcm-save"]'));
+      await t.click(modal.locator('[data-test="cnm-save"]'));
       await t.beat(700);
       await t.say("Now only the first place follows the rule. The later one rolls freely, castles included.");
       await roll(14, /later in (a torch-lit throne room|castle ramparts)/);
@@ -114,7 +114,7 @@ tutorial(
       await t.beat(600);
       await t.waitVoice();
       await t.uncallout("list");
-      await t.click(modal.locator('[data-test="wcm-save"]'));
+      await t.click(modal.locator('[data-test="cnm-save"]'));
       await t.beat(700);
       await t.say("Ticking only the later one flips it: now the first place is free and the later one obeys.");
       await roll(3);
