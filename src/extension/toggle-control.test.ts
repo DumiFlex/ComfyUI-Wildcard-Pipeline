@@ -4,6 +4,8 @@ import {
   controlState,
   drivesOff,
   canvasGroupOf,
+  canvasGroupsOf,
+  strongerMode,
   ctlInputName,
   groupTitles,
   releaseTargets,
@@ -302,5 +304,60 @@ describe("WP Node Group standing for its canvas group", () => {
     g.wire(n, toggles, ctlInputName("t1"));
     g.graph.groups.push({ title: "G", _children: new Set([toggles, n, a]) });
     expect(toggleTargets(toggles, "t1")).toEqual([a]);
+  });
+});
+
+describe("nested canvas groups (Dumi's layout)", () => {
+  function layout() {
+    const g = makeGraph();
+    const toggles = g.add(1, { type: "WP_Toggles" });
+    const outerNg = g.add(2, { type: "WP_NodeGroup", isVirtualNode: true });
+    const innerNg = g.add(3, { type: "WP_NodeGroup", isVirtualNode: true });
+    const outerText = g.add(4);
+    const innerText = g.add(5);
+    g.graph.groups.push({ title: "Outer", _children: new Set([outerNg, innerNg, outerText, innerText]), size: [900, 600] });
+    g.graph.groups.push({ title: "Inner", _children: new Set([innerNg, innerText]), size: [480, 400] });
+    g.wire(innerNg, toggles, ctlInputName("t1"));
+    g.wire(outerNg, toggles, ctlInputName("t2"));
+    return { g, toggles, outerNg, innerNg, outerText, innerText };
+  }
+
+  it("each group node takes its smallest group; the outer one includes the inner group", () => {
+    const { outerNg, innerNg, outerText, innerText } = layout();
+    expect(members(innerNg as GroupHostNode)).toEqual([innerText]);
+    expect(new Set(members(outerNg as GroupHostNode))).toEqual(new Set([outerText, innerText]));
+  });
+
+  it("'Not inner' leaves out the inner group's nodes", () => {
+    const { outerNg, outerText } = layout();
+    outerNg.properties = { wp_covers: "own" };
+    expect(members(outerNg as GroupHostNode)).toEqual([outerText]);
+  });
+
+  it("'Every group' covers outer groups too", () => {
+    const { innerNg, outerText, innerText } = layout();
+    innerNg.properties = { wp_covers: "all" };
+    expect(canvasGroupsOf(innerNg).map((x) => x.title)).toEqual(["Inner", "Outer"]);
+    expect(new Set(members(innerNg as GroupHostNode))).toEqual(new Set([innerText, outerText]));
+  });
+
+  it("off wins: the inner text stays bypassed while either toggle is off, in any order", () => {
+    const { toggles, outerText, innerText } = layout();
+    const rows = [tog("t1", { control: "bypass", on: true }), tog("t2", { control: "bypass", on: false })];
+    applyControl(toggles, cfg(rows));
+    expect([outerText.mode, innerText.mode]).toEqual([4, 4]);
+    applyControl(toggles, cfg([...rows].reverse()));
+    expect([outerText.mode, innerText.mode]).toEqual([4, 4]);
+    applyControl(toggles, cfg(rows), new Set(["t1"]));
+    expect(innerText.mode).toBe(4);
+    applyControl(toggles, cfg([tog("t1", { control: "bypass", on: true }), tog("t2", { control: "bypass", on: true })]));
+    expect([outerText.mode, innerText.mode]).toEqual([0, 0]);
+  });
+
+  it("mute beats bypass", () => {
+    expect(strongerMode(undefined, 0)).toBe(0);
+    expect(strongerMode(0, 4)).toBe(4);
+    expect(strongerMode(4, 2)).toBe(2);
+    expect(strongerMode(2, 4)).toBe(2);
   });
 });

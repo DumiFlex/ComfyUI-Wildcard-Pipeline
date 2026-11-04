@@ -12,7 +12,16 @@ import {
   type GroupHostNode,
   type MemberMode,
 } from "../extension/node-group";
-import { MODE_ALWAYS, MODE_BYPASS, MODE_NEVER, canvasGroupOf, setMode } from "../extension/toggle-control";
+import {
+  COVERS_PROP,
+  MODE_ALWAYS,
+  MODE_BYPASS,
+  MODE_NEVER,
+  canvasGroupsOf,
+  coversOf,
+  setMode,
+  type GroupCovers,
+} from "../extension/toggle-control";
 import type { MemberView } from "../components/node-group/NodeGroupWidget.vue";
 
 const NodeGroupWidget = defineAsyncComponent(() => import("../components/node-group/NodeGroupWidget.vue"));
@@ -55,11 +64,12 @@ export function mountNodeGroup(node: GroupNode) {
       const wholeGroup = reactiveFromGraph(
         graphNode,
         () => {
-          const g = canvasGroupOf(node);
-          return g ? g.title || "Untitled group" : null;
+          const gs = canvasGroupsOf(node);
+          return gs.length ? gs.map((g) => g.title || "Untitled group").join(" + ") : null;
         },
         Object.is,
       );
+      const covers = reactiveFromGraph(graphNode, () => coversOf(node), Object.is);
       // Repeater: muting / bypassing this node repeats to its members, and
       // setting it back lets them run. Only a change does (never a load).
       watch(own, (mode) => {
@@ -89,10 +99,18 @@ export function mountNodeGroup(node: GroupNode) {
         list.value = view(node);
         node.setDirtyCanvas?.(true, true);
       }
+      function setCovers(v: GroupCovers): void {
+        (node.properties ??= {})[COVERS_PROP] = v;
+        covers.value = v;
+        list.value = view(node);
+        node.setDirtyCanvas?.(true, true);
+      }
       return () => h(NodeGroupWidget, {
         members: list.value,
         groupMode: own.value,
         wholeGroup: wholeGroup.value,
+        covers: covers.value,
+        onSetCovers: setCovers,
         onSetMember: setMember,
         onSetAll: setAll,
       });

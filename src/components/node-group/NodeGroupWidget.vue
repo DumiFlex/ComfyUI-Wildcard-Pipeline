@@ -10,6 +10,7 @@ import WpSegmented from "@/kit/WpSegmented.vue";
 import Chip from "@/kit/Chip.vue";
 import { vTooltip } from "@/kit/tooltip";
 import type { MemberMode } from "../../extension/node-group";
+import type { GroupCovers } from "../../extension/toggle-control";
 
 export interface MemberView {
   id: number | string;
@@ -23,11 +24,20 @@ const props = defineProps<{
   groupMode: MemberMode;
   /** Title of the canvas group it stands for (nothing wired in), or null. */
   wholeGroup?: string | null | undefined;
+  /** Which canvas groups it covers when nothing is wired in. */
+  covers?: GroupCovers | undefined;
 }>();
 const emit = defineEmits<{
   "set-member": [id: number | string, mode: MemberMode];
   "set-all": [mode: MemberMode];
+  "set-covers": [covers: GroupCovers];
 }>();
+
+const COVERS = [
+  { value: "smallest", label: "Its group", hint: "The smallest group it sits in, inner groups included" },
+  { value: "own", label: "Not inner", hint: "The smallest group it sits in, leaving out groups inside it" },
+  { value: "all", label: "Every group", hint: "Every group it sits in, outer ones too" },
+];
 
 const ALL = [
   { value: "on", label: "Run", hint: "Let every node run" },
@@ -58,6 +68,17 @@ function allMode(): string {
         aria-label="Set every node"
         test-prefix="ng-all"
         @update:model-value="(v: string) => emit('set-all', v as MemberMode)"
+      />
+    </div>
+    <div v-if="wholeGroup" class="wp-ng__covers">
+      <span class="wp-ng__covers-label">Covers</span>
+      <WpSegmented
+        :model-value="covers ?? 'smallest'"
+        :options="COVERS"
+        size="sm"
+        aria-label="Which canvas groups it covers"
+        test-prefix="ng-covers"
+        @update:model-value="(v: string) => emit('set-covers', v as GroupCovers)"
       />
     </div>
     <div
@@ -103,6 +124,8 @@ function allMode(): string {
 .wp-ng__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
 .wp-ng__count { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-ng__group { font-weight: 600; color: var(--wp-text); }
+.wp-ng__covers { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.wp-ng__covers-label { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ng__row {
   display: flex;
   align-items: center;

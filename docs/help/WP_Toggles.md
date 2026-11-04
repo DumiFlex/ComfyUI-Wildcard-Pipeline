@@ -22,7 +22,7 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 - **Style**: Switch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name).
 - **Value (Pick one)**: What the picked variable gets when this toggle is picked, instead of its name. It can read $variables from upstream.
 - **Needs**: Another toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on.
-- **When off**: Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run.
+- **When off**: Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run. When several toggles drive one node, off wins: it runs only while all of them let it (Mute beats Bypass).
 - **Invert**: Mute or bypass while the toggle is ON instead, for a node used only as a switchboard.
 - **Canvas groups**: Groups on the canvas whose nodes When off also covers, by title. No wires needed.
 - **Upstream can set it**: When the upstream Context holds this toggle's variable as a yes/no word (true, yes, on, 1, false, no, off, 0), that value sets the switch for the run.

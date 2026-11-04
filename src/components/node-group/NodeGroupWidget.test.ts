@@ -21,3 +21,12 @@ describe("NodeGroupWidget", () => {
     expect(w.text()).toContain("inside a canvas group");
   });
 });
+
+describe("NodeGroupWidget covers", () => {
+  it("offers the Covers choice only while it stands for a canvas group", async () => {
+    const w = mount(NodeGroupWidget, { props: { members, groupMode: "on", wholeGroup: "Outer", covers: "own" } });
+    expect(w.find('[aria-label="Which canvas groups it covers"]').exists()).toBe(true);
+    const off = mount(NodeGroupWidget, { props: { members, groupMode: "on", wholeGroup: null } });
+    expect(off.find('[aria-label="Which canvas groups it covers"]').exists()).toBe(false);
+  });
+});

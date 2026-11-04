@@ -62,7 +62,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         A WP Node Group with nothing wired into its dots looks for the canvas group it sits in and
         gathers every node of it, so you don't wire each one. The bar then reads
         <b>Whole group: &lt;title&gt;</b> with the count. When groups nest it takes the smallest one
-        around it. A WP Mode Relay wired in doesn't count as a wired node, and the nodes that relay
+        around it, inner groups included; <b>Covers</b> changes that to <b>Not inner</b> (leave out
+        the nodes of groups inside it) or <b>Every group</b> (outer groups too). A WP Mode Relay wired in doesn't count as a wired node, and the nodes that relay
         watches stay out, so the relay never changes what it reads. Wire any other node in and the
         group node goes back to only its wired nodes.
       </p>
@@ -70,6 +71,11 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         Notes, bookmarks and other frontend-only nodes in the group are left alone. A WP Toggles
         node driving the group node never mutes itself, even when it sits in the same group.
       </Banner>
+      <p>
+        With a group node in an outer group and another in an inner one, the outer node covers the
+        inner group's nodes too. When toggles of one WP Toggles node both reach a node, off wins:
+        it runs only while every one of them lets it, whichever you clicked last.
+      </p>
     </DocSection>
 
     <DocSection title="Works with">
