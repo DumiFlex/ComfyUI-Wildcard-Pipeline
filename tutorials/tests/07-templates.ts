@@ -28,7 +28,9 @@ tutorial(
       await t.click(t.node(asm).locator('[data-test="neg-template-toggle"]'));
       await t.beat(500);
       await t.click(t.node(asm).locator('[data-test="neg-template-box"] [contenteditable="true"], [data-test="neg-template-box"] textarea').first());
-      await t.type("blurry, extra fingers");
+      await t.say("It starts with dollar negatives, where the variables' negatives go. Keep it, and add your own words.");
+      await t.press("ControlOrMeta+a");
+      await t.type("blurry, extra fingers, $negatives");
       await t.beat(1000);
       return { ctx, asm };
     });

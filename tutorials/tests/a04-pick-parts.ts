@@ -103,6 +103,7 @@ tutorial(
       await t.click(t.node(nodes.asm).locator('[data-test="neg-template-toggle"]'));
       await t.beat(500);
       await t.click(t.node(nodes.asm).locator('[data-test="neg-template-box"] [contenteditable="true"], [data-test="neg-template-box"] textarea').first());
+      await t.press("ControlOrMeta+a");
       await t.type("$outfit.neg, $negatives, lowres", { cps: 16 });
       await t.beat(1000);
       await t.callout("neg", neg, "Each word once", 6);

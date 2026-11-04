@@ -2135,6 +2135,12 @@
   "text": "After an update, the megaphone gets a dot. It shows what changed in each version.",
   "voice": "af_heart"
  },
+ "a340ff368730": {
+  "ms": 5632,
+  "speed": 1.0,
+  "text": "It starts with dollar negatives, where the variables' negatives go. Keep it, and add your own words.",
+  "voice": "af_heart"
+ },
  "a3aa31d03653": {
   "ms": 2624,
   "speed": 1.0,
@@ -3009,6 +3015,12 @@
   "ms": 7253,
   "speed": 1.0,
   "text": "When several constraints cover the same wildcard, they all apply: their factors multiply, and an exclude always wins.",
+  "voice": "af_heart"
+ },
+ "e4d659c77dd8": {
+  "ms": 8491,
+  "speed": 1.0,
+  "text": "They land where the negative box says dollar negatives. A new Assembler starts with it. Take it out, and the negative is only what you write there.",
   "voice": "af_heart"
  },
  "e51e36c074ae": {

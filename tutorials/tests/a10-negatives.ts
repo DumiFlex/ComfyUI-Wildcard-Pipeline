@@ -61,6 +61,12 @@ tutorial(
       await t.uncallout("neg");
       await t.say("Only variables the prompt prints send their negatives. Hide a variable, and its words stay out.");
       await t.waitVoice();
+      await t.click(t.node(asm).locator('[data-test="neg-template-toggle"]'));
+      await t.beat(500);
+      await t.callout("slot", t.node(asm).locator('[data-test="neg-template-box"]'), "Where they go", 6);
+      await t.say("They land where the negative box says dollar negatives. A new Assembler starts with it. Take it out, and the negative is only what you write there.");
+      await t.waitVoice();
+      await t.uncallout("slot");
       return { ctx, asm };
     });
 
