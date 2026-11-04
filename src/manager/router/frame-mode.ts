@@ -18,3 +18,15 @@ export const FRAMED = typeof window !== "undefined" && isFrameUrl(window.locatio
 export function staysInFrame(path: string): boolean {
   return path === "/docs" || path.startsWith("/docs/") || path.startsWith("/docs#");
 }
+
+/** Query key that hands a question to the full manager's assistant chat. */
+export const ASK_PARAM = "ask";
+
+/**
+ * The full-manager address that opens on `path` (+ `hash`) with the assistant
+ * chat open and `text` in its box. The help frame has no chat of its own, so
+ * "Ask about this page" there opens this in a new tab (`AppLayout` reads it).
+ */
+export function askInManagerUrl(origin: string, path: string, hash: string, text: string): string {
+  return `${origin}/wp${path}?${ASK_PARAM}=${encodeURIComponent(text)}${hash}`;
+}
