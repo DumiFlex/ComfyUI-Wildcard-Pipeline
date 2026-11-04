@@ -1,8 +1,8 @@
 {
   "id": "ec7ab382-b682-58b5-aa78-fb8b3c589e32",
   "revision": 0,
-  "last_node_id": 26,
-  "last_link_id": 36,
+  "last_node_id": 27,
+  "last_link_id": 37,
   "nodes": [
     {
       "type": "WP_Note",
@@ -16,10 +16,10 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Pick and refine\\n\\nA fashion shoot: **one person** in four different looks and places. The run **pauses** so you can pick the keepers (and fix a prompt or paint a mask), then refines only those. The lists come with this workflow.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Four looks |\\n| `2` | Quick drafts |\\n| `3` | Pick the keepers |\\n| `4` | Refine only the picks |\\n| `5` | The picks, refined |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Pick and refine\\n\\nA fashion shoot: **one person** in four different looks and places. The run **pauses** so you can pick the keepers (and fix a prompt or paint a mask), then refines only those. The lists come with this workflow. Read it left to right.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Four looks |\\n| `2` | Quick drafts |\\n| `3` | Pick the keepers |\\n| `4` | Refine only the picks |\\n| `5` | The picks, refined |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n![The node toolbar, with the indigo ? help button](wp:asset/toolbar-help){width=70%}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Pick and refine\\n\\nA fashion shoot: **one person** in four different looks and places. The run **pauses** so you can pick the keepers (and fix a prompt or paint a mask), then refines only those. The lists come with this workflow.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Four looks |\\n| `2` | Quick drafts |\\n| `3` | Pick the keepers |\\n| `4` | Refine only the picks |\\n| `5` | The picks, refined |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Pick and refine\\n\\nA fashion shoot: **one person** in four different looks and places. The run **pauses** so you can pick the keepers (and fix a prompt or paint a mask), then refines only those. The lists come with this workflow. Read it left to right.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Four looks |\\n| `2` | Quick drafts |\\n| `3` | Pick the keepers |\\n| `4` | Refine only the picks |\\n| `5` | The picks, refined |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n![The node toolbar, with the indigo ? help button](wp:asset/toolbar-help){width=70%}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
       },
       "id": 1,
       "pos": [
@@ -32,7 +32,7 @@
     {
       "type": "WP_Note",
       "size": [
-        560,
+        1720,
         280
       ],
       "flags": {},
@@ -41,10 +41,10 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it 4 times. The **Person** rows have **Hold across run** on (the pin icon), so all four frames show the same person; outfit, place, light and camera roll per frame.\\n\\nChange **count** for more looks.\\n\\n[WP Context Loop](docs:wp-context-loop){button pi-book} [Keep something the same](docs:howto-keep-steady){button pi-lock}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1500, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.42, \"shortcut\": \"1\", \"order\": 1}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it 4 times. The **Person** rows have **Hold across run** on (the pin icon), so all four frames show the same person; outfit, place, light and camera roll per frame. Change **count** for more looks.\\n\\n[WP Context Loop](docs:wp-context-loop){button pi-book} [Keep something the same](docs:howto-keep-steady){button pi-lock}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1400, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"1\", \"order\": 1}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it 4 times. The **Person** rows have **Hold across run** on (the pin icon), so all four frames show the same person; outfit, place, light and camera roll per frame.\\n\\nChange **count** for more looks.\\n\\n[WP Context Loop](docs:wp-context-loop){button pi-book} [Keep something the same](docs:howto-keep-steady){button pi-lock}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1500, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.42, \"shortcut\": \"1\", \"order\": 1}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it 4 times. The **Person** rows have **Hold across run** on (the pin icon), so all four frames show the same person; outfit, place, light and camera roll per frame. Change **count** for more looks.\\n\\n[WP Context Loop](docs:wp-context-loop){button pi-book} [Keep something the same](docs:howto-keep-steady){button pi-lock}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1400, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"1\", \"order\": 1}}"
       },
       "id": 2,
       "pos": [
@@ -58,7 +58,7 @@
       "type": "WP_ContextLoop",
       "size": [
         400,
-        440
+        460
       ],
       "flags": {},
       "mode": 0,
@@ -134,7 +134,7 @@
       "type": "WP_Context",
       "size": [
         600,
-        620
+        420
       ],
       "flags": {},
       "mode": 0,
@@ -182,7 +182,7 @@
       "id": 4,
       "pos": [
         460,
-        340
+        360
       ],
       "title": "WP Context · Person (held)",
       "order": 3
@@ -191,7 +191,7 @@
       "type": "WP_Context",
       "size": [
         600,
-        620
+        420
       ],
       "flags": {},
       "mode": 0,
@@ -240,17 +240,42 @@
       },
       "id": 5,
       "pos": [
-        1100,
-        340
+        1120,
+        360
       ],
       "title": "WP Context · The look",
       "order": 4
     },
     {
+      "type": "WP_Note",
+      "size": [
+        1060,
+        200
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"pencil\", \"text\": \"The **Assembler** writes the prompt, the **Cleaner** tidies it. The labels Assembler under it writes `$outfit`: it rides through the Image Filter on `extra_1`, so the contact sheet names each pick's look.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"teal\", \"bookmark\": null}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"pencil\", \"text\": \"The **Assembler** writes the prompt, the **Cleaner** tidies it. The labels Assembler under it writes `$outfit`: it rides through the Image Filter on `extra_1`, so the contact sheet names each pick's look.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"teal\", \"bookmark\": null}"
+      },
+      "id": 6,
+      "pos": [
+        1780,
+        0
+      ],
+      "title": "A prompt and a label per look",
+      "order": 5
+    },
+    {
       "type": "WP_PromptAssembler",
       "size": [
-        480,
-        460
+        500,
+        640
       ],
       "flags": {},
       "mode": 0,
@@ -312,88 +337,18 @@
         "negative_template": "$neg_base, $negatives",
         "assembler-helper": ""
       },
-      "id": 6,
-      "pos": [
-        1760,
-        340
-      ],
-      "order": 5
-    },
-    {
-      "type": "WP_PromptAssembler",
-      "size": [
-        480,
-        300
-      ],
-      "flags": {},
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "context",
-          "name": "context",
-          "type": "PIPELINE_CONTEXT",
-          "link": 4
-        },
-        {
-          "localized_name": "template",
-          "name": "template",
-          "type": "STRING",
-          "widget": {
-            "name": "template"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "negative_template",
-          "name": "negative_template",
-          "shape": 7,
-          "type": "STRING",
-          "widget": {
-            "name": "negative_template"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "prompt",
-          "name": "prompt",
-          "type": "STRING",
-          "links": null
-        },
-        {
-          "localized_name": "negative",
-          "name": "negative",
-          "type": "STRING",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "WP_PromptAssembler"
-      },
-      "widgets_values": [
-        "$outfit",
-        "",
-        ""
-      ],
-      "widgets_values_named": {
-        "template": "$outfit",
-        "negative_template": "",
-        "assembler-helper": ""
-      },
       "id": 7,
       "pos": [
-        460,
-        730
+        1780,
+        360
       ],
-      "title": "WP Prompt Assembler · labels",
       "order": 6
     },
     {
       "type": "WP_PromptCleaner",
       "size": [
-        480,
-        500
+        500,
+        520
       ],
       "flags": {},
       "mode": 0,
@@ -460,15 +415,87 @@
       },
       "id": 8,
       "pos": [
-        2300,
-        340
+        2340,
+        360
       ],
       "order": 7
     },
     {
+      "type": "WP_PromptAssembler",
+      "size": [
+        500,
+        470
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "link": 4
+        },
+        {
+          "localized_name": "template",
+          "name": "template",
+          "type": "STRING",
+          "widget": {
+            "name": "template"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "negative_template",
+          "name": "negative_template",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "negative_template"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            26
+          ]
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_PromptAssembler"
+      },
+      "widgets_values": [
+        "$outfit",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "template": "$outfit",
+        "negative_template": "",
+        "assembler-helper": ""
+      },
+      "id": 9,
+      "pos": [
+        2340,
+        920
+      ],
+      "title": "WP Prompt Assembler · labels",
+      "order": 8
+    },
+    {
       "type": "WP_Note",
       "size": [
-        560,
+        1260,
         280
       ],
       "flags": {},
@@ -477,23 +504,23 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run**. The **Seed List** gives each frame its own sampler seed, following the Loop through `loop_config`.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[WP Seed List](docs:wp-seed-list){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3960, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.42, \"shortcut\": \"2\", \"order\": 2}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run**. The **Seed List** gives each frame its own sampler seed, following the Loop through `loop_config`.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[WP Seed List](docs:wp-seed-list){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3600, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"2\", \"order\": 2}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run**. The **Seed List** gives each frame its own sampler seed, following the Loop through `loop_config`.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[WP Seed List](docs:wp-seed-list){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3960, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.42, \"shortcut\": \"2\", \"order\": 2}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run**. The **Seed List** gives each frame its own sampler seed, following the Loop through `loop_config`.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[WP Seed List](docs:wp-seed-list){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3600, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"2\", \"order\": 2}}"
       },
-      "id": 9,
+      "id": 10,
       "pos": [
-        3120,
+        2960,
         0
       ],
       "title": "Quick drafts",
-      "order": 8
+      "order": 9
     },
     {
       "type": "CheckpointLoaderSimple",
       "size": [
-        380,
+        420,
         100
       ],
       "flags": {},
@@ -516,7 +543,7 @@
           "type": "MODEL",
           "links": [
             12,
-            30
+            31
           ]
         },
         {
@@ -526,7 +553,7 @@
           "links": [
             8,
             10,
-            26
+            27
           ]
         },
         {
@@ -534,8 +561,8 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            16,
-            35
+            13,
+            36
           ]
         }
       ],
@@ -548,18 +575,18 @@
       "widgets_values_named": {
         "ckpt_name": "sd_xl_base_1.0.safetensors"
       },
-      "id": 10,
+      "id": 11,
       "pos": [
-        3120,
-        340
+        2960,
+        360
       ],
-      "order": 9
+      "order": 10
     },
     {
       "type": "WP_SeedList",
       "size": [
-        400,
-        340
+        420,
+        390
       ],
       "flags": {},
       "mode": 0,
@@ -597,7 +624,7 @@
           "shape": 6,
           "type": "INT",
           "links": [
-            18
+            17
           ]
         }
       ],
@@ -616,17 +643,123 @@
         "count": 4,
         "wp_seed_list_config": "{\"strategy\":\"hash_index\",\"override_seed\":false,\"override_count\":true,\"override_strategy\":true,\"seed_locks\":{}}"
       },
-      "id": 11,
+      "id": 12,
       "pos": [
-        3120,
-        500
+        2960,
+        520
       ],
-      "order": 10
+      "order": 11
+    },
+    {
+      "type": "CLIPTextEncode",
+      "size": [
+        400,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 8
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "CONDITIONING",
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            14,
+            21
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      },
+      "id": 13,
+      "pos": [
+        3440,
+        360
+      ],
+      "title": "Positive",
+      "order": 12
+    },
+    {
+      "type": "CLIPTextEncode",
+      "size": [
+        400,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 10
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "CONDITIONING",
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            15,
+            22
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      },
+      "id": 14,
+      "pos": [
+        3440,
+        560
+      ],
+      "title": "Negative",
+      "order": 13
     },
     {
       "type": "EmptyLatentImage",
       "size": [
-        300,
+        400,
         110
       ],
       "flags": {},
@@ -666,7 +799,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            17
+            16
           ]
         }
       ],
@@ -683,123 +816,17 @@
         "height": 1216,
         "batch_size": 1
       },
-      "id": 12,
+      "id": 15,
       "pos": [
-        3120,
-        900
+        3440,
+        760
       ],
-      "order": 11
-    },
-    {
-      "type": "CLIPTextEncode",
-      "size": [
-        400,
-        160
-      ],
-      "flags": {},
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "clip",
-          "name": "clip",
-          "type": "CLIP",
-          "link": 8
-        },
-        {
-          "localized_name": "text",
-          "name": "text",
-          "type": "STRING",
-          "widget": {
-            "name": "text"
-          },
-          "link": 9
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "CONDITIONING",
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            13,
-            21
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        ""
-      ],
-      "widgets_values_named": {
-        "text": ""
-      },
-      "id": 13,
-      "pos": [
-        3560,
-        340
-      ],
-      "title": "Positive",
-      "order": 12
-    },
-    {
-      "type": "CLIPTextEncode",
-      "size": [
-        400,
-        160
-      ],
-      "flags": {},
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "clip",
-          "name": "clip",
-          "type": "CLIP",
-          "link": 10
-        },
-        {
-          "localized_name": "text",
-          "name": "text",
-          "type": "STRING",
-          "widget": {
-            "name": "text"
-          },
-          "link": 11
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "CONDITIONING",
-          "name": "CONDITIONING",
-          "type": "CONDITIONING",
-          "links": [
-            14,
-            22
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "CLIPTextEncode"
-      },
-      "widgets_values": [
-        ""
-      ],
-      "widgets_values_named": {
-        "text": ""
-      },
-      "id": 14,
-      "pos": [
-        3560,
-        540
-      ],
-      "title": "Negative",
-      "order": 13
+      "order": 14
     },
     {
       "type": "KSampler",
       "size": [
-        300,
+        320,
         280
       ],
       "flags": {},
@@ -815,19 +842,19 @@
           "localized_name": "positive",
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 13
+          "link": 14
         },
         {
           "localized_name": "negative",
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 14
+          "link": 15
         },
         {
           "localized_name": "latent_image",
           "name": "latent_image",
           "type": "LATENT",
-          "link": 17
+          "link": 16
         },
         {
           "localized_name": "seed",
@@ -836,7 +863,7 @@
           "widget": {
             "name": "seed"
           },
-          "link": 18
+          "link": 17
         },
         {
           "localized_name": "steps",
@@ -890,7 +917,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            15,
+            18,
             20
           ]
         }
@@ -899,7 +926,7 @@
         "Node name for S&R": "KSampler"
       },
       "widgets_values": [
-        42,
+        5,
         "randomize",
         20,
         5.5,
@@ -908,7 +935,7 @@
         1
       ],
       "widgets_values_named": {
-        "seed": 42,
+        "seed": 5,
         "control_after_generate": "randomize",
         "steps": 20,
         "cfg": 5.5,
@@ -916,17 +943,17 @@
         "scheduler": "normal",
         "denoise": 1
       },
-      "id": 15,
+      "id": 16,
       "pos": [
-        4020,
-        340
+        3900,
+        360
       ],
-      "order": 14
+      "order": 15
     },
     {
       "type": "VAEDecode",
       "size": [
-        200,
+        320,
         50
       ],
       "flags": {},
@@ -936,13 +963,13 @@
           "localized_name": "samples",
           "name": "samples",
           "type": "LATENT",
-          "link": 15
+          "link": 18
         },
         {
           "localized_name": "vae",
           "name": "vae",
           "type": "VAE",
-          "link": 16
+          "link": 13
         }
       ],
       "outputs": [
@@ -958,17 +985,17 @@
       "properties": {
         "Node name for S&R": "VAEDecode"
       },
-      "id": 16,
+      "id": 17,
       "pos": [
-        4380,
-        340
+        3900,
+        700
       ],
-      "order": 15
+      "order": 16
     },
     {
       "type": "WP_Note",
       "size": [
-        560,
+        520,
         300
       ],
       "flags": {},
@@ -977,23 +1004,23 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"The run **pauses** at the **Image Filter**: click the drafts you like, then **Continue**. Every output keeps only the picks: `latent` and `positive` / `negative` feed the refine pass, `labels` the contact sheet.\\n\\nYou can fix a prompt or paint a mask there too. With `clip` wired, an edited prompt is encoded again.\\n\\n[WP Image Filter](docs:wp-image-filter){button pi-book}\", \"color\": \"violet\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1500, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"3\", \"order\": 3}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"The run **pauses** at the **Image Filter**: click the drafts you like, then **Continue**. Every output keeps only the picks: `latent` and `positive` / `negative` feed the refine pass, `extra_1` the labels.\\n\\nYou can fix a prompt or paint a mask there too. With `clip` wired, an edited prompt is encoded again.\\n\\n[WP Image Filter](docs:wp-image-filter){button pi-book}\", \"color\": \"violet\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4920, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"The run **pauses** at the **Image Filter**: click the drafts you like, then **Continue**. Every output keeps only the picks: `latent` and `positive` / `negative` feed the refine pass, `labels` the contact sheet.\\n\\nYou can fix a prompt or paint a mask there too. With `clip` wired, an edited prompt is encoded again.\\n\\n[WP Image Filter](docs:wp-image-filter){button pi-book}\", \"color\": \"violet\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1500, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"3\", \"order\": 3}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"The run **pauses** at the **Image Filter**: click the drafts you like, then **Continue**. Every output keeps only the picks: `latent` and `positive` / `negative` feed the refine pass, `extra_1` the labels.\\n\\nYou can fix a prompt or paint a mask there too. With `clip` wired, an edited prompt is encoded again.\\n\\n[WP Image Filter](docs:wp-image-filter){button pi-book}\", \"color\": \"violet\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4920, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
       },
-      "id": 17,
+      "id": 18,
       "pos": [
-        0,
-        1320
+        4380,
+        0
       ],
       "title": "Pick the keepers",
-      "order": 16
+      "order": 17
     },
     {
       "type": "WP_ImageFilter",
       "size": [
-        490,
+        500,
         430
       ],
       "flags": {},
@@ -1059,7 +1086,7 @@
           "name": "extra_1",
           "shape": 7,
           "type": "*",
-          "link": null
+          "link": 26
         },
         {
           "localized_name": "extra_2",
@@ -1073,7 +1100,7 @@
           "name": "clip",
           "shape": 7,
           "type": "CLIP",
-          "link": 26
+          "link": 27
         }
       ],
       "outputs": [
@@ -1083,7 +1110,7 @@
           "shape": 6,
           "type": "IMAGE",
           "links": [
-            27
+            28
           ]
         },
         {
@@ -1092,7 +1119,7 @@
           "shape": 6,
           "type": "LATENT",
           "links": [
-            29
+            30
           ]
         },
         {
@@ -1108,7 +1135,7 @@
           "shape": 6,
           "type": "CONDITIONING",
           "links": [
-            31
+            32
           ]
         },
         {
@@ -1117,7 +1144,7 @@
           "shape": 6,
           "type": "CONDITIONING",
           "links": [
-            32
+            33
           ]
         },
         {
@@ -1146,7 +1173,9 @@
           "name": "extra_1",
           "shape": 6,
           "type": "*",
-          "links": null
+          "links": [
+            29
+          ]
         },
         {
           "localized_name": "extra_2",
@@ -1166,9 +1195,7 @@
           "name": "labels",
           "shape": 6,
           "type": "STRING",
-          "links": [
-            28
-          ]
+          "links": null
         }
       ],
       "properties": {
@@ -1180,17 +1207,17 @@
       "widgets_values_named": {
         "wp_image_filter": "{\"mode\":\"pause\",\"send_as\":\"same_shape\",\"timeout\":600,\"on_timeout\":\"keep_all\"}"
       },
-      "id": 18,
+      "id": 19,
       "pos": [
-        620,
-        1320
+        4380,
+        360
       ],
-      "order": 17
+      "order": 18
     },
     {
       "type": "WP_Note",
       "size": [
-        560,
+        520,
         230
       ],
       "flags": {},
@@ -1199,18 +1226,18 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** reads the filter's `labels` (`#1`, `#3`…) and shows one sheet on the node. For the picks without labels, wire the filter's `images` straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-book}\", \"color\": \"info\", \"bookmark\": null}"
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** shows the picks on one sheet, each under its look (the labels Assembler's `$outfit`, kept to the picks by the filter's `extra_1`). For the picks without labels, wire the filter's `images` straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-book}\", \"color\": \"info\", \"bookmark\": null}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** reads the filter's `labels` (`#1`, `#3`…) and shows one sheet on the node. For the picks without labels, wire the filter's `images` straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-book}\", \"color\": \"info\", \"bookmark\": null}"
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** shows the picks on one sheet, each under its look (the labels Assembler's `$outfit`, kept to the picks by the filter's `extra_1`). For the picks without labels, wire the filter's `images` straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-book}\", \"color\": \"info\", \"bookmark\": null}"
       },
-      "id": 19,
+      "id": 20,
       "pos": [
-        1340,
-        1320
+        4940,
+        0
       ],
       "title": "A contact sheet of the picks",
-      "order": 18
+      "order": 19
     },
     {
       "type": "WP_LabelGrid",
@@ -1225,14 +1252,14 @@
           "localized_name": "images",
           "name": "images",
           "type": "IMAGE",
-          "link": 27
+          "link": 28
         },
         {
           "localized_name": "labels",
           "name": "labels",
           "shape": 7,
           "type": "STRING",
-          "link": 28
+          "link": 29
         },
         {
           "localized_name": "label_text",
@@ -1287,17 +1314,17 @@
       "widgets_values_named": {
         "wp_label_grid": "{\"label\":\"{label}\",\"position\":\"top\",\"align\":\"center\",\"font\":\"default\",\"font_size\":0,\"text_color\":\"#ffffff\",\"label_color\":\"#000000\",\"grid\":true,\"arrange\":\"auto\",\"columns\":0,\"rows_from\":\"none\",\"row_headers\":\"\",\"columns_from\":\"none\",\"column_headers\":\"\",\"title\":\"\",\"gap\":8,\"margin\":0,\"background\":\"#ffffff\",\"header_color\":\"#000000\",\"cell_width\":0}"
       },
-      "id": 20,
+      "id": 21,
       "pos": [
-        1340,
-        1620
+        4940,
+        360
       ],
-      "order": 19
+      "order": 20
     },
     {
       "type": "WP_Note",
       "size": [
-        560,
+        920,
         200
       ],
       "flags": {},
@@ -1306,23 +1333,23 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"A second pass upscales the picked latents by 1.5 and samples them again at half denoise. The drafts you skipped never reach it.\", \"color\": \"tip\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3960, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"4\", \"order\": 4}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"A second pass upscales the picked latents by 1.5 and samples them again at half denoise. The drafts you skipped never reach it.\", \"color\": \"tip\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 6540, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"4\", \"order\": 4}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"A second pass upscales the picked latents by 1.5 and samples them again at half denoise. The drafts you skipped never reach it.\", \"color\": \"tip\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3960, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"4\", \"order\": 4}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"A second pass upscales the picked latents by 1.5 and samples them again at half denoise. The drafts you skipped never reach it.\", \"color\": \"tip\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 6540, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"4\", \"order\": 4}}"
       },
-      "id": 21,
+      "id": 22,
       "pos": [
-        3120,
-        1320
+        5580,
+        0
       ],
       "title": "Refine only the picks",
-      "order": 20
+      "order": 21
     },
     {
       "type": "LatentUpscaleBy",
       "size": [
-        300,
+        320,
         90
       ],
       "flags": {},
@@ -1332,7 +1359,7 @@
           "localized_name": "samples",
           "name": "samples",
           "type": "LATENT",
-          "link": 29
+          "link": 30
         },
         {
           "localized_name": "upscale_method",
@@ -1359,7 +1386,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            33
+            34
           ]
         }
       ],
@@ -1374,17 +1401,17 @@
         "upscale_method": "nearest-exact",
         "scale_by": 1.5
       },
-      "id": 22,
+      "id": 23,
       "pos": [
-        3120,
-        1580
+        5580,
+        480
       ],
-      "order": 21
+      "order": 22
     },
     {
       "type": "KSampler",
       "size": [
-        300,
+        320,
         280
       ],
       "flags": {},
@@ -1394,25 +1421,25 @@
           "localized_name": "model",
           "name": "model",
           "type": "MODEL",
-          "link": 30
+          "link": 31
         },
         {
           "localized_name": "positive",
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 31
+          "link": 32
         },
         {
           "localized_name": "negative",
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 32
+          "link": 33
         },
         {
           "localized_name": "latent_image",
           "name": "latent_image",
           "type": "LATENT",
-          "link": 33
+          "link": 34
         },
         {
           "localized_name": "seed",
@@ -1475,7 +1502,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            34
+            35
           ]
         }
       ],
@@ -1500,18 +1527,18 @@
         "scheduler": "normal",
         "denoise": 0.5
       },
-      "id": 23,
+      "id": 24,
       "pos": [
-        3720,
-        1320
+        5960,
+        360
       ],
       "title": "KSampler · refine",
-      "order": 22
+      "order": 23
     },
     {
       "type": "VAEDecode",
       "size": [
-        200,
+        220,
         50
       ],
       "flags": {},
@@ -1521,13 +1548,13 @@
           "localized_name": "samples",
           "name": "samples",
           "type": "LATENT",
-          "link": 34
+          "link": 35
         },
         {
           "localized_name": "vae",
           "name": "vae",
           "type": "VAE",
-          "link": 35
+          "link": 36
         }
       ],
       "outputs": [
@@ -1536,19 +1563,19 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            36
+            37
           ]
         }
       ],
       "properties": {
         "Node name for S&R": "VAEDecode"
       },
-      "id": 24,
+      "id": 25,
       "pos": [
-        4080,
-        1320
+        6340,
+        360
       ],
-      "order": 23
+      "order": 24
     },
     {
       "type": "WP_Bookmark",
@@ -1562,24 +1589,24 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 4700, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"5\", \"order\": 5}"
+        "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 7060, \"y\": 700}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"5\", \"order\": 5}"
       ],
       "widgets_values_named": {
-        "wp_bookmark": "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 4700, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"5\", \"order\": 5}"
+        "wp_bookmark": "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 7060, \"y\": 700}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"5\", \"order\": 5}"
       },
-      "id": 25,
+      "id": 26,
       "pos": [
-        4340,
-        1320
+        6620,
+        0
       ],
       "title": "The picks, refined",
-      "order": 24
+      "order": 25
     },
     {
       "type": "SaveImage",
       "size": [
-        700,
-        820
+        860,
+        1300
       ],
       "flags": {},
       "mode": 0,
@@ -1588,7 +1615,7 @@
           "localized_name": "images",
           "name": "images",
           "type": "IMAGE",
-          "link": 36
+          "link": 37
         },
         {
           "localized_name": "filename_prefix",
@@ -1615,12 +1642,12 @@
       "widgets_values_named": {
         "filename_prefix": "wp-examples/picked"
       },
-      "id": 26,
+      "id": 27,
       "pos": [
-        4340,
-        1400
+        6620,
+        60
       ],
-      "order": 25
+      "order": 26
     }
   ],
   "links": [
@@ -1644,7 +1671,7 @@
       3,
       5,
       0,
-      6,
+      7,
       0,
       "PIPELINE_CONTEXT"
     ],
@@ -1652,13 +1679,13 @@
       4,
       5,
       0,
-      7,
+      9,
       0,
       "PIPELINE_CONTEXT"
     ],
     [
       5,
-      6,
+      7,
       0,
       8,
       1,
@@ -1666,7 +1693,7 @@
     ],
     [
       6,
-      6,
+      7,
       1,
       8,
       2,
@@ -1676,13 +1703,13 @@
       7,
       3,
       1,
-      11,
+      12,
       0,
       "WP_CONTEXT_LOOP_CONFIG"
     ],
     [
       8,
-      10,
+      11,
       1,
       13,
       0,
@@ -1698,7 +1725,7 @@
     ],
     [
       10,
-      10,
+      11,
       1,
       14,
       0,
@@ -1714,73 +1741,73 @@
     ],
     [
       12,
-      10,
+      11,
       0,
-      15,
+      16,
       0,
       "MODEL"
     ],
     [
       13,
-      13,
-      0,
-      15,
-      1,
-      "CONDITIONING"
-    ],
-    [
-      14,
-      14,
-      0,
-      15,
+      11,
       2,
-      "CONDITIONING"
-    ],
-    [
-      15,
-      15,
-      0,
-      16,
-      0,
-      "LATENT"
-    ],
-    [
-      16,
-      10,
-      2,
-      16,
+      17,
       1,
       "VAE"
+    ],
+    [
+      14,
+      13,
+      0,
+      16,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      15,
+      14,
+      0,
+      16,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      16,
+      15,
+      0,
+      16,
+      3,
+      "LATENT"
     ],
     [
       17,
       12,
       0,
-      15,
-      3,
-      "LATENT"
-    ],
-    [
-      18,
-      11,
-      0,
-      15,
+      16,
       4,
       "INT"
     ],
     [
-      19,
+      18,
       16,
       0,
-      18,
+      17,
+      0,
+      "LATENT"
+    ],
+    [
+      19,
+      17,
+      0,
+      19,
       0,
       "IMAGE"
     ],
     [
       20,
-      15,
+      16,
       0,
-      18,
+      19,
       1,
       "LATENT"
     ],
@@ -1788,7 +1815,7 @@
       21,
       13,
       0,
-      18,
+      19,
       3,
       "CONDITIONING"
     ],
@@ -1796,7 +1823,7 @@
       22,
       14,
       0,
-      18,
+      19,
       4,
       "CONDITIONING"
     ],
@@ -1804,7 +1831,7 @@
       23,
       8,
       0,
-      18,
+      19,
       5,
       "STRING"
     ],
@@ -1812,7 +1839,7 @@
       24,
       8,
       1,
-      18,
+      19,
       6,
       "STRING"
     ],
@@ -1820,95 +1847,103 @@
       25,
       5,
       0,
-      18,
+      19,
       7,
       "PIPELINE_CONTEXT"
     ],
     [
       26,
-      10,
+      9,
+      0,
+      19,
+      8,
+      "STRING"
+    ],
+    [
+      27,
+      11,
       1,
-      18,
+      19,
       10,
       "CLIP"
     ],
     [
-      27,
-      18,
+      28,
+      19,
       0,
-      20,
+      21,
       0,
       "IMAGE"
     ],
     [
-      28,
-      18,
-      11,
-      20,
+      29,
+      19,
+      8,
+      21,
       1,
-      "STRING"
+      "*"
     ],
     [
-      29,
-      18,
+      30,
+      19,
       1,
-      22,
+      23,
       0,
       "LATENT"
     ],
     [
-      30,
-      10,
+      31,
+      11,
       0,
-      23,
+      24,
       0,
       "MODEL"
     ],
     [
-      31,
-      18,
+      32,
+      19,
       3,
-      23,
+      24,
       1,
       "CONDITIONING"
     ],
     [
-      32,
-      18,
+      33,
+      19,
       4,
-      23,
+      24,
       2,
       "CONDITIONING"
-    ],
-    [
-      33,
-      22,
-      0,
-      23,
-      3,
-      "LATENT"
     ],
     [
       34,
       23,
       0,
       24,
-      0,
+      3,
       "LATENT"
     ],
     [
       35,
-      10,
-      2,
       24,
+      0,
+      25,
+      0,
+      "LATENT"
+    ],
+    [
+      36,
+      11,
+      2,
+      25,
       1,
       "VAE"
     ],
     [
-      36,
-      24,
+      37,
+      25,
       0,
-      26,
+      27,
       0,
       "IMAGE"
     ]
@@ -1920,8 +1955,8 @@
       "bounding": [
         -40,
         -60,
-        3080,
-        1280
+        2920,
+        1460
       ],
       "color": "#3f789e",
       "flags": {}
@@ -1930,10 +1965,10 @@
       "id": 2,
       "title": "Drafts",
       "bounding": [
-        3080,
+        2920,
         -60,
-        2000,
-        1280
+        1340,
+        1460
       ],
       "color": "#2f6b4f",
       "flags": {}
@@ -1942,10 +1977,10 @@
       "id": 3,
       "title": "Pick",
       "bounding": [
-        -40,
-        1260,
-        3080,
-        1000
+        4340,
+        -60,
+        1160,
+        1460
       ],
       "color": "#7a4ea8",
       "flags": {}
@@ -1954,10 +1989,10 @@
       "id": 4,
       "title": "Refine the picks",
       "bounding": [
-        3080,
-        1260,
-        2000,
-        1000
+        5540,
+        -60,
+        1980,
+        1460
       ],
       "color": "#b06634",
       "flags": {}
@@ -1971,7 +2006,956 @@
         2200,
         360
       ]
-    }
+    },
+    "reroutes": [
+      {
+        "id": 1,
+        "pos": [
+          1740,
+          400
+        ],
+        "linkIds": [
+          4
+        ]
+      },
+      {
+        "id": 2,
+        "pos": [
+          1740,
+          960
+        ],
+        "linkIds": [
+          4
+        ],
+        "parentId": 1
+      },
+      {
+        "id": 3,
+        "pos": [
+          430,
+          420
+        ],
+        "linkIds": [
+          7
+        ]
+      },
+      {
+        "id": 4,
+        "pos": [
+          430,
+          1414
+        ],
+        "linkIds": [
+          7
+        ],
+        "parentId": 3
+      },
+      {
+        "id": 5,
+        "pos": [
+          2940,
+          1414
+        ],
+        "linkIds": [
+          7
+        ],
+        "parentId": 4
+      },
+      {
+        "id": 6,
+        "pos": [
+          2940,
+          560
+        ],
+        "linkIds": [
+          7
+        ],
+        "parentId": 5
+      },
+      {
+        "id": 7,
+        "pos": [
+          3404,
+          390
+        ],
+        "linkIds": [
+          8
+        ]
+      },
+      {
+        "id": 8,
+        "pos": [
+          3404,
+          420
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 7
+      },
+      {
+        "id": 9,
+        "pos": [
+          2884,
+          400
+        ],
+        "linkIds": [
+          9
+        ]
+      },
+      {
+        "id": 10,
+        "pos": [
+          2884,
+          1426
+        ],
+        "linkIds": [
+          9
+        ],
+        "parentId": 9
+      },
+      {
+        "id": 11,
+        "pos": [
+          3416,
+          1426
+        ],
+        "linkIds": [
+          9
+        ],
+        "parentId": 10
+      },
+      {
+        "id": 12,
+        "pos": [
+          3416,
+          460
+        ],
+        "linkIds": [
+          9
+        ],
+        "parentId": 11
+      },
+      {
+        "id": 13,
+        "pos": [
+          3404,
+          390
+        ],
+        "linkIds": [
+          10
+        ]
+      },
+      {
+        "id": 14,
+        "pos": [
+          3404,
+          432
+        ],
+        "linkIds": [
+          10
+        ],
+        "parentId": 13
+      },
+      {
+        "id": 15,
+        "pos": [
+          2896,
+          412
+        ],
+        "linkIds": [
+          11
+        ]
+      },
+      {
+        "id": 16,
+        "pos": [
+          2896,
+          1438
+        ],
+        "linkIds": [
+          11
+        ],
+        "parentId": 15
+      },
+      {
+        "id": 17,
+        "pos": [
+          3428,
+          1438
+        ],
+        "linkIds": [
+          11
+        ],
+        "parentId": 16
+      },
+      {
+        "id": 18,
+        "pos": [
+          3428,
+          472
+        ],
+        "linkIds": [
+          11
+        ],
+        "parentId": 17
+      },
+      {
+        "id": 19,
+        "pos": [
+          3410,
+          336
+        ],
+        "linkIds": [
+          12,
+          31
+        ]
+      },
+      {
+        "id": 20,
+        "pos": [
+          3420,
+          324
+        ],
+        "linkIds": [
+          13,
+          36
+        ]
+      },
+      {
+        "id": 21,
+        "pos": [
+          3864,
+          336
+        ],
+        "linkIds": [
+          12
+        ],
+        "parentId": 19
+      },
+      {
+        "id": 22,
+        "pos": [
+          3864,
+          400
+        ],
+        "linkIds": [
+          12
+        ],
+        "parentId": 21
+      },
+      {
+        "id": 23,
+        "pos": [
+          3876,
+          324
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 20
+      },
+      {
+        "id": 24,
+        "pos": [
+          3876,
+          730
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 23
+      },
+      {
+        "id": 25,
+        "pos": [
+          3400,
+          560
+        ],
+        "linkIds": [
+          17
+        ]
+      },
+      {
+        "id": 26,
+        "pos": [
+          3400,
+          940
+        ],
+        "linkIds": [
+          17
+        ],
+        "parentId": 25
+      },
+      {
+        "id": 27,
+        "pos": [
+          3888,
+          940
+        ],
+        "linkIds": [
+          17
+        ],
+        "parentId": 26
+      },
+      {
+        "id": 28,
+        "pos": [
+          3888,
+          510
+        ],
+        "linkIds": [
+          17
+        ],
+        "parentId": 27
+      },
+      {
+        "id": 29,
+        "pos": [
+          4236,
+          390
+        ],
+        "linkIds": [
+          18
+        ]
+      },
+      {
+        "id": 30,
+        "pos": [
+          4236,
+          670
+        ],
+        "linkIds": [
+          18
+        ],
+        "parentId": 29
+      },
+      {
+        "id": 31,
+        "pos": [
+          3894,
+          670
+        ],
+        "linkIds": [
+          18
+        ],
+        "parentId": 30
+      },
+      {
+        "id": 32,
+        "pos": [
+          3894,
+          730
+        ],
+        "linkIds": [
+          18
+        ],
+        "parentId": 31
+      },
+      {
+        "id": 33,
+        "pos": [
+          4250,
+          730
+        ],
+        "linkIds": [
+          19
+        ]
+      },
+      {
+        "id": 34,
+        "pos": [
+          4250,
+          390
+        ],
+        "linkIds": [
+          19
+        ],
+        "parentId": 33
+      },
+      {
+        "id": 35,
+        "pos": [
+          4262,
+          390
+        ],
+        "linkIds": [
+          20
+        ]
+      },
+      {
+        "id": 36,
+        "pos": [
+          4262,
+          404
+        ],
+        "linkIds": [
+          20
+        ],
+        "parentId": 35
+      },
+      {
+        "id": 37,
+        "pos": [
+          3852,
+          390
+        ],
+        "linkIds": [
+          21
+        ]
+      },
+      {
+        "id": 38,
+        "pos": [
+          3852,
+          300
+        ],
+        "linkIds": [
+          21
+        ],
+        "parentId": 37
+      },
+      {
+        "id": 39,
+        "pos": [
+          4274,
+          300
+        ],
+        "linkIds": [
+          21
+        ],
+        "parentId": 38
+      },
+      {
+        "id": 40,
+        "pos": [
+          4274,
+          420
+        ],
+        "linkIds": [
+          21
+        ],
+        "parentId": 39
+      },
+      {
+        "id": 41,
+        "pos": [
+          3860,
+          590
+        ],
+        "linkIds": [
+          22
+        ]
+      },
+      {
+        "id": 42,
+        "pos": [
+          3860,
+          288
+        ],
+        "linkIds": [
+          22
+        ],
+        "parentId": 41
+      },
+      {
+        "id": 43,
+        "pos": [
+          4286,
+          288
+        ],
+        "linkIds": [
+          22
+        ],
+        "parentId": 42
+      },
+      {
+        "id": 44,
+        "pos": [
+          4286,
+          432
+        ],
+        "linkIds": [
+          22
+        ],
+        "parentId": 43
+      },
+      {
+        "id": 45,
+        "pos": [
+          2848,
+          390
+        ],
+        "linkIds": [
+          23
+        ]
+      },
+      {
+        "id": 46,
+        "pos": [
+          2848,
+          1450
+        ],
+        "linkIds": [
+          23
+        ],
+        "parentId": 45
+      },
+      {
+        "id": 47,
+        "pos": [
+          4298,
+          1450
+        ],
+        "linkIds": [
+          23
+        ],
+        "parentId": 46
+      },
+      {
+        "id": 48,
+        "pos": [
+          4298,
+          450
+        ],
+        "linkIds": [
+          23
+        ],
+        "parentId": 47
+      },
+      {
+        "id": 49,
+        "pos": [
+          2860,
+          410
+        ],
+        "linkIds": [
+          24
+        ]
+      },
+      {
+        "id": 50,
+        "pos": [
+          2860,
+          1462
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 49
+      },
+      {
+        "id": 51,
+        "pos": [
+          4310,
+          1462
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 50
+      },
+      {
+        "id": 52,
+        "pos": [
+          4310,
+          480
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 51
+      },
+      {
+        "id": 53,
+        "pos": [
+          1752,
+          400
+        ],
+        "linkIds": [
+          25
+        ]
+      },
+      {
+        "id": 54,
+        "pos": [
+          1752,
+          1474
+        ],
+        "linkIds": [
+          25
+        ],
+        "parentId": 53
+      },
+      {
+        "id": 55,
+        "pos": [
+          4322,
+          1474
+        ],
+        "linkIds": [
+          25
+        ],
+        "parentId": 54
+      },
+      {
+        "id": 56,
+        "pos": [
+          4322,
+          510
+        ],
+        "linkIds": [
+          25
+        ],
+        "parentId": 55
+      },
+      {
+        "id": 57,
+        "pos": [
+          2872,
+          940
+        ],
+        "linkIds": [
+          26
+        ]
+      },
+      {
+        "id": 58,
+        "pos": [
+          2872,
+          1486
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 57
+      },
+      {
+        "id": 59,
+        "pos": [
+          4334,
+          1486
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 58
+      },
+      {
+        "id": 60,
+        "pos": [
+          4334,
+          540
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 59
+      },
+      {
+        "id": 61,
+        "pos": [
+          3430,
+          312
+        ],
+        "linkIds": [
+          27
+        ]
+      },
+      {
+        "id": 62,
+        "pos": [
+          4346,
+          312
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 61
+      },
+      {
+        "id": 63,
+        "pos": [
+          4346,
+          720
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 62
+      },
+      {
+        "id": 64,
+        "pos": [
+          4904,
+          404
+        ],
+        "linkIds": [
+          30
+        ]
+      },
+      {
+        "id": 65,
+        "pos": [
+          4904,
+          252
+        ],
+        "linkIds": [
+          30
+        ],
+        "parentId": 64
+      },
+      {
+        "id": 66,
+        "pos": [
+          5550,
+          252
+        ],
+        "linkIds": [
+          30
+        ],
+        "parentId": 65
+      },
+      {
+        "id": 67,
+        "pos": [
+          5550,
+          520
+        ],
+        "linkIds": [
+          30
+        ],
+        "parentId": 66
+      },
+      {
+        "id": 68,
+        "pos": [
+          5930,
+          336
+        ],
+        "linkIds": [
+          31
+        ],
+        "parentId": 19
+      },
+      {
+        "id": 69,
+        "pos": [
+          5930,
+          400
+        ],
+        "linkIds": [
+          31
+        ],
+        "parentId": 68
+      },
+      {
+        "id": 70,
+        "pos": [
+          4912,
+          420
+        ],
+        "linkIds": [
+          32
+        ]
+      },
+      {
+        "id": 71,
+        "pos": [
+          4912,
+          276
+        ],
+        "linkIds": [
+          32
+        ],
+        "parentId": 70
+      },
+      {
+        "id": 72,
+        "pos": [
+          5918,
+          276
+        ],
+        "linkIds": [
+          32
+        ],
+        "parentId": 71
+      },
+      {
+        "id": 73,
+        "pos": [
+          5918,
+          420
+        ],
+        "linkIds": [
+          32
+        ],
+        "parentId": 72
+      },
+      {
+        "id": 74,
+        "pos": [
+          4920,
+          432
+        ],
+        "linkIds": [
+          33
+        ]
+      },
+      {
+        "id": 75,
+        "pos": [
+          4920,
+          264
+        ],
+        "linkIds": [
+          33
+        ],
+        "parentId": 74
+      },
+      {
+        "id": 76,
+        "pos": [
+          5926,
+          264
+        ],
+        "linkIds": [
+          33
+        ],
+        "parentId": 75
+      },
+      {
+        "id": 77,
+        "pos": [
+          5926,
+          432
+        ],
+        "linkIds": [
+          33
+        ],
+        "parentId": 76
+      },
+      {
+        "id": 78,
+        "pos": [
+          6310,
+          324
+        ],
+        "linkIds": [
+          36
+        ],
+        "parentId": 20
+      },
+      {
+        "id": 79,
+        "pos": [
+          6310,
+          410
+        ],
+        "linkIds": [
+          36
+        ],
+        "parentId": 78
+      }
+    ],
+    "linkExtensions": [
+      {
+        "id": 4,
+        "parentId": 2
+      },
+      {
+        "id": 7,
+        "parentId": 6
+      },
+      {
+        "id": 8,
+        "parentId": 8
+      },
+      {
+        "id": 9,
+        "parentId": 12
+      },
+      {
+        "id": 10,
+        "parentId": 14
+      },
+      {
+        "id": 11,
+        "parentId": 18
+      },
+      {
+        "id": 12,
+        "parentId": 22
+      },
+      {
+        "id": 13,
+        "parentId": 24
+      },
+      {
+        "id": 17,
+        "parentId": 28
+      },
+      {
+        "id": 18,
+        "parentId": 32
+      },
+      {
+        "id": 19,
+        "parentId": 34
+      },
+      {
+        "id": 20,
+        "parentId": 36
+      },
+      {
+        "id": 21,
+        "parentId": 40
+      },
+      {
+        "id": 22,
+        "parentId": 44
+      },
+      {
+        "id": 23,
+        "parentId": 48
+      },
+      {
+        "id": 24,
+        "parentId": 52
+      },
+      {
+        "id": 25,
+        "parentId": 56
+      },
+      {
+        "id": 26,
+        "parentId": 60
+      },
+      {
+        "id": 27,
+        "parentId": 63
+      },
+      {
+        "id": 30,
+        "parentId": 67
+      },
+      {
+        "id": 31,
+        "parentId": 69
+      },
+      {
+        "id": 32,
+        "parentId": 73
+      },
+      {
+        "id": 33,
+        "parentId": 77
+      },
+      {
+        "id": 36,
+        "parentId": 79
+      }
+    ]
   },
   "version": 0.4
 }

@@ -37,6 +37,9 @@ class Workflow:
         self.nodes: list[dict[str, Any]] = []
         self.links: list[list[Any]] = []
         self.groups: list[dict[str, Any]] = []
+        self.reroutes: list[dict[str, Any]] = []
+        self.link_parents: dict[int, int] = {}
+        self.last_link = 0  # ids never reused, even after a link is dropped
 
     # nodes
 
@@ -72,7 +75,26 @@ class Workflow:
             named[k] = v
             n["widgets_values"][keys.index(k)] = v
 
-    def link(self, a: dict[str, Any], out: str, b: dict[str, Any], inp: str) -> None:
+    def reroute(self, x: float, y: float, parent: int | None = None) -> int:
+        """A native wire reroute (a dot the wire passes through). `parent` is the
+        reroute before it, nearer the wire's source."""
+        r: dict[str, Any] = {"id": len(self.reroutes) + 1, "pos": [x, y], "linkIds": []}
+        if parent is not None:
+            r["parentId"] = parent
+        self.reroutes.append(r)
+        return r["id"]
+
+    def route(self, *points: tuple[float, float], after: int | None = None) -> int:
+        """A chain of reroutes from the source side to the target side; returns
+        the last one, to pass as `via`. `after` continues a shared chain."""
+        last: int | None = after
+        for x, y in points:
+            last = self.reroute(x, y, last)
+        assert last is not None and points
+        return last
+
+    def link(self, a: dict[str, Any], out: str, b: dict[str, Any], inp: str,
+             via: int | None = None) -> None:
         oi = next(i for i, o in enumerate(a["outputs"]) if o["name"] == out)
         try:
             ii = next(i for i, x in enumerate(b["inputs"]) if x["name"] == inp)
@@ -80,13 +102,21 @@ class Workflow:
             # dynamic sockets (Toggles control dots, Node Group slots)
             b["inputs"].append({"name": inp, "type": "*", "link": None})
             ii = len(b["inputs"]) - 1
-        lid = len(self.links) + 1
+        self.last_link += 1
+        lid = self.last_link
         kind = a["outputs"][oi]["type"]
         self.links.append([lid, a["id"], oi, b["id"], ii, kind])
         if a["outputs"][oi].get("links") is None:
             a["outputs"][oi]["links"] = []
         a["outputs"][oi]["links"].append(lid)
         b["inputs"][ii]["link"] = lid
+        if via is not None:
+            self.link_parents[lid] = via
+            rid: int | None = via
+            while rid is not None:
+                r = self.reroutes[rid - 1]
+                r["linkIds"].append(lid)
+                rid = r.get("parentId")
 
     def group(self, title: str, x: float, y: float, w: float, h: float, color: str) -> None:
         self.groups.append({"id": len(self.groups) + 1, "title": title, "bounding": [x, y, w, h],
@@ -99,10 +129,14 @@ class Workflow:
                     o["links"] = None
         wf = {
             "id": self.id, "revision": 0, "last_node_id": len(self.nodes),
-            "last_link_id": len(self.links), "nodes": self.nodes, "links": self.links,
+            "last_link_id": self.last_link, "nodes": self.nodes, "links": self.links,
             "groups": self.groups, "config": {},
             "extra": {"ds": {"scale": ds[0], "offset": [ds[1], ds[2]]}}, "version": 0.4,
         }
+        if self.reroutes:
+            wf["extra"]["reroutes"] = self.reroutes
+            wf["extra"]["linkExtensions"] = [
+                {"id": lid, "parentId": rid} for lid, rid in self.link_parents.items()]
         path.write_text(json.dumps(wf, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 

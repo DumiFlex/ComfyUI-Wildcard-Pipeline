@@ -83,7 +83,8 @@ def test_nested_refs_resolve_from_the_node_at_every_level():
 
 def test_example_workflow_colors_resolve_from_the_shared_lists_bundle():
     data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
-    node = next(n for n in data["nodes"] if n["type"] == "WP_Context" and n["id"] == 3)
+    node = next(n for n in data["nodes"]
+                if n["type"] == "WP_Context" and n.get("title") == "WP Context · Person")
     widget = next(w for w in node["widgets_values"] if isinstance(w, str) and w.startswith("{"))
     for seed in range(5):
         ctx = _run(widget, seed)

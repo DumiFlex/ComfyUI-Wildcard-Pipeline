@@ -32,7 +32,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
           an XY plot. WP Toggles in Pick one mode chooses Quick or Full: its value sets the steps
           through WP Var → Int, and WP Var → Bool picks a smaller image for Quick.</li>
         <li><b>3 - Pick and refine</b>: four drafts of one held person, a pause at WP Image Filter
-          to pick the keepers, then an upscale and a second pass on the picks only.</li>
+          to pick the keepers (the contact sheet names each pick's look), then an upscale and a
+          second pass on the picks only.</li>
         <li><b>4 - Sets and stories</b>: one loop, three ways, each in its own canvas group. WP
           Toggles in Pick one mode mutes the groups you didn't pick. <i>Every frame different</i>
           rolls everything again each frame; <i>Photo shoot</i> holds the person, outfit, place and
@@ -41,6 +42,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
           <VarToken>$iteration</VarToken>. Each group pauses at WP Image Filter so you pick the
           frames that go on the Label &amp; Grid sheet.</li>
       </ul>
+      <p>
+        Each workflow reads left to right, one canvas group per step, and long wires (the model,
+        the CLIP, the settings) run straight along a lane under the groups on wire reroutes. In
+        <i>Sets and stories</i> each mode's row has four parts, <b>Lists</b>, <b>Prompt</b>,
+        <b>Image</b> and <b>Pick and grid</b>, and one checkpoint on the left feeds all three rows.
+      </p>
       <p>
         A <b>Start here</b> note lists the steps and links to these docs, the Discord and the
         Community. Notes on the canvas explain each step, with links to the docs and to outside

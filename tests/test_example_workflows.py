@@ -252,7 +252,12 @@ def _sets_and_stories() -> tuple[Graph, dict[str, tuple[dict[str, Any], dict[str
     graph = Graph(wf, unmute=True)
     titled = {n["title"]: n for n in wf["nodes"] if n.get("title")}
     out = {}
+    toggles = titled["WP Toggles · pick a mode"]
+    rows = json.loads(toggles["widgets_values"][0])["rows"]
+    modes = {g for r in rows for g in r.get("groups", [])}
     for group in wf["groups"]:
+        if group["title"] not in modes:
+            continue  # the parts inside a mode row (Lists, Prompt, Image…)
         x, y, w, h = group["bounding"]
         inside = [
             n for n in wf["nodes"] if x <= n["pos"][0] <= x + w and y <= n["pos"][1] <= y + h

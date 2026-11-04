@@ -16,10 +16,10 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Batches and grids\\n\\nOne **Run** makes nine images of the **same person in the same place**: three shots against three kinds of light, laid out as a labelled XY plot. A quick way to see what the framing and the light do. The lists come with this workflow.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Sweep every combination |\\n| `2` | A prompt and a label per frame |\\n| `3` | One click, nine images |\\n| `4` | Quick preview |\\n| `5` | The grid |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n:pi-images: More ways to batch: [Make variations](docs:howto-variations){button pi-images}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Batches and grids\\n\\nOne **Run** makes nine images of the **same person in the same place**: three shots against three kinds of light, laid out as a labelled XY plot. A quick way to see what the framing and the light do. The lists come with this workflow. Read it left to right.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Sweep every combination |\\n| `2` | A prompt and a label per frame |\\n| `3` | Quick preview |\\n| `4` | One click, nine images |\\n| `5` | The grid |\\n| `6` | A new seed per frame (optional) |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n![The node toolbar, with the indigo ? help button](wp:asset/toolbar-help){width=70%}\\n\\n:pi-images: More ways to batch: [Make variations](docs:howto-variations){button pi-images}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Batches and grids\\n\\nOne **Run** makes nine images of the **same person in the same place**: three shots against three kinds of light, laid out as a labelled XY plot. A quick way to see what the framing and the light do. The lists come with this workflow.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Sweep every combination |\\n| `2` | A prompt and a label per frame |\\n| `3` | One click, nine images |\\n| `4` | Quick preview |\\n| `5` | The grid |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n:pi-images: More ways to batch: [Make variations](docs:howto-variations){button pi-images}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Batches and grids\\n\\nOne **Run** makes nine images of the **same person in the same place**: three shots against three kinds of light, laid out as a labelled XY plot. A quick way to see what the framing and the light do. The lists come with this workflow. Read it left to right.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Sweep every combination |\\n| `2` | A prompt and a label per frame |\\n| `3` | Quick preview |\\n| `4` | One click, nine images |\\n| `5` | The grid |\\n| `6` | A new seed per frame (optional) |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n![The node toolbar, with the indigo ? help button](wp:asset/toolbar-help){width=70%}\\n\\n:pi-images: More ways to batch: [Make variations](docs:howto-variations){button pi-images}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
       },
       "id": 1,
       "pos": [
@@ -32,7 +32,7 @@
     {
       "type": "WP_Note",
       "size": [
-        560,
+        1000,
         250
       ],
       "flags": {},
@@ -41,10 +41,10 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it once per frame. Its **Sweep combinations** walks *Shot* (3 options) against *Light* (3): 9 frames, and **count** follows it.\\n\\n**Hold other picks** keeps the same person, outfit, place, pose and angle on every frame, so only the swept lists change.\\n\\n[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1820, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.4, \"shortcut\": \"1\", \"order\": 1}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it once per frame. Its **Sweep combinations** walks *Shot* (3 options) against *Light* (3): 9 frames, and **count** follows it.\\n\\n**Hold other picks** keeps the same person, outfit, place, pose and angle on every frame, so only the swept lists change.\\n\\n[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1400, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"1\", \"order\": 1}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it once per frame. Its **Sweep combinations** walks *Shot* (3 options) against *Light* (3): 9 frames, and **count** follows it.\\n\\n**Hold other picks** keeps the same person, outfit, place, pose and angle on every frame, so only the swept lists change.\\n\\n[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1820, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.4, \"shortcut\": \"1\", \"order\": 1}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it once per frame. Its **Sweep combinations** walks *Shot* (3 options) against *Light* (3): 9 frames, and **count** follows it.\\n\\n**Hold other picks** keeps the same person, outfit, place, pose and angle on every frame, so only the swept lists change.\\n\\n[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1400, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"1\", \"order\": 1}}"
       },
       "id": 2,
       "pos": [
@@ -58,7 +58,7 @@
       "type": "WP_ContextLoop",
       "size": [
         400,
-        440
+        460
       ],
       "flags": {},
       "mode": 0,
@@ -126,14 +126,14 @@
       "id": 3,
       "pos": [
         0,
-        420
+        360
       ],
       "order": 2
     },
     {
       "type": "WP_Note",
       "size": [
-        560,
+        600,
         200
       ],
       "flags": {},
@@ -149,7 +149,7 @@
       },
       "id": 4,
       "pos": [
-        620,
+        1060,
         0
       ],
       "title": "Packs, built in",
@@ -159,7 +159,7 @@
       "type": "WP_Context",
       "size": [
         600,
-        620
+        420
       ],
       "flags": {},
       "mode": 0,
@@ -207,7 +207,7 @@
       "id": 5,
       "pos": [
         460,
-        300
+        360
       ],
       "title": "WP Context · Person",
       "order": 4
@@ -216,7 +216,7 @@
       "type": "WP_Context",
       "size": [
         600,
-        620
+        420
       ],
       "flags": {},
       "mode": 0,
@@ -264,8 +264,8 @@
       },
       "id": 6,
       "pos": [
-        1100,
-        300
+        1120,
+        360
       ],
       "title": "WP Context · Scene",
       "order": 5
@@ -273,7 +273,7 @@
     {
       "type": "WP_Note",
       "size": [
-        560,
+        1060,
         200
       ],
       "flags": {},
@@ -282,14 +282,14 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"The first **Assembler** writes the prompt. The second writes the label `$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and columns.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1820, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.4, \"shortcut\": \"2\", \"order\": 2}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"The **Assembler** writes the prompt and the **Cleaner** tidies it. The second Assembler, under the Cleaner, writes the label `$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and columns.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 2300, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"2\", \"order\": 2}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"The first **Assembler** writes the prompt. The second writes the label `$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and columns.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1820, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.4, \"shortcut\": \"2\", \"order\": 2}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"The **Assembler** writes the prompt and the **Cleaner** tidies it. The second Assembler, under the Cleaner, writes the label `$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and columns.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 2300, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"2\", \"order\": 2}}"
       },
       "id": 7,
       "pos": [
-        1600,
+        1780,
         0
       ],
       "title": "A prompt and a label per frame",
@@ -298,8 +298,8 @@
     {
       "type": "WP_PromptAssembler",
       "size": [
-        480,
-        460
+        500,
+        640
       ],
       "flags": {},
       "mode": 0,
@@ -363,16 +363,16 @@
       },
       "id": 8,
       "pos": [
-        1760,
-        300
+        1780,
+        360
       ],
       "order": 7
     },
     {
       "type": "WP_PromptCleaner",
       "size": [
-        480,
-        500
+        500,
+        520
       ],
       "flags": {},
       "mode": 0,
@@ -437,16 +437,16 @@
       },
       "id": 9,
       "pos": [
-        2300,
-        300
+        2340,
+        360
       ],
       "order": 8
     },
     {
       "type": "WP_PromptAssembler",
       "size": [
-        480,
-        360
+        500,
+        470
       ],
       "flags": {},
       "mode": 0,
@@ -508,8 +508,8 @@
       },
       "id": 10,
       "pos": [
-        2840,
-        300
+        2340,
+        920
       ],
       "title": "WP Prompt Assembler · grid labels",
       "order": 9
@@ -517,7 +517,7 @@
     {
       "type": "WP_Note",
       "size": [
-        560,
+        940,
         330
       ],
       "flags": {},
@@ -526,14 +526,14 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"bolt\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4340, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"4\", \"order\": 4}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"bolt\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4340, \"y\": 580}, \"zoomMode\": \"fixed\", \"zoom\": 0.53, \"shortcut\": \"4\", \"order\": 4}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
       },
       "id": 11,
       "pos": [
-        3760,
+        2960,
         0
       ],
       "title": "Quick preview",
@@ -578,8 +578,8 @@
       },
       "id": 12,
       "pos": [
-        3760,
-        420
+        2960,
+        360
       ],
       "title": "WP Toggles · steps",
       "order": 11
@@ -587,7 +587,7 @@
     {
       "type": "WP_VarToInt",
       "size": [
-        420,
+        460,
         180
       ],
       "flags": {},
@@ -644,8 +644,8 @@
       },
       "id": 13,
       "pos": [
-        3760,
-        640
+        2960,
+        580
       ],
       "title": "Steps",
       "order": 12
@@ -653,7 +653,7 @@
     {
       "type": "WP_VarToBool",
       "size": [
-        420,
+        460,
         180
       ],
       "flags": {},
@@ -710,8 +710,8 @@
       },
       "id": 14,
       "pos": [
-        4380,
-        700
+        2960,
+        820
       ],
       "title": "Quick preview?",
       "order": 13
@@ -719,7 +719,7 @@
     {
       "type": "EmptyLatentImage",
       "size": [
-        300,
+        420,
         110
       ],
       "flags": {},
@@ -778,8 +778,8 @@
       },
       "id": 15,
       "pos": [
-        3760,
-        880
+        3480,
+        360
       ],
       "title": "Quick size",
       "order": 14
@@ -787,7 +787,7 @@
     {
       "type": "EmptyLatentImage",
       "size": [
-        300,
+        420,
         110
       ],
       "flags": {},
@@ -846,8 +846,8 @@
       },
       "id": 16,
       "pos": [
-        3760,
-        1040
+        3480,
+        530
       ],
       "title": "Full size",
       "order": 15
@@ -855,7 +855,7 @@
     {
       "type": "ComfySwitchNode",
       "size": [
-        270,
+        420,
         80
       ],
       "flags": {},
@@ -906,8 +906,8 @@
       },
       "id": 17,
       "pos": [
-        4380,
-        420
+        3480,
+        820
       ],
       "title": "Latent",
       "order": 16
@@ -915,7 +915,7 @@
     {
       "type": "WP_Note",
       "size": [
-        560,
+        1280,
         230
       ],
       "flags": {},
@@ -924,15 +924,15 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run** once. The sampler seed is **fixed**, so only the prompt changes between cells: a fair comparison.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 900, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run** once. The sampler seed is **fixed**, so only the prompt changes between cells: a fair comparison.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"4\", \"order\": 4}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run** once. The sampler seed is **fixed**, so only the prompt changes between cells: a fair comparison.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 900, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run** once. The sampler seed is **fixed**, so only the prompt changes between cells: a fair comparison.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"4\", \"order\": 4}}"
       },
       "id": 18,
       "pos": [
-        0,
-        1320
+        4020,
+        0
       ],
       "title": "One click, nine images",
       "order": 17
@@ -940,7 +940,7 @@
     {
       "type": "CheckpointLoaderSimple",
       "size": [
-        380,
+        420,
         100
       ],
       "flags": {},
@@ -979,7 +979,7 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            20
+            17
           ]
         }
       ],
@@ -994,8 +994,8 @@
       },
       "id": 19,
       "pos": [
-        0,
-        1620
+        4020,
+        360
       ],
       "order": 18
     },
@@ -1030,7 +1030,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            17
+            18
           ]
         }
       ],
@@ -1045,8 +1045,8 @@
       },
       "id": 20,
       "pos": [
-        620,
-        1320
+        4500,
+        360
       ],
       "title": "Positive",
       "order": 19
@@ -1082,7 +1082,7 @@
           "name": "CONDITIONING",
           "type": "CONDITIONING",
           "links": [
-            18
+            19
           ]
         }
       ],
@@ -1097,8 +1097,8 @@
       },
       "id": 21,
       "pos": [
-        620,
-        1520
+        4500,
+        560
       ],
       "title": "Negative",
       "order": 20
@@ -1106,7 +1106,7 @@
     {
       "type": "KSampler",
       "size": [
-        300,
+        320,
         280
       ],
       "flags": {},
@@ -1122,13 +1122,13 @@
           "localized_name": "positive",
           "name": "positive",
           "type": "CONDITIONING",
-          "link": 17
+          "link": 18
         },
         {
           "localized_name": "negative",
           "name": "negative",
           "type": "CONDITIONING",
-          "link": 18
+          "link": 19
         },
         {
           "localized_name": "latent_image",
@@ -1197,7 +1197,7 @@
           "name": "LATENT",
           "type": "LATENT",
           "links": [
-            19
+            20
           ]
         }
       ],
@@ -1224,15 +1224,15 @@
       },
       "id": 22,
       "pos": [
-        1080,
-        1320
+        4960,
+        360
       ],
       "order": 21
     },
     {
       "type": "VAEDecode",
       "size": [
-        200,
+        320,
         50
       ],
       "flags": {},
@@ -1242,13 +1242,13 @@
           "localized_name": "samples",
           "name": "samples",
           "type": "LATENT",
-          "link": 19
+          "link": 20
         },
         {
           "localized_name": "vae",
           "name": "vae",
           "type": "VAE",
-          "link": 20
+          "link": 17
         }
       ],
       "outputs": [
@@ -1266,15 +1266,15 @@
       },
       "id": 23,
       "pos": [
-        1440,
-        1320
+        4960,
+        700
       ],
       "order": 22
     },
     {
       "type": "WP_Note",
       "size": [
-        560,
+        1580,
         230
       ],
       "flags": {},
@@ -1283,15 +1283,15 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** has two outputs: `images` (each one with its label) and `grid` (one sheet, saved here). Rows come from label part 1, columns from part 2.\\n\\n:pi-image: Want the images with no labels? Wire **VAE Decode** straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-th-large}\", \"color\": \"info\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 2760, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"5\", \"order\": 5}}"
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** has two outputs: `images` (each one with its label) and `grid` (one sheet, saved here). Rows come from label part 1, columns from part 2.\\n\\n:pi-image: Want the images with no labels? Wire **VAE Decode** straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-th-large}\", \"color\": \"info\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 6220, \"y\": 760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"5\", \"order\": 5}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** has two outputs: `images` (each one with its label) and `grid` (one sheet, saved here). Rows come from label part 1, columns from part 2.\\n\\n:pi-image: Want the images with no labels? Wire **VAE Decode** straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-th-large}\", \"color\": \"info\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 2760, \"y\": 1760}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"5\", \"order\": 5}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** has two outputs: `images` (each one with its label) and `grid` (one sheet, saved here). Rows come from label part 1, columns from part 2.\\n\\n:pi-image: Want the images with no labels? Wire **VAE Decode** straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-th-large}\", \"color\": \"info\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 6220, \"y\": 760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"5\", \"order\": 5}}"
       },
       "id": 24,
       "pos": [
-        1920,
-        1320
+        5420,
+        0
       ],
       "title": "The grid",
       "order": 23
@@ -1300,7 +1300,7 @@
       "type": "WP_LabelGrid",
       "size": [
         520,
-        480
+        490
       ],
       "flags": {},
       "mode": 0,
@@ -1375,16 +1375,16 @@
       },
       "id": 25,
       "pos": [
-        1920,
-        1620
+        5420,
+        360
       ],
       "order": 24
     },
     {
       "type": "SaveImage",
       "size": [
-        1100,
-        900
+        1000,
+        1040
       ],
       "flags": {},
       "mode": 0,
@@ -1422,16 +1422,16 @@
       },
       "id": 26,
       "pos": [
-        2520,
-        1320
+        6000,
+        360
       ],
       "order": 25
     },
     {
       "type": "WP_Note",
       "size": [
-        560,
-        200
+        980,
+        160
       ],
       "flags": {},
       "mode": 0,
@@ -1439,15 +1439,15 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"replay\", \"text\": \"Un-bypass the **Seed List** (select it, Ctrl+B) to give every frame its own sampler seed. It follows the Loop's frame count through `loop_config`. Bypassed, the sampler's fixed seed is used.\\n\\n[WP Seed List](docs:wp-seed-list){button pi-list}\", \"color\": \"neutral\", \"bookmark\": null}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 6, \"icon\": \"info-circle\", \"text\": \"Un-bypass the **Seed List** (select it, Ctrl+B) to give every frame its own sampler seed. It follows the Loop's frame count through `loop_config`. Bypassed, the sampler's fixed seed is used.\\n\\n[WP Seed List](docs:wp-seed-list){button pi-list}\", \"color\": \"neutral\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4510, \"y\": 1900}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"6\", \"order\": 6}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"replay\", \"text\": \"Un-bypass the **Seed List** (select it, Ctrl+B) to give every frame its own sampler seed. It follows the Loop's frame count through `loop_config`. Bypassed, the sampler's fixed seed is used.\\n\\n[WP Seed List](docs:wp-seed-list){button pi-list}\", \"color\": \"neutral\", \"bookmark\": null}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 6, \"icon\": \"info-circle\", \"text\": \"Un-bypass the **Seed List** (select it, Ctrl+B) to give every frame its own sampler seed. It follows the Loop's frame count through `loop_config`. Bypassed, the sampler's fixed seed is used.\\n\\n[WP Seed List](docs:wp-seed-list){button pi-list}\", \"color\": \"neutral\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4510, \"y\": 1900}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"6\", \"order\": 6}}"
       },
       "id": 27,
       "pos": [
-        3760,
-        1320
+        4020,
+        1600
       ],
       "title": "A new seed per frame (optional)",
       "order": 26
@@ -1455,8 +1455,8 @@
     {
       "type": "WP_SeedList",
       "size": [
-        400,
-        340
+        460,
+        370
       ],
       "flags": {},
       "mode": 4,
@@ -1515,8 +1515,8 @@
       },
       "id": 28,
       "pos": [
-        3760,
-        1600
+        4020,
+        1840
       ],
       "order": 27
     }
@@ -1652,6 +1652,14 @@
     ],
     [
       17,
+      19,
+      2,
+      23,
+      1,
+      "VAE"
+    ],
+    [
+      18,
       20,
       0,
       22,
@@ -1659,7 +1667,7 @@
       "CONDITIONING"
     ],
     [
-      18,
+      19,
       21,
       0,
       22,
@@ -1667,20 +1675,12 @@
       "CONDITIONING"
     ],
     [
-      19,
+      20,
       22,
       0,
       23,
       0,
       "LATENT"
-    ],
-    [
-      20,
-      19,
-      2,
-      23,
-      1,
-      "VAE"
     ],
     [
       21,
@@ -1746,8 +1746,8 @@
       "bounding": [
         -40,
         -60,
-        3720,
-        1280
+        2920,
+        1460
       ],
       "color": "#3f789e",
       "flags": {}
@@ -1756,10 +1756,10 @@
       "id": 2,
       "title": "Quick preview",
       "bounding": [
-        3720,
+        2920,
         -60,
-        1240,
-        1280
+        1020,
+        1460
       ],
       "color": "#b06634",
       "flags": {}
@@ -1768,10 +1768,10 @@
       "id": 3,
       "title": "Image",
       "bounding": [
-        -40,
-        1260,
-        1900,
-        1000
+        3980,
+        -60,
+        1360,
+        1460
       ],
       "color": "#2f6b4f",
       "flags": {}
@@ -1780,10 +1780,10 @@
       "id": 4,
       "title": "Grid",
       "bounding": [
-        1880,
-        1260,
-        1800,
-        1000
+        5380,
+        -60,
+        1660,
+        1460
       ],
       "color": "#7a4ea8",
       "flags": {}
@@ -1792,10 +1792,10 @@
       "id": 5,
       "title": "Optional · a new seed per frame",
       "bounding": [
-        3720,
-        1260,
-        1240,
-        1000
+        3980,
+        1540,
+        1060,
+        720
       ],
       "color": "#6b7280",
       "flags": {}
@@ -1809,7 +1809,573 @@
         2540,
         380
       ]
-    }
+    },
+    "reroutes": [
+      {
+        "id": 1,
+        "pos": [
+          1740,
+          400
+        ],
+        "linkIds": [
+          4
+        ]
+      },
+      {
+        "id": 2,
+        "pos": [
+          1740,
+          960
+        ],
+        "linkIds": [
+          4
+        ],
+        "parentId": 1
+      },
+      {
+        "id": 3,
+        "pos": [
+          2940,
+          400
+        ],
+        "linkIds": [
+          8
+        ]
+      },
+      {
+        "id": 4,
+        "pos": [
+          2940,
+          860
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 3
+      },
+      {
+        "id": 5,
+        "pos": [
+          4460,
+          390
+        ],
+        "linkIds": [
+          12
+        ]
+      },
+      {
+        "id": 6,
+        "pos": [
+          4460,
+          420
+        ],
+        "linkIds": [
+          12
+        ],
+        "parentId": 5
+      },
+      {
+        "id": 7,
+        "pos": [
+          2894,
+          400
+        ],
+        "linkIds": [
+          13
+        ]
+      },
+      {
+        "id": 8,
+        "pos": [
+          2894,
+          1450
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 7
+      },
+      {
+        "id": 9,
+        "pos": [
+          4476,
+          1450
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 8
+      },
+      {
+        "id": 10,
+        "pos": [
+          4476,
+          460
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 9
+      },
+      {
+        "id": 11,
+        "pos": [
+          4460,
+          390
+        ],
+        "linkIds": [
+          14
+        ]
+      },
+      {
+        "id": 12,
+        "pos": [
+          4460,
+          432
+        ],
+        "linkIds": [
+          14
+        ],
+        "parentId": 11
+      },
+      {
+        "id": 13,
+        "pos": [
+          2906,
+          412
+        ],
+        "linkIds": [
+          15
+        ]
+      },
+      {
+        "id": 14,
+        "pos": [
+          2906,
+          1462
+        ],
+        "linkIds": [
+          15
+        ],
+        "parentId": 13
+      },
+      {
+        "id": 15,
+        "pos": [
+          4488,
+          1462
+        ],
+        "linkIds": [
+          15
+        ],
+        "parentId": 14
+      },
+      {
+        "id": 16,
+        "pos": [
+          4488,
+          472
+        ],
+        "linkIds": [
+          15
+        ],
+        "parentId": 15
+      },
+      {
+        "id": 17,
+        "pos": [
+          4470,
+          336
+        ],
+        "linkIds": [
+          16
+        ]
+      },
+      {
+        "id": 18,
+        "pos": [
+          4908,
+          336
+        ],
+        "linkIds": [
+          16
+        ],
+        "parentId": 17
+      },
+      {
+        "id": 19,
+        "pos": [
+          4908,
+          400
+        ],
+        "linkIds": [
+          16
+        ],
+        "parentId": 18
+      },
+      {
+        "id": 20,
+        "pos": [
+          4480,
+          324
+        ],
+        "linkIds": [
+          17
+        ]
+      },
+      {
+        "id": 21,
+        "pos": [
+          4918,
+          324
+        ],
+        "linkIds": [
+          17
+        ],
+        "parentId": 20
+      },
+      {
+        "id": 22,
+        "pos": [
+          4918,
+          730
+        ],
+        "linkIds": [
+          17
+        ],
+        "parentId": 21
+      },
+      {
+        "id": 23,
+        "pos": [
+          5296,
+          390
+        ],
+        "linkIds": [
+          20
+        ]
+      },
+      {
+        "id": 24,
+        "pos": [
+          5296,
+          670
+        ],
+        "linkIds": [
+          20
+        ],
+        "parentId": 23
+      },
+      {
+        "id": 25,
+        "pos": [
+          4954,
+          670
+        ],
+        "linkIds": [
+          20
+        ],
+        "parentId": 24
+      },
+      {
+        "id": 26,
+        "pos": [
+          4954,
+          730
+        ],
+        "linkIds": [
+          20
+        ],
+        "parentId": 25
+      },
+      {
+        "id": 27,
+        "pos": [
+          3940,
+          1040
+        ],
+        "linkIds": [
+          21
+        ]
+      },
+      {
+        "id": 28,
+        "pos": [
+          4928,
+          1040
+        ],
+        "linkIds": [
+          21
+        ],
+        "parentId": 27
+      },
+      {
+        "id": 29,
+        "pos": [
+          4928,
+          440
+        ],
+        "linkIds": [
+          21
+        ],
+        "parentId": 28
+      },
+      {
+        "id": 30,
+        "pos": [
+          3440,
+          1060
+        ],
+        "linkIds": [
+          22
+        ]
+      },
+      {
+        "id": 31,
+        "pos": [
+          4938,
+          1060
+        ],
+        "linkIds": [
+          22
+        ],
+        "parentId": 30
+      },
+      {
+        "id": 32,
+        "pos": [
+          4938,
+          510
+        ],
+        "linkIds": [
+          22
+        ],
+        "parentId": 31
+      },
+      {
+        "id": 33,
+        "pos": [
+          5320,
+          740
+        ],
+        "linkIds": [
+          23
+        ]
+      },
+      {
+        "id": 34,
+        "pos": [
+          5380,
+          740
+        ],
+        "linkIds": [
+          23
+        ],
+        "parentId": 33
+      },
+      {
+        "id": 35,
+        "pos": [
+          5380,
+          400
+        ],
+        "linkIds": [
+          23
+        ],
+        "parentId": 34
+      },
+      {
+        "id": 36,
+        "pos": [
+          2880,
+          950
+        ],
+        "linkIds": [
+          24
+        ]
+      },
+      {
+        "id": 37,
+        "pos": [
+          2880,
+          1414
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 36
+      },
+      {
+        "id": 38,
+        "pos": [
+          5392,
+          1414
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 37
+      },
+      {
+        "id": 39,
+        "pos": [
+          5392,
+          420
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 38
+      },
+      {
+        "id": 40,
+        "pos": [
+          430,
+          420
+        ],
+        "linkIds": [
+          26
+        ]
+      },
+      {
+        "id": 41,
+        "pos": [
+          430,
+          1426
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 40
+      },
+      {
+        "id": 42,
+        "pos": [
+          3990,
+          1426
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 41
+      },
+      {
+        "id": 43,
+        "pos": [
+          3990,
+          1880
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 42
+      },
+      {
+        "id": 44,
+        "pos": [
+          4520,
+          1880
+        ],
+        "linkIds": [
+          27
+        ]
+      },
+      {
+        "id": 45,
+        "pos": [
+          4520,
+          1438
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 44
+      },
+      {
+        "id": 46,
+        "pos": [
+          4948,
+          1438
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 45
+      },
+      {
+        "id": 47,
+        "pos": [
+          4948,
+          480
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 46
+      }
+    ],
+    "linkExtensions": [
+      {
+        "id": 4,
+        "parentId": 2
+      },
+      {
+        "id": 8,
+        "parentId": 4
+      },
+      {
+        "id": 12,
+        "parentId": 6
+      },
+      {
+        "id": 13,
+        "parentId": 10
+      },
+      {
+        "id": 14,
+        "parentId": 12
+      },
+      {
+        "id": 15,
+        "parentId": 16
+      },
+      {
+        "id": 16,
+        "parentId": 19
+      },
+      {
+        "id": 17,
+        "parentId": 22
+      },
+      {
+        "id": 20,
+        "parentId": 26
+      },
+      {
+        "id": 21,
+        "parentId": 29
+      },
+      {
+        "id": 22,
+        "parentId": 32
+      },
+      {
+        "id": 23,
+        "parentId": 35
+      },
+      {
+        "id": 24,
+        "parentId": 39
+      },
+      {
+        "id": 26,
+        "parentId": 43
+      },
+      {
+        "id": 27,
+        "parentId": 47
+      }
+    ]
   },
   "version": 0.4
 }
