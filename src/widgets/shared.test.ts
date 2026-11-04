@@ -236,4 +236,14 @@ describe("negatives opt-in on load", () => {
     markNegativeOptIn(n as never);
     expect(n.properties[NEG_SLOT_PROP]).toBe(true);
   });
+
+  it("a new node's empty box starts with $negatives; a box with text is left alone", async () => {
+    const { prefillNegativeSlot } = await import("./assembler");
+    const empty = node("");
+    prefillNegativeSlot(empty as never);
+    expect(neg(empty)).toBe("$negatives");
+    const text = node("lowres");
+    prefillNegativeSlot(text as never);
+    expect(neg(text)).toBe("lowres");
+  });
 });

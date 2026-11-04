@@ -85,6 +85,15 @@ export function markNegativeOptIn(node: AssemblerNode): void {
   n.properties[NEG_SLOT_PROP] = true;
 }
 
+/** Start a NEW Assembler's negative box with `$negatives`. The box is our
+ *  own DOM widget, which ComfyUI never fills from the input's default, so the
+ *  node def's `default="$negatives"` alone left it empty. Runs from
+ *  `onNodeCreated`, before a loaded workflow writes its saved value over it. */
+export function prefillNegativeSlot(node: AssemblerNode): void {
+  const w = negativeTemplateWidget(node);
+  if (w && (w.value === "" || w.value == null)) w.value = withSlot("");
+}
+
 /** After a workflow load: an Assembler saved before negatives became opt-in
  *  (its saved properties lack the mark) gets `$negatives` added to its box. */
 export function migrateNegativeOptIn(node: AssemblerNode, info: unknown): void {

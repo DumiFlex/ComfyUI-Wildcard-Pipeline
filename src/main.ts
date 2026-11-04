@@ -412,6 +412,7 @@ app.registerExtension({
     const orig = nt.prototype.onNodeCreated;
     nt.prototype.onNodeCreated = function (this: AssemblerHelperNode, ...args: unknown[]) {
       orig?.apply(this, args);
+      asmMod.prefillNegativeSlot(this);
       asmMod.markNegativeOptIn(this);
       asmMod.mountHelper(this);
       dimWidgetsWhileSkipped(this, ["template", "negative_template"]);
