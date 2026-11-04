@@ -152,6 +152,10 @@ export function useEditorDraft(opts: EditorDraftOptions): EditorDraft {
   }
 
   function discard(): void {
+    // A draft write still waiting on its debounce (or the unmount flush)
+    // would bring the discarded edits straight back.
+    pending = false;
+    if (timer) { clearTimeout(timer); timer = null; }
     if (storage) try { storage.removeItem(key); } catch { /* ignore */ }
     bootstrap.value = null;
   }

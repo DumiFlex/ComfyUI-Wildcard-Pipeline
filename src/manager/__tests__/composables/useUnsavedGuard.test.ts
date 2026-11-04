@@ -29,6 +29,7 @@ const GuardHost = defineComponent({
   setup(props) {
     const { showConfirm, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
       () => props.dirty,
+      () => { discarded += 1; },
     );
     return { showConfirm, onConfirmLeave, onCancelLeave };
   },
@@ -75,6 +76,8 @@ async function waitForGuard(): Promise<void> {
 }
 
 let wrappers: ReturnType<typeof mount>[] = [];
+/** How many times the guard asked the host to discard its draft. */
+let discarded = 0;
 
 beforeEach(() => {
   wrappers = [];
@@ -150,6 +153,21 @@ describe("useUnsavedGuard", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.path).toBe("/list");
+  });
+
+  it("onConfirmLeave asks the editor to discard its draft; Stay doesn't", async () => {
+    discarded = 0;
+    const { wrap, router } = await mountEditor(true);
+    const stay = router.push("/list");
+    await waitForGuard();
+    await wrap.find('[data-test="cancel-btn"]').trigger("click");
+    await stay;
+    expect(discarded).toBe(0);
+    const leave = router.push("/list");
+    await waitForGuard();
+    await wrap.find('[data-test="confirm-btn"]').trigger("click");
+    await leave;
+    expect(discarded).toBe(1);
   });
 
   it("onCancelLeave closes dialog and blocks navigation", async () => {

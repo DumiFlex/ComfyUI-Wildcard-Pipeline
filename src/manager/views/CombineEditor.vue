@@ -270,6 +270,7 @@ function useAiTemplate(p: Record<string, unknown>): void {
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
 
 /** Load a stored payload into the editor (saved row or chat draft). An empty

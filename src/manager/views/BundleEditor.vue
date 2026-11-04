@@ -343,6 +343,7 @@ function bundleSnapshot(): string {
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
+  () => draft.discard()
 );
 
 // The chat reads and edits this item's info here; its children stay on

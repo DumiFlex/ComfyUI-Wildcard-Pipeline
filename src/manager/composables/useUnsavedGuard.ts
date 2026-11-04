@@ -33,7 +33,12 @@ export interface UnsavedGuard {
   onCancelLeave(): void;
 }
 
-export function useUnsavedGuard(isDirty: () => boolean): UnsavedGuard {
+/**
+ * `onDiscard` runs when the user confirms Discard & leave, so an editor can
+ * drop its autosaved draft too (otherwise the next visit offers to restore
+ * the very edits the user just threw away).
+ */
+export function useUnsavedGuard(isDirty: () => boolean, onDiscard?: () => void): UnsavedGuard {
   const showConfirm = ref(false);
   let pendingResolve: ((proceed: boolean) => void) | null = null;
 
@@ -64,6 +69,7 @@ export function useUnsavedGuard(isDirty: () => boolean): UnsavedGuard {
 
   function onConfirmLeave(): void {
     showConfirm.value = false;
+    onDiscard?.();
     pendingResolve?.(true);
     pendingResolve = null;
   }

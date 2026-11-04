@@ -192,6 +192,7 @@ function useAiValues(p: Record<string, unknown>): void {
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
 
 /** Load a stored payload's values into the editor (saved row or chat draft). */
