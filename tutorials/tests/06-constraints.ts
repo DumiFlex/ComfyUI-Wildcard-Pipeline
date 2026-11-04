@@ -44,6 +44,8 @@ tutorial(
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 260 });
       await t.pickModules(ctx, ["Hero", "Hero fits the place", "Setting"]);
+      await t.say("Order matters here too. Rows run top to bottom: the constraint reads a Hero that has already rolled, and only changes Settings that roll after it. Put it above the Hero, or below the Setting, and it does nothing.");
+      await t.waitVoice();
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 260 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());

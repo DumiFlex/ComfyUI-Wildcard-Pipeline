@@ -185,6 +185,12 @@
   "text": "Load a pack, check the plan, import, and its lists work like your own. Next: sharing and publishing.",
   "voice": "af_heart"
  },
+ "10175c2d8472": {
+  "ms": 3072,
+  "speed": 1.0,
+  "text": "It lists what's inside. Select all, and continue.",
+  "voice": "af_heart"
+ },
  "106c4c910925": {
   "ms": 5184,
   "speed": 1.0,
@@ -369,6 +375,12 @@
   "ms": 5205,
   "speed": 1.0,
   "text": "Draft many, keep few, refine those. The Image Filter video shows the picker in full.",
+  "voice": "af_heart"
+ },
+ "1dbdf190ec08": {
+  "ms": 3051,
+  "speed": 1.0,
+  "text": "Nothing here clashes with your library, so import it.",
   "voice": "af_heart"
  },
  "1e5956b48c0b": {
@@ -581,6 +593,12 @@
   "text": "It also takes a negative, like any other source.",
   "voice": "af_heart"
  },
+ "2f292cd13367": {
+  "ms": 1067,
+  "speed": 1.0,
+  "text": "Choose the file.",
+  "voice": "af_heart"
+ },
  "2f6f96c67804": {
   "ms": 5973,
   "speed": 1.0,
@@ -725,6 +743,12 @@
   "text": "Negatives ride with the picks that need them, only reach an Assembler that prints them, and the Cleaner tidies what's left. Next: chaining Contexts.",
   "voice": "af_heart"
  },
+ "395987eb1df3": {
+  "ms": 2709,
+  "speed": 1.0,
+  "text": "Open Import and Export, then the Import tab.",
+  "voice": "af_heart"
+ },
  "39b01f3c2403": {
   "ms": 4928,
   "speed": 1.0,
@@ -819,6 +843,12 @@
   "ms": 9344,
   "speed": 1.0,
   "text": "A negative belongs to the pick that needs it. In Outfit, plate armor sends rust and broken armor to the negative prompt, only when plate armor is picked.",
+  "voice": "af_heart"
+ },
+ "417c570e517e": {
+  "ms": 7893,
+  "speed": 1.0,
+  "text": "The example workflows carry their lists too. Their first note has an Add to my library button that saves them, if you'd rather start there.",
   "voice": "af_heart"
  },
  "4198872a7351": {
@@ -1427,6 +1457,12 @@
   "text": "And the state markers can be badges, or small dots.",
   "voice": "af_heart"
  },
+ "73873fa47774": {
+  "ms": 12373,
+  "speed": 1.0,
+  "text": "Order matters: rows run top to bottom, so the rule goes after Time of day, which it reads, and the combine goes last, after everything it uses. A rule placed above what it reads sees nothing yet.",
+  "voice": "af_heart"
+ },
  "7418d9d210ae": {
   "ms": 7445,
   "speed": 1.0,
@@ -1569,6 +1605,12 @@
   "ms": 4757,
   "speed": 1.0,
   "text": "Time, setting and lighting only feed the scene line. Hide them with their globe buttons.",
+  "voice": "af_heart"
+ },
+ "7fee97af2629": {
+  "ms": 9813,
+  "speed": 1.0,
+  "text": "The tutorials all use the same small library: a hero, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.",
   "voice": "af_heart"
  },
  "7ffd0bd7c749": {
@@ -2129,6 +2171,12 @@
   "text": "Step one: pick your model in Load Checkpoint. The two LoRA loaders under it stay bypassed until you switch them on.",
   "voice": "af_heart"
  },
+ "a803c63c91e3": {
+  "ms": 3200,
+  "speed": 1.0,
+  "text": "That's all the setup. Next: your first random prompt.",
+  "voice": "af_heart"
+ },
  "a8e131ac2101": {
   "ms": 2560,
   "speed": 1.0,
@@ -2319,6 +2367,12 @@
   "ms": 4416,
   "speed": 1.0,
   "text": "Your installed LoRAs and embeddings work the same way, once you have some.",
+  "voice": "af_heart"
+ },
+ "b8dc6b9b8b99": {
+  "ms": 5611,
+  "speed": 1.0,
+  "text": "The wildcards, rules and bundles are in your library now, and every tutorial can use them.",
   "voice": "af_heart"
  },
  "b9991d78fc0b": {
@@ -2535,6 +2589,12 @@
   "ms": 4203,
   "speed": 1.0,
   "text": "It asks before it goes online, and shows what it will look up. Allow once.",
+  "voice": "af_heart"
+ },
+ "c986a41cb1e9": {
+  "ms": 7915,
+  "speed": 1.0,
+  "text": "So first, bring the tutorial library in. The file, WP Tutorials library dot json, comes with the videos.",
   "voice": "af_heart"
  },
  "c9aeb816d168": {
@@ -2883,6 +2943,12 @@
   "ms": 1088,
   "speed": 1.0,
   "text": "Apply makes it.",
+  "voice": "af_heart"
+ },
+ "e2e0167f4834": {
+  "ms": 13205,
+  "speed": 1.0,
+  "text": "Order matters here too. Rows run top to bottom: the constraint reads a Hero that has already rolled, and only changes Settings that roll after it. Put it above the Hero, or below the Setting, and it does nothing.",
   "voice": "af_heart"
  },
  "e3269bd8e7cc": {
