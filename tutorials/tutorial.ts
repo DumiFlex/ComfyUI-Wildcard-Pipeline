@@ -213,6 +213,8 @@ export class Tutor {
 
   /** Scrolls a part into view first when it sits under the page's edges (a sticky footer, the caption). */
   private async bringIntoView(target: Locator): Promise<void> {
+    // On the ComfyUI canvas the wheel zooms instead of scrolling, so leave the view alone there.
+    if (!this.inManager()) return;
     await target.waitFor({ state: "attached", timeout: 15_000 });
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     const box = await target.boundingBox();
@@ -261,7 +263,13 @@ export class Tutor {
    * Scrolls with the wheel, the pointer over the part that scrolls, until `target`'s top sits in
    * the upper part of the screen (`at`, a share of the height). Already there: no scroll.
    */
+  /** Whether the page is the manager (`/wp/…`), where the wheel scrolls; on the canvas it zooms. */
+  private inManager(): boolean {
+    return new URL(this.page.url()).pathname.startsWith("/wp");
+  }
+
   async scrollTo(target: Locator, { at = 0.22 }: { at?: number } = {}): Promise<void> {
+    if (!this.inManager()) return;
     await target.waitFor({ state: "attached", timeout: 15_000 });
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     let first = await target.boundingBox();
