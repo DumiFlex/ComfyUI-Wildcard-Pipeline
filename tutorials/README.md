@@ -11,7 +11,7 @@ After the take, `render.mjs` adds a text-to-speech voice and writes the finished
 | File | What it does |
 |---|---|
 | `pack.ts` | The Watchwright pack. It records in Chromium at 1920 × 1080 in dark mode, keeps a video of every take, and puts your library back afterwards (`../bench/lifecycle.ts`). |
-| `tutorial.ts` | The presenter (`Tutor`): `say`, `click`, `drag`, `type`, `callout`, `addNode`, `wire`, `run`, `fastForward`. |
+| `tutorial.ts` | The presenter (`Tutor`): `say`, `click`, `drag`, `type`, `fill`, `scrollTo`, `go`, `callout`, `addNode`, `wire`, `pickModules`, `run`, `fastForward`, plus `showcase` for rendering real images. |
 | `cursor.js` | The page script that draws the pointer, captions, callouts and the sync mark. |
 | `library.json` | The library every take starts from (the example workflows' rows). |
 | `voice/speak.py` | Speaks every `t.say("…")` line with Kokoro-82M into `voice/cache/` and writes `voice/lines.json`. |
@@ -30,7 +30,7 @@ The pack's `reset` setting (on by default) loads `library.json` before the first
 ```ts
 import { tutorial } from "../tutorial.js";
 
-tutorial("T02", { title: "Make your own wildcard" }, async (t) => {
+tutorial("T07", { title: "Your next tutorial" }, async (t) => {
   await t.h.step("Add a Context node", async () => {
     await t.say("Double-click the canvas and search for WP Context.");
     const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
@@ -46,6 +46,23 @@ tutorial("T02", { title: "Make your own wildcard" }, async (t) => {
 - `t.addNode(search, {x, y})` drops the node centred on that point. Leave the bottom 140 px free for the caption.
 - Wrap a long wait in `t.fastForward(() => …)`, such as a model run. The video plays that part 6× faster.
 - `addNode` sets new seeds to fixed, so what the video shows matches what the narration says.
+
+### Pack settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `reset` | on | Loads `library.json` before the first tutorial. |
+| `showcase` | off | Ends each tutorial by rendering real images from its prompt (needs a GPU and the checkpoint below). Leave it off where no model is installed. |
+| `checkpoint` | `novaCartoonXL_v60` | The checkpoint the showcase uses, without the extension. A missing one stops the take and lists the ones ComfyUI has. |
+| `steps`, `cfg` | 24, 5 | The showcase sampler's steps and CFG. |
+
+### More helpers
+
+- `t.go("/wp/wildcards")` opens a manager page, or `t.go("/")` for an empty canvas. The load plays fast and the caption stays up.
+- `t.fill(locator, text)` clicks a field, clears it and types, the way a person would.
+- `t.scrollTo(locator)` wheel-scrolls the page until the target is near the top. `t.click` scrolls by itself when its target is off screen or under the caption.
+- `t.pickModules(contextId, ["Hero", "Setting"])` opens a Context node's picker, scrolls to each row and ticks it (in that order), then adds them.
+- `if (showcasing(t)) await showcase(t, { from: assembler, preview, chain })` builds a folded checkpoint → sampler chain fed by the Assembler, adds a preview and runs it a few times, fast-forwarded. `between(i)` runs before each run after the first (change a seed, flip a toggle).
 
 ## Notes
 

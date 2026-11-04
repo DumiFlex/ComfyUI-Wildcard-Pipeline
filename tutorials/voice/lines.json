@@ -1,8 +1,44 @@
 {
+ "01aa462feb9c": {
+  "ms": 2837,
+  "speed": 1.0,
+  "text": "Change the seed, and the weather rolls with the hero.",
+  "voice": "af_heart"
+ },
+ "038520e2868f": {
+  "ms": 768,
+  "speed": 1.0,
+  "text": "Save it.",
+  "voice": "af_heart"
+ },
+ "106c4c910925": {
+  "ms": 5184,
+  "speed": 1.0,
+  "text": "On the canvas, the constraint goes between the two lists: Hero, the constraint, then Setting.",
+  "voice": "af_heart"
+ },
+ "110fa32584ae": {
+  "ms": 2112,
+  "speed": 1.0,
+  "text": "Now the template only needs two names.",
+  "voice": "af_heart"
+ },
  "13cd23613d87": {
   "ms": 4693,
   "speed": 1.0,
   "text": "Each one rolls one option and keeps it in a variable: hero, outfit and setting.",
+  "voice": "af_heart"
+ },
+ "1577b8b81b7d": {
+  "ms": 4715,
+  "speed": 1.0,
+  "text": "And the gear opens the settings: themes, density, and how the canvas widgets look.",
+  "voice": "af_heart"
+ },
+ "1594804181ff": {
+  "ms": 5845,
+  "speed": 1.0,
+  "text": "On the canvas, a Context node picks Hero and Outfit first, then Style and the new Hero line.",
   "voice": "af_heart"
  },
  "166012658898": {
@@ -11,10 +47,100 @@
   "text": "Drag a wire from context to context.",
   "voice": "af_heart"
  },
+ "1b4ab1b8b262": {
+  "ms": 3008,
+  "speed": 1.0,
+  "text": "lighting becomes moonlight and a warm lantern glow.",
+  "voice": "af_heart"
+ },
+ "1f61a094c1b7": {
+  "ms": 6123,
+  "speed": 1.0,
+  "text": "Fixed values hold what never changes, combines build lines you reuse. Next: derivations.",
+  "voice": "af_heart"
+ },
  "2316739f0dc7": {
   "ms": 896,
   "speed": 1.0,
   "text": "Press Run.",
+  "voice": "af_heart"
+ },
+ "2326db785937": {
+  "ms": 3136,
+  "speed": 1.0,
+  "text": "The manager opens in its own window, on the dashboard.",
+  "voice": "af_heart"
+ },
+ "26421a02d89b": {
+  "ms": 6763,
+  "speed": 1.0,
+  "text": "Derivations set a variable by a rule, constraints keep picks that clash apart, and bundles group items together.",
+  "voice": "af_heart"
+ },
+ "2660c2190195": {
+  "ms": 5653,
+  "speed": 1.0,
+  "text": "Rules keep your picks making sense together. Next: constraints, which change the odds instead.",
+  "voice": "af_heart"
+ },
+ "26c0e72a9fa0": {
+  "ms": 2731,
+  "speed": 1.0,
+  "text": "This one reads the Hero and re-weights the Setting.",
+  "voice": "af_heart"
+ },
+ "26f5ff32982a": {
+  "ms": 4395,
+  "speed": 1.0,
+  "text": "Every option has a weight. The chance column shows how often each one rolls.",
+  "voice": "af_heart"
+ },
+ "338d8373eb82": {
+  "ms": 3840,
+  "speed": 1.0,
+  "text": "The sidebar lists your modules: the pieces a prompt is built from.",
+  "voice": "af_heart"
+ },
+ "37b3e46e447c": {
+  "ms": 4459,
+  "speed": 1.0,
+  "text": "A combine joins variables into one line you can reuse. Let's make one.",
+  "voice": "af_heart"
+ },
+ "3f9efb813688": {
+  "ms": 4331,
+  "speed": 1.0,
+  "text": "Documentation explains every node, editor and setting, with pictures.",
+  "voice": "af_heart"
+ },
+ "404b595aee9e": {
+  "ms": 1813,
+  "speed": 1.0,
+  "text": "Save it, and it's in your library.",
+  "voice": "af_heart"
+ },
+ "4593f77bfe49": {
+  "ms": 3989,
+  "speed": 1.0,
+  "text": "Change the seed until the time rolls night, and watch the lighting follow.",
+  "voice": "af_heart"
+ },
+ "4743c9d8a71d": {
+  "ms": 2816,
+  "speed": 1.0,
+  "text": "From here you can start any new item in one click.",
+  "voice": "af_heart"
+ },
+ "4b84f916ede4": {
+  "ms": 4245,
+  "speed": 1.0,
+  "text": "Night brings the moonlight, and the negative output gets the rule's negative.",
+  "voice": "af_heart"
+ },
+ "4e308a7941cf": {
+  "ms": 3776,
+  "speed": 1.0,
+  "text": "Back on the canvas, add a Context node and pick Hero and Weather.",
   "voice": "af_heart"
  },
  "540ace07a36b": {
@@ -23,10 +149,28 @@
   "text": "Next, a WP Prompt Assembler. It writes the prompt.",
   "voice": "af_heart"
  },
+ "57c3de063bbb": {
+  "ms": 3776,
+  "speed": 1.0,
+  "text": "The style stays put while the hero line rolls with every seed.",
+  "voice": "af_heart"
+ },
  "58e7c938f87e": {
   "ms": 3499,
   "speed": 1.0,
   "text": "The Assembler shows the prompt it will write, before you run anything.",
+  "voice": "af_heart"
+ },
+ "590497dcb5ec": {
+  "ms": 3797,
+  "speed": 1.0,
+  "text": "Now the options: one per line. Each prompt rolls one of them.",
+  "voice": "af_heart"
+ },
+ "5dfbe441b399": {
+  "ms": 3093,
+  "speed": 1.0,
+  "text": "Give it a name. The variable name follows on its own.",
   "voice": "af_heart"
  },
  "5fb2cbe57356": {
@@ -41,10 +185,118 @@
   "text": "Wildcard Pipeline builds random prompts from lists you keep in a library. Let's make a first one.",
   "voice": "af_heart"
  },
+ "66d3bbeafd33": {
+  "ms": 3072,
+  "speed": 1.0,
+  "text": "Rows are the hero's tags, columns the setting's tags.",
+  "voice": "af_heart"
+ },
+ "68da0984793f": {
+  "ms": 5312,
+  "speed": 1.0,
+  "text": "Snow should be rare, so give it a weight of a half. Its chance drops, and the others share the rest.",
+  "voice": "af_heart"
+ },
+ "6b28502ca8aa": {
+  "ms": 5355,
+  "speed": 1.0,
+  "text": "A derivation sets a variable by a rule, instead of rolling it. Here is Lighting from time.",
+  "voice": "af_heart"
+ },
+ "6b2ebc636880": {
+  "ms": 5952,
+  "speed": 1.0,
+  "text": "On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.",
+  "voice": "af_heart"
+ },
+ "7427fca97898": {
+  "ms": 3307,
+  "speed": 1.0,
+  "text": "A combine reads what was rolled above it, so the order matters.",
+  "voice": "af_heart"
+ },
+ "836924b6e384": {
+  "ms": 3243,
+  "speed": 1.0,
+  "text": "And here they are as pictures: every hero where they belong.",
+  "voice": "af_heart"
+ },
+ "92997cc71a53": {
+  "ms": 1536,
+  "speed": 1.0,
+  "text": "Let's open the wildcards.",
+  "voice": "af_heart"
+ },
+ "93386c56c97d": {
+  "ms": 3243,
+  "speed": 1.0,
+  "text": "A noble hero makes a castle four times as likely,",
+  "voice": "af_heart"
+ },
  "98fcdd0a1bd9": {
   "ms": 4843,
   "speed": 1.0,
   "text": "That's it: a new prompt for every seed. Next, we'll make a wildcard of our own.",
+  "voice": "af_heart"
+ },
+ "9963393f5591": {
+  "ms": 5845,
+  "speed": 1.0,
+  "text": "Roll a few seeds. Knights and mages land in castles more often, and the thief stays in the city.",
+  "voice": "af_heart"
+ },
+ "9c736b37c1b1": {
+  "ms": 6976,
+  "speed": 1.0,
+  "text": "Wildcard Pipeline adds a button to ComfyUI's top bar. It opens the manager, where your library lives.",
+  "voice": "af_heart"
+ },
+ "9f69ea64d8b9": {
+  "ms": 3093,
+  "speed": 1.0,
+  "text": "Add a Prompt Assembler, wire it up, and write the template.",
+  "voice": "af_heart"
+ },
+ "a3aa31d03653": {
+  "ms": 2624,
+  "speed": 1.0,
+  "text": "Here are a few of those scenes, run through a model.",
+  "voice": "af_heart"
+ },
+ "a687e71df23a": {
+  "ms": 4139,
+  "speed": 1.0,
+  "text": "Not everything should roll. A fixed value always writes the same text.",
+  "voice": "af_heart"
+ },
+ "a8e131ac2101": {
+  "ms": 2560,
+  "speed": 1.0,
+  "text": "Here's what those prompts make, run through a model.",
+  "voice": "af_heart"
+ },
+ "aa69b4ebf7ef": {
+  "ms": 3733,
+  "speed": 1.0,
+  "text": "A second action adds a negative, so the night isn't overexposed.",
+  "voice": "af_heart"
+ },
+ "b87a218300d1": {
+  "ms": 7168,
+  "speed": 1.0,
+  "text": "Wildcards are lists to roll from. Fixed values always say the same thing. Combines join variables into a line.",
+  "voice": "af_heart"
+ },
+ "b9fa2a9a7498": {
+  "ms": 1323,
+  "speed": 1.0,
+  "text": "If the time rolled night,",
+  "voice": "af_heart"
+ },
+ "bc3eac1bb4b5": {
+  "ms": 5483,
+  "speed": 1.0,
+  "text": "Constraints never block a run. They only change the odds, so your prompts make sense more often.",
   "voice": "af_heart"
  },
  "be416c6e5a2c": {
@@ -53,16 +305,70 @@
   "text": "Add WP Debug to see what each list picked when the workflow runs.",
   "voice": "af_heart"
  },
+ "c1c2cfc38a01": {
+  "ms": 7403,
+  "speed": 1.0,
+  "text": "Random picks can clash: a street thief in a royal throne room. A constraint changes the odds by what was already rolled.",
+  "voice": "af_heart"
+ },
+ "c43be75daabb": {
+  "ms": 3392,
+  "speed": 1.0,
+  "text": "Hero is a list of heroes. Open it to see its options.",
+  "voice": "af_heart"
+ },
+ "c659646078ad": {
+  "ms": 3285,
+  "speed": 1.0,
+  "text": "Run through a model, every picture keeps the painted style.",
+  "voice": "af_heart"
+ },
+ "cacfd5b6844f": {
+  "ms": 2837,
+  "speed": 1.0,
+  "text": "and an urban hero never gets a castle at all.",
+  "voice": "af_heart"
+ },
+ "d0a2ac7b1137": {
+  "ms": 5312,
+  "speed": 1.0,
+  "text": "Your own lists work just like the ones you install. Next: fixed values and combines.",
+  "voice": "af_heart"
+ },
  "d2d2087d49e9": {
   "ms": 4971,
   "speed": 1.0,
   "text": "A Context node holds the lists that roll. Add module picks them from your library.",
   "voice": "af_heart"
  },
+ "d4eef3de5ae2": {
+  "ms": 5717,
+  "speed": 1.0,
+  "text": "Let's make a wildcard for the weather. In the manager, open Wildcards and press New Wildcard.",
+  "voice": "af_heart"
+ },
+ "d9e69f144151": {
+  "ms": 3221,
+  "speed": 1.0,
+  "text": "That's the tour. Next, we'll make a wildcard of our own.",
+  "voice": "af_heart"
+ },
+ "de9f4c1999b3": {
+  "ms": 3947,
+  "speed": 1.0,
+  "text": "It writes a new variable, hero line, from a small template of its own.",
+  "voice": "af_heart"
+ },
  "e443a24ea63a": {
   "ms": 3392,
   "speed": 1.0,
   "text": "Double-click the canvas and search for WP Context.",
+  "voice": "af_heart"
+ },
+ "e45cc48a0969": {
+  "ms": 4843,
+  "speed": 1.0,
+  "text": "Tags sort options into groups, like noble or urban. Rules can read them later.",
   "voice": "af_heart"
  },
  "ef02a1e32300": {
@@ -75,6 +381,18 @@
   "ms": 2603,
   "speed": 1.0,
   "text": "Change the seed, and every list rolls again.",
+  "voice": "af_heart"
+ },
+ "f9a5d8143a7c": {
+  "ms": 2176,
+  "speed": 1.0,
+  "text": "Any other time gets soft natural light.",
+  "voice": "af_heart"
+ },
+ "f9ed444fa84e": {
+  "ms": 3904,
+  "speed": 1.0,
+  "text": "This one sets style to a painting look, and it carries a negative too.",
   "voice": "af_heart"
  },
  "fc506693480a": {
