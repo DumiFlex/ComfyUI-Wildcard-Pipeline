@@ -17,11 +17,11 @@ tutorial(
     const nodes = await t.h.step("The trigger words", async () => {
       await t.go("/");
       await t.say("A character LoRA comes with trigger words. Put them in a text box, next to your LoRA loader.");
-      const txt = await t.addNode("Text (Multiline)", { x: 270, y: 560 });
+      const txt = await t.addNode("Text (Multiline)", { x: 470, y: 560 });
       await t.click(t.node(txt).locator("textarea").first());
       await t.type("kara_v2, short white hair, red scarf", { cps: 16 });
       await t.beat(500);
-      const inj = await t.addNode("WP Context Injector", { x: 275, y: 200 });
+      const inj = await t.addNode("WP Context Injector", { x: 475, y: 200 });
       await t.wire(txt, "STRING", inj, "input_0");
       await t.beat(600);
       await t.waitVoice();
@@ -51,10 +51,10 @@ tutorial(
 
     const prev = await t.h.step("The swap", async () => {
       await t.say("Now a Context with the hero, hair and eyes, and the Character LoRA rule from the LoRA swaps bundle.");
-      const ctx = await t.addNode("WP Context", { x: 800, y: 200 });
+      const ctx = await t.addNode("WP Context", { x: 1010, y: 200 });
       await t.wire(nodes.inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Hero", "Hair", "Eyes", "Character LoRA"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1350, y: 200 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero, $hair, $eyes, in a quiet forest", { cps: 16 });
