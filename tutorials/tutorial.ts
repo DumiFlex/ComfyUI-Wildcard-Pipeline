@@ -506,8 +506,19 @@ export class Tutor {
    * Adds a node the way a person does: double-click empty canvas at `at`, type `search`, Enter,
    * then click to drop it there. Returns the new node's id.
    */
-  async addNode(search: string, at: Point): Promise<string> {
+  async addNode(search: string, wanted: Point): Promise<string> {
     const before = new Set(await this.nodeIds());
+    // The double click must land on empty canvas. A node that grew (a preview row, a longer list)
+    // can cover the planned point: then drop the new node just below the one in the way.
+    const at = await this.page.evaluate((p) => {
+      let { x, y } = p;
+      for (let i = 0; i < 4; i++) {
+        const hit = document.elementFromPoint(x, y)?.closest("[data-node-id]");
+        if (!hit) break;
+        y = hit.getBoundingClientRect().bottom + 40;
+      }
+      return { x, y: Math.min(y, window.innerHeight - 60) };
+    }, wanted);
     // The search box opens on a double click on empty canvas; when the click is taken for something
     // else (a click just before it), try once more rather than typing into the canvas.
     const searchOpen = () => this.page.evaluate(() => document.activeElement?.tagName === "INPUT");
