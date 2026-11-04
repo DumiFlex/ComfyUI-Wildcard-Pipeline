@@ -23,6 +23,12 @@
   "text": "Save it.",
   "voice": "af_heart"
  },
+ "03bea0d67a7c": {
+  "ms": 3413,
+  "speed": 1.0,
+  "text": "Allow repeats stays off, so a color never comes up twice.",
+  "voice": "af_heart"
+ },
  "06b090554805": {
   "ms": 9387,
   "speed": 1.0,
@@ -123,6 +129,12 @@
   "ms": 3008,
   "speed": 1.0,
   "text": "lighting becomes moonlight and a warm lantern glow.",
+  "voice": "af_heart"
+ },
+ "1e5956b48c0b": {
+  "ms": 1963,
+  "speed": 1.0,
+  "text": "Right-click Colors and open Edit.",
   "voice": "af_heart"
  },
  "1f61a094c1b7": {
@@ -245,6 +257,18 @@
   "text": "Save it, and it's in your library.",
   "voice": "af_heart"
  },
+ "40d049bc862d": {
+  "ms": 5803,
+  "speed": 1.0,
+  "text": "A wildcard picks one option. Sometimes you want two or three: here, the colors a hero wears.",
+  "voice": "af_heart"
+ },
+ "4198872a7351": {
+  "ms": 7019,
+  "speed": 1.0,
+  "text": "Pick several on the node for a library list, or inline for a quick one. Next: wildcards inside wildcards.",
+  "voice": "af_heart"
+ },
  "424fa9c34f31": {
   "ms": 2795,
   "speed": 1.0,
@@ -279,6 +303,12 @@
   "ms": 6187,
   "speed": 1.0,
   "text": "The canvas look lives in ComfyUI's Settings, the manager's in its own. Next: autocomplete.",
+  "voice": "af_heart"
+ },
+ "47257e7e68c2": {
+  "ms": 6763,
+  "speed": 1.0,
+  "text": "Two means exactly two. One dash three picks one to three, and a tilde after the count lets one come up twice.",
   "voice": "af_heart"
  },
  "4743c9d8a71d": {
@@ -491,10 +521,22 @@
   "text": "The disk button saves both to the library.",
   "voice": "af_heart"
  },
+ "78d86bb85dc3": {
+  "ms": 4715,
+  "speed": 1.0,
+  "text": "Now the pictures. WP Debug under the Context shows each run's picks.",
+  "voice": "af_heart"
+ },
  "78e1b769f478": {
   "ms": 4885,
   "speed": 1.0,
   "text": "The roll happens once per run, so $gear.SHOES reads the same everywhere you write it.",
+  "voice": "af_heart"
+ },
+ "7a3f6b90953b": {
+  "ms": 3499,
+  "speed": 1.0,
+  "text": "Pick sets how many options it rolls. Set it to two up to three.",
   "voice": "af_heart"
  },
  "7d8dcf11971e": {
@@ -525,6 +567,12 @@
   "ms": 3819,
   "speed": 1.0,
   "text": "Every saved template lives on the Templates page of the manager.",
+  "voice": "af_heart"
+ },
+ "86f91454300a": {
+  "ms": 1941,
+  "speed": 1.0,
+  "text": "Save keeps this on this node only.",
   "voice": "af_heart"
  },
  "88f568cd701d": {
@@ -573,6 +621,12 @@
   "ms": 5803,
   "speed": 1.0,
   "text": "Character brings the Hero list, then Look with the hair, eyes and colors, Outfit, and the Shared lists.",
+  "voice": "af_heart"
+ },
+ "97c73be443a4": {
+  "ms": 4075,
+  "speed": 1.0,
+  "text": "The separator goes between them. Make it and, with a space each side.",
   "voice": "af_heart"
  },
  "98a27fe5fd6f": {
@@ -1007,6 +1061,12 @@
   "text": "Accepts groups also let constraints match tag for tag, and tags filter references inside wildcards. Both come next.",
   "voice": "af_heart"
  },
+ "f50d114bc4b9": {
+  "ms": 9835,
+  "speed": 1.0,
+  "text": "You can also write several picks right in a template or an option. Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.",
+  "voice": "af_heart"
+ },
  "f5b117624e40": {
   "ms": 2603,
   "speed": 1.0,
@@ -1035,6 +1095,12 @@
   "ms": 3029,
   "speed": 1.0,
   "text": "Debug lists every variable and the option it rolled.",
+  "voice": "af_heart"
+ },
+ "fe0d8098b56e": {
+  "ms": 2795,
+  "speed": 1.0,
+  "text": "Roll a few seeds: two or three colors each time.",
   "voice": "af_heart"
  },
  "fe48b0868bdd": {

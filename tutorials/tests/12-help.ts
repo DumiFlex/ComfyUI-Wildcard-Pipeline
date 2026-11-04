@@ -39,7 +39,12 @@ tutorial(
       await t.click(page.getByRole("button", { name: /^templates/i }).first());
       await t.beat(1200);
       const dialog = page.getByRole("dialog").last();
-      await t.click(dialog.getByText("ComfyUI-Wildcard-Pipeline", { exact: true }));
+      const ours = dialog.getByText("ComfyUI-Wildcard-Pipeline", { exact: true });
+      // It sits at the bottom of the list, below the window's edge on a 1080p screen.
+      await t.moveTo({ x: 370, y: 700 });
+      await ours.scrollIntoViewIfNeeded();
+      await t.beat(400);
+      await t.click(ours);
       await t.beat(1000);
       await t.waitVoice();
       await t.say("Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it.");
