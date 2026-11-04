@@ -161,6 +161,9 @@ function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
  * the preview cache:
  *
  *   - id, type, enabled — module identity + skip flag
+ *   - _uid, bundle_origin — the instance's random-stream key (engine
+ *                            `__wp_instance_key__`); without them the
+ *                            preview rolls other picks than Run
  *   - payload, entries  — what handlers actually read
  *   - meta.name         — surfaces in the wildcard catalog name
  *   - instance.{relevant subset} — overrides the handlers consume
@@ -219,6 +222,11 @@ function relevantModule(m: unknown): unknown {
     type: src.type,
     enabled: src.enabled,
   };
+  // Each instance rolls on its own stream, keyed by bundle copy + `_uid`
+  // (engine/pipeline.py `__wp_instance_key__`), so the preview needs both
+  // to print what Run prints for the same seed.
+  if (typeof src._uid === "string" && src._uid) out._uid = src._uid;
+  if (typeof src.bundle_origin === "string" && src.bundle_origin) out.bundle_origin = src.bundle_origin;
   if (src.payload !== undefined) out.payload = src.payload;
   if (src.entries !== undefined) out.entries = src.entries;
   if (src.meta && typeof src.meta === "object") {
@@ -237,6 +245,9 @@ function relevantModule(m: unknown): unknown {
   }
   return out;
 }
+
+/** Test-only export of {@link relevantModule}. */
+export const relevantModuleForTest = relevantModule;
 
 function relevantChain(chain: unknown[][]): unknown[][] {
   return chain.map((step) => step.map(relevantModule));
