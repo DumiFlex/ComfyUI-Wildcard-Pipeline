@@ -239,6 +239,7 @@ const aiPending = ref(false);
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
 
 /** The chat's draft this new wildcard was opened with (Save creates it at

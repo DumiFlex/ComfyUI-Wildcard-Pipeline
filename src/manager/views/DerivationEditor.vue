@@ -161,6 +161,7 @@ const aiPending = ref(false);
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
 
 /** The chat's draft this new derivation was opened with (Save creates it at

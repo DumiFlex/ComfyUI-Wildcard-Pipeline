@@ -178,6 +178,25 @@ describe("useEditorDraft", () => {
     expect(stored.snapshot).toBe("v1");
   });
 
+  it("discard drops a pending draft too, so the unmount flush can't bring it back", async () => {
+    const storage = fakeStorage();
+    const dirty = ref(false);
+    const snap = ref("v0");
+    const { api, wrap } = harness({
+      kind: "wildcard", id: "abc",
+      dirty,
+      snapshot: () => snap.value,
+      storage,
+    });
+    dirty.value = true;
+    snap.value = "v1";
+    await wrap.vm.$nextTick();
+    // Discard & leave: the edit is thrown away before the debounce fires.
+    api.discard();
+    wrap.unmount();
+    expect(storage.getItem("wp-draft-wildcard-abc")).toBeNull();
+  });
+
   it("flushes a pending draft on beforeunload (refresh) before the debounce", async () => {
     const storage = fakeStorage();
     const dirty = ref(false);

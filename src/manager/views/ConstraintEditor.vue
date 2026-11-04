@@ -219,6 +219,7 @@ const aiPending = ref(false);
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
 
 // The chat reads and edits this item's info here; an existing item's payload
