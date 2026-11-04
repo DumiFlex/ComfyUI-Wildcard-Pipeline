@@ -86,7 +86,7 @@ export class Tutor {
 
   constructor(
     readonly h: Helpers,
-    packDir: string,
+    readonly packDir: string,
     readonly params: Record<string, unknown> = {},
   ) {
     this.page = h.page;
