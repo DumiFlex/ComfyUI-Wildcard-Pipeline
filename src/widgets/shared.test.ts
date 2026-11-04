@@ -188,4 +188,18 @@ describe("RELEVANT_INSTANCE_KEYS — tier 2 cache invalidation", () => {
     expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("_ui")).toBe(false);
     expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("last_locked_seed")).toBe(false);
   });
+
+  it("keeps each instance's random-stream key (_uid, bundle_origin) so the preview rolls what Run rolls", async () => {
+    const { relevantModuleForTest } = await import("./assembler");
+    const out = relevantModuleForTest({
+      id: "808878ba", _uid: "a1b2c3", bundle_origin: "b9", type: "wildcard", enabled: true, collapsed: true,
+      payload: {}, meta: { name: "Hero", description: "x" },
+    }) as Record<string, unknown>;
+    expect(out._uid).toBe("a1b2c3");
+    expect(out.bundle_origin).toBe("b9");
+    expect(out.collapsed).toBeUndefined();
+    const bare = relevantModuleForTest({ id: "808878ba", type: "wildcard", enabled: true }) as Record<string, unknown>;
+    expect("_uid" in bare).toBe(false);
+    expect("bundle_origin" in bare).toBe(false);
+  });
 });
