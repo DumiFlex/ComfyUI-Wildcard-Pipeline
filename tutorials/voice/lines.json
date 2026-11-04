@@ -11,6 +11,12 @@
   "text": "Save it.",
   "voice": "af_heart"
  },
+ "07b61ad32f1b": {
+  "ms": 5163,
+  "speed": 1.0,
+  "text": "First, add WP Debug under the Context, so every run shows what it rolled.",
+  "voice": "af_heart"
+ },
  "106c4c910925": {
   "ms": 5184,
   "speed": 1.0,
@@ -381,6 +387,12 @@
   "ms": 4843,
   "speed": 1.0,
   "text": "Tags sort options into groups, like noble or urban. Rules can read them later.",
+  "voice": "af_heart"
+ },
+ "e99c3c741bab": {
+  "ms": 5397,
+  "speed": 1.0,
+  "text": "Debug shows the picks behind the last picture, so you can see the prompt change from run to run.",
   "voice": "af_heart"
  },
  "ef02a1e32300": {

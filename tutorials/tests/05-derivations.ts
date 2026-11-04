@@ -1,6 +1,6 @@
 // Tutorial 5: derivations. The Lighting from time rule (IF night THEN moonlight and a negative,
 // ELSE soft light), read in a scene line; new seeds until night rolls and the light follows.
-import { showcase, showcasing, tutorial } from "../tutorial.js";
+import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
   "T05",
@@ -76,7 +76,13 @@ tutorial(
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
         await t.say("Here are a few of those scenes, run through a model.");
+        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
+        const dbg = await addDebugUnder(t, nodes.ctx);
         await showcase(t, { from: nodes.asm, preview: { x: 1560, y: 440, width: 340, height: 500 }, chain: { x: 1820, y: 960 }, between: () => t.click(plus) });
+        await t.callout("picks", t.node(dbg), "What this picture rolled");
+        await t.say("Debug shows the picks behind the last picture, so you can see the prompt change from run to run.");
+        await t.waitVoice();
+        await t.uncallout("picks");
       });
     }
 

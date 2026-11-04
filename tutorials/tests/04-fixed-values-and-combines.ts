@@ -1,6 +1,6 @@
 // Tutorial 4: fixed values and combines. The Style fixed value (always the same text, with its
 // own negative), a new Hero line combine that joins two variables, and both in a template.
-import { showcase, showcasing, tutorial } from "../tutorial.js";
+import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
   "T04",
@@ -89,7 +89,13 @@ tutorial(
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
         await t.say("Run through a model, every picture keeps the painted style.");
+        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
+        const dbg = await addDebugUnder(t, nodes.ctx);
         await showcase(t, { from: nodes.asm, preview: { x: 1560, y: 420, width: 340, height: 500 }, chain: { x: 1820, y: 960 }, between: () => t.click(nodes.plus) });
+        await t.callout("picks", t.node(dbg), "What this picture rolled");
+        await t.say("Debug shows the picks behind the last picture, so you can see the prompt change from run to run.");
+        await t.waitVoice();
+        await t.uncallout("picks");
       });
     }
 

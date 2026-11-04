@@ -507,6 +507,21 @@ async function toGraph(page: Page, p: Point): Promise<[number, number]> {
   }, [p.x, p.y] as const);
 }
 
+/**
+ * Adds a WP Debug node under a Context node and wires the Context into it, the way a person does,
+ * so each run shows the picks that went into its picture. Returns the Debug node's id.
+ */
+export async function addDebugUnder(t: Tutor, ctxId: string): Promise<string> {
+  const box = await t.node(ctxId).boundingBox();
+  const view = t.page.viewportSize() ?? { width: 1920, height: 1080 };
+  const x = box ? box.x + box.width / 2 : 520;
+  const below = box ? box.y + box.height + 40 : 600;
+  const y = Math.min(below + 120, view.height - 300);
+  const dbg = await t.addNode("WP Debug", { x, y });
+  await t.wire(ctxId, "context", dbg, "context");
+  return dbg;
+}
+
 /** Whether takes make real images (the pack's `showcase` setting; it needs a model, so it's off in the cloud). */
 export function showcasing(t: Tutor): boolean {
   return t.params.showcase === true;
