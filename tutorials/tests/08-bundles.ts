@@ -31,7 +31,7 @@ tutorial(
       await t.say("On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.");
       await t.go("/");
       await t.beat(600);
-      const ctx = await t.addNode("WP Context", { x: 520, y: 220 });
+      const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       for (const id of ["7e3d3ec2", "86360bc3"]) {
         await t.click(t.node(ctx).locator('[data-testid="open-bundle-picker"]').first());
         await t.beat(700);
@@ -45,21 +45,20 @@ tutorial(
         await t.click(row);
         await t.beat(900);
       }
-      await t.say("Each bundle sits in its own frame. Open them to see what came in.");
-      await t.expandBundles(ctx);
+      await t.say("Each bundle sits in its own frame. Open Character to see what came in.");
+      await t.foldBundle(ctx, "Scene");
+      await t.expandBundles(ctx, "Character");
       await t.waitVoice();
-      const fold = async (name: string) => {
-        const header = t.node(ctx).locator(".wp-bundle-header").filter({ hasText: name }).first();
-        await t.click(header.locator(".wp-bundle-collapse"));
-        await t.beat(500);
-      };
       await t.callout("character", t.bundleFrame(ctx, "Character"), "Hero plus three sub-bundles", 4);
       await t.say("Character brings the Hero list, then Look with the hair, eyes and colors, Outfit, and the Shared lists.");
       await t.waitVoice();
       await t.uncallout("character");
       await t.say("The hair list already reads the colors, so hide Colors with its globe button. Then fold the frame.");
       await t.hide(ctx, ["Colors"]);
-      await fold("Character");
+      await t.foldBundle(ctx, "Character");
+      await t.waitVoice();
+      await t.say("Now open Scene.");
+      await t.expandBundles(ctx, "Scene");
       await t.waitVoice();
       await t.callout("scene", t.bundleFrame(ctx, "Scene"), "The whole scene", 4);
       await t.say("Scene brings the setting, the time of day, the lighting rule, the scene line and the style.");
@@ -67,11 +66,11 @@ tutorial(
       await t.uncallout("scene");
       await t.say("The scene line reads the setting, the time and the lighting, so hide those three too, and fold Scene.");
       await t.hide(ctx, ["Setting", "Time of day", "Lighting from time"]);
-      await fold("Scene");
+      await t.foldBundle(ctx, "Scene");
       await t.waitVoice();
       await t.say("Fold a frame, switch it off with its checkbox, or open an item to change it for this node only.");
       await t.waitVoice();
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 220 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$style, $hero with $hair and $eyes, wearing $outfit, $scene");
@@ -89,7 +88,7 @@ tutorial(
       await t.h.step("The pictures", async () => {
         await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
-        await showcase(t, { from: nodes.asm, preview: { x: 1560, y: 440, width: 340, height: 500 }, chain: { x: 1820, y: 960 }, between: () => t.click(nodes.plus) });
+        await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, between: () => t.click(nodes.plus) });
         await t.callout("picks", t.node(dbg), "What this picture rolled");
         await t.say("Debug shows the picks behind the last picture, so you can see the prompt change from run to run.");
         await t.waitVoice();

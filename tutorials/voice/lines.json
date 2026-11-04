@@ -5,6 +5,12 @@
   "text": "Change the seed, and the weather rolls with the hero.",
   "voice": "af_heart"
  },
+ "0302fe1cacea": {
+  "ms": 4117,
+  "speed": 1.0,
+  "text": "Each bundle sits in its own frame. Open Character to see what came in.",
+  "voice": "af_heart"
+ },
  "038520e2868f": {
   "ms": 768,
   "speed": 1.0,
@@ -153,6 +159,12 @@
   "ms": 5973,
   "speed": 1.0,
   "text": "The badge marks a row that differs from the library. Reset overrides in the same window puts it back.",
+  "voice": "af_heart"
+ },
+ "30b3d8aa3fa0": {
+  "ms": 1152,
+  "speed": 1.0,
+  "text": "Now open Scene.",
   "voice": "af_heart"
  },
  "338d8373eb82": {

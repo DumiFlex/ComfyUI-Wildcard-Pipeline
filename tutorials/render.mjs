@@ -12,8 +12,8 @@
  * - <name>.srt: the narration as subtitles (YouTube, Discord and players take it);
  * - <name>.chapters.txt: the chapter list for a YouTube description (from the test's steps).
  *
- * The voice is lined up through the sync mark the take shows at its start (a magenta square in the
- * top-right corner, tutorial.ts › begin). Needs a full ffmpeg (libx264, aac) on PATH or --ffmpeg;
+ * The voice is lined up through the sync marks the take flashes (a magenta square in the top-right
+ * corner at the start, with each line and after each sped-up part, tutorial.ts); they are painted out. Needs a full ffmpeg (libx264, aac) on PATH or --ffmpeg;
  * Playwright's own ffmpeg can't do this.
  */
 import { spawnSync } from "node:child_process";
@@ -46,28 +46,65 @@ mkdirSync(out, { recursive: true });
 
 // ---- line the take's clock up with the video ------------------------------------------------------
 
-/** The first time (s) the sync mark shows in the top-right corner. */
-function findMark() {
+/** Every time (s) the sync mark comes up in the top-right corner, and the colour under it. */
+function findMarks() {
   const r = spawnSync(
     FFMPEG,
-    ["-hide_banner", "-t", "60", "-i", video, "-vf", "crop=8:8:iw-12:4,scale=1:1,showinfo", "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
-    { maxBuffer: 1 << 26 },
+    ["-hide_banner", "-i", video, "-vf", "crop=8:8:iw-12:4,scale=1:1,showinfo", "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+    { maxBuffer: 1 << 28 },
   );
   if (r.status !== 0) throw new Error(`ffmpeg couldn't read the video: ${String(r.stderr).slice(-400)}`);
   const times = [...String(r.stderr).matchAll(/pts_time:\s*([\d.]+)/g)].map((m) => Number(m[1]));
   const px = r.stdout;
+  const found = [];
+  let on = false;
+  let under = null;
   for (let i = 0; i < times.length; i++) {
     const [red, green, blue] = [px[i * 3], px[i * 3 + 1], px[i * 3 + 2]];
-    if (red > 200 && green < 90 && blue > 200) return times[i];
+    const lit = red > 200 && green < 90 && blue > 200;
+    if (lit && !on) found.push(times[i]);
+    if (!lit && under === null && times[i] > 0.5) under = [red, green, blue];
+    on = lit;
   }
-  return null;
+  return { found, under: under ?? [24, 24, 27] };
 }
 
-const mark = findMark();
-if (mark == null) console.warn("No sync mark found; assuming the video starts with the take's clock.");
+const { found, under } = findMarks();
+if (!found.length) console.warn("No sync mark found; assuming the video starts with the take's clock.");
+// Pair each mark the take flashed with the one seen in the video, nearest to where it should be. The
+// recorder's clock drifts from the page's under load, so the voice is lined up between pairs.
+const pairs = [];
+{
+  let offset = found.length ? found[0] - (take.marks?.[0] ?? take.mark) / 1000 : 0;
+  let next = 0;
+  for (const ms of take.marks ?? [take.mark]) {
+    const want = ms / 1000 + offset;
+    let best = -1;
+    for (let i = next; i < found.length && found[i] < want + 3; i++) {
+      if (Math.abs(found[i] - want) < 3 && (best < 0 || Math.abs(found[i] - want) < Math.abs(found[best] - want))) best = i;
+    }
+    if (best < 0) continue;
+    pairs.push([ms / 1000, found[best]]);
+    offset = found[best] - ms / 1000;
+    next = best + 1;
+  }
+}
+if (take.marks && pairs.length < take.marks.length) console.warn(`${take.marks.length - pairs.length} of ${take.marks.length} sync mark(s) not found in the video.`);
+const drift = pairs.length > 1 ? pairs[pairs.length - 1][1] - pairs[0][1] - (pairs[pairs.length - 1][0] - pairs[0][0]) : 0;
+if (pairs.length > 1) console.log(`sync: ${pairs.length} mark(s), the video's clock is ${drift.toFixed(2)} s off the take's by the end`);
 /** Video seconds for a take time in ms. */
-const offset = mark == null ? 0 : mark - take.mark / 1000;
-const vt = (ms) => ms / 1000 + offset;
+function vt(ms) {
+  const s = ms / 1000;
+  if (!pairs.length) return s;
+  if (s <= pairs[0][0]) return s + pairs[0][1] - pairs[0][0];
+  for (let i = 1; i < pairs.length; i++) {
+    const [s0, v0] = pairs[i - 1];
+    const [s1, v1] = pairs[i];
+    if (s <= s1) return v0 + ((s - s0) * (v1 - v0)) / (s1 - s0);
+  }
+  const [sl, vl] = pairs[pairs.length - 1];
+  return s + vl - sl;
+}
 
 const start = vt(take.start);
 const end = vt(take.ended);
@@ -141,8 +178,14 @@ writeFileSync(metaFile, meta.join("\n") + "\n");
 
 const inputs = ["-i", video];
 const graph = [];
+// Paint the sync marks out with the colour under them.
+const hex = under.map((c) => c.toString(16).padStart(2, "0")).join("");
+const paint = found.map((t) => `between(t,${(t - 0.1).toFixed(3)},${(t + 0.7).toFixed(3)})`).join("+");
+// The recorder writes a frame only when the page changes (gaps of seconds), and `trim` ends a part at
+// its last frame, so make it constant frame rate first or every still stretch at a cut drops out.
+graph.push(`[0:v]fps=${FPS},${paint ? `drawbox=x=iw-20:y=0:w=20:h=20:color=0x${hex}:t=fill:enable='${paint}',` : ""}split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
 parts.forEach((p, i) => {
-  graph.push(`[0:v]trim=start=${p.a.toFixed(3)}:end=${p.b.toFixed(3)},setpts=(PTS-STARTPTS)/${p.speed}[v${i}]`);
+  graph.push(`[s${i}]trim=start=${p.a.toFixed(3)}:end=${p.b.toFixed(3)},setpts=(PTS-STARTPTS)/${p.speed}[v${i}]`);
 });
 graph.push(`${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0,fps=${FPS},format=yuv420p[vout]`);
 voiced.forEach((c, i) => {

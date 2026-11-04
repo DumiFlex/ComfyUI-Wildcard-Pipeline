@@ -17,9 +17,9 @@ tutorial(
       await t.say("So far we rolled by clicking plus. The Context node can roll for you.");
       await t.go("/");
       await t.beat(600);
-      const ctx = await t.addNode("WP Context", { x: 520, y: 240 });
+      const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Hero", "Outfit", "Setting"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 240 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero wearing $outfit, in $setting");
@@ -39,6 +39,12 @@ tutorial(
       await t.say("Pick Randomize, so every run rolls something new.");
       await t.click(page.locator('label[for$="-randomize"]').last());
       await t.beat(500);
+      // addNode pins new nodes to Fixed underneath while the menu can still show Randomize, so a click
+      // on the shown choice changes nothing: set the widget to match what the video shows.
+      await page.evaluate((id) => {
+        const node = window.app?.graph?.getNodeById(id) as { widgets?: { name: string; value: unknown }[] } | null | undefined;
+        for (const w of node?.widgets ?? []) if (w.name === "control_after_generate") w.value = "randomize";
+      }, ctx);
       // Escape doesn't close this popover; a click on empty canvas does.
       await t.click({ x: 960, y: 860 });
       await t.beat(400);
@@ -105,7 +111,7 @@ tutorial(
       await t.h.step("The pictures", async () => {
         await t.say("Now press Run a few times. Randomize gives each run a new seed, no clicking needed.");
         const dbg = await addDebugUnder(t, nodes.ctx);
-        await showcase(t, { from: nodes.asm, preview: { x: 1560, y: 440, width: 340, height: 500 }, chain: { x: 1820, y: 960 } });
+        await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 } });
         await t.callout("picks", t.node(dbg), "What this picture rolled");
         await t.say("Debug shows what each run rolled. No street thief, on this node.");
         await t.waitVoice();
