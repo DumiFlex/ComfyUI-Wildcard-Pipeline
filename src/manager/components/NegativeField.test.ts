@@ -18,6 +18,18 @@ describe("NegativeField", () => {
     w.unmount();
   });
 
+  it("stays open when the add button it replaced loses focus", async () => {
+    const w = mount(NegativeField, { props: { modelValue: undefined, testId: "neg" }, attachTo: document.body });
+    const add = w.get("[data-test='neg-add']");
+    const el = add.element;
+    await add.trigger("click");
+    // Chrome fires focusout from the removed button, with no next target.
+    el.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: null }));
+    await w.vm.$nextTick();
+    expect(w.findComponent(RichTextInput).exists()).toBe(true);
+    w.unmount();
+  });
+
   it("forwards RichTextInput props (surface) and shows existing text", () => {
     const w = mount(NegativeField, { props: { modelValue: "strawberry, fruit" }, attrs: { surface: "wildcard" } });
     const rt = w.getComponent(RichTextInput);

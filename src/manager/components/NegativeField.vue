@@ -57,8 +57,16 @@ const expanded = computed(() => props.alwaysOpen || hasText.value || opened.valu
 async function open(): Promise<void> {
   opened.value = true;
   await nextTick();
-  const host = rootEl.value?.querySelector<HTMLElement>("[contenteditable='true']");
-  host?.focus();
+  // The editor is an async component: it can mount a few frames after the
+  // field opens, so look for it for a short while.
+  for (let i = 0; i < 20; i++) {
+    const host = rootEl.value?.querySelector<HTMLElement>("[contenteditable='true']");
+    if (host) {
+      host.focus();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 25));
+  }
 }
 
 function onInput(v: string): void {
@@ -67,6 +75,9 @@ function onInput(v: string): void {
 
 /** Leaving an empty field folds it back to the ghost button. */
 function onFocusOut(e: FocusEvent): void {
+  // The add button losing focus because opening the field removed it is
+  // not the user leaving: it used to fold the field shut the moment it opened.
+  if ((e.target as HTMLElement | null)?.classList?.contains("wp-negfield__add")) return;
   const next = e.relatedTarget as Node | null;
   if (next && rootEl.value?.contains(next)) return;
   if (!hasText.value) opened.value = false;
