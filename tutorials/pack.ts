@@ -29,6 +29,18 @@ export default pack({
       description: "Load the tutorial library (library.json) first, so every take starts from the same items. Your library is backed up first and put back after.",
     },
     putBack: { type: "boolean", default: true, description: "Put your library back when the run ends." },
+    showcase: {
+      type: "boolean",
+      default: false,
+      description: "End tutorials with real images: the prompt goes into a checkpoint and sampler and a few runs land on screen. Needs a GPU and the checkpoint below.",
+    },
+    checkpoint: {
+      type: "string",
+      default: "novaCartoonXL_v60",
+      description: "The checkpoint the showcase loads, by its file name in models/checkpoints (the .safetensors ending is optional).",
+    },
+    steps: { type: "number", default: 24, description: "Sampler steps for the showcase." },
+    cfg: { type: "number", default: 5, description: "CFG for the showcase." },
   },
   // One take per tutorial, every take keeps its video, no robot labels in the picture.
   run: { video: "always", showActions: false, chapters: false, frameQuality: 92, trace: "problems", pauseLimitMinutes: 5, testTimeout: 15 * 60_000 },
