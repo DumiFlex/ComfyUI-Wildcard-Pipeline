@@ -186,6 +186,7 @@ export const NODE_FIELDS = {
     controls: [
       { term: "node dots (in)", pin: "in:node_*", desc: "Wire any node's output in. A new free dot appears as you wire; a freed one goes. Each shows its node's title." },
       { term: "nodes (out)", pin: "out:*", desc: "Wire it into a WP Toggles control dot: that toggle then mutes or bypasses every node here." },
+      { term: "Whole group", desc: "With nothing wired into its dots (a WP Mode Relay doesn't count), the node gathers every node of the canvas group it sits in, the smallest one when groups nest, and the bar names that group. Nodes a wired-in relay watches stay out. Wire any node in and it goes back to only the wired ones." },
       { term: "Run / Mute / Bypass", pin: "css:[aria-label='Set every node']@right", desc: "Set every node in the group at once." },
       { term: "Mode chip", pin: "css:[data-test^=ng-mode-]@right", desc: "Each row's chip shows its node's mode. Click it to go Runs → Muted → Bypassed." },
     ],

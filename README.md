@@ -112,7 +112,7 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 | **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
 | **WP Model Info** | Reads the loaded checkpoint into `$model_family` / `$model_variant` (Pony, Illustrious, …) so rules can pick LoRAs and tags per model. |
 | **WP Toggles** | Several on/off switches in one node: each writes a true/false `$variable` for rules, can have a BOOLEAN output, and can mute or bypass the nodes wired into it. Merges existing Boolean nodes. |
-| **WP Node Group** | Gathers nodes so one WP Toggles switch mutes or bypasses them all (frontend only, never runs). |
+| **WP Node Group** | Gathers nodes so one WP Toggles switch mutes or bypasses them all. With nothing wired in, it stands for the canvas group it sits in (frontend only, never runs). |
 | **WP Mode Relay** | Watches nodes' mute / bypass and passes a mode on to a WP Node Group, for chains (frontend only, never runs). |
 | **WP Bookmark** | Marks a spot on the canvas to jump back to with a shortcut or from the Bookmarks dock: pick the corner, edge or centre it lands at and the zoom; the shortcut field shows clashes with ComfyUI and other extensions. Can hide itself from the canvas (frontend only, never runs). |
 | **WP Image Filter** | Pauses the run so you pick which images go on to the upscaler. Their latent, conditioning, prompt text and Context are filtered with them, and you can edit a prompt or paint a mask before they go on. |

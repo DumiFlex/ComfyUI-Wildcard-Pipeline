@@ -3,6 +3,7 @@ import {
   applyControl,
   controlState,
   drivesOff,
+  canvasGroupOf,
   ctlInputName,
   groupTitles,
   releaseTargets,
@@ -232,5 +233,74 @@ describe("WP Mode Relay", () => {
     expect(member.mode).toBe(4);
     expect(relay(relayNode, "on", { muted: "mute", bypassed: "bypass", on: "nothing" })).toBe(0);
     expect(relay(relayNode, null, parseRelayMap(null))).toBe(0);
+  });
+});
+
+describe("WP Node Group standing for its canvas group", () => {
+  it("gathers every node of the canvas group it sits in when nothing is wired in", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const a = g.add(2);
+    const b = g.add(3);
+    const note = g.add(4, { isVirtualNode: true });
+    g.add(5); // outside the group
+    g.graph.groups.push({ title: "Upscale", _children: new Set([n, a, b, note]), size: [400, 300] });
+    expect(canvasGroupOf(n)?.title).toBe("Upscale");
+    expect(members(n)).toEqual([a, b]);
+    expect(setMembersMode(n, 4)).toBe(2);
+    expect([a.mode, b.mode]).toEqual([4, 4]);
+  });
+
+  it("picks the smallest group when groups nest", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const inner = g.add(2);
+    const outer = g.add(3);
+    g.graph.groups.push({ title: "Outer", _children: new Set([n, inner, outer]), size: [900, 900] });
+    g.graph.groups.push({ title: "Inner", _children: new Set([n, inner]), _bounding: [0, 0, 300, 200] });
+    expect(canvasGroupOf(n)?.title).toBe("Inner");
+    expect(members(n)).toEqual([inner]);
+  });
+
+  it("drives only its wired nodes once anything real is wired in", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const a = g.add(2);
+    const b = g.add(3);
+    g.graph.groups.push({ title: "G", _children: new Set([n, a, b]) });
+    g.wire(a, n, "node_1");
+    expect(canvasGroupOf(n)).toBeNull();
+    expect(members(n)).toEqual([a]);
+  });
+
+  it("does nothing outside any group", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    g.add(2);
+    expect(canvasGroupOf(n)).toBeNull();
+    expect(members(n)).toEqual([]);
+  });
+
+  it("still stands for the group with only a relay wired in, leaving out what the relay watches", () => {
+    const g = makeGraph();
+    const n = g.add(1, { type: "WP_NodeGroup", isVirtualNode: true }) as GroupHostNode;
+    const relayNode = g.add(2, { type: "WP_ModeRelay", isVirtualNode: true });
+    const watchedNode = g.add(3);
+    const member = g.add(4);
+    g.wire(watchedNode, relayNode, "node_1");
+    g.wire(relayNode, n, "node_1");
+    g.graph.groups.push({ title: "G", _children: new Set([n, relayNode, watchedNode, member]) });
+    expect(canvasGroupOf(n)?.title).toBe("G");
+    expect(members(n)).toEqual([member]);
+  });
+
+  it("lets a toggle drive the whole group through the group node, never itself", () => {
+    const g = makeGraph();
+    const toggles = g.add(1, { type: "WP_Toggles" });
+    const n = g.add(2, { type: "WP_NodeGroup", isVirtualNode: true });
+    const a = g.add(3);
+    g.wire(n, toggles, ctlInputName("t1"));
+    g.graph.groups.push({ title: "G", _children: new Set([toggles, n, a]) });
+    expect(toggleTargets(toggles, "t1")).toEqual([a]);
   });
 });

@@ -12,7 +12,7 @@ import {
   type GroupHostNode,
   type MemberMode,
 } from "../extension/node-group";
-import { MODE_ALWAYS, MODE_BYPASS, MODE_NEVER, setMode } from "../extension/toggle-control";
+import { MODE_ALWAYS, MODE_BYPASS, MODE_NEVER, canvasGroupOf, setMode } from "../extension/toggle-control";
 import type { MemberView } from "../components/node-group/NodeGroupWidget.vue";
 
 const NodeGroupWidget = defineAsyncComponent(() => import("../components/node-group/NodeGroupWidget.vue"));
@@ -51,6 +51,15 @@ export function mountNodeGroup(node: GroupNode) {
       const graphNode = node as unknown as Parameters<typeof reactiveFromGraph>[0];
       const list = reactiveFromGraph(graphNode, () => view(node), sameView);
       const own = reactiveFromGraph(graphNode, () => modeName(node.mode), Object.is);
+      // Nothing wired in and inside a canvas group: it stands for that group.
+      const wholeGroup = reactiveFromGraph(
+        graphNode,
+        () => {
+          const g = canvasGroupOf(node);
+          return g ? g.title || "Untitled group" : null;
+        },
+        Object.is,
+      );
       // Repeater: muting / bypassing this node repeats to its members, and
       // setting it back lets them run. Only a change does (never a load).
       watch(own, (mode) => {
@@ -83,6 +92,7 @@ export function mountNodeGroup(node: GroupNode) {
       return () => h(NodeGroupWidget, {
         members: list.value,
         groupMode: own.value,
+        wholeGroup: wholeGroup.value,
         onSetMember: setMember,
         onSetAll: setAll,
       });

@@ -42,6 +42,9 @@ export interface CtlNode {
 }
 export interface CtlGroup {
   title?: string;
+  /** `[w, h]`; older litegraph keeps it in `_bounding[2..3]`. */
+  size?: ArrayLike<number>;
+  _bounding?: ArrayLike<number>;
   recomputeInsideNodes?: () => void;
   _children?: Iterable<unknown>;
   nodes?: Iterable<unknown>;
@@ -84,13 +87,55 @@ export function expandTargets(start: CtlNode | null, seen = new Set<CtlNode>()):
   if (!start || seen.has(start)) return [];
   seen.add(start);
   if (!isPassThrough(start)) return [start];
-  return (start.inputs ?? []).flatMap((inp) => expandTargets(originOf(start, inp), seen));
+  const wired = (start.inputs ?? []).flatMap((inp) => expandTargets(originOf(start, inp), seen));
+  if (start.type !== NODE_GROUP_TYPE || wired.some((n) => !n.isVirtualNode)) return wired;
+  // Nothing real wired in (a WP Mode Relay driving it doesn't count): a WP
+  // Node Group inside a canvas group stands for every node of that group,
+  // like rgthree's Repeater. Nodes it gathers are followed the same way.
+  const group = innermostGroupOf(start);
+  if (!group) return wired;
+  // Nodes a wired-in relay watches stay out, so the relay never sets the
+  // mode it reads (a "muted → run" relay would flip forever).
+  for (const r of wired) for (const inp of r.inputs ?? []) {
+    const w = originOf(r, inp);
+    if (w) seen.add(w);
+  }
+  return [...wired, ...nodesOfGroup(group).flatMap((n) => expandTargets(n, seen))];
 }
 
 function nodesOfGroup(group: CtlGroup): CtlNode[] {
   group.recomputeInsideNodes?.();
   const kids = [...(group._children ?? group.nodes ?? [])];
   return kids.filter((k): k is CtlNode => !!k && typeof k === "object" && "id" in k && "mode" in k);
+}
+
+function groupArea(group: CtlGroup): number {
+  const w = group.size?.[0] ?? group._bounding?.[2] ?? Infinity;
+  const h = group.size?.[1] ?? group._bounding?.[3] ?? Infinity;
+  return w * h;
+}
+
+/** The smallest canvas group `node` sits in, or null. */
+export function innermostGroupOf(node: CtlNode): CtlGroup | null {
+  const all = node.graph?.groups ?? node.graph?._groups ?? [];
+  let best: CtlGroup | null = null;
+  for (const g of all) {
+    if (!nodesOfGroup(g).includes(node)) continue;
+    if (!best || groupArea(g) < groupArea(best)) best = g;
+  }
+  return best;
+}
+
+/**
+ * The canvas group a WP Node Group stands for: the smallest one it sits in,
+ * when nothing real is wired into it. Null otherwise.
+ */
+export function canvasGroupOf(node: CtlNode): CtlGroup | null {
+  if (node.type !== NODE_GROUP_TYPE) return null;
+  const seen = new Set<CtlNode>([node]);
+  const wired = (node.inputs ?? []).flatMap((inp) => expandTargets(originOf(node, inp), seen));
+  if (wired.some((n) => !n.isVirtualNode)) return null;
+  return innermostGroupOf(node);
 }
 
 /** Canvas groups of `graph` by title (several may share one). */

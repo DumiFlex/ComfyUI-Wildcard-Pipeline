@@ -21,6 +21,8 @@ const props = defineProps<{
   members: MemberView[];
   /** The group node's own mode, repeated to its members. */
   groupMode: MemberMode;
+  /** Title of the canvas group it stands for (nothing wired in), or null. */
+  wholeGroup?: string | null | undefined;
 }>();
 const emit = defineEmits<{
   "set-member": [id: number | string, mode: MemberMode];
@@ -44,7 +46,10 @@ function allMode(): string {
 <template>
   <div class="wp-ng">
     <div class="wp-ng__bar">
-      <span class="wp-ng__count">{{ members.length }} node{{ members.length === 1 ? "" : "s" }}</span>
+      <span class="wp-ng__count">
+        <template v-if="wholeGroup">Whole group: <b class="wp-ng__group" data-test="ng-whole-group">{{ wholeGroup }}</b> · </template>
+        {{ members.length }} node{{ members.length === 1 ? "" : "s" }}
+      </span>
       <WpSegmented
         v-if="members.length"
         :model-value="allMode()"
@@ -76,7 +81,8 @@ function allMode(): string {
       </Chip>
     </div>
     <div v-if="!members.length" class="wp-ng__ghost">
-      Wire nodes into the dots on the left, then this node's output into a WP Toggles control dot.
+      Wire nodes into the dots on the left, or put this node inside a canvas group to gather the whole
+      group. Then wire its output into a WP Toggles control dot, or mute or bypass this node.
     </div>
     <div v-else-if="groupMode !== 'on'" class="wp-ng__note">
       This node is {{ groupMode }}, so its nodes are too.
@@ -95,7 +101,8 @@ function allMode(): string {
   min-width: 0;
 }
 .wp-ng__bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
-.wp-ng__count { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-ng__count { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-ng__group { font-weight: 600; color: var(--wp-text); }
 .wp-ng__row {
   display: flex;
   align-items: center;
