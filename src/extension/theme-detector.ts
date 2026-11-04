@@ -7,40 +7,35 @@
  * so a host-only class doesn't reach them. Mounting the same class on
  * `<html>` makes the cascade reach every descendant.
  *
- * **Why watch the `dark-theme` class instead of `Comfy.ColorPalette`:**
- * ComfyUI sets a `dark-theme` class for every dark variant (default
- * `dark`, `obsidian`, themed dark palettes) and omits it for light
- * variants. The `Comfy.ColorPalette` setting key is unreliable across
- * versions — some builds don't expose
- * `extensionManager.setting.onChange`, others use different palette
- * IDs (`dark` / `light` / `obsidian` / `github` / …) that don't all
- * map cleanly to dark/light.
+ * **Where the theme is read from**, in order (the signal moved between
+ * frontend releases; checked against live builds):
  *
- * **Why BOTH `<html>` and `<body>`:** the class moved between frontend
- * releases. Verified against two live builds:
+ *   1. The active colour palette, `extensionManager.colorPalette
+ *      .getActiveColorPalette().light_theme` (`true` only for light
+ *      palettes). The authority wherever the API exists. Frontend 1.58.5
+ *      sets no `dark-theme` class at all, so without this the extension
+ *      painted its light tokens onto a dark ComfyUI.
+ *   2. A `dark-theme` class on `<html>` (1.47.10) or `<body>` (1.45.21).
+ *   3. The computed `color-scheme` of `<html>` (1.58.5 sets it per palette).
  *
- *   - 1.45.21 → `<body class="litegraph grid dark-theme …">`, `<html>` bare
- *   - 1.47.10 → `<html class="dark-theme">`, body no longer carries it
- *
- * Reading only `<body>` therefore reported LIGHT on every modern build,
- * so the extension painted its light tokens onto a dark ComfyUI. Checking
- * either element covers both eras, and observing both means a theme switch
- * is caught whichever element the running frontend mutates. Neither element
- * carrying the class is the genuine light signal on both.
+ * None of them saying dark is the light signal. A palette switch on 1.58
+ * rewrites `<html>`'s inline style (the palette's CSS variables) rather than
+ * a class, so the observer watches `style` on `<html>` as well as `class`.
  *
  * The detector exposes two surfaces:
  *  - `applyTheme(host, theme)` — pure mutation, used by mount glue
  *    and tests
- *  - `attachThemeDetector(host, app)` — full lifecycle: read initial
- *    body class, observe future changes, return cleanup
+ *  - `attachThemeDetector(host, app)` — full lifecycle: read the initial
+ *    theme, observe future changes, return cleanup
  */
 
 export type WpTheme = "dark" | "light";
 
+interface PaletteLike {
+  light_theme?: boolean;
+}
+
 interface AppLike {
-  // Kept for backward compatibility with the test harness; no longer
-  // queried by attachThemeDetector. Body-class observation supersedes
-  // the setting read.
   extensionManager?: unknown;
 }
 
@@ -49,7 +44,7 @@ const CLASS_DARK = "wp-theme-dark";
 const CLASS_LIGHT = "wp-theme-light";
 
 /** The elements ComfyUI has parked the `dark-theme` class on across releases.
- *  `<html>` first — that's where current builds put it. */
+ *  `<html>` first — that's where 1.47-era builds put it. */
 function themeSignalTargets(): HTMLElement[] {
   if (typeof document === "undefined") return [];
   const out: HTMLElement[] = [];
@@ -58,13 +53,40 @@ function themeSignalTargets(): HTMLElement[] {
   return out;
 }
 
-/** True when EITHER `<html>` or `<body>` carries ComfyUI's dark marker.
+/** The active palette's `light_theme`, or `undefined` when this frontend has
+ *  no palette API (or it throws). */
+function paletteIsLight(app?: AppLike): boolean | undefined {
+  const em = app?.extensionManager;
+  if (!em || typeof em !== "object" || !("colorPalette" in em)) return undefined;
+  const cp: unknown = em.colorPalette;
+  if (!cp || typeof cp !== "object" || !("getActiveColorPalette" in cp)) return undefined;
+  const get: unknown = cp.getActiveColorPalette;
+  if (typeof get !== "function") return undefined;
+  try {
+    const palette = get.call(cp) as PaletteLike | null | undefined;
+    if (!palette || typeof palette !== "object") return undefined;
+    return palette.light_theme === true;
+  } catch {
+    return undefined;
+  }
+}
+
+/** True when ComfyUI is dark, read from the signals in the file header.
  *  Defaults to dark when there's no DOM at all (SSR / unit bootstrap), which
  *  matches ComfyUI's own default palette. */
-function hasDarkClass(): boolean {
+function isDark(app?: AppLike): boolean {
+  const light = paletteIsLight(app);
+  if (light !== undefined) return !light;
   const targets = themeSignalTargets();
   if (targets.length === 0) return true;
-  return targets.some((el) => el.classList.contains(COMFY_DARK_BODY_CLASS));
+  if (targets.some((el) => el.classList.contains(COMFY_DARK_BODY_CLASS))) return true;
+  try {
+    const scheme = getComputedStyle(document.documentElement).colorScheme;
+    if (/\bdark\b/.test(scheme) && !/\blight\b/.test(scheme)) return true;
+  } catch {
+    /* no computed style — fall through to light */
+  }
+  return false;
 }
 
 /**
@@ -86,25 +108,21 @@ export function applyTheme(host: HTMLElement, theme: WpTheme): void {
   }
 }
 
-/**
- * Read the current theme from `<body class>`. Returns `"dark"` when
- * `dark-theme` is present (default ComfyUI dark + obsidian + every
- * dark-variant palette), `"light"` otherwise.
- */
-export function detectInitialTheme(_app?: AppLike): WpTheme {
-  return hasDarkClass() ? "dark" : "light";
+/** Read ComfyUI's current theme (see the file header for where from). */
+export function detectInitialTheme(app?: AppLike): WpTheme {
+  return isDark(app) ? "dark" : "light";
 }
 
 /**
- * Wire a host element to follow ComfyUI's theme class.
+ * Wire a host element to follow ComfyUI's theme.
  *
- * Applies the initial theme synchronously, observes future `class` changes on
- * BOTH `<html>` and `<body>` (the class has lived on each across releases —
- * see the file header) via `MutationObserver`, and returns a cleanup function
- * that disconnects the observer.
+ * Applies the initial theme synchronously, observes `class` on `<html>` and
+ * `<body>` plus `style` on `<html>` (where each frontend era signals a theme
+ * switch — see the file header) via `MutationObserver`, and returns a cleanup
+ * function that disconnects the observer.
  */
-export function attachThemeDetector(host: HTMLElement, _app?: AppLike): () => void {
-  applyTheme(host, detectInitialTheme());
+export function attachThemeDetector(host: HTMLElement, app?: AppLike): () => void {
+  applyTheme(host, detectInitialTheme(app));
 
   const targets = themeSignalTargets();
   if (typeof MutationObserver === "undefined" || targets.length === 0) {
@@ -112,17 +130,18 @@ export function attachThemeDetector(host: HTMLElement, _app?: AppLike): () => vo
     return () => {};
   }
 
-  let lastIsDark = hasDarkClass();
+  let lastIsDark = isDark(app);
   const observer = new MutationObserver(() => {
-    const isDark = hasDarkClass();
-    if (isDark === lastIsDark) return;
-    lastIsDark = isDark;
-    applyTheme(host, isDark ? "dark" : "light");
+    const dark = isDark(app);
+    if (dark === lastIsDark) return;
+    lastIsDark = dark;
+    applyTheme(host, dark ? "dark" : "light");
   });
   // One observer, both targets — whichever element the running frontend
   // mutates, the same callback re-reads the combined signal.
   for (const t of targets) {
-    observer.observe(t, { attributes: true, attributeFilter: ["class"] });
+    const filter = t === document.documentElement ? ["class", "style"] : ["class"];
+    observer.observe(t, { attributes: true, attributeFilter: filter });
   }
 
   return () => {
