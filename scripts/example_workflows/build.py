@@ -38,6 +38,23 @@ MODEL_INFO = json.dumps({"version": 1, "rules": [
     "internal": {"family": True, "variant": True, "name": True}}, separators=(",", ":"))
 
 
+HELP_TIP = (
+    ":pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** "
+    "in the toolbar above it. Its help page opens over the canvas, with what every socket and "
+    "control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor."
+)
+JUMP_TIP = (
+    ":pi-bookmark: Press a step's number key with the canvas focused, or click it in the "
+    "**Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings "
+    "you back to this note."
+)
+
+
+def start_view(x: float, w: float, h: float) -> dict:
+    """The Start here note's own bookmark: first in the dock, no key."""
+    return view(x + w / 2, h / 2, 0.7, "", 0)
+
+
 def loop_config(**over: object) -> str:
     cfg: dict[str, object] = {
         "strategy": "hash_index", "override_seed": False, "iteration_var_name": "iteration",
@@ -82,10 +99,10 @@ GROUPS = [
 
 def sets_and_stories() -> None:
     wf = Workflow(stable_uuid("4 - Sets and stories"))
-    ckpt = wf.add("CheckpointLoaderSimple", (-1260, 1700), (380, 100),
+    ckpt = wf.add("CheckpointLoaderSimple", (-1260, 1600), (380, 100),
                   widgets={"ckpt_name": "sd_xl_base_1.0.safetensors"})
 
-    wf.add("WP_Toggles", (-1260, 1100), (480, 230), title="WP Toggles · pick a mode",
+    wf.add("WP_Toggles", (-1260, 1300), (480, 230), title="WP Toggles · pick a mode",
                      widgets={"wp_toggles": json.dumps({
                          "version": 1, "mode": "one", "group_var": "pack_mode",
                          "rows": [
@@ -103,6 +120,13 @@ def sets_and_stories() -> None:
                               "value": "story"},
                          ]})})
 
+    wf.add("WP_Note", (-1260, 1080), (620, 190), title="Pick a mode", widgets={
+        "wp_note": note_value(
+            "**Pick one**: switching a mode on switches the others off, and each row mutes its "
+            "own canvas group, so only the picked group runs. Use the indigo **?** above the "
+            "node for what each part does.\n\n[WP Toggles](docs:wp-toggles){button pi-sliders-h}",
+            tone="icon", icon="sliders-h", color="violet",
+            bookmark=view(-950, 1080 + 260, 0.8, "", 4))})
     wf.add("WP_Note", (-1260, 0), (620, 1040), title="Start here", widgets={"wp_note": note_value(
         "### Sets and stories\n\n"
         "One **Run** makes a set of images from one loop. Three ways to run it, one group each; "
@@ -117,16 +141,16 @@ def sets_and_stories() -> None:
         "{button pi-filter}\n\n"
         "All the lists come with this workflow, in packs (bundles) on the **WP Context** nodes.\n\n"
         "[Add this workflow's lists to my library](wp:library){button pi-download}\n\n"
-        "| Key | Jump to |\n|---|---|\n| `Alt+1` | Every frame different |\n"
-        "| `Alt+2` | Photo shoot |\n| `Alt+3` | Storyboard |\n\n"
-        ":pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\n\n"
+        "| Key | Jump to |\n|---|---|\n| `1` | Every frame different |\n"
+        "| `2` | Photo shoot |\n| `3` | Storyboard |\n\n"
+        + JUMP_TIP + "\n\n" + HELP_TIP + "\n\n"
         ":pi-lightbulb:{#22c55e} The lists name no style, so they suit any model. **WP Model "
         "Info** in each group sets the quality words: Illustrious / NoobAI by default, Pony's "
         "score tags, none for Flux. Add your style to the template.\n\n"
         ":pi-lock: Want this for your own lists? [Keep something the same](docs:howto-keep-steady)"
         "{button pi-lock} explains **Hold across run**, the switch the photo shoot and the "
         "storyboard lean on." + LINKS_FOOTER,
-        tone="icon", icon="flag")})
+        tone="icon", icon="flag", bookmark=start_view(-1260, 620, 1040))})
 
     for gi, (gtitle, gcolor) in enumerate(GROUPS):
         y = gi * ROW_H
@@ -135,7 +159,7 @@ def sets_and_stories() -> None:
         wf.group(gtitle, -40, y - 60, 6800, ROW_H - 100, gcolor)
 
         loop = wf.add("WP_ContextLoop", (0, y + 380), (400, 440), mode=muted)
-        minfo = wf.add("WP_ModelInfo", (0, y + 860), (400, 300), mode=muted,
+        minfo = wf.add("WP_ModelInfo", (0, y + 880), (400, 300), mode=muted,
                        widgets={"wp_model_info": MODEL_INFO})
         wf.link(loop, "context", minfo, "upstream")
         wf.link(ckpt, "MODEL", minfo, "model")
@@ -211,7 +235,7 @@ def sets_and_stories() -> None:
 
         wf.add("WP_Note", (0, y), (900, 280), title=gtitle, mode=0, widgets={
             "wp_note": note_value(text, tone="step", step=gi + 1, bookmark=view(
-                3360, y + 700, 0.24, f"Alt+{gi + 1}", gi + 1))})
+                3360, y + 700, 0.24, f"{gi + 1}", gi + 1))})
 
         wf.link(minfo, "context", c1, "upstream")
         wf.link(c1, "context", c2, "upstream")
@@ -219,7 +243,7 @@ def sets_and_stories() -> None:
 
         asm = wf.add("WP_PromptAssembler", (2380, y + 320), (460, 420), mode=muted,
                      widgets={"template": prompt, "negative_template": photo.NEGATIVE})
-        lab = wf.add("WP_PromptAssembler", (2380, y + 780), (460, 300), mode=muted,
+        lab = wf.add("WP_PromptAssembler", (1740, y + 800), (480, 480), mode=muted,
                      title="WP Prompt Assembler · labels",
                      widgets={"template": label, "negative_template": ""})
         cln = wf.add("WP_PromptCleaner", (2900, y + 320), (460, 480), mode=muted,
@@ -237,6 +261,14 @@ def sets_and_stories() -> None:
             "seed": 42 + gi, "control_after_generate": "fixed", "steps": 28, "cfg": 5.5,
             "sampler_name": "euler_ancestral", "scheduler": "normal", "denoise": 1})
         dec = wf.add("VAEDecode", (4240, y + 320), (200, 50), mode=muted)
+        wf.add("WP_Note", (4500, y), (490, 280), title=f"{gtitle} · pick the frames", widgets={
+            "wp_note": note_value(
+                "The run **pauses** here. Click the frames you want on the sheet, then "
+                "**Continue** (or **Keep all**). Each keeps its label for the grid. Press **?** "
+                "above the node for its keys and modes.\n\n"
+                "[WP Image Filter](docs:wp-image-filter){button pi-filter}",
+                tone="icon", icon="filter", color="tip",
+                bookmark=view(5000, y + 500, 0.6, "", 10 + gi))})
         filt = wf.add("WP_ImageFilter", (4500, y + 320), (490, 430), mode=muted,
                       widgets={"wp_image_filter": FILTER})
         grid_n = wf.add("WP_LabelGrid", (5060, y + 320), (520, 480), mode=muted,

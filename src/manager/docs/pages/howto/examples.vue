@@ -45,7 +45,9 @@ import VarToken from "../../../components/docs/VarToken.vue";
         A <b>Start here</b> note lists the steps and links to these docs, the Discord and the
         Community. Notes on the canvas explain each step, with links to the docs and to outside
         guides and checkpoints. The notes that open a step are also bookmarks that frame their
-        whole group: the <b>Bookmarks</b> dock lists them, and Alt+1, Alt+2… jump between them.
+        whole group: the <b>Bookmarks</b> dock lists them (Start here too), and the number keys 1, 2…
+        jump between them while the canvas has focus. The Start here note also points at the indigo
+        <b>?</b> in the toolbar over a selected node, which opens that node's help page.
       </p>
     </DocSection>
 

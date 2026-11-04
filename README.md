@@ -89,7 +89,9 @@ scripts/example_workflows/build.py`), and a test runs every workflow on an
 empty library. Their bundles show a grey **EXAMPLE** chip; right-click a header →
 **Push to library…** to keep one. A **Start here** note in each one lists
 the steps and links to the docs, Discord and the Community; the step notes
-double as bookmarks that frame their group (Alt+1, Alt+2…).
+double as bookmarks that frame their group (number keys 1, 2… on the canvas), and
+**Start here** is a bookmark too. Select any node and press the indigo **?** in
+the toolbar above it for its help page.
 
 ## How it works
 

@@ -312,7 +312,7 @@ def context_value(*items: Module | Bundle, salt: str = "") -> str:
             "start_idx": start,
             "end_idx": len(modules) - 1,
             "enabled": item.enabled,
-            "collapsed": parent is not None,
+            "collapsed": True,  # headers only: a Context stays the size it was saved at
             "inserted_at_hash": "",
             "name": item.name,
             "color": item.color,

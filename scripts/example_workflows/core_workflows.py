@@ -9,7 +9,17 @@ import json
 
 import build
 import photo
-from build import CLEANER, LINKS_FOOTER, MODEL_INFO, OUT, ctx, loop_config
+from build import (
+    CLEANER,
+    HELP_TIP,
+    JUMP_TIP,
+    LINKS_FOOTER,
+    MODEL_INFO,
+    OUT,
+    ctx,
+    loop_config,
+    start_view,
+)
 from graph import BYPASS, Workflow, note_value, stable_uuid, view
 from packs import Bundle, branch, derivation, eq, put, rule, uid_of
 from photo import S
@@ -92,14 +102,15 @@ def one_image() -> None:
         "library: the lists come with this workflow.\n\n"
         "[Add this workflow's lists to my library](wp:library){button pi-download}\n\n"
         + PACKS_TABLE + "\n\n"
-        "| Key | Step |\n|---|---|\n| `Alt+1` | Who is in the picture |\n"
-        "| `Alt+2` | Write the prompt |\n| `Alt+3` | Pick a checkpoint and run |\n"
-        "| `Alt+4` | LoRAs and switches (optional) |\n"
-        "| `Alt+5` | Settings from the model (optional) |\n| `Alt+6` | The image |\n\n"
-        ":pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\n\n"
+        "| Key | Step |\n|---|---|\n| `1` | Who is in the picture |\n"
+        "| `2` | Write the prompt |\n| `3` | Pick a checkpoint and run |\n"
+        "| `4` | LoRAs and switches (optional) |\n"
+        "| `5` | Settings from the model (optional) |\n| `6` | The image |\n\n"
+        + JUMP_TIP + "\n\n" + HELP_TIP + "\n\n"
         ":pi-lightbulb:{#22c55e} New to ComfyUI? [ComfyUI's first-image guide]"
         "(https://docs.comfy.org/tutorials/basic/text-to-image){button pi-external-link #eab308}"
-        + LINKS_FOOTER, tone="icon", icon="flag")})
+        + LINKS_FOOTER, tone="icon", icon="flag",
+        bookmark=start_view(-760, 620, 1080))})
 
     # Prompt group
     wf.add("WP_Note", (0, 0), (520, 270), title="Who is in the picture", widgets={
@@ -112,10 +123,10 @@ def one_image() -> None:
             "- **Render** writes the words your model wants first and last.\n\n"
             "[Bundles](docs:bundles){button pi-book} [WP Context](docs:wp-context)"
             "{button pi-sitemap}",
-            step=1, bookmark=view(1260, 580, 0.42, "Alt+1", 1))})
+            step=1, bookmark=view(1260, 580, 0.42, "1", 1))})
     person = ctx(wf, (0, 300), "WP Context · Person", 1, photo.render(False), photo.person(),
                  salt="one", h=640)
-    wf.add("WP_Note", (640, 0), (560, 270), title="Where, what and how", widgets={
+    wf.add("WP_Note", (640, 0), (560, 260), title="Where, what and how", widgets={
         "wp_note": note_value(
             "| Row | What it does here |\n|---|---|\n"
             "| **constraint** | *Place → Outfit*: a beach brings swimwear, a forest a rain jacket. "
@@ -125,7 +136,7 @@ def one_image() -> None:
             "wide shot |\n\n"
             "[Constraints](docs:constraint){button pi-book} [Derivations](docs:derivation)"
             "{button pi-directions}", tone="icon", icon="sitemap", color="teal")})
-    scene = ctx(wf, (640, 300), "WP Context · Scene", 2, *_scene_bundles(), salt="one", h=640)
+    scene = ctx(wf, (640, 320), "WP Context · Scene", 2, *_scene_bundles(), salt="one", h=640)
     wf.link(person, "context", scene, "upstream")
 
     wf.add("WP_Note", (1280, 0), (520, 270), title="Write the prompt", widgets={
@@ -136,19 +147,19 @@ def one_image() -> None:
             "say leaves behind.\n\n"
             "[Prompt Assembler](docs:wp-prompt-assembler){button pi-book} "
             "[Negatives](docs:negatives){button pi-minus-circle}",
-            step=2, bookmark=view(1260, 580, 0.42, "Alt+2", 2))})
+            step=2, bookmark=view(1260, 580, 0.42, "2", 2))})
     asm = wf.add("WP_PromptAssembler", (1280, 300), (500, 460),
                  widgets={"template": photo.PROMPT, "negative_template": photo.NEGATIVE})
     cln = wf.add("WP_PromptCleaner", (1840, 300), (500, 480), widgets={"wp_cleaner": CLEANER})
     wf.link(asm, "prompt", cln, "prompt")
     wf.link(asm, "negative", cln, "negative")
-    dbg = wf.add("WP_Debug", (1280, 820), (500, 380))
+    dbg = wf.add("WP_Debug", (640, 800), (540, 400))
     wf.add("WP_Note", (1840, 0), (500, 240), title="See what was picked", widgets={
         "wp_note": note_value(
             "After a run, **WP Debug** lists every variable, which option each list picked and "
             "any warnings. Safe to delete.\n\n[WP Debug](docs:wp-debug){button pi-search}",
             tone="icon", icon="search", color="neutral")})
-    wf.add("WP_Note", (1840, 840), (500, 240), title="Keep these lists", widgets={
+    wf.add("WP_Note", (1840, 870), (500, 240), title="Keep these lists", widgets={
         "wp_note": note_value(
             "They live in this workflow. Save them all in one step (you review the list first), "
             "or right-click a bundle header → **Push to library…**.\n\n"
@@ -161,7 +172,7 @@ def one_image() -> None:
             "Choose your model in **Load Checkpoint**, then press **Run**. Every run rolls new "
             "picks; set a Context's seed to *fixed* to repeat one.\n\n" + SUGGESTED
             + "\n\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}",
-            step=3, bookmark=view(3820, 580, 0.42, "Alt+3", 3))})
+            step=3, bookmark=view(3820, 580, 0.42, "3", 3))})
     ckpt = wf.add("CheckpointLoaderSimple", (2640, 320), (380, 100),
                   widgets={"ckpt_name": "sd_xl_base_1.0.safetensors"})
     lat = wf.add("EmptyLatentImage", (2640, 760), (300, 110),
@@ -172,7 +183,7 @@ def one_image() -> None:
     wf.link(lat, "LATENT", ks, "latent_image")
     wf.add("WP_Bookmark", (4400, 0), (183, 30), title="The image", widgets={
         "wp_bookmark": json.dumps({"version": 1, "color": "", "icon": "image", "hidden": False,
-                                   **view(4660, 640, 0.9, "Alt+6", 6)})})
+                                   **view(4660, 640, 0.9, "6", 6)})})
     save = wf.add("SaveImage", (4400, 80), (600, 1080), widgets={"filename_prefix": "wp-examples/one"})
     wf.link(dec, "IMAGE", save, "images")
 
@@ -193,7 +204,7 @@ def one_image() -> None:
                "[Find LoRAs on Civitai](https://civitai.com/models?types=LORA)"
                "{button pi-search #3b82f6}",
                tone="icon", icon="sliders-h", color="violet",
-               bookmark=view(1260, 1800, 0.42, "Alt+4", 4))})
+               bookmark=view(1260, 1800, 0.42, "4", 4))})
     words = []
     for i, name in enumerate(("Character trigger words", "Its clothes trigger words",
                               "Style trigger words")):
@@ -210,7 +221,7 @@ def one_image() -> None:
     wf.link(scene, "context", inj, "upstream")
     for i, w in enumerate(words):
         wf.link(w, "STRING", inj, f"input_{i}")
-    tog = wf.add("WP_Toggles", (620, 1700), (560, 320), title="WP Toggles · workflow switches",
+    tog = wf.add("WP_Toggles", (620, 1730), (560, 320), title="WP Toggles · workflow switches",
                  widgets={"wp_toggles": json.dumps({"version": 1, "mode": "any", "group_var": "",
                      "rows": [
                          {"id": "c248fdcf", "kind": "label", "name": "LoRAs", "color": 5},
@@ -261,7 +272,7 @@ def one_image() -> None:
                "[Mode Relay](docs:wp-mode-relay){button pi-share-alt} "
                "[Node Group](docs:wp-node-group){button pi-objects-column}",
                tone="icon", icon="microchip", color="warning",
-               bookmark=view(3820, 1800, 0.42, "Alt+5", 5))})
+               bookmark=view(3820, 1800, 0.42, "5", 5))})
     minfo = wf.add("WP_ModelInfo", (2640, 1780), (480, 300), widgets={"wp_model_info": MODEL_INFO})
     wf.link(ckpt, "MODEL", minfo, "model")
     wf.link(minfo, "context", person, "upstream")
@@ -326,12 +337,13 @@ def batches_and_grids() -> None:
         "against three kinds of light, laid out as a labelled XY plot. A quick way to see what "
         "the framing and the light do. The lists come with this workflow.\n\n"
         "[Add this workflow's lists to my library](wp:library){button pi-download}\n\n"
-        "| Key | Step |\n|---|---|\n| `Alt+1` | Sweep every combination |\n"
-        "| `Alt+2` | A prompt and a label per frame |\n| `Alt+3` | One click, nine images |\n"
-        "| `Alt+4` | Quick preview |\n| `Alt+5` | The grid |\n\n"
-        ":pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\n\n"
+        "| Key | Step |\n|---|---|\n| `1` | Sweep every combination |\n"
+        "| `2` | A prompt and a label per frame |\n| `3` | One click, nine images |\n"
+        "| `4` | Quick preview |\n| `5` | The grid |\n\n"
+        + JUMP_TIP + "\n\n" + HELP_TIP + "\n\n"
         ":pi-images: More ways to batch: [Make variations](docs:howto-variations)"
-        "{button pi-images}" + LINKS_FOOTER, tone="icon", icon="flag")})
+        "{button pi-images}" + LINKS_FOOTER, tone="icon", icon="flag",
+        bookmark=start_view(-760, 620, 760))})
 
     shot = photo.shot
     light = photo.light
@@ -349,7 +361,7 @@ def batches_and_grids() -> None:
             "follows it.\n\n**Hold other picks** keeps the same person, outfit, place, pose and "
             "angle on every frame, so only the swept lists change.\n\n"
             "[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}",
-            step=1, bookmark=view(1820, 580, 0.4, "Alt+1", 1))})
+            step=1, bookmark=view(1820, 580, 0.4, "1", 1))})
     loop = wf.add("WP_ContextLoop", (0, 420), (400, 440), widgets={
         "seed": 7, "control_after_generate": "randomize", "count": 9,
         "wp_context_loop_config": loop_config(sweep=sweep)})
@@ -373,7 +385,7 @@ def batches_and_grids() -> None:
             "The first **Assembler** writes the prompt. The second writes the label "
             "`$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and "
             "columns.\n\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}",
-            step=2, bookmark=view(1820, 580, 0.4, "Alt+2", 2))})
+            step=2, bookmark=view(1820, 580, 0.4, "2", 2))})
     asm = wf.add("WP_PromptAssembler", (1760, 300), (480, 460),
                  widgets={"template": photo.PROMPT, "negative_template": photo.NEGATIVE})
     cln = wf.add("WP_PromptCleaner", (2300, 300), (480, 500), widgets={"wp_cleaner": CLEANER})
@@ -395,7 +407,7 @@ def batches_and_grids() -> None:
             "`$quick_preview` and the **If/Else Switch** picks the smaller latent.\n\n"
             "[WP Toggles](docs:wp-toggles){button pi-sliders-h} "
             "[Var → Bool](docs:wp-var-to-bool){button pi-check-square}",
-            tone="icon", icon="bolt", color="warning", bookmark=view(4340, 580, 0.53, "Alt+4", 4))})
+            tone="icon", icon="bolt", color="warning", bookmark=view(4340, 580, 0.53, "4", 4))})
     tog = wf.add("WP_Toggles", (3760, 420), (460, 150), title="WP Toggles · steps", widgets={
         "wp_toggles": json.dumps({"version": 1, "mode": "one", "group_var": "steps",
             "group_upstream": True, "rows": [
@@ -426,7 +438,7 @@ def batches_and_grids() -> None:
             "Pick your model in **Load Checkpoint** and press **Run** once. The sampler seed is "
             "**fixed**, so only the prompt changes between cells: a fair comparison.\n\n"
             + SUGGESTED + "\n\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}",
-            step=3, bookmark=view(900, 1760, 0.6, "Alt+3", 3))})
+            step=3, bookmark=view(900, 1760, 0.6, "3", 3))})
     ckpt = wf.add("CheckpointLoaderSimple", (0, 1620), (380, 100),
                   widgets={"ckpt_name": "sd_xl_base_1.0.safetensors"})
     dec = _image_chain(wf, 620, 1320, ckpt, cln, seed=42, control="fixed")
@@ -441,7 +453,7 @@ def batches_and_grids() -> None:
             "(one sheet, saved here). Rows come from label part 1, columns from part 2.\n\n"
             ":pi-image: Want the images with no labels? Wire **VAE Decode** straight into a "
             "**Save Image**.\n\n[WP Label & Grid](docs:wp-label-grid){button pi-th-large}",
-            tone="icon", icon="th-large", color="info", bookmark=view(2760, 1760, 0.6, "Alt+5", 5))})
+            tone="icon", icon="th-large", color="info", bookmark=view(2760, 1760, 0.6, "5", 5))})
     grid = wf.add("WP_LabelGrid", (1920, 1620), (520, 480), widgets={"wp_label_grid": json.dumps({
         "label": "", "position": "none", "align": "center", "font": "default", "font_size": 0,
         "text_color": "#ffffff", "label_color": "#000000", "grid": True, "arrange": "auto",
@@ -484,11 +496,11 @@ def pick_and_refine() -> None:
         "so you can pick the keepers (and fix a prompt or paint a mask), then refines only "
         "those. The lists come with this workflow.\n\n"
         "[Add this workflow's lists to my library](wp:library){button pi-download}\n\n"
-        "| Key | Step |\n|---|---|\n| `Alt+1` | Four looks |\n| `Alt+2` | Quick drafts |\n"
-        "| `Alt+3` | Pick the keepers |\n| `Alt+4` | Refine only the picks |\n"
-        "| `Alt+5` | The picks, refined |\n\n"
-        ":pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar)." + LINKS_FOOTER,
-        tone="icon", icon="flag")})
+        "| Key | Step |\n|---|---|\n| `1` | Four looks |\n| `2` | Quick drafts |\n"
+        "| `3` | Pick the keepers |\n| `4` | Refine only the picks |\n"
+        "| `5` | The picks, refined |\n\n"
+        + JUMP_TIP + "\n\n" + HELP_TIP + LINKS_FOOTER,
+        tone="icon", icon="flag", bookmark=start_view(-760, 620, 760))})
     salt = "pick"
     wf.add("WP_Note", (0, 0), (560, 280), title="Four looks", widgets={"wp_note": note_value(
         "The **Context Loop** runs everything after it 4 times. The **Person** rows have **Hold "
@@ -497,7 +509,7 @@ def pick_and_refine() -> None:
         "Change **count** for more looks.\n\n"
         "[WP Context Loop](docs:wp-context-loop){button pi-book} "
         "[Keep something the same](docs:howto-keep-steady){button pi-lock}",
-        step=1, bookmark=view(1500, 580, 0.42, "Alt+1", 1))})
+        step=1, bookmark=view(1500, 580, 0.42, "1", 1))})
     loop = wf.add("WP_ContextLoop", (0, 360), (400, 440), widgets={
         "seed": 5, "control_after_generate": "randomize", "count": 4,
         "wp_context_loop_config": loop_config()})
@@ -508,7 +520,7 @@ def pick_and_refine() -> None:
     wf.link(person, "context", scene, "upstream")
     asm = wf.add("WP_PromptAssembler", (1760, 340), (480, 460),
                  widgets={"template": photo.PROMPT, "negative_template": photo.NEGATIVE})
-    lab = wf.add("WP_PromptAssembler", (1760, 860), (480, 300),
+    lab = wf.add("WP_PromptAssembler", (460, 730), (480, 300),
                  title="WP Prompt Assembler · labels",
                  widgets={"template": "$outfit", "negative_template": ""})
     cln = wf.add("WP_PromptCleaner", (2300, 340), (480, 500), widgets={"wp_cleaner": CLEANER})
@@ -521,7 +533,7 @@ def pick_and_refine() -> None:
         "Pick your model in **Load Checkpoint** and press **Run**. The **Seed List** gives each "
         "frame its own sampler seed, following the Loop through `loop_config`.\n\n" + SUGGESTED
         + "\n\n[WP Seed List](docs:wp-seed-list){button pi-book}",
-        step=2, bookmark=view(3960, 580, 0.42, "Alt+2", 2))})
+        step=2, bookmark=view(3960, 580, 0.42, "2", 2))})
     ckpt = wf.add("CheckpointLoaderSimple", (3120, 340), (380, 100),
                   widgets={"ckpt_name": "sd_xl_base_1.0.safetensors"})
     seeds = wf.add("WP_SeedList", (3120, 500), (400, 340), widgets={
@@ -543,7 +555,7 @@ def pick_and_refine() -> None:
             "`negative` feed the refine pass, `labels` the contact sheet.\n\n"
             "You can fix a prompt or paint a mask there too. With `clip` wired, an edited prompt "
             "is encoded again.\n\n[WP Image Filter](docs:wp-image-filter){button pi-book}",
-            step=3, color="violet", bookmark=view(1500, 1760, 0.5, "Alt+3", 3))})
+            step=3, color="violet", bookmark=view(1500, 1760, 0.5, "3", 3))})
     filt = wf.add("WP_ImageFilter", (620, 1320), (490, 430), widgets={"wp_image_filter": json.dumps(
         {"mode": "pause", "send_as": "same_shape", "timeout": 600, "on_timeout": "keep_all"},
         separators=(",", ":"))})
@@ -575,7 +587,7 @@ def pick_and_refine() -> None:
         "wp_note": note_value(
             "A second pass upscales the picked latents by 1.5 and samples them again at half "
             "denoise. The drafts you skipped never reach it.",
-            step=4, color="tip", bookmark=view(3960, 1760, 0.5, "Alt+4", 4))})
+            step=4, color="tip", bookmark=view(3960, 1760, 0.5, "4", 4))})
     up = wf.add("LatentUpscaleBy", (3120, 1580), (300, 90),
                 widgets={"upscale_method": "nearest-exact", "scale_by": 1.5})
     ks2 = wf.add("KSampler", (3720, 1320), (300, 280), title="KSampler · refine", widgets={
@@ -591,7 +603,7 @@ def pick_and_refine() -> None:
     wf.link(ckpt, "VAE", dec2, "vae")
     wf.add("WP_Bookmark", (4340, 1320), (183, 30), title="The picks, refined", widgets={
         "wp_bookmark": json.dumps({"version": 1, "color": "", "icon": "image", "hidden": False,
-                                   **view(4700, 1760, 0.6, "Alt+5", 5)})})
+                                   **view(4700, 1760, 0.6, "5", 5)})})
     save = wf.add("SaveImage", (4340, 1400), (700, 820), widgets={"filename_prefix": "wp-examples/picked"})
     wf.link(dec2, "IMAGE", save, "images")
     wf.save(OUT / "3 - Pick and refine.json", (0.24, 2200, 360))
