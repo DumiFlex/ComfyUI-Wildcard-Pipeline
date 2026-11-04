@@ -569,8 +569,42 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
       set(sampler, "seed", 1234);
       for (const w of sampler.widgets ?? []) if (w.name === "control_after_generate") w.value = "fixed";
       const decode = make("VAEDecode", cx, cy + 250);
-      const preview = make("PreviewImage", previewAt[0], previewAt[1], false);
-      preview.size = [size[0], size[1]];
+      // Keep the preview clear of the nodes already on screen (their real height depends on the
+      // fonts and the template's length), and inside the view above the caption.
+      const title = (window.LiteGraph as unknown as { NODE_TITLE_HEIGHT?: number }).NODE_TITLE_HEIGHT ?? 30;
+      const others = (graph as unknown as { _nodes: LNode[] })._nodes.filter((n) => !n.flags.collapsed);
+      const view = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] }; canvas: HTMLCanvasElement } }).canvas;
+      const box = view.canvas.getBoundingClientRect();
+      const viewBottom = (box.height - 150) / view.ds.scale - view.ds.offset[1];
+      const viewRight = (box.width - 30) / view.ds.scale - view.ds.offset[0];
+      let [px, py] = previewAt;
+      let [pw, ph] = size;
+      for (let pass = 0; pass < 4; pass++) {
+        let moved = false;
+        for (const n of others) {
+          const top = n.pos[1] - title;
+          const bottom = n.pos[1] + n.size[1];
+          const apart = px + pw <= n.pos[0] || n.pos[0] + n.size[0] <= px || py + ph <= top || bottom <= py - title;
+          if (apart) continue;
+          moved = true;
+          const right = n.pos[0] + n.size[0] + 30;
+          if (viewRight - right >= 300) {
+            // Beside it, narrower if needed.
+            px = right;
+            const w = Math.min(pw, viewRight - right);
+            ph = Math.round((ph * w) / pw);
+            pw = w;
+          } else py = bottom + title + 30;
+        }
+        if (!moved) break;
+      }
+      if (py + ph > viewBottom) {
+        const fit = Math.max(220, viewBottom - py);
+        pw = Math.round((pw * fit) / ph);
+        ph = fit;
+      }
+      const preview = make("PreviewImage", px, py, false);
+      preview.size = [pw, ph];
       link(load, "CLIP", pos, "clip");
       link(load, "CLIP", neg, "clip");
       link(src, "prompt", pos, "text");
