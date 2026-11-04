@@ -1,6 +1,7 @@
-import { defineComponent, h, inject, type VNode } from "vue";
+import { defineComponent, h, inject, type PropType, type VNode } from "vue";
 import { parseMarkdown, type Align, type Block, type Inline, type ListItem } from "../../manager/utils/chat-markdown";
-import { parseTarget, readLinkAttrs, splitIcons, targetUrl } from "./note-format";
+import { assetUrl, NOTE_ASSETS, parseImageTarget, parseTarget, readImageAttrs, readLinkAttrs, splitIcons, targetUrl } from "./note-format";
+import type { NoteImage } from "../../extension/note";
 import { NOTE_ACTIONS, type NoteActions } from "./note-actions";
 
 /**
@@ -10,8 +11,15 @@ import { NOTE_ACTIONS, type NoteActions } from "./note-actions";
  * `wp:community/…` opens a pack in the manager's Community tab; `wp:library`
  * is a button that runs the note's "add to library" action. A link to
  * anything else shows its text only.
+ *
+ * Pictures: `wp:image/<id>` draws one saved in the note (`images`),
+ * `wp:asset/<name>` one the extension ships. Nothing else ever becomes an
+ * <img>, so no web address loads. A `{width=N%}` after it sets its width in
+ * percent of the note; without one it is its own size, never wider than the
+ * note.
  */
 let actions: NoteActions | null = null;
+let pictures: Record<string, NoteImage> = {};
 function origin(): string {
   return typeof window === "undefined" ? "" : window.location.origin;
 }
@@ -62,6 +70,39 @@ function link(n: Extract<Inline, { t: "link" }>, button: boolean, icon: string, 
   ]);
 }
 
+function picture(n: Extract<Inline, { t: "img" }>, width: number | null): VNode {
+  const target = parseImageTarget(n.src);
+  let src: string | null = null;
+  let size: { w: number; h: number } | null = null;
+  if (target.kind === "saved") {
+    const img = pictures[target.id];
+    if (img) { src = img.src; size = img; }
+  } else if (target.kind === "asset") {
+    src = assetUrl(target.id, origin());
+    size = NOTE_ASSETS.find((a) => a.id === target.id) ?? null;
+  }
+  if (!src || !size) {
+    // A picture this note can't show: its alt text, marked as a picture.
+    return h("span", { class: "wp-note-md__nopic", "data-test": "note-image-missing" }, [
+      h("i", { class: "pi pi-image", "aria-hidden": "true" }),
+      n.alt || "Picture",
+    ]);
+  }
+  return h("img", {
+    class: "wp-note-md__img",
+    src,
+    alt: n.alt,
+    title: n.alt || undefined,
+    // Its size keeps the room while it decodes; CSS caps it at the note.
+    width: size.w,
+    height: size.h,
+    style: width === null ? undefined : { width: `${width}%` },
+    draggable: "false",
+    decoding: "async",
+    "data-test": "note-image",
+  });
+}
+
 function inline(nodes: Inline[]): (VNode | string)[] {
   const out: (VNode | string)[] = [];
   for (let i = 0; i < nodes.length; i++) {
@@ -74,6 +115,17 @@ function inline(nodes: Inline[]): (VNode | string)[] {
       case "s": out.push(h("s", inline(n.c))); break;
       case "code": out.push(h("code", { class: "wp-note-md__code" }, n.v)); break;
       case "ref": out.push(h("span", n.v)); break;
+      case "img": {
+        const next = nodes[i + 1];
+        const attrs = next?.t === "text" ? readImageAttrs(next.v) : null;
+        out.push(picture(n, attrs?.width ?? null));
+        if (attrs && next?.t === "text") {
+          const rest = next.v.slice(attrs.length);
+          if (rest) out.push(...text(rest));
+          i++;
+        }
+        break;
+      }
       case "link": {
         // A `{button …}` / `{#hex}` right after the link is its attribute block.
         const next = nodes[i + 1];
@@ -135,16 +187,22 @@ function block(b: Block): VNode {
 
 export default defineComponent({
   name: "NoteMarkdown",
-  props: { text: { type: String, required: true } },
+  props: {
+    text: { type: String, required: true },
+    /** The note's saved pictures (`NoteConfig.images`). */
+    images: { type: Object as PropType<Record<string, NoteImage>>, default: () => ({}) },
+  },
   setup(props) {
     const injected = inject(NOTE_ACTIONS, null);
     return () => {
-      // The draw functions are plain recursion; they read the actions here.
+      // The draw functions are plain recursion; they read these here.
       actions = injected;
+      pictures = props.images;
       try {
-        return h("div", { class: "wp-note-md" }, parseMarkdown(props.text).map(block));
+        return h("div", { class: "wp-note-md" }, parseMarkdown(props.text, { images: true }).map(block));
       } finally {
         actions = null;
+        pictures = {};
       }
     };
   },

@@ -8,9 +8,9 @@ describe("WP Note config", () => {
     expect(parseNoteConfig("")).toEqual(defaultNoteConfig());
     expect(parseNoteConfig("{oops")).toEqual(defaultNoteConfig());
     expect(parseNoteConfig({ tone: "loud", look: "label", step: 250, text: 3 }))
-      .toEqual({ version: 1, tone: "step", look: "label", step: 99, icon: "lightbulb", text: "", color: "", bookmark: null });
+      .toEqual({ version: 1, tone: "step", look: "label", step: 99, icon: "lightbulb", text: "", color: "", bookmark: null, images: {} });
     expect(parseNoteConfig(JSON.stringify({ tone: "plain", step: 0.4, text: "hi" })))
-      .toEqual({ version: 1, tone: "plain", look: "card", step: 1, icon: "lightbulb", text: "hi", color: "", bookmark: null });
+      .toEqual({ version: 1, tone: "plain", look: "card", step: 1, icon: "lightbulb", text: "hi", color: "", bookmark: null, images: {} });
   });
 
   it("turns the old Tip and Info tones into Icon notes that look the same", () => {
@@ -56,5 +56,23 @@ describe("WP Note as a bookmark", () => {
     expect(parseNoteConfig({ bookmark: "yes" }).bookmark).toBeNull();
     expect(parseNoteConfig({ bookmark: { anchor: "c", zoom: 40, shortcut: "alt + 3", hidden: true, color: "#ffffff" } }).bookmark)
       .toEqual({ anchor: "c", zoomMode: "fixed", zoom: 10, shortcut: "Alt+3", order: 0, view: null });
+  });
+});
+
+describe("WP Note pictures", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  it("keeps well-formed saved pictures and drops the rest", () => {
+    const images = parseNoteConfig({
+      images: {
+        "1a2b3c4d": { src: png, w: 640, h: 360 },
+        "nothex!!": { src: png, w: 1, h: 1 },
+        "00000001": { src: "https://example.com/x.png", w: 10, h: 10 },
+        "00000002": { src: "data:image/svg+xml;base64,PHN2Zz4=", w: 10, h: 10 },
+        "00000003": { src: png, w: 0, h: 10 },
+        "00000004": "nope",
+      },
+    }).images;
+    expect(images).toEqual({ "1a2b3c4d": { src: png, w: 640, h: 360 } });
+    expect(parseNoteConfig({ images: [] }).images).toEqual({});
   });
 });

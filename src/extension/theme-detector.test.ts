@@ -147,4 +147,65 @@ describe("theme-detector", () => {
       expect(host.classList.contains("wp-theme-dark")).toBe(true);
     });
   });
+
+  // --- Frontend 1.58: no `dark-theme` class, the palette API decides ------
+
+  describe("palette API (ComfyUI ≥ 1.58)", () => {
+    const appWith = (palette: unknown) => ({
+      extensionManager: { colorPalette: { getActiveColorPalette: () => palette } },
+    });
+
+    afterEach(() => {
+      document.documentElement.removeAttribute("style");
+    });
+
+    it("returns 'dark' for a dark palette even with no dark-theme class", () => {
+      expect(detectInitialTheme(appWith({ id: "dark" }))).toBe("dark");
+    });
+
+    it("returns 'light' for a light palette even if a stale dark-theme class is left", () => {
+      document.documentElement.classList.add("dark-theme");
+      expect(detectInitialTheme(appWith({ id: "light", light_theme: true }))).toBe("light");
+    });
+
+    it("falls back to the class when the palette API throws or is missing", () => {
+      document.body.classList.add("dark-theme");
+      const broken = {
+        extensionManager: {
+          colorPalette: {
+            getActiveColorPalette: () => {
+              throw new Error("not ready");
+            },
+          },
+        },
+      };
+      expect(detectInitialTheme(broken)).toBe("dark");
+      expect(detectInitialTheme({ extensionManager: {} })).toBe("dark");
+    });
+
+    it("reads the computed color-scheme when there is neither palette nor class", () => {
+      document.documentElement.style.colorScheme = "dark";
+      expect(detectInitialTheme()).toBe("dark");
+      document.documentElement.style.colorScheme = "light";
+      expect(detectInitialTheme()).toBe("light");
+    });
+
+    it("follows a palette switch that only rewrites <html>'s style", async () => {
+      let palette: { id: string; light_theme?: boolean } = { id: "dark" };
+      const app = { extensionManager: { colorPalette: { getActiveColorPalette: () => palette } } };
+      const cleanup = attachThemeDetector(host, app);
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
+
+      palette = { id: "light", light_theme: true };
+      document.documentElement.style.setProperty("--background", "#ffffff");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(host.classList.contains("wp-theme-light")).toBe(true);
+
+      palette = { id: "dark" };
+      document.documentElement.style.setProperty("--background", "#171718");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(host.classList.contains("wp-theme-dark")).toBe(true);
+      cleanup();
+    });
+  });
 });

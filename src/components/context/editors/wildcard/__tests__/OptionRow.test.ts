@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import OptionRow from "../sections/OptionRow.vue";
 import { _resetForTests, _setForTests, _tombstoneForTests } from "@/extension/preview-resolver";
+import { CONTEXT_POOLS_KEY, buildContextPools } from "@/extension/context-pools";
+import { computed } from "vue";
 
 const baseOption = { id: "o1", value: "red", weight: 1, sub_categories: ["warm"] };
 const allOptions = [
@@ -446,5 +448,45 @@ describe("OptionRow — broken-ref row marker", () => {
     const opt = { id: "p", value: "a @{11223344#castle}", weight: 1, sub_categories: [] };
     const w = mount(OptionRow, { props: { option: opt, allOptions: [opt], instance: {} } });
     expect(w.find(".opt").classes()).not.toContain("opt--broken");
+  });
+});
+
+describe("OptionRow — refs to this node's own wildcards", () => {
+  beforeEach(() => _resetForTests());
+
+  /** The example workflow: Colors ($color) sits in a switched-off bundle on
+   *  the same node, and the library has never seen it (404 → tombstone). */
+  const nodeModules = [
+    { id: "bc15a82d", type: "wildcard", enabled: false, meta: { name: "Colors" },
+      payload: { var_binding: "color", options: [{ id: "c1", value: "copper" }] } },
+  ];
+  const mountWithPools = (value: string) => {
+    const opt = { id: "p", value, weight: 1, sub_categories: [] };
+    return mount(OptionRow, {
+      props: { option: opt, allOptions: [opt], instance: {} },
+      global: { provide: { [CONTEXT_POOLS_KEY as symbol]: computed(() => buildContextPools(nodeModules)) } },
+    });
+  };
+
+  it("does not mark the row broken when the node holds the wildcard (even switched off)", () => {
+    _tombstoneForTests("bc15a82d");
+    const w = mountWithPools("short @{bc15a82d#Colors} hair");
+    expect(w.find(".opt").classes()).not.toContain("opt--broken");
+    const chip = w.get(".wp-refchip--ref");
+    expect(chip.classes()).not.toContain("wp-refchip--unresolved");
+    expect(chip.text()).toContain("@color");
+  });
+
+  it("resolves a ref nested inside a {a|b} block from the node too", () => {
+    _tombstoneForTests("bc15a82d");
+    const w = mountWithPools("{@{bc15a82d#Colors}|plain} hair");
+    expect(w.find(".opt").classes()).not.toContain("opt--broken");
+    expect(w.get(".wp-refchip--ref").classes()).not.toContain("wp-refchip--unresolved");
+  });
+
+  it("still marks a ref the node does NOT hold and the library confirmed missing", () => {
+    _tombstoneForTests("11223344");
+    const w = mountWithPools("a @{11223344#castle}");
+    expect(w.find(".opt").classes()).toContain("opt--broken");
   });
 });

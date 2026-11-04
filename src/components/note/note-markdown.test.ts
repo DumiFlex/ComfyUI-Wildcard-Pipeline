@@ -41,3 +41,31 @@ describe("note markdown", () => {
     expect(w.find("hr.wp-note-md__hr").exists()).toBe(true);
   });
 });
+
+describe("note pictures", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  const images = { "1a2b3c4d": { src: png, w: 640, h: 360 } };
+  const draw = (text: string) => mount(NoteMarkdown, { props: { text, images } });
+
+  it("draws a saved picture at a share of the note's width", () => {
+    const w = draw("![The toolbar](wp:image/1a2b3c4d){width=60%} after");
+    const img = w.get('[data-test="note-image"]');
+    expect(img.attributes("src")).toBe(png);
+    expect(img.attributes("alt")).toBe("The toolbar");
+    expect(img.attributes("width")).toBe("640");
+    expect(img.attributes("style")).toContain("width: 60%");
+    expect(w.text()).toContain("after");
+    expect(w.text()).not.toContain("width=");
+  });
+
+  it("draws a picture the extension ships from our own server", () => {
+    const w = draw("![Help](wp:asset/toolbar-help)");
+    expect(w.get('[data-test="note-image"]').attributes("src")).toMatch(/\/wp\/images\/note\/toolbar-help\.png$/);
+  });
+
+  it("never loads a web address, an unknown asset or a missing picture", () => {
+    const w = draw("![a](https://example.com/x.png) ![b](wp:asset/nope) ![c](wp:image/00000000) ![d](data:image/png;base64,AAAA)");
+    expect(w.find("img").exists()).toBe(false);
+    expect(w.findAll('[data-test="note-image-missing"]').map((m) => m.text())).toEqual(["a", "b", "c", "d"]);
+  });
+});

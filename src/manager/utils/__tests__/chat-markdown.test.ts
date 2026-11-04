@@ -239,3 +239,14 @@ describe("plainText", () => {
     expect(plainText("**keep** `markdown`")).toBe("**keep** `markdown`");
   });
 });
+
+describe("images", () => {
+  it("stay alt text unless the caller asks for them", () => {
+    expect(parseMarkdown("see ![a cat](https://x.test/c.png)")).toEqual([{ t: "p", c: [{ t: "text", v: "see a cat" }] }]);
+    expect(parseMarkdown("see ![a cat](wp:image/1a2b3c4d)", { images: true })).toEqual([
+      { t: "p", c: [{ t: "text", v: "see " }, { t: "img", alt: "a cat", src: "wp:image/1a2b3c4d" }] },
+    ]);
+    // The option is per call: the next plain call is back to alt text.
+    expect(parseMarkdown("![x](y)")).toEqual([{ t: "p", c: [{ t: "text", v: "x" }] }]);
+  });
+});

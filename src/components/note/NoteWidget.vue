@@ -11,6 +11,7 @@ import NoteMarkdown from "./note-markdown";
 import NoteTextEditor from "./NoteTextEditor.vue";
 import { NOTE_ACTIONS, NOTE_CONTEXTS } from "./note-actions";
 import { useNoteLibrary } from "./note-library-state";
+import { prunePictures } from "./note-images";
 import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import BookmarkFields from "../bookmark/BookmarkFields.vue";
@@ -76,6 +77,13 @@ watch(() => [props.config.color, props.editing], () => requestAnimationFrame(rea
 function patch(part: Partial<NoteConfig>): void {
   emit("update:config", { ...props.config, ...part });
 }
+// Closing the editor drops pictures the text no longer names (taken out,
+// or undone). While it is open they stay, so Redo can bring one back.
+watch(() => props.editing, (on, was) => {
+  if (on || !was) return;
+  const kept = prunePictures(props.config.text, props.config.images);
+  if (Object.keys(kept).length !== Object.keys(props.config.images).length) patch({ images: kept });
+});
 function onTitle(ev: Event): void {
   emit("update:title", (ev.target as HTMLInputElement).value);
 }
@@ -131,7 +139,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
         ></i>
       </div>
       <div v-if="config.look !== 'label'" class="wp-note__body">
-        <NoteMarkdown v-if="config.text.trim()" :text="config.text" />
+        <NoteMarkdown v-if="config.text.trim()" :text="config.text" :images="config.images" />
         <p v-else class="wp-note__empty">Double-click to write this note.</p>
       </div>
     </div>
@@ -239,8 +247,10 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
         <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows when you hover the label" : "Markdown, links and icons" }}</span></span>
         <NoteTextEditor
           :model-value="config.text"
+          :images="config.images"
           :hint="config.look === 'label' ? 'What the label explains…' : 'Write the note. The bar above adds links to the docs, icons and formatting.'"
           @update:model-value="(v: string) => patch({ text: v })"
+          @picture="(v) => patch(v)"
         />
       </div>
       <div class="wp-note__row">
@@ -526,6 +536,19 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
   .wp-note-md .wp-note-md__link:hover { color: var(--wp-text); text-decoration-color: var(--wp-note-link, var(--wp-note-tone, var(--wp-accent))); }
   .wp-note-md .wp-note-md__link--color { color: var(--wp-note-link); text-decoration-color: var(--wp-note-link); }
   .wp-note-md .wp-note-md__plain { text-decoration: underline dotted; }
+  /* A picture: never wider than the note (its width is a share of it),
+     its own height for its width. */
+  .wp-note-md .wp-note-md__img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 4px 0 6px;
+    border-radius: min(6px, var(--wp-radius-cap, 999px));
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  .wp-note-md .wp-note-md__nopic { display: inline-flex; align-items: center; gap: 4px; color: var(--wp-text-dim); font-style: italic; }
+  .wp-note-md .wp-note-md__nopic .pi { font-size: 0.95em; }
   .wp-note-md .wp-note-md__icon { font-size: 0.95em; vertical-align: -0.05em; }
   .wp-note-md .wp-note-md__btn {
     display: inline-flex;

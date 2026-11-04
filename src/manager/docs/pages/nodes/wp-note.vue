@@ -24,6 +24,9 @@ const syntax = [
   { term: "[Add the Scene lists](wp:library#node-12){button}", desc: "The same for one WP Context only (its node id; inside a subgraph the editor writes the subgraph's id too)." },
   { term: "[Get the pack](wp:community/owner/pack)", desc: "Opens that published pack in the manager's Community tab, where it installs." },
   { term: ":pi-heart:  :pi-heart:{#rrggbb}", desc: "An icon, optionally in a colour: a hex code like the custom colour field shows." },
+  { term: "![What it shows](wp:image/1a2b3c4d)", desc: "A picture saved in the note: the bar's Pictures panel, a paste or a drop writes it and its id." },
+  { term: "![The ? button](wp:asset/toolbar-help)", desc: "A picture the extension ships." },
+  { term: "![What it shows](wp:image/1a2b3c4d){width=60%}", desc: "The picture as wide as 60% of the note (10 to 100). Without it, its own size, never wider than the note." },
 ];
 </script>
 
@@ -95,6 +98,32 @@ const syntax = [
         in the text. Any other kind of link shows as plain text.
       </p>
       <DocKeyList :items="syntax" />
+    </DocSection>
+
+    <DocSection title="Pictures">
+      <p>
+        A note can show pictures: a screenshot of the step it explains, or the picture the extension ships of
+        the node toolbar with its <b>?</b> button, which opens any node's help page. Open <b>Pictures</b> in
+        the bar and press <b>Add a picture…</b>, or paste or drop a picture straight into the text. Each one
+        goes on a line of its own where the caret is, named by what you type in the box (or the file's name).
+      </p>
+      <DocImage
+        src="images/docs/wp-note-pictures.png"
+        ratio="1720 / 860"
+        caption="A note with the shipped toolbar picture, and its editor with the Pictures panel: the note's pictures, each with a Width slider."
+      />
+      <p>
+        A picture is never wider than the note. Its width is a share of the note's, so it grows and shrinks
+        with the note and never makes the note bigger; set it with the panel's <b>Width</b> slider, or
+        <b>Own size</b> for its own width up to the note's. <b>Remove</b> takes it out (Undo brings it back
+        while the editor is open).
+      </p>
+      <Banner tone="info" note>
+        A pasted or dropped picture is saved in the workflow, so a shared workflow shows it too. It is made
+        smaller first: at most 1280 px on its long side and about 400 KB, which also drops camera and
+        location data. A note holds up to six pictures and 2 MB. Pictures never load from a web address, so
+        opening a shared workflow fetches nothing.
+      </Banner>
     </DocSection>
 
     <DocSection title="An add-to-library button">

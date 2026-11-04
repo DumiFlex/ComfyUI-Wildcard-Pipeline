@@ -27,6 +27,18 @@ export interface NoteConfig {
   color: string;
   /** The note is also a bookmark (its jump settings), or null when not. */
   bookmark: BookmarkJump | null;
+  /** Pictures pasted, dropped or picked into the note, by id. The text
+   *  names them as `![alt](wp:image/<id>)`; the data is saved here, with
+   *  the workflow (re-encoded and size-capped, see note-images.ts). */
+  images: Record<string, NoteImage>;
+}
+
+export interface NoteImage {
+  /** A `data:image/(webp|jpeg|png);base64,…` URL. */
+  src: string;
+  /** Its size in pixels, so the note keeps the space before it decodes. */
+  w: number;
+  h: number;
 }
 
 export const NOTE_TONES: { id: NoteTone; label: string }[] = [
@@ -80,7 +92,7 @@ function legacyDocLink(page: string): string {
 export const NOTE_STEP_MAX = 99;
 
 export function defaultNoteConfig(): NoteConfig {
-  return { version: 1, tone: "step", look: "card", step: 1, icon: "lightbulb", text: "", color: "", bookmark: null };
+  return { version: 1, tone: "step", look: "card", step: 1, icon: "lightbulb", text: "", color: "", bookmark: null, images: {} };
 }
 
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -133,7 +145,30 @@ export function parseNoteConfig(raw: unknown): NoteConfig {
     text: withLegacyDoc(typeof d.text === "string" ? d.text : base.text, d.doc),
     color: noteColor(d.color) || old?.color || "",
     bookmark: d.bookmark && typeof d.bookmark === "object" ? jumpFields(parseBookmarkConfig(d.bookmark)) : null,
+    images: parseNoteImages(d.images),
   };
+}
+
+const DATA_IMAGE = /^data:image\/(?:webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/;
+const IMAGE_ID = /^[0-9a-f]{8}$/;
+
+/** The saved pictures: only well-formed ids and base64 data URLs of the
+ *  three types we write. Anything else is dropped, so a hand-edited
+ *  workflow can't make a note load an address. */
+export function parseNoteImages(v: unknown): Record<string, NoteImage> {
+  const out: Record<string, NoteImage> = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  for (const [id, raw] of Object.entries(v as Record<string, unknown>)) {
+    if (!IMAGE_ID.test(id) || !raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.src !== "string" || !DATA_IMAGE.test(r.src)) continue;
+    const size = (n: unknown): number => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.min(8192, Math.round(n)) : 0);
+    const w = size(r.w);
+    const h = size(r.h);
+    if (!w || !h) continue;
+    out[id] = { src: r.src, w, h };
+  }
+  return out;
 }
 
 /** A saved `doc` field becomes a button link at the end of the text, where

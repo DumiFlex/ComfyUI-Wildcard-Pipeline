@@ -130,7 +130,7 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 | **WP Debug** | Shows what happened during a run (see below). |
 | **WP Var → Int / Float / Bool** | Use a variable to drive a number or switch, like image size or steps. |
 | **WP Var → Choice** | Use a variable to pick from a dropdown, like the checkpoint or sampler. Matches it against the real list. |
-| **WP Note** | A frameless note that explains a workflow: numbered steps, warnings with an icon, or a small label, with links into the built-in docs. Never runs. |
+| **WP Note** | A frameless note that explains a workflow: numbered steps, warnings with an icon, or a small label, with links into the built-in docs and pictures (pasted, dropped or shipped). Never runs. |
 
 Select a WP node and the indigo **?** in ComfyUI's selection toolbar opens
 its page of the built-in docs over the canvas (WP Toggles, WP Note and WP
