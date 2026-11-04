@@ -179,15 +179,11 @@ export class Tutor {
     await sleep(400 + 600);
   }
 
-  /** Runs `fn`; the final video plays that part `speed` times faster (a long wait, a model run). */
-  async fastForward<T>(fn: () => Promise<T>, speed = 6, { waitVoice = true }: { waitVoice?: boolean } = {}): Promise<T> {
-    // A caption still on screen would flash past at this speed in the video, so let it finish first.
-    // A page load doesn't wait: the voice plays on over it (render.mjs starts the fast part after the
-    // line, so the load plays at normal speed under it) and the hand goes on as it speaks.
-    if (waitVoice) {
-      await this.waitVoice();
-      if (this.caption) await sleep(Math.max(0, this.caption.until - Date.now()));
-    }
+  /** Runs `fn`; the final video plays that part `speed` times faster (a long wait, a model run), or cuts it out with speed 0. */
+  async fastForward<T>(fn: () => Promise<T>, speed = 6): Promise<T> {
+    // A caption still on screen would flash past (or be cut) in the video, so let the line finish first.
+    await this.waitVoice();
+    if (this.caption) await sleep(Math.max(0, this.caption.until - Date.now()));
     const from = this.now();
     try {
       return await fn();
@@ -344,7 +340,7 @@ export class Tutor {
 
   /**
    * Opens a page of ComfyUI (`/`, which comes up empty, like at the start) or the manager
-   * (`/wp/…`). The page load plays fast in the video, and the caption on screen stays up.
+   * (`/wp/…`). The page load is cut out of the video, after the line being spoken has finished.
    */
   async go(pathname: string): Promise<void> {
     await this.fastForward(async () => {
@@ -358,7 +354,7 @@ export class Tutor {
         await sleep(400);
       }
       await this.page.mouse.move(this.pos.x, this.pos.y);
-    }, 12, { waitVoice: false });
+    }, 0);
     const c = this.caption;
     if (c && c.until > Date.now()) await this.page.evaluate((t) => window.__tut?.caption(t), c.text).catch(() => undefined);
     await sleep(300);

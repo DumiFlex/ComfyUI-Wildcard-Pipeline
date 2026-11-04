@@ -119,7 +119,8 @@ for (const f of [...(take.fast ?? [])].sort((a, b) => a.from - b.from)) {
   const b = Math.min(vt(f.to), end);
   if (b - a < 1) continue;
   if (a > at) parts.push({ a: at, b: a, speed: 1 });
-  parts.push({ a, b, speed: f.speed });
+  // Speed 0 cuts the part out (a page load): nothing is pushed, so ft() maps it to the cut point.
+  if (f.speed > 0) parts.push({ a, b, speed: f.speed });
   at = b;
 }
 if (end > at) parts.push({ a: at, b: end, speed: 1 });
