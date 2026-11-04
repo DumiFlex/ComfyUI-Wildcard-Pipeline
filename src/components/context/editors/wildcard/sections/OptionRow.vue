@@ -2,7 +2,7 @@
 import Checkbox from "@/kit/Checkbox.vue";
 import Chip from "@/kit/Chip.vue";
 import WpNumber from "@/kit/WpNumber.vue";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import {
   effectiveWeight,
   isEnabled,
@@ -12,6 +12,7 @@ import {
 } from "../probability";
 import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
 import { cacheVersion, ensure, isConfirmedMissing, lookup } from "../../../../../extension/preview-resolver";
+import { CONTEXT_POOLS_KEY } from "../../../../../extension/context-pools";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import { formatProbability } from "@/manager/utils/percent";
@@ -59,6 +60,15 @@ const emit = defineEmits<{
   "toggle": [optionId: string];
   "weight": [optionId: string, weight: number | null];
 }>();
+
+/** This node's own wildcards (switched-off rows included), provided by the
+ *  Context widget. The engine resolves a `@{}` ref against these BEFORE the
+ *  library, so a ref to one of them is never broken — even on a machine whose
+ *  library has never seen it (an example workflow, a shared workflow). */
+const contextPools = inject(CONTEXT_POOLS_KEY, undefined);
+function nodePool(uuid: string | undefined) {
+  return uuid ? contextPools?.value.get(uuid) : undefined;
+}
 
 const enabled = computed(() => isEnabled(props.option, props.instance, props.multiActive === true));
 
@@ -130,7 +140,7 @@ const hasBrokenRef = computed(() => {
   void cacheVersion.value;
   return tokens.value.some((t) => {
     const uuid = t.kind === "ref" ? t.meta?.uuid : undefined;
-    return typeof uuid === "string" && isConfirmedMissing(uuid);
+    return typeof uuid === "string" && !nodePool(uuid) && isConfirmedMissing(uuid);
   });
 });
 
@@ -146,13 +156,16 @@ function refDisplay(
   raw: string,
 ): string {
   if (!uuid) return raw;
-  // Priority: live library lookup → cached `#name` from the token →
-  // raw token text (which still carries `@{uuid#name}` or bare uuid).
-  // Mirrors the SPA's RefChip label-fallback chain so broken refs
-  // surface the cached name instead of a bare uuid.
+  // Priority: live library lookup → this node's own copy → cached `#name`
+  // from the token → raw token text (which still carries `@{uuid#name}` or
+  // bare uuid). Mirrors the SPA's RefChip label-fallback chain so broken
+  // refs surface the cached name instead of a bare uuid.
   const hit = lookup(uuid);
   if (hit?.varBinding && hit.varBinding.trim()) return `@${hit.varBinding.trim()}`;
   if (hit?.name && hit.name.trim()) return `@${hit.name.trim()}`;
+  const local = nodePool(uuid);
+  if (local?.varBinding) return `@${local.varBinding}`;
+  if (local?.name.trim()) return `@${local.name.trim()}`;
   if (cachedName && cachedName.trim()) {
     // Drop a leaked `!null` exclude-null marker so the label reads `@mood`,
     // not `@mood!null` (the marker surfaces as the ban icon instead).
@@ -162,13 +175,14 @@ function refDisplay(
   return raw;
 }
 
-/** True when the ref's uuid resolves against neither the live preview-
- *  resolver cache nor any local sibling in the chain — i.e. broken
+/** True when the ref's uuid resolves against neither this node's own
+ *  wildcards nor the live preview-resolver cache — i.e. broken
  *  reference. Drives the danger-tint + `?` icon on the option chip
  *  so canvas-side broken refs read the same way as the SPA's RefChip
  *  unresolved state. */
 function refIsUnresolved(uuid: string | undefined): boolean {
   if (!uuid) return false;
+  if (nodePool(uuid)) return false;
   // `lookup` is the resolver cache; truthy means we know a live
   // entry exists for this uuid (live name/varBinding either populated
   // now or already polled). Anything falsey reads as broken.

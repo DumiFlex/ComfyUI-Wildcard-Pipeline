@@ -417,6 +417,14 @@ const optionStats = computed<{ total: number; matched: number } | null>(() => {
 /** True when this node supplies the pool, so the chip can say so. */
 const poolFromNode = computed(() => pool.value?.source === "context");
 
+/** Open the module in the library editor. Not for a wildcard only this node
+ *  holds (the library has no row for it, so the page would 404). */
+const canOpen = computed(() => {
+  void cacheVersion.value;
+  if (!props.resolved) return false;
+  return !(poolFromNode.value && props.uuid && lookup(props.uuid) === undefined);
+});
+
 /** Human label for the winning pool. Names the module when the node supplies
  *  it, because a node can hold a renamed copy of a library row. */
 const poolLabel = computed<string | null>(() => {
@@ -721,7 +729,7 @@ onBeforeUnmount(() => {
         <!-- Actions. The card is interactive here (unlike the var branch) —
              copy the id, or open the linked module in a new window. Copy works
              even for a broken ref (the id is still known); open is gated on the
-             ref resolving, since a missing module would 404. -->
+             ref resolving to a library row, since a missing module would 404. -->
         <div v-if="uuid" class="wp-refchip-pop__acts" data-test="refchip-acts">
           <Button
             variant="ghost"
@@ -733,7 +741,7 @@ onBeforeUnmount(() => {
             @click.stop="copyId"
           >{{ copied ? "Copied" : "Copy id" }}</Button>
           <Button
-            v-if="resolved"
+            v-if="canOpen"
             variant="ghost"
             size="sm"
             class="wp-refchip-pop__act"

@@ -28,6 +28,10 @@ export interface ContextPool {
   /** Display name of the module inside the node — not necessarily the library
    *  row's name, since a node-local rename is an instance override. */
   name: string;
+  /** The module's `$var` binding (`payload.var_binding`), "" when it has
+   *  none. Chips label a ref with the binding, so a ref to a wildcard that
+   *  only this node holds still reads `@color`, not a raw uuid. */
+  varBinding: string;
   /** Per-option `sub_categories`, one array per option in declaration order.
    *  Same shape `preview-resolver` exposes for library rows, so the card's
    *  filter-match maths is identical whichever pool wins. */
@@ -102,6 +106,11 @@ function hasNullOption(payload: unknown): boolean {
   return options.some((o) => Boolean((o as { is_null?: unknown } | null)?.is_null));
 }
 
+function varBindingOf(payload: unknown): string {
+  const vb = (payload as { var_binding?: unknown } | null)?.var_binding;
+  return typeof vb === "string" ? vb.trim() : "";
+}
+
 /**
  * Build the uuid → pool map for one Context node's module list.
  *
@@ -128,6 +137,7 @@ export function buildContextPools(modules: readonly unknown[] | undefined): Cont
     map.set(m.id, {
       uuid: m.id,
       name: typeof meta.name === "string" ? meta.name : "",
+      varBinding: varBindingOf(m.payload),
       tagSets: optionTagSets(m.payload),
       subCategories: onlyStrings(
         (m.payload as { sub_categories?: unknown } | null)?.sub_categories,
@@ -187,10 +197,11 @@ export function resolvePoolFor(
  * picker read. Structural mirror of `buildWildcardRefData`'s result, declared
  * here so this module stays free of manager-layer imports.
  *
- * `uuidToName` is deliberately absent: it holds each wildcard's VARIABLE
- * binding, which is what the chip labels itself with. A node-local rename
- * changes the module's display name, not its binding, so overlaying it would
- * relabel chips with the wrong thing.
+ * `uuidToName` holds each wildcard's VARIABLE binding, which is what the chip
+ * labels itself with, and doubles as the editors' "is this ref known" set. The
+ * overlay only ADDS the uuids the library lacks (labelled with the node's own
+ * binding) and never relabels a row the library already names: a node-local
+ * rename changes the module's display name, not its binding.
  */
 export interface RefPickerData {
   uuidToSubCategories: Map<string, string[]>;
@@ -198,6 +209,7 @@ export interface RefPickerData {
   uuidToHasNull: Map<string, boolean>;
   uuidToOptionTagSets: Map<string, string[][]>;
   uuidToOptionsCount: Map<string, number>;
+  uuidToName?: Map<string, string>;
 }
 
 /**
@@ -234,6 +246,16 @@ export function overlayContextPools<T extends RefPickerData>(
     merged.uuidToHasNull.set(uuid, pool.hasNull);
     merged.uuidToOptionTagSets.set(uuid, pool.tagSets);
     merged.uuidToOptionsCount.set(uuid, pool.tagSets.length);
+  }
+  // A ref to a wildcard only THIS node holds (switched off, in a switched-off
+  // bundle, or never in this machine's library) resolves at run time, so it
+  // must not read as broken.
+  if (library.uuidToName) {
+    const names = new Map(library.uuidToName);
+    for (const [uuid, pool] of pools) {
+      if (!names.has(uuid)) names.set(uuid, pool.varBinding || pool.name || uuid);
+    }
+    merged.uuidToName = names;
   }
   return { ...library, ...merged };
 }

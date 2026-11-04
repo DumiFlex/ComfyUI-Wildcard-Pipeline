@@ -82,8 +82,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <p>
           A reference such as <VarToken>@{color}</VarToken> looks for its wildcard among this node's
           rows first (even a switched-off row), then in the library of the machine that runs the
-          workflow. Keep the wildcards a reference needs on the node and a workflow you share works
-          on someone else's machine too. WP Debug shows where each pick came from.
+          workflow. The same goes for a reference inside a referenced wildcard, at every level. Keep
+          the wildcards a reference needs on the node and a workflow you share works on someone
+          else's machine too. In the editor, hover the chip: its card says
+          <b>pool: this node</b> or <b>pool: library</b>. WP Debug shows where each pick came from.
         </p>
       </DocDetails>
       <Banner tone="info" note>
