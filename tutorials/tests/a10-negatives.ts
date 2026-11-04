@@ -38,9 +38,9 @@ tutorial(
     const nodes = await t.h.step("Where each word came from", async () => {
       await t.go("/");
       await t.say("On the canvas, pick Hero, Outfit, Time of day and Lighting from time.");
-      const ctx = await t.addNode("WP Context", { x: 380, y: 170 });
+      const ctx = await t.addNode("WP Context", { x: 340, y: 170 });
       await t.pickModules(ctx, ["Hero", "Outfit", "Time of day", "Lighting from time"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 860, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 890, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero wearing $outfit at $time, $lighting, masterpiece, best quality, masterpiece", { cps: 18 });
@@ -66,10 +66,10 @@ tutorial(
 
     await t.h.step("Prompt Cleaner", async () => {
       await t.say("Last, the WP Prompt Cleaner. It tidies a prompt before the sampler. Wire both Assembler outputs into it.");
-      const cl = await t.addNode("WP Prompt Cleaner", { x: 1340, y: 170 });
+      const cl = await t.addNode("WP Prompt Cleaner", { x: 1410, y: 170 });
       await t.wire(nodes.asm, "prompt", cl, "prompt");
       await t.wire(nodes.asm, "negative", cl, "negative");
-      const text = await t.addNode("Preview as Text", { x: 1340, y: 720 });
+      const text = await t.addNode("Preview as Text", { x: 1410, y: 720 });
       await t.wire(cl, "prompt", text, "source");
       await t.waitVoice();
       await t.callout("mode", t.node(cl), "Gentle, Balanced or Aggressive", 4);

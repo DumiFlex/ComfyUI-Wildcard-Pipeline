@@ -24,7 +24,7 @@ tutorial(
     const nodes = await t.h.step("Two settings", async () => {
       await t.go("/");
       await t.say("A story in two places. The first Context picks the hero and the Hero fits the place constraint.");
-      const c1 = await t.addNode("WP Context", { x: 90, y: 170 });
+      const c1 = await t.addNode("WP Context", { x: 340, y: 170 });
       await t.pickModules(c1, ["Hero", "Hero fits the place"]);
       await t.say("For a clear test, keep only the street thief on this node. City folk are never sent to a castle.");
       let modal = await editItem(c1, "Hero");
@@ -36,10 +36,10 @@ tutorial(
       await t.beat(700);
       await t.waitVoice();
       await t.say("A second Context picks the first setting, and a third picks Setting again, renamed to later for this node.");
-      const c2 = await t.addNode("WP Context", { x: 530, y: 170 });
+      const c2 = await t.addNode("WP Context", { x: 1000, y: 170 });
       await t.wire(c1, "context", c2, "upstream");
       await t.pickModules(c2, ["Setting"]);
-      const c3 = await t.addNode("WP Context", { x: 530, y: 560 });
+      const c3 = await t.addNode("WP Context", { x: 1000, y: 560 });
       await t.wire(c2, "context", c3, "upstream");
       await t.pickModules(c3, ["Setting"]);
       modal = await editItem(c3, "Setting");
@@ -49,7 +49,7 @@ tutorial(
       await t.beat(500);
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(700);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 170 });
       await t.wire(c3, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero in $setting, later in $later", { cps: 16 });

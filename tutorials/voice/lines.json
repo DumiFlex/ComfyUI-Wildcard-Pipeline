@@ -1,4 +1,10 @@
 {
+ "01354199d65e": {
+  "ms": 5547,
+  "speed": 1.0,
+  "text": "Something before it has to set time. Add a Context in front with Time of day, and Hero too.",
+  "voice": "af_heart"
+ },
  "01aa462feb9c": {
   "ms": 2837,
   "speed": 1.0,
@@ -17,10 +23,22 @@
   "text": "Each bundle sits in its own frame. Open Character to see what came in.",
   "voice": "af_heart"
  },
+ "034485de1cb8": {
+  "ms": 6976,
+  "speed": 1.0,
+  "text": "With several, previous and next in the dock step through them in order, like slides. Good for showing a workflow to someone.",
+  "voice": "af_heart"
+ },
  "03478773fa26": {
   "ms": 5547,
   "speed": 1.0,
   "text": "Ticking only the later one flips it: now the first place is free and the later one obeys.",
+  "voice": "af_heart"
+ },
+ "0359e052d071": {
+  "ms": 1621,
+  "speed": 1.0,
+  "text": "Switch it on, and run again.",
   "voice": "af_heart"
  },
  "038520e2868f": {
@@ -35,10 +53,28 @@
   "text": "Allow repeats stays off, so a color never comes up twice.",
   "voice": "af_heart"
  },
+ "04e25c143b14": {
+  "ms": 8021,
+  "speed": 1.0,
+  "text": "Storyboard: a held story picks one of four scripts, and a derivation writes each frame's beat: what happens, where, the light and the shot.",
+  "voice": "af_heart"
+ },
+ "052b0ab0ea1e": {
+  "ms": 3563,
+  "speed": 1.0,
+  "text": "The Assembler checks its template too. Type a mood nothing sets.",
+  "voice": "af_heart"
+ },
  "05c915f6b8de": {
   "ms": 9216,
   "speed": 1.0,
   "text": "Match is how a model, a LoRA or your own typed text can steer a pack. WP Model Info sets model variables for exactly this.",
+  "voice": "af_heart"
+ },
+ "062677d53a3e": {
+  "ms": 4075,
+  "speed": 1.0,
+  "text": "Before a big change, back up by hand, with a note so you find it again.",
   "voice": "af_heart"
  },
  "06b090554805": {
@@ -65,6 +101,12 @@
   "text": "First, add WP Debug under the Context, so every run shows what it rolled.",
   "voice": "af_heart"
  },
+ "07c9a16841b4": {
+  "ms": 3712,
+  "speed": 1.0,
+  "text": "The toggle is off, so the lighting Context is bypassed. Run.",
+  "voice": "af_heart"
+ },
  "081d577824c7": {
   "ms": 9131,
   "speed": 1.0,
@@ -89,16 +131,52 @@
   "text": "The negative preview colors each word like the variable it came from: the armor's words, and the night lighting's. Hover a word to see its variable.",
   "voice": "af_heart"
  },
+ "09b5cde47218": {
+  "ms": 3157,
+  "speed": 1.0,
+  "text": "Label what each image is, and let the grid line them up.",
+  "voice": "af_heart"
+ },
+ "0a95ba2e26f0": {
+  "ms": 4928,
+  "speed": 1.0,
+  "text": "Select with dependencies adds what it needs, so nothing is missing on the other side.",
+  "voice": "af_heart"
+ },
  "0ac5d7ddd817": {
   "ms": 14421,
   "speed": 1.0,
   "text": "The LoRA swaps bundle has two more rules like it: the LoRA's own clothes in place of the outfit, and style words added after the style. The first example workflow wires all three to LoRA loaders and switches.",
   "voice": "af_heart"
  },
+ "0b5dd56a63a8": {
+  "ms": 1749,
+  "speed": 1.0,
+  "text": "Now delete the first Context.",
+  "voice": "af_heart"
+ },
+ "0d153c807ace": {
+  "ms": 3627,
+  "speed": 1.0,
+  "text": "Swap the swept lists for any two you like, and the grid compares them.",
+  "voice": "af_heart"
+ },
+ "0d7c3cb57462": {
+  "ms": 3627,
+  "speed": 1.0,
+  "text": "When off can also mute or bypass other nodes. Pick Bypass.",
+  "voice": "af_heart"
+ },
  "0f506d4c8b9f": {
   "ms": 2688,
   "speed": 1.0,
   "text": "Control and slash shows every keyboard shortcut.",
+  "voice": "af_heart"
+ },
+ "0fdabd715aa6": {
+  "ms": 5995,
+  "speed": 1.0,
+  "text": "Load a pack, check the plan, import, and its lists work like your own. Next: sharing and publishing.",
   "voice": "af_heart"
  },
  "106c4c910925": {
@@ -125,10 +203,28 @@
   "text": "SHOES is an accepts group. Its tags are alternatives: a robe goes with sandals or slippers, and each pick rolls one of them.",
   "voice": "af_heart"
  },
+ "1145e822e04a": {
+  "ms": 3563,
+  "speed": 1.0,
+  "text": "Each frame rolls on its own seed. The seeds button lists them.",
+  "voice": "af_heart"
+ },
+ "11aca573dc37": {
+  "ms": 7232,
+  "speed": 1.0,
+  "text": "Add a WP Note. It opens in its editor. Step tone numbers it, Card is the look, and the colour is yours.",
+  "voice": "af_heart"
+ },
  "11ebce977b47": {
   "ms": 5269,
   "speed": 1.0,
   "text": "Back to Hero fits the place. Each cell of the matrix holds one rule for a pair of tags.",
+  "voice": "af_heart"
+ },
+ "11fa056125d2": {
+  "ms": 7765,
+  "speed": 1.0,
+  "text": "The Assembler writes each frame's prompt. A second one writes its label, shot and light, which become the grid's rows and columns.",
   "voice": "af_heart"
  },
  "13585180ef78": {
@@ -149,6 +245,18 @@
   "text": "Click the lock again to let it roll.",
   "voice": "af_heart"
  },
+ "1444827d0471": {
+  "ms": 5120,
+  "speed": 1.0,
+  "text": "The run waits here. Grid shows every draft, one frame per look. Click the ones you like.",
+  "voice": "af_heart"
+ },
+ "14f4a8b84783": {
+  "ms": 6955,
+  "speed": 1.0,
+  "text": "Detail shows one image with what made it: Values lists each variable, coloured the same as its words in the prompt.",
+  "voice": "af_heart"
+ },
  "1577b8b81b7d": {
   "ms": 4715,
   "speed": 1.0,
@@ -161,16 +269,46 @@
   "text": "On the canvas, a Context node picks Hero and Outfit first, then Style and the new Hero line.",
   "voice": "af_heart"
  },
+ "15dfc091e3d5": {
+  "ms": 5269,
+  "speed": 1.0,
+  "text": "Library health checks your whole library, without a canvas. It sorts what it finds three ways.",
+  "voice": "af_heart"
+ },
  "166012658898": {
   "ms": 2347,
   "speed": 1.0,
   "text": "Drag a wire from context to context.",
   "voice": "af_heart"
  },
+ "170d8bb1af90": {
+  "ms": 5995,
+  "speed": 1.0,
+  "text": "Open the Pick and refine example from Templates. A loop drafts four looks of one person, fast.",
+  "voice": "af_heart"
+ },
+ "186f7be49818": {
+  "ms": 5440,
+  "speed": 1.0,
+  "text": "In a big workflow you scroll around a lot. A bookmark brings you back to a spot in one click.",
+  "voice": "af_heart"
+ },
  "187905cfc2b9": {
   "ms": 5205,
   "speed": 1.0,
   "text": "Every setting is here, in groups. The easiest way to try them is the playground at the top.",
+  "voice": "af_heart"
+ },
+ "18e3a375170c": {
+  "ms": 5995,
+  "speed": 1.0,
+  "text": "Every frame different: nothing is held, so each frame rolls a new person, outfit, place and light.",
+  "voice": "af_heart"
+ },
+ "19623fe615e9": {
+  "ms": 5077,
+  "speed": 1.0,
+  "text": "One run makes a set of images from one loop. There are three ways to run it, one row each.",
   "voice": "af_heart"
  },
  "19dd0e37d21a": {
@@ -197,16 +335,34 @@
   "text": "lighting becomes moonlight and a warm lantern glow.",
   "voice": "af_heart"
  },
+ "1b4b3fccadb1": {
+  "ms": 5888,
+  "speed": 1.0,
+  "text": "Here's a Context with Hero. Someone opening this workflow might not know where to start, so leave them a note.",
+  "voice": "af_heart"
+ },
  "1c0abce3c8ad": {
   "ms": 6805,
   "speed": 1.0,
   "text": "Write a list once, and let other lists read it, all of it, or only the tags you want. Next: reading a pick's parts.",
   "voice": "af_heart"
  },
+ "1d4ec2cfd2b2": {
+  "ms": 5589,
+  "speed": 1.0,
+  "text": "They fold into one node. The wires crossing its edge became its inputs and outputs. Run.",
+  "voice": "af_heart"
+ },
  "1d7e402b20cb": {
   "ms": 6272,
   "speed": 1.0,
   "text": "This scene needs a thief. Edit Hero on this node and untick everyone else. The library keeps all six.",
+  "voice": "af_heart"
+ },
+ "1d9abe0712c3": {
+  "ms": 5205,
+  "speed": 1.0,
+  "text": "Draft many, keep few, refine those. The Image Filter video shows the picker in full.",
   "voice": "af_heart"
  },
  "1e5956b48c0b": {
@@ -221,6 +377,12 @@
   "text": "Now only the first place follows the rule. The later one rolls freely, castles included.",
   "voice": "af_heart"
  },
+ "1eb90a5cd22e": {
+  "ms": 4565,
+  "speed": 1.0,
+  "text": "The refine pass only ran on the two picks, and Label and Grid names each look.",
+  "voice": "af_heart"
+ },
  "1f61a094c1b7": {
   "ms": 6123,
   "speed": 1.0,
@@ -231,6 +393,30 @@
   "ms": 4288,
   "speed": 1.0,
   "text": "On the canvas, pick Hero, Setting and the Hero fits the place constraint.",
+  "voice": "af_heart"
+ },
+ "21b6fc447c7f": {
+  "ms": 2027,
+  "speed": 1.0,
+  "text": "Done leaves a small pill on the canvas.",
+  "voice": "af_heart"
+ },
+ "21eeea2d0b81": {
+  "ms": 7253,
+  "speed": 1.0,
+  "text": "Your settings aren't in the library. Advanced has Export settings and Import settings, to move them to another PC.",
+  "voice": "af_heart"
+ },
+ "220251fce39d": {
+  "ms": 7381,
+  "speed": 1.0,
+  "text": "And where it's kept: per ComfyUI install, shared by every install on this PC, or inside the plugin's folder.",
+  "voice": "af_heart"
+ },
+ "22c2ffcf9af4": {
+  "ms": 1941,
+  "speed": 1.0,
+  "text": "Add a second one, by the Assembler.",
   "voice": "af_heart"
  },
  "2316739f0dc7": {
@@ -257,6 +443,12 @@
   "text": "Chain Contexts to split a prompt into parts, hide what only feeds other items, and change items per node. Next: the Context Injector.",
   "voice": "af_heart"
  },
+ "25c00ca91ce1": {
+  "ms": 6933,
+  "speed": 1.0,
+  "text": "Without it, a plain KSampler uses one seed for every frame, which is what you want for a clean sweep comparison.",
+  "voice": "af_heart"
+ },
  "26421a02d89b": {
   "ms": 6763,
   "speed": 1.0,
@@ -267,6 +459,12 @@
   "ms": 2411,
   "speed": 1.0,
   "text": "Run, and each Var node shows what it read.",
+  "voice": "af_heart"
+ },
+ "265f8df40750": {
+  "ms": 4373,
+  "speed": 1.0,
+  "text": "Open Templates, ComfyUI Wildcard Pipeline, and Batches and grids.",
   "voice": "af_heart"
  },
  "2660c2190195": {
@@ -293,6 +491,18 @@
   "text": "And when a list has an accepts group, its tags can be the rows or the columns too. Save.",
   "voice": "af_heart"
  },
+ "27b7947fd28d": {
+  "ms": 5632,
+  "speed": 1.0,
+  "text": "Zoom is only the picture, to check the hands and the face. The arrow keys step through the images.",
+  "voice": "af_heart"
+ },
+ "284d3440bffb": {
+  "ms": 5013,
+  "speed": 1.0,
+  "text": "Its row gets an amber dot and a label: missing var. Hover it for the whole message.",
+  "voice": "af_heart"
+ },
  "288d854dd2e0": {
   "ms": 7573,
   "speed": 1.0,
@@ -309,6 +519,18 @@
   "ms": 2155,
   "speed": 1.0,
   "text": "Roll until the armor turns up at night.",
+  "voice": "af_heart"
+ },
+ "29784f4ec12c": {
+  "ms": 3904,
+  "speed": 1.0,
+  "text": "Draft fast, pick by eye, and spend the time only on the keepers.",
+  "voice": "af_heart"
+ },
+ "2ae76fb7f1eb": {
+  "ms": 4843,
+  "speed": 1.0,
+  "text": "Add this workflow's lists to your library with the button on Start here, and make them yours.",
   "voice": "af_heart"
  },
  "2b51a144bf37": {
@@ -365,6 +587,12 @@
   "text": "They leave the Assembler's list, but Scene line, and any later Context, still reads them. Hidden means not offered to templates, not gone.",
   "voice": "af_heart"
  },
+ "2f8bbc39620d": {
+  "ms": 2005,
+  "speed": 1.0,
+  "text": "Tick what to bring in, and continue.",
+  "voice": "af_heart"
+ },
  "30a3a1a5181b": {
   "ms": 5397,
   "speed": 1.0,
@@ -389,10 +617,34 @@
   "text": "Match goes the other way: a pick follows a variable that something else set. Here a Context Injector sets wanted time to night.",
   "voice": "af_heart"
  },
+ "32e096978da6": {
+  "ms": 6827,
+  "speed": 1.0,
+  "text": "A fashion shoot: one person in four looks. The run pauses so you pick the keepers, then refines only those.",
+  "voice": "af_heart"
+ },
  "338d8373eb82": {
   "ms": 3840,
   "speed": 1.0,
   "text": "The sidebar lists your modules: the pieces a prompt is built from.",
+  "voice": "af_heart"
+ },
+ "33b3880cbd45": {
+  "ms": 9792,
+  "speed": 1.0,
+  "text": "The Context Loop runs four times. The person's rows are held across the run, so all four frames show the same person, while the outfit, place and light roll.",
+  "voice": "af_heart"
+ },
+ "340ba915e426": {
+  "ms": 10560,
+  "speed": 1.0,
+  "text": "Pin a value to stand in for one an upstream node would pass in. Save the scenario to keep it, and Compare shows what changed against a saved baseline after you edit an item.",
+  "voice": "af_heart"
+ },
+ "350ff9155063": {
+  "ms": 6741,
+  "speed": 1.0,
+  "text": "Step six, optional: Model Info reads the loaded model, so the size, sampler and quality words follow it.",
   "voice": "af_heart"
  },
  "3522eba415f6": {
@@ -405,6 +657,18 @@
   "ms": 9792,
   "speed": 1.0,
   "text": "Boost, reduce, exclude and only for tag pairs, exceptions for single options, and the Preview to check the odds. Next: how far a constraint reaches.",
+  "voice": "af_heart"
+ },
+ "35d0a2f4b053": {
+  "ms": 3755,
+  "speed": 1.0,
+  "text": "It recommends settings for the request. Use them, or pick your own.",
+  "voice": "af_heart"
+ },
+ "36175103517d": {
+  "ms": 4352,
+  "speed": 1.0,
+  "text": "Every web call waits for your Allow. This switch would skip that; leave it off.",
   "voice": "af_heart"
  },
  "365e7e8b5674": {
@@ -423,6 +687,12 @@
   "ms": 4459,
   "speed": 1.0,
   "text": "A combine joins variables into one line you can reuse. Let's make one.",
+  "voice": "af_heart"
+ },
+ "380849a2d053": {
+  "ms": 4203,
+  "speed": 1.0,
+  "text": "Open Templates, ComfyUI Wildcard Pipeline, and Sets and stories.",
   "voice": "af_heart"
  },
  "381822cd1a3a": {
@@ -449,6 +719,18 @@
   "text": "Negatives ride with the picks that need them, only reach an Assembler that prints them, and the Cleaner tidies what's left. Next: chaining Contexts.",
   "voice": "af_heart"
  },
+ "39b01f3c2403": {
+  "ms": 4928,
+  "speed": 1.0,
+  "text": "To send items without a workflow, use Export. Open Bundles and tick Character.",
+  "voice": "af_heart"
+ },
+ "3a3609354150": {
+  "ms": 1877,
+  "speed": 1.0,
+  "text": "Test connection checks it answers.",
+  "voice": "af_heart"
+ },
  "3b77e02d054e": {
   "ms": 7787,
   "speed": 1.0,
@@ -467,10 +749,28 @@
   "text": "That's the basics of Wildcard Pipeline. The advanced videos go further: nested lists, LoRAs, loops and more.",
   "voice": "af_heart"
  },
+ "3bea7a8c626c": {
+  "ms": 4331,
+  "speed": 1.0,
+  "text": "Changed your mind? Back in Library and data, press Restore on the backup.",
+  "voice": "af_heart"
+ },
+ "3c4181764bc2": {
+  "ms": 5504,
+  "speed": 1.0,
+  "text": "WP Toggles holds on and off switches. Select it and press the pencil to edit it.",
+  "voice": "af_heart"
+ },
  "3d5e84977e46": {
   "ms": 896,
   "speed": 1.0,
   "text": "Run again.",
+  "voice": "af_heart"
+ },
+ "3d75bd8d9557": {
+  "ms": 4800,
+  "speed": 1.0,
+  "text": "Hold what should stay, roll what should change, and a loop becomes a set or a story.",
   "voice": "af_heart"
  },
  "3f9147194aa7": {
@@ -491,6 +791,18 @@
   "text": "Save it, and it's in your library.",
   "voice": "af_heart"
  },
+ "4062d5418559": {
+  "ms": 7403,
+  "speed": 1.0,
+  "text": "Each toggle writes a true or false variable, so a derivation can branch on it, and it has a BOOLEAN output for switch nodes.",
+  "voice": "af_heart"
+ },
+ "40cb5d80cf31": {
+  "ms": 9344,
+  "speed": 1.0,
+  "text": "These are already in this library, so it asks: skip them, replace yours, or import them as new copies. An import can be undone from the message after it.",
+  "voice": "af_heart"
+ },
  "40d049bc862d": {
   "ms": 5803,
   "speed": 1.0,
@@ -509,6 +821,24 @@
   "text": "Pick several on the node for a library list, or inline for a quick one. Next: wildcards inside wildcards.",
   "voice": "af_heart"
  },
+ "41f77ec36c40": {
+  "ms": 4373,
+  "speed": 1.0,
+  "text": "Add a WP Bookmark at the top left of the part you want. Give it a name.",
+  "voice": "af_heart"
+ },
+ "420d4683f00e": {
+  "ms": 6421,
+  "speed": 1.0,
+  "text": "And wp library makes a button that adds this workflow's items to whoever opens it, after a review.",
+  "voice": "af_heart"
+ },
+ "423a092984ae": {
+  "ms": 4501,
+  "speed": 1.0,
+  "text": "Also a bookmark puts the note in the Bookmarks dock, which the next video shows.",
+  "voice": "af_heart"
+ },
  "424fa9c34f31": {
   "ms": 2795,
   "speed": 1.0,
@@ -521,10 +851,22 @@
   "text": "Fold both to keep the node small.",
   "voice": "af_heart"
  },
+ "43cf8460502a": {
+  "ms": 4075,
+  "speed": 1.0,
+  "text": "The drafts come out fast, each frame with its own seed from the Seed List.",
+  "voice": "af_heart"
+ },
  "43e6d7968ac9": {
   "ms": 6656,
   "speed": 1.0,
   "text": "How it looks on the canvas is up to you. Open ComfyUI's Settings and find Wildcard Pipeline at the bottom.",
+  "voice": "af_heart"
+ },
+ "456e3f1b6aba": {
+  "ms": 7957,
+  "speed": 1.0,
+  "text": "A warning on every seed. The stack runs left to right, and the constraint comes after the setting it should change, so it never applies.",
   "voice": "af_heart"
  },
  "4593f77bfe49": {
@@ -545,10 +887,22 @@
   "text": "Give the patched tunic one too: clean, new clothes.",
   "voice": "af_heart"
  },
+ "46b302d19781": {
+  "ms": 6293,
+  "speed": 1.0,
+  "text": "Problems print wrong or nothing. Warnings are probably mistakes. Tidy up is clutter that breaks nothing.",
+  "voice": "af_heart"
+ },
  "46b474c11e16": {
   "ms": 6187,
   "speed": 1.0,
   "text": "The canvas look lives in ComfyUI's Settings, the manager's in its own. Next: autocomplete.",
+  "voice": "af_heart"
+ },
+ "46ec4016c39b": {
+  "ms": 6485,
+  "speed": 1.0,
+  "text": "The dashboard is the library at a glance: how many of each kind, what you changed last, and what needs a look.",
   "voice": "af_heart"
  },
  "46f9f1715965": {
@@ -581,6 +935,30 @@
   "text": "Both must hold, so the join says AND. Click it for OR, when either one is enough. We want AND, so click it back.",
   "voice": "af_heart"
  },
+ "4a61c44332e3": {
+  "ms": 7531,
+  "speed": 1.0,
+  "text": "Connect a model, ask in plain words, and apply only the cards you like. Next: drafting with AI inside the editors.",
+  "voice": "af_heart"
+ },
+ "4abdfb45bb4f": {
+  "ms": 4523,
+  "speed": 1.0,
+  "text": "Optional: un-bypass the Seed List to give every frame its own sampler seed.",
+  "voice": "af_heart"
+ },
+ "4b44023c2b14": {
+  "ms": 4075,
+  "speed": 1.0,
+  "text": "Web tools are off until you set them up, in Settings, AI assistant.",
+  "voice": "af_heart"
+ },
+ "4b7bac51b9f5": {
+  "ms": 6400,
+  "speed": 1.0,
+  "text": "Lock a frame you like, and it keeps its seed while the others change. That's how you keep a good one and reroll the rest.",
+  "voice": "af_heart"
+ },
  "4b84f916ede4": {
   "ms": 4245,
   "speed": 1.0,
@@ -591,6 +969,12 @@
   "ms": 7765,
   "speed": 1.0,
   "text": "Tag suggestions need a tag list first. Download fetches it once, about five megabytes, and nothing else ever goes online.",
+  "voice": "af_heart"
+ },
+ "4ca810a6a0f4": {
+  "ms": 7189,
+  "speed": 1.0,
+  "text": "When you run it, the picker opens over the canvas with every draft. Pick the keepers, and only those reach the refine pass.",
   "voice": "af_heart"
  },
  "4d2c51c1d88c": {
@@ -635,16 +1019,34 @@
   "text": "Here an Injector says the model is sdxl. In a real workflow, WP Model Info reads it from your checkpoint: that's the next tutorial.",
   "voice": "af_heart"
  },
+ "50bab19d8abd": {
+  "ms": 8341,
+  "speed": 1.0,
+  "text": "WP Toggles in Pick one mode chooses the row. Switching one on switches the others off, and mutes their groups. Pick Photo shoot.",
+  "voice": "af_heart"
+ },
  "50f6f768cab2": {
   "ms": 5013,
   "speed": 1.0,
   "text": "On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.",
   "voice": "af_heart"
  },
+ "5129cece217c": {
+  "ms": 3840,
+  "speed": 1.0,
+  "text": "Now add the Hero fits the place constraint, at the end, and run.",
+  "voice": "af_heart"
+ },
  "513655383b1f": {
   "ms": 5419,
   "speed": 1.0,
   "text": "Roll a few seeds: a wool cloak in a new color, or a cold weather coat, never a summer robe.",
+  "voice": "af_heart"
+ },
+ "515209463997": {
+  "ms": 4160,
+  "speed": 1.0,
+  "text": "The row now has a dot on the left. Wire the lighting Context into it.",
   "voice": "af_heart"
  },
  "517182170871": {
@@ -677,6 +1079,12 @@
   "text": "Only the inventor's row changes. An exception beats the matrix for its pair.",
   "voice": "af_heart"
  },
+ "537e9157313d": {
+  "ms": 3563,
+  "speed": 1.0,
+  "text": "Trace is the run in order: each item, what it did, and why.",
+  "voice": "af_heart"
+ },
  "540ace07a36b": {
   "ms": 3413,
   "speed": 1.0,
@@ -689,6 +1097,12 @@
   "text": "Every variable from both bundles is ready to use. Roll a few seeds.",
   "voice": "af_heart"
  },
+ "56c122095c2f": {
+  "ms": 6635,
+  "speed": 1.0,
+  "text": "One Context sets the time of day. The next adds a hero and lighting that reads the time, into an Assembler.",
+  "voice": "af_heart"
+ },
  "56f794b38a10": {
   "ms": 6891,
   "speed": 1.0,
@@ -699,6 +1113,12 @@
   "ms": 9536,
   "speed": 1.0,
   "text": "Now time is night on every seed. And Lighting, which reads time, gives moonlight every time: a matched pick drives the rules and constraints after it.",
+  "voice": "af_heart"
+ },
+ "577d0a0614ef": {
+  "ms": 10197,
+  "speed": 1.0,
+  "text": "WP Toggles in Pick one mode: Quick for a fast, rough grid, Full for the real thing. Its value sets the steps, and a switch picks a smaller latent for Quick.",
   "voice": "af_heart"
  },
  "57a03de8c3e6": {
@@ -737,6 +1157,12 @@
   "text": "Pick a colour theme: Nebula is violet, Tide is blue, Ember is warm.",
   "voice": "af_heart"
  },
+ "5cd7645cefa5": {
+  "ms": 5909,
+  "speed": 1.0,
+  "text": "Remove Setting and add it again, so it comes after the constraint. You can also drag cards to reorder.",
+  "voice": "af_heart"
+ },
  "5cf5da21ae39": {
   "ms": 3755,
   "speed": 1.0,
@@ -773,6 +1199,12 @@
   "text": "Your templates are listed here. Pick one.",
   "voice": "af_heart"
  },
+ "605dfa049140": {
+  "ms": 5867,
+  "speed": 1.0,
+  "text": "Loops make batches, number them, keep the seeds you like and sweep combinations. Next: switches.",
+  "voice": "af_heart"
+ },
  "60b0dbad4ed7": {
   "ms": 6059,
   "speed": 1.0,
@@ -789,6 +1221,12 @@
   "ms": 5739,
   "speed": 1.0,
   "text": "Wildcard Pipeline builds random prompts from lists you keep in a library. Let's make a first one.",
+  "voice": "af_heart"
+ },
+ "624d4230d7a0": {
+  "ms": 2325,
+  "speed": 1.0,
+  "text": "Warnings explains a result that looks wrong.",
   "voice": "af_heart"
  },
  "631bc4847822": {
@@ -815,10 +1253,28 @@
   "text": "Roll a few seeds. A later Context can also set a variable again: the last one wins, and the node shows a small note when it does.",
   "voice": "af_heart"
  },
+ "65416993d83f": {
+  "ms": 7573,
+  "speed": 1.0,
+  "text": "Rows come from part one, the shot, and columns from part two, the light. That's an XY plot, with each value as a header.",
+  "voice": "af_heart"
+ },
  "65ff3e617888": {
   "ms": 5355,
   "speed": 1.0,
   "text": "Start a LoRA with angle bracket, lora, colon, and the list shows your LoRAs.",
+  "voice": "af_heart"
+ },
+ "660a882bc968": {
+  "ms": 6208,
+  "speed": 1.0,
+  "text": "A Context with Hero, Setting, Time of day, Lighting from time, and the constraint Hero fits the place.",
+  "voice": "af_heart"
+ },
+ "66a3e8952305": {
+  "ms": 3349,
+  "speed": 1.0,
+  "text": "Run. The set pauses at its Image Filter; keep them all.",
   "voice": "af_heart"
  },
  "66d3bbeafd33": {
@@ -831,6 +1287,12 @@
   "ms": 3755,
   "speed": 1.0,
   "text": "Untick the switch row, and the rolled hero, hair and eyes come back.",
+  "voice": "af_heart"
+ },
+ "6854878f221a": {
+  "ms": 5312,
+  "speed": 1.0,
+  "text": "Step five: Run. Every run rolls new picks; fix a Context's seed to repeat one.",
   "voice": "af_heart"
  },
  "687d0df2c7bf": {
@@ -851,10 +1313,22 @@
   "text": "Your installed LoRAs and embeddings work the same way. Turn on LoRAs.",
   "voice": "af_heart"
  },
+ "69fad3d45add": {
+  "ms": 7531,
+  "speed": 1.0,
+  "text": "Danbooru tag lookup reads tags, their wiki and related tags. Read only, and never more than one call a second. Turn it on.",
+  "voice": "af_heart"
+ },
  "6a1d71dfcdc9": {
   "ms": 8299,
   "speed": 1.0,
   "text": "Then a switch: a template row named lora character, set to true. A WP Toggles switch can drive this too, as in Switches.",
+  "voice": "af_heart"
+ },
+ "6a458350c188": {
+  "ms": 6059,
+  "speed": 1.0,
+  "text": "Prompt shows the text, and you can fix it here before the refine pass. Mask paints an area to change.",
   "voice": "af_heart"
  },
  "6b0ed43017b7": {
@@ -881,16 +1355,40 @@
   "text": "On the canvas, pick Time of day and Setting, the rule, and Scene line, a combine that reads all three.",
   "voice": "af_heart"
  },
+ "6c4f5bce34bd": {
+  "ms": 1877,
+  "speed": 1.0,
+  "text": "Set category: Fantasy.",
+  "voice": "af_heart"
+ },
+ "6cda98773820": {
+  "ms": 5291,
+  "speed": 1.0,
+  "text": "Health caught it: the same option twice. Raise one option's weight instead. Press Open.",
+  "voice": "af_heart"
+ },
  "6cea86fd7562": {
   "ms": 1771,
   "speed": 1.0,
   "text": "Set the count to four, and Run.",
   "voice": "af_heart"
  },
+ "6d19e416d8c6": {
+  "ms": 3861,
+  "speed": 1.0,
+  "text": "Samples lists every seed and what it rolled. Click one to trace it.",
+  "voice": "af_heart"
+ },
  "6eb0dbefbb7b": {
   "ms": 2560,
   "speed": 1.0,
   "text": "Pick Hero, Travel gear, Colors and Outfit.",
+  "voice": "af_heart"
+ },
+ "6ef7909cdef8": {
+  "ms": 5077,
+  "speed": 1.0,
+  "text": "Ask in the editor, check the preview, apply and save. Next: building a whole pack.",
   "voice": "af_heart"
  },
  "6f1da3098da0": {
@@ -905,10 +1403,28 @@
   "text": "Lost? Select any Wildcard Pipeline node and press the question mark above it.",
   "voice": "af_heart"
  },
+ "70d068f6e0fa": {
+  "ms": 6592,
+  "speed": 1.0,
+  "text": "Categories and tags sort it, the star and search find it, and filters narrow it down. That's the library track.",
+  "voice": "af_heart"
+ },
+ "72ae9c59be4b": {
+  "ms": 7403,
+  "speed": 1.0,
+  "text": "The Batches and grids example makes nine images: three shots against three lights. Each comes with a label, shot and light.",
+  "voice": "af_heart"
+ },
  "733b17d4073c": {
   "ms": 3008,
   "speed": 1.0,
   "text": "And the state markers can be badges, or small dots.",
+  "voice": "af_heart"
+ },
+ "7418d9d210ae": {
+  "ms": 7445,
+  "speed": 1.0,
+  "text": "One run makes nine images of the same person in the same place: three shots against three kinds of light, as a labelled grid.",
   "voice": "af_heart"
  },
  "7427fca97898": {
@@ -923,10 +1439,40 @@
   "text": "Let's make a Cloak list that does the same.",
   "voice": "af_heart"
  },
+ "75bfc8fe31ce": {
+  "ms": 9088,
+  "speed": 1.0,
+  "text": "The same page shows the database: its file, its size, and maintenance tools. Integrity check finds damage, Vacuum makes the file smaller.",
+  "voice": "af_heart"
+ },
+ "7674a583f227": {
+  "ms": 6464,
+  "speed": 1.0,
+  "text": "To switch several nodes with one toggle, gather them in a WP Node Group, and wire the group into the dot.",
+  "voice": "af_heart"
+ },
+ "76f4363b0ec0": {
+  "ms": 4352,
+  "speed": 1.0,
+  "text": "The badge in the sidebar counts the problems left, so you see it from any page.",
+  "voice": "af_heart"
+ },
  "7786b4c7decc": {
   "ms": 2304,
   "speed": 1.0,
   "text": "The disk button saves both to the library.",
+  "voice": "af_heart"
+ },
+ "77dde1096a86": {
+  "ms": 5419,
+  "speed": 1.0,
+  "text": "The assistant is optional and off until you turn it on. Open Settings, AI assistant.",
+  "voice": "af_heart"
+ },
+ "77e50fe3600f": {
+  "ms": 4096,
+  "speed": 1.0,
+  "text": "Here's a hero at a time of day, and a second Context that adds lighting.",
   "voice": "af_heart"
  },
  "782f0934274a": {
@@ -953,6 +1499,12 @@
   "text": "Reach is all by default: the constraint covers every Setting after it, in this Context or in the ones it feeds. Neither place is ever a castle.",
   "voice": "af_heart"
  },
+ "79db2069a0d4": {
+  "ms": 7957,
+  "speed": 1.0,
+  "text": "Range runs seeds in a row from the first one. Random picks seeds at random. Raise the count to five hundred for finer shares.",
+  "voice": "af_heart"
+ },
  "7a3f6b90953b": {
   "ms": 3499,
   "speed": 1.0,
@@ -965,16 +1517,40 @@
   "text": "Hover the throne room's chance and click set as fallback.",
   "voice": "af_heart"
  },
+ "7c1183845fe9": {
+  "ms": 6848,
+  "speed": 1.0,
+  "text": "Blue is for your information. Amber is worth a look. Red points at something that's gone, like a deleted wildcard.",
+  "voice": "af_heart"
+ },
+ "7cfb9ecc7ec6": {
+  "ms": 7168,
+  "speed": 1.0,
+  "text": "The loop writes iteration, the frame's number. It's hidden by default, so it stays out of prompts. Untick hidden to print it.",
+  "voice": "af_heart"
+ },
  "7d8dcf11971e": {
   "ms": 4608,
   "speed": 1.0,
   "text": "Write a prompt once, save it, and load it into any Assembler. Next: bundles.",
   "voice": "af_heart"
  },
+ "7de82384691f": {
+  "ms": 5312,
+  "speed": 1.0,
+  "text": "Wire WP Debug after it. It changes nothing; it shows what reached that point.",
+  "voice": "af_heart"
+ },
  "7e26b5fe3294": {
   "ms": 5440,
   "speed": 1.0,
   "text": "On the left are the controls; on the right, a live preview with every kind of row and marker.",
+  "voice": "af_heart"
+ },
+ "7f1448b012cc": {
+  "ms": 6613,
+  "speed": 1.0,
+  "text": "Here's the plan. You can change any item, add one, or ask for changes in words before anything is built.",
   "voice": "af_heart"
  },
  "7f1f79c3d1d1": {
@@ -987,6 +1563,42 @@
   "ms": 4757,
   "speed": 1.0,
   "text": "Time, setting and lighting only feed the scene line. Hide them with their globe buttons.",
+  "voice": "af_heart"
+ },
+ "7ffd0bd7c749": {
+  "ms": 5291,
+  "speed": 1.0,
+  "text": "Sticky is tinted with its colour. Icon tone puts an icon in front: a warning here.",
+  "voice": "af_heart"
+ },
+ "80083e33bd46": {
+  "ms": 8704,
+  "speed": 1.0,
+  "text": "The plan shows what each file becomes. Scene is an entry point, the one you'd put in a prompt. Creature and weather are vocabulary it draws from.",
+  "voice": "af_heart"
+ },
+ "80cfa1ea8622": {
+  "ms": 6997,
+  "speed": 1.0,
+  "text": "And how each one carries over: exact here. Syntax this pipeline reads differently is marked close or needs a look.",
+  "voice": "af_heart"
+ },
+ "819eaff3e16b": {
+  "ms": 1515,
+  "speed": 1.0,
+  "text": "Now wander off somewhere else.",
+  "voice": "af_heart"
+ },
+ "8263e83cd81c": {
+  "ms": 6080,
+  "speed": 1.0,
+  "text": "Have wildcard text files from another tool? Open Import, Export, and the Wildcard packs tab.",
+  "voice": "af_heart"
+ },
+ "8306ee4c1d6c": {
+  "ms": 6741,
+  "speed": 1.0,
+  "text": "Instead of random rolls, a sweep runs every combination you choose. Open Sweep combinations and switch it on.",
   "voice": "af_heart"
  },
  "83260fd05253": {
@@ -1007,6 +1619,18 @@
   "text": "And here they are as pictures: every hero where they belong.",
   "voice": "af_heart"
  },
+ "84195e14b5d9": {
+  "ms": 7317,
+  "speed": 1.0,
+  "text": "Fold a busy part into a subgraph: its variables still flow, and the badge keeps watch. Next: warnings on the canvas.",
+  "voice": "af_heart"
+ },
+ "84d03c446b6d": {
+  "ms": 1259,
+  "speed": 1.0,
+  "text": "Now ask for a tag.",
+  "voice": "af_heart"
+ },
  "84e824df63c4": {
   "ms": 5675,
   "speed": 1.0,
@@ -1023,6 +1647,12 @@
   "ms": 6379,
   "speed": 1.0,
   "text": "Hold keeps a pick for a run. Match makes a pick follow a variable. Next: what happens when nothing fits.",
+  "voice": "af_heart"
+ },
+ "85e2146e3964": {
+  "ms": 3520,
+  "speed": 1.0,
+  "text": "When something isn't clear it asks. Answer, or let it decide.",
   "voice": "af_heart"
  },
  "86f91454300a": {
@@ -1061,10 +1691,28 @@
   "text": "While the switch is on, the rule puts the trigger words in place of the hero, and the rolled hair and eyes step aside, so they don't fight the LoRA.",
   "voice": "af_heart"
  },
+ "899837142e75": {
+  "ms": 5739,
+  "speed": 1.0,
+  "text": "Web search uses a search engine you choose: your own SearXNG, or a provider with a key.",
+  "voice": "af_heart"
+ },
  "8af2ea8156da": {
   "ms": 6549,
   "speed": 1.0,
   "text": "An option can hold another wildcard. Hair's options read the Colors list: each purple chip rolls a color.",
+  "voice": "af_heart"
+ },
+ "8b298f68c72d": {
+  "ms": 14144,
+  "speed": 1.0,
+  "text": "Step two: who is in the picture. Each Context holds bundles, packs of lists that work together. Click a header to open one. Constraints keep the outfit right for the place, and a derivation hides details a close-up can't show.",
+  "voice": "af_heart"
+ },
+ "8b611d008c97": {
+  "ms": 6336,
+  "speed": 1.0,
+  "text": "Pick your model and press Run once. The sampler seed is fixed, so only the prompt changes between cells.",
   "voice": "af_heart"
  },
  "8b8f43018df7": {
@@ -1073,10 +1721,22 @@
   "text": "Any rule can branch on these: quality words per family, Pony's score tags only for Pony. A derivation's LoRA by model button builds one rule per model for you. A wildcard with Match variable can follow the variant too.",
   "voice": "af_heart"
  },
+ "8bcbb6c8c706": {
+  "ms": 9067,
+  "speed": 1.0,
+  "text": "To share with everyone, Publish to community opens the publish form with your selection filled in. Every module and bundle editor has the same button.",
+  "voice": "af_heart"
+ },
  "8beb48e0c348": {
   "ms": 3136,
   "speed": 1.0,
   "text": "Debug shows each pick with its tags and its negative.",
+  "voice": "af_heart"
+ },
+ "8bff094c1cd9": {
+  "ms": 4331,
+  "speed": 1.0,
+  "text": "Your library is backed up for you. Open Settings, Library and data.",
   "voice": "af_heart"
  },
  "8c144ede649c": {
@@ -1091,6 +1751,18 @@
   "text": "But the constraint keeps city folk out of castles, so nothing is left to pick. The fallback steps in: the throne room, on every seed.",
   "voice": "af_heart"
  },
+ "8d8686dc65e0": {
+  "ms": 3307,
+  "speed": 1.0,
+  "text": "The shoot, one sheet: the same person, shot after shot.",
+  "voice": "af_heart"
+ },
+ "8dc3d29d5a2b": {
+  "ms": 5227,
+  "speed": 1.0,
+  "text": "The run pauses at the Image Filter. Each pick keeps its own latent, prompt and label.",
+  "voice": "af_heart"
+ },
  "8e3dc896fcc0": {
   "ms": 4395,
   "speed": 1.0,
@@ -1103,10 +1775,28 @@
   "text": "A big prompt reads better in parts. One Context for the character: Hero, Hair and Eyes.",
   "voice": "af_heart"
  },
+ "8f42c36710c8": {
+  "ms": 5696,
+  "speed": 1.0,
+  "text": "The time still reaches the lighting inside: variables flow across a subgraph's edge, in and out.",
+  "voice": "af_heart"
+ },
  "8f9e745c682a": {
   "ms": 3947,
   "speed": 1.0,
   "text": "Type style shows each row's kind as a chip, an icon, or both.",
+  "voice": "af_heart"
+ },
+ "8faf8151529e": {
+  "ms": 3477,
+  "speed": 1.0,
+  "text": "Plan writes out the items it will make, and how they work together.",
+  "voice": "af_heart"
+ },
+ "8fc4094650ed": {
+  "ms": 2901,
+  "speed": 1.0,
+  "text": "Imported. One Undo takes the whole pack back out.",
   "voice": "af_heart"
  },
  "8ff93e4882d0": {
@@ -1115,10 +1805,22 @@
   "text": "Click Done, close Settings, and your real node has the new look.",
   "voice": "af_heart"
  },
+ "90667b5909f0": {
+  "ms": 4224,
+  "speed": 1.0,
+  "text": "Apply puts them in the editor. They're yours to change, and Save keeps them.",
+  "voice": "af_heart"
+ },
  "92997cc71a53": {
   "ms": 1536,
   "speed": 1.0,
   "text": "Let's open the wildcards.",
+  "voice": "af_heart"
+ },
+ "92f349eeb0a8": {
+  "ms": 4821,
+  "speed": 1.0,
+  "text": "This card says where your data goes. With a local model, nothing leaves your PC.",
   "voice": "af_heart"
  },
  "93386c56c97d": {
@@ -1151,16 +1853,40 @@
   "text": "When hero matches knight or mage. Matches takes a regular expression: the bar means or.",
   "voice": "af_heart"
  },
+ "9580d5dcf04c": {
+  "ms": 5888,
+  "speed": 1.0,
+  "text": "Step four: the Assembler writes the prompt, the negatives ride along, and the Cleaner tidies the commas.",
+  "voice": "af_heart"
+ },
  "95fa2308979b": {
   "ms": 4437,
   "speed": 1.0,
   "text": "Open the negative box under it, too. A template keeps its negative with it.",
   "voice": "af_heart"
  },
+ "961a8f0a07d6": {
+  "ms": 10475,
+  "speed": 1.0,
+  "text": "Tidy up lists items nothing uses and variables nothing reads. Keep a ComfyUI tab open with your workflow, and Check again counts what sits on the canvas too.",
+  "voice": "af_heart"
+ },
  "969c54d0b0aa": {
   "ms": 5824,
   "speed": 1.0,
   "text": "Pick lists every Setting the constraint can reach, with its node, so you tick exactly the ones it covers.",
+  "voice": "af_heart"
+ },
+ "96cc66c1fbcb": {
+  "ms": 5312,
+  "speed": 1.0,
+  "text": "Its notes are bookmarks, so the Bookmarks dock lists the steps. Click one, or press its number.",
+  "voice": "af_heart"
+ },
+ "97011e017b18": {
+  "ms": 4587,
+  "speed": 1.0,
+  "text": "The pack builder makes a whole pack from a description. Say what the pictures are about.",
   "voice": "af_heart"
  },
  "9719ef12f3b0": {
@@ -1181,6 +1907,18 @@
   "text": "The separator goes between them. Make it and, with a space each side.",
   "voice": "af_heart"
  },
+ "97e8c0c10b52": {
+  "ms": 6101,
+  "speed": 1.0,
+  "text": "Bookmark the spots you return to, then jump with the dock or a shortcut. A note can be a bookmark too.",
+  "voice": "af_heart"
+ },
+ "981ff0f33ff4": {
+  "ms": 1557,
+  "speed": 1.0,
+  "text": "Remove the copy, and save.",
+  "voice": "af_heart"
+ },
  "98a27fe5fd6f": {
   "ms": 5568,
   "speed": 1.0,
@@ -1197,6 +1935,12 @@
   "ms": 2347,
   "speed": 1.0,
   "text": "Next N covers the next few, by a count.",
+  "voice": "af_heart"
+ },
+ "9948eed4f330": {
+  "ms": 3221,
+  "speed": 1.0,
+  "text": "The sparkle at the top opens the chat. Ask for something.",
   "voice": "af_heart"
  },
  "9963393f5591": {
@@ -1223,10 +1967,22 @@
   "text": "This button opens the manager. Its Documentation covers every node and every module, with examples.",
   "voice": "af_heart"
  },
+ "9a9f31fda4a1": {
+  "ms": 7787,
+  "speed": 1.0,
+  "text": "Nine images, shots down and lights across, each cell headed. Grid saves the sheet; images gives each one with its label.",
+  "voice": "af_heart"
+ },
  "9b7236360017": {
   "ms": 8256,
   "speed": 1.0,
   "text": "The scene line already reads the setting, the time and the lighting, and the hair list reads the colors. Hide those four with their globe buttons.",
+  "voice": "af_heart"
+ },
+ "9b9b84a86eac": {
+  "ms": 7275,
+  "speed": 1.0,
+  "text": "Enter subgraph opens it. Inside are the same nodes, with the subgraph's inputs on the left and outputs on the right.",
   "voice": "af_heart"
  },
  "9c72f8c561d4": {
@@ -1239,6 +1995,12 @@
   "ms": 6976,
   "speed": 1.0,
   "text": "Wildcard Pipeline adds a button to ComfyUI's top bar. It opens the manager, where your library lives.",
+  "voice": "af_heart"
+ },
+ "9e347114b800": {
+  "ms": 2219,
+  "speed": 1.0,
+  "text": "The image. Run again for someone new.",
   "voice": "af_heart"
  },
  "9e8624e43986": {
@@ -1265,10 +2027,46 @@
   "text": "Next: the Context node itself, and how it can roll for you.",
   "voice": "af_heart"
  },
+ "a0f4ba69e0e8": {
+  "ms": 3989,
+  "speed": 1.0,
+  "text": "Install puts it in your library as one bundle, ready for a Context.",
+  "voice": "af_heart"
+ },
+ "a0f6e7766ec1": {
+  "ms": 10731,
+  "speed": 1.0,
+  "text": "Arrange picks the layout: fit the run, a sheet, side by side, a row per frame, an XY plot, or labels only. After a run the panel suggests the one that fits.",
+  "voice": "af_heart"
+ },
+ "a14bfd11de3e": {
+  "ms": 3883,
+  "speed": 1.0,
+  "text": "Label and Grid lays the nine out: shots down, lights across.",
+  "voice": "af_heart"
+ },
  "a1ac4c8feaa5": {
   "ms": 8875,
   "speed": 1.0,
   "text": "First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain. Next: negatives.",
+  "voice": "af_heart"
+ },
+ "a1bc16e09293": {
+  "ms": 13013,
+  "speed": 1.0,
+  "text": "WP Image Filter sits between the drafts and the expensive refine pass. The run pauses there and you pick. Every input has a matching output, so each pick keeps its own latent, prompt and label.",
+  "voice": "af_heart"
+ },
+ "a1e5ce351d8b": {
+  "ms": 4181,
+  "speed": 1.0,
+  "text": "Open Templates, ComfyUI Wildcard Pipeline, and Pick and refine.",
+  "voice": "af_heart"
+ },
+ "a291d0fb473b": {
+  "ms": 9429,
+  "speed": 1.0,
+  "text": "Step three, optional: WP Toggles is the switchboard. Turn a LoRA on and it un-bypasses its loader and puts its trigger words in the prompt.",
   "voice": "af_heart"
  },
  "a2f48bda015d": {
@@ -1307,10 +2105,22 @@
   "text": "Everything set upstream flows down the chain. The Assembler offers variables from both Contexts.",
   "voice": "af_heart"
  },
+ "a4931dc9f6ca": {
+  "ms": 3733,
+  "speed": 1.0,
+  "text": "When the check is happy, Install puts it in your library as one bundle.",
+  "voice": "af_heart"
+ },
  "a687e71df23a": {
   "ms": 4139,
   "speed": 1.0,
   "text": "Not everything should roll. A fixed value always writes the same text.",
+  "voice": "af_heart"
+ },
+ "a73f114626ca": {
+  "ms": 7125,
+  "speed": 1.0,
+  "text": "Step one: pick your model in Load Checkpoint. The two LoRA loaders under it stay bypassed until you switch them on.",
   "voice": "af_heart"
  },
  "a8e131ac2101": {
@@ -1331,10 +2141,28 @@
   "text": "Pick Randomize, so every run rolls something new.",
   "voice": "af_heart"
  },
+ "a992f3174971": {
+  "ms": 9771,
+  "speed": 1.0,
+  "text": "Filters narrow the table by kind, category, favourites, tags, and content rating: safe for work, or eighteen plus. Each item's editor sets its rating.",
+  "voice": "af_heart"
+ },
+ "a996ba24763a": {
+  "ms": 1749,
+  "speed": 1.0,
+  "text": "The new options show here first.",
+  "voice": "af_heart"
+ },
  "a99e66d4c58c": {
   "ms": 5504,
   "speed": 1.0,
   "text": "It fills in the template and the negative. Edit it here freely: the saved copy doesn't change.",
+  "voice": "af_heart"
+ },
+ "aa32dd1ca732": {
+  "ms": 2752,
+  "speed": 1.0,
+  "text": "It knows the docs too. Ask how something works.",
   "voice": "af_heart"
  },
  "aa69b4ebf7ef": {
@@ -1355,10 +2183,58 @@
   "text": "That's the basics. The advanced videos take each part further, one at a time.",
   "voice": "af_heart"
  },
+ "adc718279e26": {
+  "ms": 2795,
+  "speed": 1.0,
+  "text": "Mood is flagged as missing, so it would print nothing.",
+  "voice": "af_heart"
+ },
+ "af1e3da8fb86": {
+  "ms": 4864,
+  "speed": 1.0,
+  "text": "Lighting from time reads the time variable. Put it in a Context without Time of day.",
+  "voice": "af_heart"
+ },
+ "af9d620de554": {
+  "ms": 1728,
+  "speed": 1.0,
+  "text": "Add Time of day, then Outfit.",
+  "voice": "af_heart"
+ },
+ "b0649e54f022": {
+  "ms": 9621,
+  "speed": 1.0,
+  "text": "The Community tab is where people find packs. Search or browse, open one to see what's inside, and install it in one click, with the wildcards it needs.",
+  "voice": "af_heart"
+ },
+ "b09edc07a45e": {
+  "ms": 6549,
+  "speed": 1.0,
+  "text": "Test a stack on hundreds of seeds, fix what the warnings point at, and trace any seed. Next: Library health.",
+  "voice": "af_heart"
+ },
  "b1066e8446ac": {
   "ms": 4352,
   "speed": 1.0,
   "text": "Density sets how much room each row takes. Compact fits more on a node.",
+  "voice": "af_heart"
+ },
+ "b17133f1f650": {
+  "ms": 2795,
+  "speed": 1.0,
+  "text": "Run. When the picker opens, keep them all this time.",
+  "voice": "af_heart"
+ },
+ "b17bde35da07": {
+  "ms": 10880,
+  "speed": 1.0,
+  "text": "WP Mode Relay chains mutes and bypasses. It watches the nodes wired into it, and when they're muted or bypassed, it does the same to the node group its output goes into.",
+  "voice": "af_heart"
+ },
+ "b1a9fc7d98a1": {
+  "ms": 3179,
+  "speed": 1.0,
+  "text": "Continue, and tick what to import. All three are ticked.",
   "voice": "af_heart"
  },
  "b1f1eb689728": {
@@ -1391,6 +2267,36 @@
   "text": "The hero and the place still roll. The outfit is whatever the text box says, so change the text and the prompt follows.",
   "voice": "af_heart"
  },
+ "b5f3ece0d334": {
+  "ms": 9664,
+  "speed": 1.0,
+  "text": "Photo shoot: the person, outfit, place and light are held for the whole set. The shot has a pick per frame, from wide to close-up, and the pose still rolls.",
+  "voice": "af_heart"
+ },
+ "b6d3f7d57992": {
+  "ms": 13397,
+  "speed": 1.0,
+  "text": "The Context Loop runs everything after it once per frame. Sweep combinations walks Shot against Light: nine frames. Hold other picks keeps the person, outfit and place the same, so only the swept lists change.",
+  "voice": "af_heart"
+ },
+ "b751cf7f6433": {
+  "ms": 6208,
+  "speed": 1.0,
+  "text": "All items lists every kind in one table. Tick a few, and the bar above acts on all of them at once.",
+  "voice": "af_heart"
+ },
+ "b7c22a9a38b1": {
+  "ms": 4245,
+  "speed": 1.0,
+  "text": "Describe, plan, build, install. Next: web search and tag lookup.",
+  "voice": "af_heart"
+ },
+ "b825ebd2f769": {
+  "ms": 5803,
+  "speed": 1.0,
+  "text": "Derivations, constraints, templates and the rest have the same button, each with its own kind of help.",
+  "voice": "af_heart"
+ },
  "b8445a581178": {
   "ms": 7723,
   "speed": 1.0,
@@ -1409,6 +2315,12 @@
   "text": "Your installed LoRAs and embeddings work the same way, once you have some.",
   "voice": "af_heart"
  },
+ "b9991d78fc0b": {
+  "ms": 2880,
+  "speed": 1.0,
+  "text": "Four prompts from one click, each with its own picks.",
+  "voice": "af_heart"
+ },
  "b9e95a7bc276": {
   "ms": 5909,
   "speed": 1.0,
@@ -1419,6 +2331,12 @@
   "ms": 1323,
   "speed": 1.0,
   "text": "If the time rolled night,",
+  "voice": "af_heart"
+ },
+ "ba0203b9a360": {
+  "ms": 4203,
+  "speed": 1.0,
+  "text": "Now a real mistake. Open Outfit and add a tunic that's already there.",
   "voice": "af_heart"
  },
  "ba07e8089faf": {
@@ -1445,6 +2363,12 @@
   "text": "Last in the basics: where to look when you're stuck. Every Wildcard Pipeline node has its own help.",
   "voice": "af_heart"
  },
+ "bc0f9bec0639": {
+  "ms": 4416,
+  "speed": 1.0,
+  "text": "Build makes every item, then plays the pack to check it rolls the way you asked.",
+  "voice": "af_heart"
+ },
  "bc3eac1bb4b5": {
   "ms": 5483,
   "speed": 1.0,
@@ -1469,6 +2393,30 @@
   "text": "Add WP Debug to see what each list picked when the workflow runs.",
   "voice": "af_heart"
  },
+ "be4d2f39700e": {
+  "ms": 4331,
+  "speed": 1.0,
+  "text": "Backups are on, one a day, and it keeps the last seven. Raise that if you like.",
+  "voice": "af_heart"
+ },
+ "bf7e0400b789": {
+  "ms": 9344,
+  "speed": 1.0,
+  "text": "Toggles switch rules and nodes, Node Groups gather what one switch drives, and Mode Relay chains them. The first example workflow uses all three.",
+  "voice": "af_heart"
+ },
+ "c01162af1580": {
+  "ms": 4267,
+  "speed": 1.0,
+  "text": "The search box finds items by name, id or tag. Type hair.",
+  "voice": "af_heart"
+ },
+ "c08af493f58e": {
+  "ms": 2923,
+  "speed": 1.0,
+  "text": "It runs seeds zero to ninety nine. Press Run.",
+  "voice": "af_heart"
+ },
  "c1c2cfc38a01": {
   "ms": 7403,
   "speed": 1.0,
@@ -1487,6 +2435,18 @@
   "text": "Select it and press the question mark above it.",
   "voice": "af_heart"
  },
+ "c2d7688e9a56": {
+  "ms": 10539,
+  "speed": 1.0,
+  "text": "Start here says what it makes: every run rolls a person, what they wear, where they are, the light and the camera. The lists come with the workflow, so nothing has to be in your library.",
+  "voice": "af_heart"
+ },
+ "c3b26142e927": {
+  "ms": 3648,
+  "speed": 1.0,
+  "text": "Every editor has an AI button. Open Outfit and press it.",
+  "voice": "af_heart"
+ },
  "c43be75daabb": {
   "ms": 3392,
   "speed": 1.0,
@@ -1503,6 +2463,18 @@
   "ms": 7147,
   "speed": 1.0,
   "text": "A second Context for the scene, wired into the first one's upstream: Time of day, Setting, the lighting rule and Scene line.",
+  "voice": "af_heart"
+ },
+ "c548282f00ff": {
+  "ms": 5867,
+  "speed": 1.0,
+  "text": "The missing var is gone. The second Hero row is blue now: it replaces the hero from upstream.",
+  "voice": "af_heart"
+ },
+ "c57c36b6e974": {
+  "ms": 1877,
+  "speed": 1.0,
+  "text": "A title goes over the whole sheet.",
   "voice": "af_heart"
  },
  "c5bfdd49b8ac": {
@@ -1529,10 +2501,34 @@
   "text": "Don't want the pop-up somewhere? Switch that side off again. I'll turn everything off for the next videos.",
   "voice": "af_heart"
  },
+ "c6e77d7bea9a": {
+  "ms": 5440,
+  "speed": 1.0,
+  "text": "No warnings now, and the settings' shares moved, because each hero leans to its own places.",
+  "voice": "af_heart"
+ },
+ "c6eab7efc286": {
+  "ms": 7637,
+  "speed": 1.0,
+  "text": "Daily backups, a noted one before big changes, and a restore that takes a second. Next: keeping a big library tidy.",
+  "voice": "af_heart"
+ },
  "c70902e4d7fb": {
   "ms": 2347,
   "speed": 1.0,
   "text": "The switch on the group's header sets its kind.",
+  "voice": "af_heart"
+ },
+ "c8ba56c73bf7": {
+  "ms": 9237,
+  "speed": 1.0,
+  "text": "The loop varies the prompt. For a new image seed per frame too, wire loop config into a WP Seed List, and its seed output into your KSampler.",
+  "voice": "af_heart"
+ },
+ "c938fc33db38": {
+  "ms": 4203,
+  "speed": 1.0,
+  "text": "It asks before it goes online, and shows what it will look up. Allow once.",
   "voice": "af_heart"
  },
  "c9aeb816d168": {
@@ -1559,6 +2555,30 @@
   "text": "Now try it in a new wildcard. Type the start of a tag in an option.",
   "voice": "af_heart"
  },
+ "cc493a9afd40": {
+  "ms": 3861,
+  "speed": 1.0,
+  "text": "Categories group items, like folders. Make one called Fantasy.",
+  "voice": "af_heart"
+ },
+ "cc5f6848acf8": {
+  "ms": 2027,
+  "speed": 1.0,
+  "text": "Or, from anywhere, press its shortcut.",
+  "voice": "af_heart"
+ },
+ "cc808e558232": {
+  "ms": 8661,
+  "speed": 1.0,
+  "text": "The Test Runner rolls your items on many seeds at once, without a canvas. Add the items you want to test, like the modules on a Context node.",
+  "voice": "af_heart"
+ },
+ "cc9764a92832": {
+  "ms": 4288,
+  "speed": 1.0,
+  "text": "The Bookmarks dock lists every bookmark in the workflow. Click one to jump.",
+  "voice": "af_heart"
+ },
  "cca08052c78c": {
   "ms": 10432,
   "speed": 1.0,
@@ -1569,6 +2589,12 @@
   "ms": 4757,
   "speed": 1.0,
   "text": "Scene brings the setting, the time of day, the lighting rule, the scene line and the style.",
+  "voice": "af_heart"
+ },
+ "cf8e9a53dfac": {
+  "ms": 7019,
+  "speed": 1.0,
+  "text": "Lands at says where the bookmark sits on screen after a jump: top left here. Zoom can be set, or kept as it is.",
   "voice": "af_heart"
  },
  "d0a2ac7b1137": {
@@ -1613,6 +2639,12 @@
   "text": "Each bundle sits in its own frame. Fold it, switch it off with its checkbox, or open it to change one item for this node only.",
   "voice": "af_heart"
  },
+ "d3e958cc4e47": {
+  "ms": 2859,
+  "speed": 1.0,
+  "text": "Now the big edit: Hero loses the inventor.",
+  "voice": "af_heart"
+ },
  "d48848da457b": {
   "ms": 5035,
   "speed": 1.0,
@@ -1637,10 +2669,22 @@
   "text": "Under Extensions, Wildcard Pipeline. Each one runs on an empty library, with notes that walk you through it. Open one, pick your checkpoint and press Run.",
   "voice": "af_heart"
  },
+ "d5ff6e4b8dfe": {
+  "ms": 7851,
+  "speed": 1.0,
+  "text": "Drop a folder or a zip here, or choose files. These three are plain lists, one option per line. Scene reads the other two by name.",
+  "voice": "af_heart"
+ },
  "d6554076490c": {
   "ms": 8533,
   "speed": 1.0,
   "text": "Fixed values and combines take a negative the same way. A derivation has two actions for them: Add to negative, and Replace negative.",
+  "voice": "af_heart"
+ },
+ "d67c07d39971": {
+  "ms": 4800,
+  "speed": 1.0,
+  "text": "Variables lists every variable the run set, its value, and the item that set it.",
   "voice": "af_heart"
  },
  "d6d0bde0a587": {
@@ -1667,10 +2711,40 @@
   "text": "Color intensity makes the kind colors softer or stronger.",
   "voice": "af_heart"
  },
+ "d7e1a3b6361e": {
+  "ms": 2517,
+  "speed": 1.0,
+  "text": "The filter finds one by name. Type light.",
+  "voice": "af_heart"
+ },
+ "d7ecc77b8879": {
+  "ms": 4907,
+  "speed": 1.0,
+  "text": "Each bookmark gets a shortcut: Alt 1 for this one. Press it to record another.",
+  "voice": "af_heart"
+ },
+ "d827cdfee087": {
+  "ms": 5163,
+  "speed": 1.0,
+  "text": "The text takes Markdown: bold, lists, links. A docs link can be drawn as a button.",
+  "voice": "af_heart"
+ },
+ "d89bfae2fcb7": {
+  "ms": 640,
+  "speed": 1.0,
+  "text": "Run.",
+  "voice": "af_heart"
+ },
  "d9309d89d174": {
   "ms": 6571,
   "speed": 1.0,
   "text": "Now a city hero gets the city, or a place with its own rule in that row. The wilds had none, so they're out.",
+  "voice": "af_heart"
+ },
+ "d960952a9692": {
+  "ms": 11883,
+  "speed": 1.0,
+  "text": "The trace shows each step in order: what the hero rolled, what the constraint did, and the setting it picked. The same seed on a canvas Context gives the same values, and Copy seed takes it there.",
   "voice": "af_heart"
  },
  "d969a6f6fab7": {
@@ -1679,10 +2753,40 @@
   "text": "Debug shows what each run rolled. No street thief, on this node.",
   "voice": "af_heart"
  },
+ "d9a30625a4a6": {
+  "ms": 6848,
+  "speed": 1.0,
+  "text": "Nothing sets time any more, and the subgraph's badge says so, without opening it. It shows the worst problem inside.",
+  "voice": "af_heart"
+ },
+ "d9caf7d04585": {
+  "ms": 11989,
+  "speed": 1.0,
+  "text": "Pick where the model runs: a local server like LM Studio or Ollama, or a cloud provider with a key. Then pick the model. This one is a nine billion parameter model on this PC.",
+  "voice": "af_heart"
+ },
  "d9e69f144151": {
   "ms": 3221,
   "speed": 1.0,
   "text": "That's the tour. Next, we'll make a wildcard of our own.",
+  "voice": "af_heart"
+ },
+ "dab59bd4ebaf": {
+  "ms": 6549,
+  "speed": 1.0,
+  "text": "WP Label and Grid takes the images and their labels. A label can have parts, split by a dot.",
+  "voice": "af_heart"
+ },
+ "dad21c276423": {
+  "ms": 1408,
+  "speed": 1.0,
+  "text": "And the image lands here.",
+  "voice": "af_heart"
+ },
+ "dae556b5fb69": {
+  "ms": 5589,
+  "speed": 1.0,
+  "text": "Each variable shows how often every value came up. A hundred seeds in a fraction of a second.",
   "voice": "af_heart"
  },
  "db0e076ef627": {
@@ -1709,6 +2813,18 @@
   "text": "The scene line reads the setting, the time and the lighting, so hide those three too, and fold Scene.",
   "voice": "af_heart"
  },
+ "dd4e928e6910": {
+  "ms": 6635,
+  "speed": 1.0,
+  "text": "It goes back right away, with no restart, and backs up the current library first, so a restore can be undone too.",
+  "voice": "af_heart"
+ },
+ "dd72ccc9a8df": {
+  "ms": 2133,
+  "speed": 1.0,
+  "text": "Export downloads one file to send.",
+  "voice": "af_heart"
+ },
  "de9f4c1999b3": {
   "ms": 3947,
   "speed": 1.0,
@@ -1719,6 +2835,12 @@
   "ms": 7168,
   "speed": 1.0,
   "text": "The second option takes from Travel gear. Travel gear has tags, so Enter offers a filter: pick cold, then Apply.",
+  "voice": "af_heart"
+ },
+ "df5d749c8495": {
+  "ms": 6976,
+  "speed": 1.0,
+  "text": "Check the library now and then, fix the problems, ignore what's on purpose. Next: importing wildcard packs.",
   "voice": "af_heart"
  },
  "df828f030366": {
@@ -1743,6 +2865,18 @@
   "ms": 3947,
   "speed": 1.0,
   "text": "Its page opens over the canvas: what each part does, with a picture.",
+  "voice": "af_heart"
+ },
+ "e178796b9070": {
+  "ms": 6123,
+  "speed": 1.0,
+  "text": "Two more permissions, both off: letting it delete items, and applying small safe changes without a card.",
+  "voice": "af_heart"
+ },
+ "e19f5d434c40": {
+  "ms": 1088,
+  "speed": 1.0,
+  "text": "Apply makes it.",
   "voice": "af_heart"
  },
  "e3269bd8e7cc": {
@@ -1781,10 +2915,28 @@
   "text": "Without one, the setting would come out empty. WP Debug says fallback used when it kicks in, so you can spot rules that box a pick in.",
   "voice": "af_heart"
  },
+ "e461e6875c4a": {
+  "ms": 4139,
+  "speed": 1.0,
+  "text": "On the other side, the Import tab takes the file, or its text pasted in.",
+  "voice": "af_heart"
+ },
+ "e46868775249": {
+  "ms": 10261,
+  "speed": 1.0,
+  "text": "These rules read LoRA variables that no library item sets. That's on purpose: an Injector on the canvas sets them. Press Ignore, and it stays quiet.",
+  "voice": "af_heart"
+ },
  "e4c6d4c92069": {
   "ms": 7253,
   "speed": 1.0,
   "text": "When several constraints cover the same wildcard, they all apply: their factors multiply, and an exclude always wins.",
+  "voice": "af_heart"
+ },
+ "e51e36c074ae": {
+  "ms": 2240,
+  "speed": 1.0,
+  "text": "The refined picks, each under its look.",
   "voice": "af_heart"
  },
  "e68524598f2b": {
@@ -1793,10 +2945,28 @@
   "text": "WP Model Info names the model, and your rules follow it. Next: loops and seeds.",
   "voice": "af_heart"
  },
+ "e7551bc278c5": {
+  "ms": 12203,
+  "speed": 1.0,
+  "text": "None of this stops a run. In ComfyUI's settings, Validation strictness picks what shows: everything, no blue notes, or nothing. After a run, WP Debug lists what actually happened.",
+  "voice": "af_heart"
+ },
  "e779341f3c23": {
   "ms": 5099,
   "speed": 1.0,
   "text": "Bundles can nest, so you build big sets out of small ones and reuse the small ones anywhere.",
+  "voice": "af_heart"
+ },
+ "e8bddc93d62d": {
+  "ms": 3435,
+  "speed": 1.0,
+  "text": "To change a note, double-click it. Done goes back to reading.",
+  "voice": "af_heart"
+ },
+ "e8f61bf87c04": {
+  "ms": 4288,
+  "speed": 1.0,
+  "text": "Send a workflow, export a file, or publish a pack. Next: backups.",
   "voice": "af_heart"
  },
  "e941f947ad27": {
@@ -1809,6 +2979,36 @@
   "ms": 5397,
   "speed": 1.0,
   "text": "Debug shows the picks behind the last picture, so you can see the prompt change from run to run.",
+  "voice": "af_heart"
+ },
+ "e9cc9667e495": {
+  "ms": 6123,
+  "speed": 1.0,
+  "text": "A Context Loop runs everything after it several times from one Run. Put it before your first Context.",
+  "voice": "af_heart"
+ },
+ "ea3ebe9d5360": {
+  "ms": 4587,
+  "speed": 1.0,
+  "text": "The answer is a card. Nothing changes until you apply it, so read it first.",
+  "voice": "af_heart"
+ },
+ "ea458bb29ba2": {
+  "ms": 4373,
+  "speed": 1.0,
+  "text": "Web tools when you want them, always after your Allow. That's the AI track.",
+  "voice": "af_heart"
+ },
+ "ecffa284bfed": {
+  "ms": 5461,
+  "speed": 1.0,
+  "text": "Say what you want. It knows this wildcard's options, so it adds new ones in the same style.",
+  "voice": "af_heart"
+ },
+ "ed0be9280add": {
+  "ms": 5035,
+  "speed": 1.0,
+  "text": "Select the second Context and the Assembler, and press Convert to subgraph in the toolbar.",
   "voice": "af_heart"
  },
  "ed33c3eb3873": {
@@ -1835,10 +3035,34 @@
   "text": "Type a template. Each dollar-sign name is replaced by what its list rolled.",
   "voice": "af_heart"
  },
+ "ef4861fe131c": {
+  "ms": 1920,
+  "speed": 1.0,
+  "text": "And Undo takes it back, any time.",
+  "voice": "af_heart"
+ },
+ "ef9c13a4ef26": {
+  "ms": 16277,
+  "speed": 1.0,
+  "text": "The simplest way to share is the workflow itself. Every row on a Context node is a copy of its item, so a saved workflow runs on another machine even with an empty library. Rows they don't have show as missing, and right-click, Save to library adds them.",
+  "voice": "af_heart"
+ },
  "f0f12a8d4482": {
   "ms": 7851,
   "speed": 1.0,
   "text": "Accepts groups also let constraints match tag for tag, and tags filter references inside wildcards. Both come next.",
+  "voice": "af_heart"
+ },
+ "f1b17e1046c9": {
+  "ms": 4160,
+  "speed": 1.0,
+  "text": "Done shows it as a panel. It never runs, and it's saved with the workflow.",
+  "voice": "af_heart"
+ },
+ "f1f63bf7fa68": {
+  "ms": 1579,
+  "speed": 1.0,
+  "text": "Run, and see what it rolls.",
   "voice": "af_heart"
  },
  "f2567cdd4908": {
@@ -1847,10 +3071,46 @@
   "text": "A Context Loop runs the workflow several times from one click. Each frame rolls its own picks.",
   "voice": "af_heart"
  },
+ "f299418696d2": {
+  "ms": 2859,
+  "speed": 1.0,
+  "text": "And the refined picks land here, each under its look.",
+  "voice": "af_heart"
+ },
  "f2d342f41fc5": {
   "ms": 5440,
   "speed": 1.0,
   "text": "Now make Colors pick two for this node: right-click it, Edit, and set the pick to exactly two.",
+  "voice": "af_heart"
+ },
+ "f2fbcce8129f": {
+  "ms": 2411,
+  "speed": 1.0,
+  "text": "The star marks a favourite. Star Hero.",
+  "voice": "af_heart"
+ },
+ "f303d1656139": {
+  "ms": 4992,
+  "speed": 1.0,
+  "text": "Only the picks go on: upscaled by one and a half and sampled again at half denoise.",
+  "voice": "af_heart"
+ },
+ "f39b73b74dd9": {
+  "ms": 6229,
+  "speed": 1.0,
+  "text": "Put Debug after any Context to see what it rolled, how, and what went wrong. Use as many as you like.",
+  "voice": "af_heart"
+ },
+ "f405cd065831": {
+  "ms": 6528,
+  "speed": 1.0,
+  "text": "Steps, warnings and labels, with links into the docs. Next: bookmarks, to jump around a big workflow.",
+  "voice": "af_heart"
+ },
+ "f4c1d3502180": {
+  "ms": 7189,
+  "speed": 1.0,
+  "text": "Raw is the whole run as data. Copy puts the open tab on the clipboard as JSON, handy for a bug report.",
   "voice": "af_heart"
  },
  "f50d114bc4b9": {
@@ -1877,16 +3137,70 @@
   "text": "Debug shows what each reference rolled.",
   "voice": "af_heart"
  },
+ "f7ef74ca1ae4": {
+  "ms": 7680,
+  "speed": 1.0,
+  "text": "Wire in as many nodes as you like. Or put the group node inside a canvas group with nothing wired, and it stands for the whole group.",
+  "voice": "af_heart"
+ },
+ "f8aec088779c": {
+  "ms": 5120,
+  "speed": 1.0,
+  "text": "And a tag, characters. Tags cut across categories, so one item can carry several.",
+  "voice": "af_heart"
+ },
+ "f8cba51bf720": {
+  "ms": 6208,
+  "speed": 1.0,
+  "text": "Keep picked sends only those on. Keep all sends everything, and Stop branch skips what's after the filter.",
+  "voice": "af_heart"
+ },
+ "f8f2a14d0471": {
+  "ms": 5227,
+  "speed": 1.0,
+  "text": "Label is a small pill with just the title. Its text shows when you hover it, pictures too.",
+  "voice": "af_heart"
+ },
  "f9a5d8143a7c": {
   "ms": 2176,
   "speed": 1.0,
   "text": "Any other time gets soft natural light.",
   "voice": "af_heart"
  },
+ "f9a787ed978a": {
+  "ms": 4373,
+  "speed": 1.0,
+  "text": "Name the pack, and pick the tool the files were written for if Detect gets it wrong.",
+  "voice": "af_heart"
+ },
  "f9ed444fa84e": {
   "ms": 3904,
   "speed": 1.0,
   "text": "This one sets style to a painting look, and it carries a negative too.",
+  "voice": "af_heart"
+ },
+ "fa2a87298e56": {
+  "ms": 8448,
+  "speed": 1.0,
+  "text": "Hero fits the place sits after Hero, so it had nothing left to steer: it never applied. A constraint goes before the items it changes.",
+  "voice": "af_heart"
+ },
+ "fa49991c84e2": {
+  "ms": 4651,
+  "speed": 1.0,
+  "text": "Open Lighting from time. Its rules show which one matched the time that was rolled.",
+  "voice": "af_heart"
+ },
+ "fb4f4aefbb79": {
+  "ms": 10731,
+  "speed": 1.0,
+  "text": "On the node, Pause and pick is the default. Reuse last picks repeats your choice without asking, and Pass all lets everything through. A timeout keeps an unattended queue moving.",
+  "voice": "af_heart"
+ },
+ "fb94ebb0bf8b": {
+  "ms": 4032,
+  "speed": 1.0,
+  "text": "Same base seed, same strategy, same batch: a loop is repeatable.",
   "voice": "af_heart"
  },
  "fbd797ce07e7": {
@@ -1901,6 +3215,24 @@
   "text": "Debug lists every variable and the option it rolled.",
   "voice": "af_heart"
  },
+ "fc7526ef1cd5": {
+  "ms": 8640,
+  "speed": 1.0,
+  "text": "The extension ships example workflows. Open Templates, then ComfyUI Wildcard Pipeline under Extensions, and pick One image.",
+  "voice": "af_heart"
+ },
+ "fc99df12b7b9": {
+  "ms": 3989,
+  "speed": 1.0,
+  "text": "The pin keeps a backup for good: pinned ones never count toward the seven.",
+  "voice": "af_heart"
+ },
+ "fce1e0a35544": {
+  "ms": 1237,
+  "speed": 1.0,
+  "text": "Undo puts it back.",
+  "voice": "af_heart"
+ },
  "fd6c1efc349f": {
   "ms": 3669,
   "speed": 1.0,
@@ -1913,6 +3245,12 @@
   "text": "Roll a few seeds: two or three colors each time.",
   "voice": "af_heart"
  },
+ "fe448d003cb4": {
+  "ms": 7659,
+  "speed": 1.0,
+  "text": "On the canvas, pick scene in a Context. Its references to creature and weather became wildcard references, so they roll too.",
+  "voice": "af_heart"
+ },
  "fe48b0868bdd": {
   "ms": 5760,
   "speed": 1.0,
@@ -1923,6 +3261,24 @@
   "ms": 7424,
   "speed": 1.0,
   "text": "Below are the details. Write tags with spaces turns blue underscore hair into blue hair, which reads better in a prompt.",
+  "voice": "af_heart"
+ },
+ "ff82b3a5997c": {
+  "ms": 4672,
+  "speed": 1.0,
+  "text": "Read the dot, hover for why, and fix it upstream. That ends the advanced track.",
+  "voice": "af_heart"
+ },
+ "ffa668bb3ec5": {
+  "ms": 8832,
+  "speed": 1.0,
+  "text": "Its page lists every item, the version, and what it needs. Install puts it in your library, and updates show up when the author publishes a new version.",
+  "voice": "af_heart"
+ },
+ "fff695fea387": {
+  "ms": 7701,
+  "speed": 1.0,
+  "text": "Three times of day by four outfits: twelve frames. The hero isn't swept, so Hold other picks keeps one hero on all of them.",
   "voice": "af_heart"
  }
 }

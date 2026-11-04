@@ -893,3 +893,82 @@ declare global {
     LiteGraph?: unknown;
   }
 }
+
+// ---- example workflows -----------------------------------------------------------------------------
+
+/**
+ * Opens one of the extension's example workflows from ComfyUI's Templates browser (Extensions ›
+ * ComfyUI-Wildcard-Pipeline) and closes the missing-model card it raises when its checkpoint isn't
+ * installed.
+ */
+export async function openExample(t: Tutor, title: string): Promise<void> {
+  const page = t.page;
+  await t.click(page.getByText("Templates", { exact: true }).first());
+  await sleep(1500);
+  const dialog = page.getByRole("dialog").last();
+  await t.click(dialog.getByText("ComfyUI-Wildcard-Pipeline", { exact: true }).first());
+  await sleep(1200);
+  await t.click(page.locator(`[data-testid="template-workflow-${title}"]`));
+  await page.waitForFunction(() => (window.app?.graph?.nodes?.length ?? 0) > 5, undefined, { timeout: 20_000 });
+  await sleep(2500);
+  const missing = page.getByRole("status").filter({ hasText: "is missing" });
+  if ((await missing.count()) > 0) {
+    await missing.first().getByRole("button").filter({ hasNotText: "View details" }).first().click().catch(() => undefined);
+    await sleep(500);
+  }
+}
+
+/** Points every Load Checkpoint at the pack's `checkpoint` (when ComfyUI has it). Returns whether it did. */
+export async function useCheckpoint(t: Tutor): Promise<boolean> {
+  const ckpt = String(t.params.checkpoint ?? "");
+  if (!ckpt) return false;
+  const info = await t.h.api("/object_info/CheckpointLoaderSimple");
+  const known = ((info.json as Record<string, { input?: { required?: { ckpt_name?: [string[]] } } }> | undefined)?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? []) as string[];
+  const strip = (s: string) => s.replace(/\.(safetensors|ckpt)$/i, "");
+  const name = known.find((k) => k === ckpt || strip(k) === strip(ckpt));
+  if (!name) return false;
+  await t.page.evaluate((n) => {
+    type W = { name: string; value: unknown };
+    const nodes = (window.app?.graph?.nodes ?? []) as unknown as { type: string; widgets?: W[] }[];
+    for (const node of nodes) {
+      if (node.type !== "CheckpointLoaderSimple") continue;
+      const w = node.widgets?.find((x) => x.name === "ckpt_name");
+      if (w) w.value = n;
+    }
+    window.app?.canvas?.setDirty(true, true);
+  }, name);
+  return true;
+}
+
+// ---- the AI assistant ------------------------------------------------------------------------------
+
+/**
+ * Waits (sped up in the video) until the assistant is done: nothing on the page says it's working for
+ * `quiet` ms. The marks are the ones the bench watches.
+ */
+export async function aiWait(t: Tutor, { quiet = 3000, timeout = 30 * 60_000, speed = 20 }: { quiet?: number; timeout?: number; speed?: number } = {}): Promise<void> {
+  await t.fastForward(async () => {
+    const busy = () =>
+      t.page
+        .evaluate(() => {
+          const shown = (e: Element) => {
+            const r = (e as HTMLElement).getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          };
+          return [...document.querySelectorAll(".wp-aiw, [aria-busy='true'], [data-test='ai-chat-live'], [data-test='ai-loading']")].some(shown);
+        })
+        .catch(() => false);
+    // The request can start a moment after the click.
+    const t0 = Date.now();
+    while (Date.now() - t0 < 15_000 && !(await busy())) await sleep(300);
+    let calm = Date.now();
+    const end = await t.h.waitUntil(
+      async () => {
+        if (await busy()) calm = Date.now();
+        return Date.now() - calm >= quiet;
+      },
+      { timeout, interval: 500, what: "the assistant to finish" },
+    );
+    if (end !== "done") throw new StepError("The assistant didn't finish.");
+  }, speed);
+}

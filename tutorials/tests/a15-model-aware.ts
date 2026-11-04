@@ -21,7 +21,7 @@ tutorial(
       const known = ((info.json as Record<string, { input?: { required?: { ckpt_name?: [string[]] } } }> | undefined)?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? []) as string[];
       const name = known.find((k) => k.replace(/\.(safetensors|ckpt)$/i, "") === ckpt.replace(/\.(safetensors|ckpt)$/i, ""));
       if (!name) throw new StepError(`The checkpoint "${ckpt}" isn't in ComfyUI's models/checkpoints.`);
-      const load = await t.addNode("Load Checkpoint", { x: 60, y: 170 });
+      const load = await t.addNode("Load Checkpoint", { x: 205, y: 170 });
       await t.page.evaluate(
         ([id, n]) => {
           const node = window.app?.graph?.getNodeById(Number(id)) as { widgets?: { name: string; value: unknown }[] } | null | undefined;
@@ -31,7 +31,7 @@ tutorial(
         [load, name] as const,
       );
       await t.beat(600);
-      const mi = await t.addNode("WP Model Info", { x: 500, y: 170 });
+      const mi = await t.addNode("WP Model Info", { x: 635, y: 170 });
       await t.wire(load, "MODEL", mi, "model");
       await t.beat(800);
       await t.waitVoice();
@@ -48,15 +48,15 @@ tutorial(
 
     await t.h.step("Rules that follow it", async () => {
       await t.say("Put it first, so every Context after it can read the model. This one runs Settings per model, which sets a size, sampler and CFG per family.");
-      const ctx = await t.addNode("WP Context", { x: 960, y: 170 });
+      const ctx = await t.addNode("WP Context", { x: 1200, y: 170 });
       await t.wire(nodes.mi, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Hero", "Settings per model"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1420, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1200, y: 600 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero, $model_family, $model_variant, $size", { cps: 16 });
       await t.beat(600);
-      const text = await t.addNode("Preview as Text", { x: 1420, y: 640 });
+      const text = await t.addNode("Preview as Text", { x: 1700, y: 600 });
       await t.wire(asm, "prompt", text, "source");
       await t.waitVoice();
       await t.say("Run it. The model loads, and the prompt shows what was read.");

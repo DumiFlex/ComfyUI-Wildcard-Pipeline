@@ -23,14 +23,14 @@ tutorial(
     const nodes = await t.h.step("Two Contexts", async () => {
       await t.go("/");
       await t.say("A big prompt reads better in parts. One Context for the character: Hero, Hair and Eyes.");
-      const a = await t.addNode("WP Context", { x: 90, y: 170 });
+      const a = await t.addNode("WP Context", { x: 340, y: 170 });
       await t.pickModules(a, ["Hero", "Hair", "Eyes"]);
       await t.waitVoice();
       await t.say("A second Context for the scene, wired into the first one's upstream: Time of day, Setting, the lighting rule and Scene line.");
-      const b = await t.addNode("WP Context", { x: 540, y: 170 });
+      const b = await t.addNode("WP Context", { x: 1000, y: 170 });
       await t.wire(a, "context", b, "upstream");
       await t.pickModules(b, ["Time of day", "Setting", "Lighting from time", "Scene line"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1000, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 170 });
       await t.wire(b, "context", asm, "context");
       await t.waitVoice();
       await t.callout("vars", t.node(asm), "Variables from both Contexts", 4);

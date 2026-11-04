@@ -24,7 +24,7 @@ tutorial(
 
     await t.h.step("Sometimes none", async () => {
       await t.go("/wp/wildcards/38c1b584/edit");
-      const nul = row(3);
+      const nul = page.locator('[data-test="wc-opt-row-null"]').first();
       await t.scrollTo(nul, { at: 0.5 });
       await t.callout("null", nul, "An empty option: no eyes this time", 6);
       await t.say("Eyes has an empty option. It rolls like the others, and when it comes up, nothing is written: a quarter of the time, no eyes at all.");

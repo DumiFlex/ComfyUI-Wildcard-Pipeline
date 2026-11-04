@@ -24,16 +24,16 @@ tutorial(
     const nodes = await t.h.step("A loop", async () => {
       await t.go("/");
       await t.say("A Context Loop runs the workflow several times from one click. Each frame rolls its own picks.");
-      const loop = await t.addNode("WP Context Loop", { x: 90, y: 170 });
-      const ctx = await t.addNode("WP Context", { x: 560, y: 170 });
+      const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
+      const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Hero", "Outfit", "Setting"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1040, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero wearing $outfit, $setting", { cps: 16 });
       await t.beat(600);
-      const text = await t.addNode("Preview as Text", { x: 1490, y: 170 });
+      const text = await t.addNode("Preview as Text", { x: 1340, y: 620 });
       await t.wire(asm, "prompt", text, "source");
       await t.waitVoice();
       await t.say("Set the count to four, and Run.");
@@ -73,13 +73,13 @@ tutorial(
     await t.h.step("Match a variable", async () => {
       await t.go("/");
       await t.say("Match goes the other way: a pick follows a variable that something else set. Here a Context Injector sets wanted time to night.");
-      const inj = await t.addNode("WP Context Injector", { x: 160, y: 170 });
+      const inj = await t.addNode("WP Context Injector", { x: 275, y: 170 });
       await t.click(t.node(inj).locator('[data-test="inj-add-general"]'));
       await t.beat(500);
       await t.fill(t.node(inj).locator('[data-test="inj-row-binding"] input').last(), "wanted_time", { cps: 14 });
       await t.press("Tab");
       await t.beat(400);
-      await t.click(t.node(inj).locator('[data-test="inj-row-summary"]').first(), { right: true });
+      await t.click(t.node(inj).locator('[data-test="inj-row-general-tag"]').last(), { right: true });
       await t.beat(500);
       await t.click(page.getByRole("menuitem", { name: "Edit" }));
       await t.beat(800);
@@ -89,10 +89,10 @@ tutorial(
       await t.click(page.locator('[data-test="ibm-save"]'));
       await t.beat(700);
       await t.waitVoice();
-      const ctx = await t.addNode("WP Context", { x: 640, y: 170 });
+      const ctx = await t.addNode("WP Context", { x: 800, y: 170 });
       await t.wire(inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Hero", "Time of day", "Lighting from time"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1350, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero at $time, $lighting", { cps: 16 });

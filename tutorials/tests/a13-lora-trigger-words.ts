@@ -17,11 +17,11 @@ tutorial(
     const nodes = await t.h.step("The trigger words", async () => {
       await t.go("/");
       await t.say("A character LoRA comes with trigger words. Put them in a text box, next to your LoRA loader.");
-      const txt = await t.addNode("Text (Multiline)", { x: 90, y: 200 });
+      const txt = await t.addNode("Text (Multiline)", { x: 270, y: 560 });
       await t.click(t.node(txt).locator("textarea").first());
       await t.type("kara_v2, short white hair, red scarf", { cps: 16 });
       await t.beat(500);
-      const inj = await t.addNode("WP Context Injector", { x: 540, y: 200 });
+      const inj = await t.addNode("WP Context Injector", { x: 275, y: 200 });
       await t.wire(txt, "STRING", inj, "input_0");
       await t.beat(600);
       await t.waitVoice();
@@ -36,7 +36,7 @@ tutorial(
       await t.fill(t.node(inj).locator('[data-test="inj-row-binding"] input').last(), "lora_character", { cps: 14 });
       await t.press("Tab");
       await t.beat(400);
-      await t.click(t.node(inj).locator('[data-test="inj-row-summary"]').last(), { right: true });
+      await t.click(t.node(inj).locator('[data-test="inj-row-general-tag"]').last(), { right: true });
       await t.beat(500);
       await t.click(page.getByRole("menuitem", { name: "Edit" }));
       await t.beat(800);
@@ -51,10 +51,10 @@ tutorial(
 
     const prev = await t.h.step("The swap", async () => {
       await t.say("Now a Context with the hero, hair and eyes, and the Character LoRA rule from the LoRA swaps bundle.");
-      const ctx = await t.addNode("WP Context", { x: 1000, y: 200 });
+      const ctx = await t.addNode("WP Context", { x: 800, y: 200 });
       await t.wire(nodes.inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Hero", "Hair", "Eyes", "Character LoRA"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1450, y: 200 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1350, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero, $hair, $eyes, in a quiet forest", { cps: 16 });
