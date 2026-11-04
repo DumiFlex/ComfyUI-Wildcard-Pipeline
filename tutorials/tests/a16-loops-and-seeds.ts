@@ -79,9 +79,14 @@ tutorial(
       await t.waitVoice();
       await t.say("Add Time of day, then Outfit.");
       for (const name of [/time/i, /outfit/i]) {
-        await t.click(modal.locator('[data-test="sweep-add"]'));
-        await t.beat(600);
-        await t.click(page.getByRole("option", { name }).first());
+        // The add list is a native drop-down: choose the option whose label matches.
+        const add = modal.locator('[data-test="sweep-add"]');
+        const select = (await add.evaluate((el) => el.tagName)) === "SELECT" ? add : add.locator("select").first();
+        const value = await select.locator("option").evaluateAll(
+          (opts, src) => (opts as HTMLOptionElement[]).find((o) => new RegExp(src, "i").test(o.text))?.value ?? "",
+          name.source,
+        );
+        await t.choose(select, value);
         await t.beat(800);
       }
       await t.callout("total", modal.locator('[data-test="sweep-total"]'), "3 times 4: twelve frames", 5);
