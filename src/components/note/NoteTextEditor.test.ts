@@ -243,3 +243,32 @@ describe("NoteMarkdown library button", () => {
     w.unmount();
   });
 });
+
+describe("NoteTextEditor pictures", () => {
+  it("inserts a shipped picture on its own line", async () => {
+    const w = make("Look:");
+    const area = w.get('[data-test="note-text"]').element as HTMLTextAreaElement;
+    area.setSelectionRange(5, 5);
+    await w.get('[data-test="note-fmt-image"]').trigger("click");
+    await w.get('[data-test="note-asset-toolbar-help"]').trigger("click");
+    expect(lastText(w)).toBe("Look:\n\n![Node toolbar with the ? help button](wp:asset/toolbar-help)");
+    w.unmount();
+  });
+
+  it("lists the note's pictures and changes their width or takes one out", async () => {
+    const w = make("A\n\n![Shot](wp:asset/toolbar-help)\n\nB");
+    await w.get('[data-test="note-fmt-image"]').trigger("click");
+    expect(w.findAll('[data-test="note-image-row"]')).toHaveLength(1);
+    await w.get('[data-test="note-image-remove"]').trigger("click");
+    expect(lastText(w)).toBe("A\n\nB");
+    w.unmount();
+  });
+
+  it("sets a picture back to its own size", async () => {
+    const w = make("![Shot](wp:asset/toolbar-help){width=40%}");
+    await w.get('[data-test="note-fmt-image"]').trigger("click");
+    await w.get('[data-test="note-image-own"]').trigger("click");
+    expect(lastText(w)).toBe("![Shot](wp:asset/toolbar-help)");
+    w.unmount();
+  });
+});

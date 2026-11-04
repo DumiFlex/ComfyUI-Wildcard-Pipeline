@@ -371,7 +371,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // with Zod, migrations, commit, reattach) from the canvas, so those land in
 // the extension build as lazy chunks that load on the press only
 // (626,405 -> 636,864 bytes).
-const TOTAL_LIMIT = 630 * 1024;     // 630 KB
+// RAISED 630 -> 640 KB on 2026-11-04 for pictures in WP Note: the
+// Pictures panel, the canvas re-encode (note-images.ts) and the picture
+// syntax ride in the note's lazy editor chunk (dev was already ~636.9 KB).
+const TOTAL_LIMIT = 640 * 1024;     // 640 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

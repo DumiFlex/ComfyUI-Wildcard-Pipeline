@@ -170,6 +170,8 @@ function inline(nodes: Inline[]): Array<VNode | string> {
       case "ref": return [chip(n.v)];
       // Never followed: the text, with the address in a tooltip.
       case "link": return [h("span", { class: "wp-ai-msg__link", title: unmark(n.href) }, inline(n.c))];
+      // Never made here (the chat parses without images); the alt text.
+      case "img": return [n.alt];
     }
   });
 }

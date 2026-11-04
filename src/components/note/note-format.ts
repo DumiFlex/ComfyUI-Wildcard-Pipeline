@@ -12,6 +12,13 @@
  *   [text](target){button pi-book #e11d48}  … in its own colour
  *   [text](target){#e11d48}        a text link in its own colour
  *   :pi-cog:  :pi-cog:{#e11d48}    a PrimeIcons glyph, optionally coloured
+ *   ![alt](wp:image/1a2b3c4d)      a picture saved in the note (pasted, dropped
+ *                                  or picked; the data lives in the workflow)
+ *   ![alt](wp:asset/toolbar-help)  a picture the extension ships
+ *   ![alt](target){width=60%}      … as wide as 60% of the note
+ *
+ * Pictures never load from a web address: anything other than those two
+ * stays as its alt text, so opening a shared workflow fetches nothing.
  *
  * The `{…}` blocks follow the attribute lists of MkDocs Material and Pandoc.
  * Pure functions: the renderer (note-markdown.ts) and the editor share them.
@@ -165,4 +172,129 @@ export function prefixLines(value: string, start: number, end: number, prefix: "
 export function insert(value: string, start: number, end: number, text: string): Edit {
   const at = start + text.length;
   return { value: value.slice(0, start) + text + value.slice(end), start: at, end: at };
+}
+
+// ── pictures ───────────────────────────────────────────────────────────
+
+/** The pictures the extension ships, served from `/wp/images/note/`. A fixed
+ *  list: a note can't name any other file. */
+export const NOTE_ASSETS: ReadonlyArray<{ id: string; label: string; file: string; w: number; h: number }> = [
+  { id: "toolbar-help", label: "Node toolbar with the ? help button", file: "toolbar-help.png", w: 610, h: 116 },
+];
+
+export type ImageTarget =
+  | { kind: "saved"; id: string }
+  | { kind: "asset"; id: string }
+  | { kind: "none" };
+
+/** Picture ids are 8 hex characters, like module ids. */
+export const IMAGE_ID_RE = /^[0-9a-f]{8}$/;
+
+export function parseImageTarget(src: string): ImageTarget {
+  const s = src.trim();
+  const saved = /^wp:image\/([0-9a-f]{8})$/i.exec(s);
+  if (saved?.[1]) return { kind: "saved", id: saved[1].toLowerCase() };
+  const asset = /^wp:asset\/([a-z0-9-]{1,64})$/i.exec(s);
+  if (asset?.[1]) {
+    const id = asset[1].toLowerCase();
+    if (NOTE_ASSETS.some((a) => a.id === id)) return { kind: "asset", id };
+  }
+  return { kind: "none" };
+}
+
+export function assetUrl(id: string, origin: string): string | null {
+  const a = NOTE_ASSETS.find((x) => x.id === id);
+  return a ? `${origin}/wp/images/note/${a.file}` : null;
+}
+
+export const IMAGE_WIDTH_MIN = 10;
+export const IMAGE_WIDTH_MAX = 100;
+
+/** A `{width=60%}` block at the start of the text after a picture. Width in
+ *  percent of the note (10–100), so the picture follows the note's width
+ *  and never makes it wider. */
+export function readImageAttrs(after: string): { width: number; length: number } | null {
+  const m = /^\{\s*width\s*=\s*(\d{1,3})\s*%\s*\}/i.exec(after);
+  if (!m?.[1]) return null;
+  return { width: clampWidth(Number(m[1])), length: m[0].length };
+}
+
+export function clampWidth(w: number): number {
+  if (!Number.isFinite(w)) return IMAGE_WIDTH_MAX;
+  return Math.min(IMAGE_WIDTH_MAX, Math.max(IMAGE_WIDTH_MIN, Math.round(w)));
+}
+
+/** The Markdown for a picture. Brackets in the alt text become parentheses
+ *  (the parser ends it at the first `]`). No width: as wide as it is, up to
+ *  the note's width. */
+export function imageMarkdown(alt: string, target: string, width: number | null = null): string {
+  const a = alt.replace(/\[/g, "(").replace(/\]/g, ")").replace(/\n+/g, " ").trim();
+  return `![${a}](${target})${width === null ? "" : `{width=${clampWidth(width)}%}`}`;
+}
+
+export function savedImageTarget(id: string): string {
+  return `wp:image/${id}`;
+}
+
+export function assetImageTarget(id: string): string {
+  return `wp:asset/${id}`;
+}
+
+/** One picture written in the text: where its Markdown sits, so the editor
+ *  can change its width or take it out. */
+export interface ImageRef {
+  start: number;
+  end: number;
+  alt: string;
+  target: ImageTarget;
+  src: string;
+  width: number | null;
+}
+
+const IMAGE_SRC_RE = /!\[([^\]\n]*)\]\((wp:(?:image|asset)\/[A-Za-z0-9-]{1,64})\)(\{\s*width\s*=\s*\d{1,3}\s*%\s*\})?/g;
+
+/** Every `wp:` picture in the text, in order. (Code spans aren't skipped: a
+ *  picture written in backticks still counts, which only keeps its data.) */
+export function findImages(text: string): ImageRef[] {
+  const out: ImageRef[] = [];
+  for (const m of text.matchAll(IMAGE_SRC_RE)) {
+    const at = m.index ?? 0;
+    const src = m[2] ?? "";
+    out.push({
+      start: at,
+      end: at + m[0].length,
+      alt: m[1] ?? "",
+      src,
+      target: parseImageTarget(src),
+      width: m[3] ? readImageAttrs(m[3])?.width ?? null : null,
+    });
+  }
+  return out;
+}
+
+/** The text with one picture's width set (null: its own size). */
+export function setImageWidth(text: string, ref: ImageRef, width: number | null): string {
+  return text.slice(0, ref.start) + imageMarkdown(ref.alt, ref.src, width) + text.slice(ref.end);
+}
+
+/** The text with one picture taken out (and a line it leaves empty). */
+export function removeImage(text: string, ref: ImageRef): string {
+  let start = ref.start;
+  let end = ref.end;
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  const nl = text.indexOf("\n", end);
+  const lineEnd = nl === -1 ? text.length : nl;
+  if (!text.slice(lineStart, start).trim() && !text.slice(end, lineEnd).trim()) {
+    start = lineStart;
+    end = nl === -1 ? lineEnd : lineEnd + 1;
+    if (nl === -1 && start > 0) start--;
+  }
+  // No run of blank lines left where it was.
+  const head = text.slice(0, start);
+  const tail = text.slice(end);
+  const m = /\n*$/.exec(head);
+  const n = /^\n*/.exec(tail);
+  const lines = (m?.[0].length ?? 0) + (n?.[0].length ?? 0);
+  if (lines > 2) return head.replace(/\n*$/, "") + (head.trim() && tail.trim() ? "\n\n" : "") + tail.replace(/^\n*/, "");
+  return head + tail;
 }

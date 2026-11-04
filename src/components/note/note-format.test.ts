@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  communityTarget, libraryTarget,
+  communityTarget, libraryTarget, findImages, imageMarkdown, parseImageTarget, readImageAttrs, removeImage, setImageWidth,
   docsTarget, iconMarkdown, insert, linkMarkdown, parseTarget, prefixLines, readLinkAttrs, splitIcons, targetUrl, wrap,
 } from "./note-format";
 
@@ -103,5 +103,34 @@ describe("toolbar edits", () => {
 
   it("inserts in place of the selection, caret after it", () => {
     expect(insert("a b", 1, 2, ":pi-cog:")).toEqual({ value: "a:pi-cog:b", start: 9, end: 9 });
+  });
+});
+
+describe("note pictures syntax", () => {
+  it("reads only our two picture kinds", () => {
+    expect(parseImageTarget("wp:image/1A2B3C4D")).toEqual({ kind: "saved", id: "1a2b3c4d" });
+    expect(parseImageTarget("wp:asset/toolbar-help")).toEqual({ kind: "asset", id: "toolbar-help" });
+    expect(parseImageTarget("wp:asset/../etc")).toEqual({ kind: "none" });
+    expect(parseImageTarget("wp:asset/other")).toEqual({ kind: "none" });
+    expect(parseImageTarget("https://x.test/a.png")).toEqual({ kind: "none" });
+  });
+
+  it("reads and clamps a width block", () => {
+    expect(readImageAttrs("{width=60%} rest")).toEqual({ width: 60, length: 11 });
+    expect(readImageAttrs("{ width = 400 % }")?.width).toBe(100);
+    expect(readImageAttrs("{width=2%}")?.width).toBe(10);
+    expect(readImageAttrs("{width=60px}")).toBeNull();
+  });
+
+  it("finds pictures and changes or removes one", () => {
+    const text = "Intro\n\n![A](wp:image/1a2b3c4d)\n\nmore ![B](wp:asset/toolbar-help){width=50%}";
+    const refs = findImages(text);
+    expect(refs.map((r) => [r.alt, r.width, r.target.kind])).toEqual([["A", null, "saved"], ["B", 50, "asset"]]);
+    const [a, b] = refs;
+    if (!a || !b) throw new Error("no refs");
+    expect(setImageWidth(text, b, 75)).toContain("![B](wp:asset/toolbar-help){width=75%}");
+    expect(setImageWidth(text, b, null)).toMatch(/!\[B\]\(wp:asset\/toolbar-help\)$/);
+    expect(removeImage(text, a)).toBe("Intro\n\nmore ![B](wp:asset/toolbar-help){width=50%}");
+    expect(imageMarkdown("a [b]\nc", "wp:image/1a2b3c4d", 30)).toBe("![a (b) c](wp:image/1a2b3c4d){width=30%}");
   });
 });

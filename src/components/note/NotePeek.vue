@@ -51,7 +51,7 @@ const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP
   >
     <div v-if="hasTitle" class="wp-note-peek__title">{{ title }}</div>
     <div class="wp-note-peek__body">
-      <NoteMarkdown v-if="config.text.trim()" :text="config.text" />
+      <NoteMarkdown v-if="config.text.trim()" :text="config.text" :images="config.images" />
       <p v-else class="wp-note-peek__empty">No text yet.</p>
     </div>
     <div class="wp-note-peek__actions">
