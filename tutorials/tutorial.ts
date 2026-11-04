@@ -447,8 +447,17 @@ export class Tutor {
    */
   async addNode(search: string, at: Point): Promise<string> {
     const before = new Set(await this.nodeIds());
+    // The search box opens on a double click on empty canvas; when the click is taken for something
+    // else (a click just before it), try once more rather than typing into the canvas.
+    const searchOpen = () => this.page.evaluate(() => document.activeElement?.tagName === "INPUT");
     await this.click(at, { double: true });
     await sleep(500);
+    if (!(await searchOpen())) {
+      await sleep(600);
+      await this.click(at, { double: true });
+      await sleep(600);
+      if (!(await searchOpen())) throw new StepError(`The node search didn't open at ${Math.round(at.x)}, ${Math.round(at.y)}.`);
+    }
     await this.type(search, { cps: 16 });
     await sleep(700);
     await this.press("Enter");
@@ -559,6 +568,21 @@ export async function addDebugUnder(t: Tutor, ctxId: string): Promise<string> {
   const below = box ? box.y + box.height + 40 : 600;
   const y = Math.min(below + 100, view.height - 320);
   const dbg = await t.addNode("WP Debug", { x, y });
+  // Snug under the Context (the drop point centres it, which can leave a gap or overlap).
+  await t.page.evaluate(
+    ({ ctxId, dbg }) => {
+      type N = { pos: [number, number]; size: [number, number] };
+      const app = window.app as unknown as { graph: { getNodeById(id: string | number): N | null }; canvas: { setDirty(a: boolean, b: boolean): void } };
+      const get = (id: string) => app.graph.getNodeById(id) ?? app.graph.getNodeById(Number(id));
+      const c = get(ctxId);
+      const d = get(dbg);
+      if (!c || !d) return;
+      d.pos = [c.pos[0], c.pos[1] + c.size[1] + 70];
+      app.canvas.setDirty(true, true);
+    },
+    { ctxId, dbg },
+  );
+  await sleep(300);
   await t.wire(ctxId, "context", dbg, "context");
   t.debugId = dbg;
   await fitDebug(t);
@@ -578,7 +602,7 @@ export async function fitDebug(t: Tutor): Promise<void> {
       const app = window.app as unknown as { graph: { getNodeById(id: string | number): { size: [number, number] } | null }; canvas: { ds: { scale: number }; setDirty(a: boolean, b: boolean): void } };
       const n = app.graph.getNodeById(id) ?? app.graph.getNodeById(Number(id));
       if (!n) return;
-      n.size = [n.size[0], Math.max(160, room / app.canvas.ds.scale - 30)];
+      n.size = [n.size[0], Math.max(130, room / app.canvas.ds.scale - 30)];
       app.canvas.setDirty(true, true);
     },
     { id: dbg, room },

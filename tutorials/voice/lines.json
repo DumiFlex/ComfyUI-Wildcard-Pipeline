@@ -467,6 +467,12 @@
   "text": "Wildcard Pipeline adds a button to ComfyUI's top bar. It opens the manager, where your library lives.",
   "voice": "af_heart"
  },
+ "9ec5a72ea990": {
+  "ms": 8661,
+  "speed": 1.0,
+  "text": "Randomize gives every run a new seed. Fixed keeps the same one, and plus one steps through seeds in order, so you can come back to any of them.",
+  "voice": "af_heart"
+ },
  "9f69ea64d8b9": {
   "ms": 3093,
   "speed": 1.0,
@@ -495,6 +501,12 @@
   "ms": 2560,
   "speed": 1.0,
   "text": "Here's what those prompts make, run through a model.",
+  "voice": "af_heart"
+ },
+ "a97c81877530": {
+  "ms": 2816,
+  "speed": 1.0,
+  "text": "Pick Randomize, so every run rolls something new.",
   "voice": "af_heart"
  },
  "a99e66d4c58c": {

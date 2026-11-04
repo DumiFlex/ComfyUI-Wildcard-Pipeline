@@ -24,7 +24,7 @@ tutorial(
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero wearing $outfit, in $setting");
       await t.beat(800);
-      const mode = t.node(ctx).getByRole("button", { name: "Randomize Value" }).first();
+      const mode = t.node(ctx).getByRole("button", { name: /^(Randomize|Fixed|Increment|Decrement) Value$/ }).first();
       await t.callout("mode", mode, "What happens after a run", 6);
       await t.say("This button sets what the seed does after each run.");
       await t.waitVoice();
@@ -33,9 +33,12 @@ tutorial(
       await t.beat(700);
       const choices = page.getByRole("radiogroup").last();
       await t.callout("choices", choices, "Fixed, +1, −1 or Randomize", 6);
-      await t.say("Randomize, the default, gives every run a new seed. Fixed keeps the same one, and plus one steps through seeds in order, so you can come back to any of them.");
+      await t.say("Randomize gives every run a new seed. Fixed keeps the same one, and plus one steps through seeds in order, so you can come back to any of them.");
       await t.waitVoice();
       await t.uncallout("choices");
+      await t.say("Pick Randomize, so every run rolls something new.");
+      await t.click(page.locator('label[for$="-randomize"]').last());
+      await t.beat(500);
       // Escape doesn't close this popover; a click on empty canvas does.
       await t.click({ x: 960, y: 860 });
       await t.beat(400);
