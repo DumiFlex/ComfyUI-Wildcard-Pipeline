@@ -20,8 +20,19 @@ After the take, `render.mjs` adds a text-to-speech voice and writes the finished
 ## Make a video
 
 1. **Voice.** Run `pip install kokoro-onnx soundfile` once, then `python tutorials/voice/speak.py`. The first run downloads the model (~350 MB) into `voice/models/`. It speaks only lines that are new or changed. `--voice` picks another voice (`af_heart` is the default; others are `af_bella`, `am_michael`, `bf_emma` and `bm_george`). Run it before recording, because each line's length decides how long the hands wait for the voice.
-2. **Record.** Start ComfyUI with this extension on port 8189. Add this folder as a pack in Watchwright, then start a run with the tutorials you want. Each take's video and `files/cues.json` land in its attempt folder.
+2. **Record.** Start ComfyUI with this extension on port 8189, or a clean one (see below). Add this folder as a pack in Watchwright, then start a run with the tutorials you want. Each take's video and `files/cues.json` land in its attempt folder.
 3. **Render.** Run `node tutorials/render.mjs <attempt folder>`. It needs a full ffmpeg with libx264 and aac on `PATH` (or pass `--ffmpeg <path>`); Playwright's own ffmpeg can't do it. The finished files go to `tutorials/out/`.
+
+### Record on a clean ComfyUI
+
+Other custom nodes add their own buttons, menus, badges and node colours to the canvas, and some change how it behaves, so the videos look different for everyone. Record on a second ComfyUI that loads only this extension. It uses the same install and models, but its own user folder, so its settings, open tabs and library are separate from the ComfyUI you work in. Your own ComfyUI keeps running.
+
+```bash
+# from the ComfyUI folder; the user folder must already exist; any empty folder will do
+python main.py --port 8190 --disable-all-custom-nodes --whitelist-custom-nodes ComfyUI-Wildcard-Pipeline --user-directory <empty folder>
+```
+
+The whitelist name is the extension's folder name in `custom_nodes`. Then start Watchwright with `WP_TUTORIALS_URL=http://127.0.0.1:8190/wp/` in its environment, so the pack records that ComfyUI instead of the one on 8189.
 
 The pack's `reset` setting (on by default) loads `library.json` before the first tutorial, so every take shows the same items. Your library is backed up first and put back when the run ends, the same way the bench packs do it (see `../bench/README.md` › Putting your library back).
 
