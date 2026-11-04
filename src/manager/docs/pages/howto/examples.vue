@@ -13,7 +13,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
     title="Start from an example"
     icon="pi pi-th-large"
     tone="neutral"
-    blurb="Three ready-made workflows that run on an empty library, with notes that walk you through each step."
+    blurb="Four ready-made workflows that run on an empty library, with notes that walk you through each step."
   >
     <DocSection title="Open one">
       <p>
@@ -27,18 +27,43 @@ import VarToken from "../../../components/docs/VarToken.vue";
           the trigger words from the Context Injector into the prompt, and another switches the
           group that reads the image size, sampler and CFG from the loaded model (a Mode Relay
           passes it on to a Node Group).</li>
-        <li><b>2 - Batches and grids</b>: a WP Context Loop sweeps every outfit against every time of
-          day, a second Assembler writes the labels and WP Label &amp; Grid lays the images out as
+        <li><b>2 - Batches and grids</b>: a WP Context Loop sweeps three lenses against three
+          lights on one held person, a second Assembler writes the labels and WP Label &amp; Grid lays the images out as
           an XY plot. WP Toggles in Pick one mode chooses Quick or Full: its value sets the steps
           through WP Var → Int, and WP Var → Bool picks a smaller image for Quick.</li>
-        <li><b>3 - Pick and refine</b>: four drafts, a pause at WP Image Filter to pick the keepers,
-          then an upscale and a second pass on the picks only.</li>
+        <li><b>3 - Pick and refine</b>: four drafts of one held person, a pause at WP Image Filter
+          to pick the keepers, then an upscale and a second pass on the picks only.</li>
+        <li><b>4 - Sets and stories</b>: one loop, three ways, each in its own canvas group. WP
+          Toggles in Pick one mode mutes the groups you didn't pick. <i>Every frame different</i>
+          rolls everything again each frame; <i>Photo shoot</i> holds the person, outfit, place and
+          light and gives each frame its own shot; <i>Storyboard</i> holds a story and writes each
+          frame's beat with a derivation on <VarToken>$story</VarToken> and
+          <VarToken>$iteration</VarToken>. Each group pauses at WP Image Filter so you pick the
+          frames that go on the Label &amp; Grid sheet.</li>
       </ul>
       <p>
         A <b>Start here</b> note lists the steps and links to these docs, the Discord and the
         Community. Notes on the canvas explain each step, with links to the docs and to outside
         guides and checkpoints. The notes that open a step are also bookmarks that frame their
         whole group: the <b>Bookmarks</b> dock lists them, and Alt+1, Alt+2… jump between them.
+      </p>
+    </DocSection>
+
+    <DocSection title="The packs">
+      <p>
+        All four share one family of photorealistic packs, each a bundle with sub-bundles:
+        <b>Person</b> (gender, age, heritage, build, skin, hair, eyes, makeup or facial hair),
+        <b>Location</b> (place and time of day), <b>Wardrobe</b> (an outfit that fits the place,
+        with shoes it accepts), <b>Light</b>, <b>Camera</b> (shot, angle, lens, film look) and
+        <b>Direction</b> (pose and expression). Constraints keep them coherent: the place picks
+        the time and the light, the shot picks the lens and leaves out poses it can't see.
+      </p>
+      <p>
+        <b>Render</b> reads <VarToken>$model_variant</VarToken> and
+        <VarToken>$model_family</VarToken> from WP Model Info and writes the head,
+        tail and negative for the loaded model: Pony's score tags, Illustrious quality tags, a
+        plain sentence for Flux and other sentence models, or the realistic SDXL words when it
+        can't tell.
       </p>
     </DocSection>
 

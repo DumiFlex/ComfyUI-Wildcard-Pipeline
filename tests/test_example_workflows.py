@@ -59,8 +59,11 @@ def _json_value(values: list[Any], key: str) -> str:
 class Graph:
     """Runs the WP nodes of a saved (UI-format) workflow, frame by frame."""
 
-    def __init__(self, wf: dict[str, Any], toggles_on: bool = False):
+    def __init__(self, wf: dict[str, Any], toggles_on: bool = False, unmute: bool = False):
         self.toggles_on = toggles_on
+        # Muted groups are the modes a Pick one toggle switched off; with
+        # `unmute` they run too, so every mode gets checked.
+        self.unmute = unmute
         self.nodes = {n["id"]: n for n in wf["nodes"]}
         self.links = {link[0]: link for link in wf["links"]}
         self.frame: Any = None
@@ -86,6 +89,8 @@ class Graph:
 
     def _run(self, node: dict[str, Any], slot: int) -> Any:
         t, wv, mode = node["type"], node.get("widgets_values") or [], node.get("mode", 0)
+        if mode == MUTE and self.unmute:
+            mode = 0
         if mode == MUTE:
             return None
         if mode == BYPASS:
@@ -94,6 +99,9 @@ class Graph:
             return self.input(node, "upstream") if t.startswith("WP_Context") else None
         if t == "WP_ContextLoop":
             return self.frame if slot == 0 else None
+        if t == "WP_ModelInfo":
+            # No model here: it hands its upstream on, as with no model wired.
+            return self.input(node, "upstream")
         if t == "WP_Context":
             out = WPContext.execute(
                 wv[0], _json_value(wv, "modules"), upstream=self.input(node, "upstream"),
@@ -131,12 +139,47 @@ class Graph:
             return wv[0]
         return None  # Model loaders, samplers, images: not ours to run here.
 
-    def frames(self) -> list[Any]:
-        loops = [n for n in self.nodes.values() if n["type"] == "WP_ContextLoop"]
+    def loops(self) -> list[dict[str, Any]]:
+        return [n for n in self.nodes.values() if n["type"] == "WP_ContextLoop"]
+
+    def frames(self, loop: dict[str, Any] | None = None) -> list[Any]:
+        loops = self.loops()
         if not loops:
             return [None]
-        wv = loops[0]["widgets_values"]
+        wv = (loop or loops[0])["widgets_values"]
         return WPContextLoop.execute([wv[0]], [wv[2]], [_json_value(wv, "strategy")]).values[0]
+
+    def downstream(self, start: dict[str, Any]) -> set[int]:
+        """Ids of every node fed, directly or not, by `start`."""
+        seen: set[int] = set()
+        todo = [start["id"]]
+        while todo:
+            nid = todo.pop()
+            for link in self.links.values():
+                if link[1] == nid and link[3] not in seen:
+                    seen.add(link[3])
+                    todo.append(link[3])
+        return seen
+
+    def per_loop(self) -> list[tuple[dict[str, Any] | None, list[dict[str, Any]]]]:
+        """Each loop (or None) with the active Prompt Assemblers it feeds."""
+        asms = [
+            n for n in self.nodes.values() if n["type"] == "WP_PromptAssembler"
+            and (n.get("mode", 0) == 0 or (self.unmute and n.get("mode") == MUTE))
+        ]
+        loops = self.loops()
+        if len(loops) <= 1:
+            return [(loops[0] if loops else None, asms)]
+        return [(lp, [a for a in asms if a["id"] in self.downstream(lp)]) for lp in loops]
+
+    def run_frames(
+        self, loop: dict[str, Any] | None, node: dict[str, Any], slot: int = 0,
+    ) -> list[Any]:
+        out = []
+        for frame in self.frames(loop) if loop else [None]:
+            self.frame, self.cache = frame, {}
+            out.append(self.output(node, slot))
+        return out
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -168,18 +211,18 @@ def test_embedded_rows_are_engine_valid(path: Path):
 @pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.stem)
 def test_runs_on_an_empty_library_without_warnings(path: Path):
     wf = _load(path)
-    graph = Graph(wf)
-    assemblers = [
-        n for n in wf["nodes"] if n["type"] == "WP_PromptAssembler" and n.get("mode", 0) == 0
-    ]
-    assert assemblers
-    for frame in graph.frames():
-        graph.frame, graph.cache = frame, {}
-        for asm in assemblers:
-            assert graph.output(asm, 0).strip(), f"{asm.get('title')} printed nothing"
-        for node in wf["nodes"]:
-            if node["type"] == "WP_PromptCleaner" or node["type"] in VAR_NODES:
-                graph.output(node, 0)
+    graph = Graph(wf, unmute=True)
+    groups = graph.per_loop()
+    assert any(asms for _, asms in groups)
+    for loop, assemblers in groups:
+        assert assemblers, f"loop {loop and loop['id']} feeds no Prompt Assembler"
+        for frame in graph.frames(loop) if loop else [None]:
+            graph.frame, graph.cache = frame, {}
+            for asm in assemblers:
+                assert graph.output(asm, 0).strip(), f"{asm.get('title')} printed nothing"
+            for node in wf["nodes"]:
+                if node["type"] == "WP_PromptCleaner" or node["type"] in VAR_NODES:
+                    graph.output(node, 0)
     bad = [w for w in graph.warnings if w.get("severity") in ("warn", "warning", "error")]
     assert not bad, bad
 
@@ -199,3 +242,45 @@ def test_lora_toggles_swap_in_the_trigger_words():
 def test_every_wp_node_is_in_an_example():
     seen = {n["type"] for p in EXAMPLES for n in _load(p)["nodes"]}
     assert ALL_WP_NODES <= seen, sorted(ALL_WP_NODES - seen)
+
+
+def _sets_and_stories() -> tuple[Graph, dict[str, tuple[dict[str, Any], dict[str, Any]]]]:
+    """The Sets and stories workflow: each group's loop, prompt and labels."""
+    path = next(p for p in EXAMPLES if p.stem.startswith("4 "))
+    wf = _load(path)
+    graph = Graph(wf, unmute=True)
+    titled = {n["title"]: n for n in wf["nodes"] if n.get("title")}
+    out = {}
+    for group in wf["groups"]:
+        x, y, w, h = group["bounding"]
+        inside = [
+            n for n in wf["nodes"] if x <= n["pos"][0] <= x + w and y <= n["pos"][1] <= y + h
+        ]
+        loop = next(n for n in inside if n["type"] == "WP_ContextLoop")
+        asm = next(n for n in inside if n["type"] == "WP_PromptAssembler" and not n.get("title"))
+        out[group["title"]] = (loop, asm)
+    assert titled["WP Toggles · pick a mode"]
+    return graph, out
+
+
+def _subject(prompt: str) -> str:
+    return prompt.split(" photo of ", 1)[1].split(",", 1)[0]
+
+
+def test_sets_and_stories_modes_hold_what_they_say():
+    graph, groups = _sets_and_stories()
+    loop, asm = groups["Every frame different"]
+    random_people = {_subject(p) for p in graph.run_frames(loop, asm)}
+    assert len(random_people) > 3, random_people
+
+    loop, asm = groups["Photo shoot"]
+    shots = graph.run_frames(loop, asm)
+    assert len({_subject(p) for p in shots}) == 1, shots
+    order = ["wide environmental", "full-body", "three-quarter length", "waist-up",
+             "head-and-shoulders", "close-up portrait"]
+    assert [next(s for s in order if f" {s} photo of" in p) for p in shots] == order
+
+    loop, asm = groups["Storyboard"]
+    beats = graph.run_frames(loop, asm)
+    assert len({_subject(p) for p in beats}) == 1, beats
+    assert len(set(beats)) == len(beats)

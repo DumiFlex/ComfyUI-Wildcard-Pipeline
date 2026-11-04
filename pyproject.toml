@@ -73,6 +73,11 @@ extend-exclude = ["js", "web", "node_modules"]
 select = ["E", "F", "I", "UP", "B"]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+# The example packs are data written as code: long option strings, and `O`
+# reads as "option" there.
+"scripts/example_workflows/*" = ["E501", "E742"]
+
 [tool.pyright]
 # conftest.py prepends the project root to sys.path; mirror that for Pyright
 # so `from engine.template import ...` resolves in tests and editor.

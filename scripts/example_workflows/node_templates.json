@@ -1,0 +1,1628 @@
+{
+ "WP_Note": {
+  "type": "WP_Note",
+  "size": [
+   620,
+   453
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [],
+  "outputs": [],
+  "properties": {},
+  "widgets_values": [
+   "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### One image, step by step\\n\\nEvery run rolls a new character and scene from the lists in the two **WP Context** nodes, writes the prompt and makes one image. Nothing has to be in your library: the lists come with this workflow.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `Alt+1` | Pick the character |\\n| `Alt+2` | Write the prompt |\\n| `Alt+3` | Pick a checkpoint and run |\\n| `Alt+4` | LoRAs and switches (optional) |\\n| `Alt+5` | Settings from the model (optional) |\\n| `Alt+6` | The image |\\n\\n:pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\\n\\n:pi-lightbulb:{#22c55e} New to ComfyUI? [ComfyUI's first-image guide](https://docs.comfy.org/tutorials/basic/text-to-image){button pi-external-link #eab308}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": null}"
+  ],
+  "widgets_values_named": {
+   "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### One image, step by step\\n\\nEvery run rolls a new character and scene from the lists in the two **WP Context** nodes, writes the prompt and makes one image. Nothing has to be in your library: the lists come with this workflow.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `Alt+1` | Pick the character |\\n| `Alt+2` | Write the prompt |\\n| `Alt+3` | Pick a checkpoint and run |\\n| `Alt+4` | LoRAs and switches (optional) |\\n| `Alt+5` | Settings from the model (optional) |\\n| `Alt+6` | The image |\\n\\n:pi-bookmark: Jump with the keys or the **Bookmarks** dock (top bar).\\n\\n:pi-lightbulb:{#22c55e} New to ComfyUI? [ComfyUI's first-image guide](https://docs.comfy.org/tutorials/basic/text-to-image){button pi-external-link #eab308}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": null}"
+  }
+ },
+ "WP_Context": {
+  "type": "WP_Context",
+  "size": [
+   540,
+   550
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "upstream",
+    "name": "upstream",
+    "shape": 7,
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "seed",
+    "name": "seed",
+    "type": "INT",
+    "widget": {
+     "name": "seed"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_Context"
+  },
+  "widgets_values": [
+   1,
+   "randomize",
+   "{\"version\": 1, \"modules\": [{\"id\": \"808878ba\", \"_uid\": \"8239dc1982bc\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hero\", \"library_name\": \"Hero\", \"description\": \"Who the picture is about. The tags drive the Scene constraint.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hero\", \"sub_categories\": [\"noble\", \"wild\", \"urban\"], \"options\": [{\"id\": \"c8fc80d0\", \"value\": \"a knight\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"c243437e\", \"value\": \"a court mage\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"784f4138\", \"value\": \"a forest ranger\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"e291d944\", \"value\": \"a desert nomad\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"dd612ba4\", \"value\": \"a street thief\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"422b5317\", \"value\": \"an inventor\", \"weight\": 1, \"sub_categories\": [\"urban\"]}]}, \"payload_hash\": \"25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed\", \"example\": true, \"bundle_origin\": \"55b935057561\"}, {\"id\": \"4facf8ce\", \"_uid\": \"577abb1b962f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hair\", \"library_name\": \"Hair\", \"description\": \"Uses the Colors list through an @{} reference.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair\", \"sub_categories\": [], \"options\": [{\"id\": \"a3ff1986\", \"value\": \"short @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6d04f1d\", \"value\": \"long braided @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"28356404\", \"value\": \"messy @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5e455e15\", \"value\": \"a shaved head\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"38c1b584\", \"_uid\": \"8c7312010704\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Eyes\", \"library_name\": \"Eyes\", \"description\": \"Has an empty option: sometimes the eyes aren't mentioned.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"eyes\", \"sub_categories\": [], \"options\": [{\"id\": \"fdffc693\", \"value\": \"@{bc15a82d#Colors} eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c6e9202c\", \"value\": \"piercing eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"8313f6dc\", \"value\": \"tired eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d8dda0e3\", \"value\": \"\", \"weight\": 1, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"195238e2\", \"_uid\": \"587d500e2a44\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Outfit\", \"library_name\": \"Outfit\", \"description\": \"Options carry negative words; the tunic is the fallback.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"outfit\", \"sub_categories\": [\"armor\", \"travel\", \"formal\"], \"options\": [{\"id\": \"72f8e1d7\", \"value\": \"polished plate armor\", \"weight\": 1, \"sub_categories\": [\"armor\"], \"negative\": \"rust, broken armor\"}, {\"id\": \"b553cc92\", \"value\": \"a hooded leather coat\", \"weight\": 1, \"sub_categories\": [\"travel\"]}, {\"id\": \"1955f005\", \"value\": \"a flowing robe with gold trim\", \"weight\": 1, \"sub_categories\": [\"formal\"]}, {\"id\": \"9f7a6c18\", \"value\": \"a patched linen tunic\", \"weight\": 1, \"sub_categories\": [\"travel\"], \"fallback\": true}]}, \"payload_hash\": \"3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755\", \"example\": true, \"bundle_origin\": \"5db12ff2afae\"}, {\"id\": \"bc15a82d\", \"_uid\": \"67b4876b270e\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Colors\", \"library_name\": \"Colors\", \"description\": \"Switched off: only read through @{} references.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"color\", \"sub_categories\": [], \"options\": [{\"id\": \"7d1e78ef\", \"value\": \"auburn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6c3528de\", \"value\": \"silver\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6eda3f2\", \"value\": \"jet black\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"645b75a6\", \"value\": \"copper\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c7331bc4\", \"value\": \"pale blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5693e178\", \"value\": \"emerald\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77\", \"example\": true, \"bundle_origin\": \"86b8e329b2aa\"}], \"bundles\": [{\"_uid\": \"55b935057561\", \"library_id\": \"7e3d3ec2\", \"start_idx\": 0, \"end_idx\": 4, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Character\", \"color\": \"#4f8cff\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"b5d51fd04042\", \"library_id\": \"37af0127\", \"start_idx\": 1, \"end_idx\": 2, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Look\", \"color\": \"#9b6bff\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"5db12ff2afae\", \"library_id\": \"b748104b\", \"start_idx\": 3, \"end_idx\": 3, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Outfit\", \"color\": \"#e0a030\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"86b8e329b2aa\", \"library_id\": \"805bdfa4\", \"start_idx\": 4, \"end_idx\": 4, \"enabled\": false, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Shared lists\", \"color\": \"#7a7f8a\", \"parent_uid\": \"55b935057561\", \"example\": true}]}"
+  ],
+  "widgets_values_named": {
+   "seed": 1,
+   "control_after_generate": "randomize",
+   "wp_modules": "{\"version\": 1, \"modules\": [{\"id\": \"808878ba\", \"_uid\": \"8239dc1982bc\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hero\", \"library_name\": \"Hero\", \"description\": \"Who the picture is about. The tags drive the Scene constraint.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hero\", \"sub_categories\": [\"noble\", \"wild\", \"urban\"], \"options\": [{\"id\": \"c8fc80d0\", \"value\": \"a knight\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"c243437e\", \"value\": \"a court mage\", \"weight\": 1, \"sub_categories\": [\"noble\"]}, {\"id\": \"784f4138\", \"value\": \"a forest ranger\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"e291d944\", \"value\": \"a desert nomad\", \"weight\": 1, \"sub_categories\": [\"wild\"]}, {\"id\": \"dd612ba4\", \"value\": \"a street thief\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"422b5317\", \"value\": \"an inventor\", \"weight\": 1, \"sub_categories\": [\"urban\"]}]}, \"payload_hash\": \"25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed\", \"example\": true, \"bundle_origin\": \"55b935057561\"}, {\"id\": \"4facf8ce\", \"_uid\": \"577abb1b962f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hair\", \"library_name\": \"Hair\", \"description\": \"Uses the Colors list through an @{} reference.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair\", \"sub_categories\": [], \"options\": [{\"id\": \"a3ff1986\", \"value\": \"short @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6d04f1d\", \"value\": \"long braided @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"28356404\", \"value\": \"messy @{bc15a82d#Colors} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5e455e15\", \"value\": \"a shaved head\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"38c1b584\", \"_uid\": \"8c7312010704\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Eyes\", \"library_name\": \"Eyes\", \"description\": \"Has an empty option: sometimes the eyes aren't mentioned.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"eyes\", \"sub_categories\": [], \"options\": [{\"id\": \"fdffc693\", \"value\": \"@{bc15a82d#Colors} eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c6e9202c\", \"value\": \"piercing eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"8313f6dc\", \"value\": \"tired eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d8dda0e3\", \"value\": \"\", \"weight\": 1, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0\", \"example\": true, \"bundle_origin\": \"b5d51fd04042\"}, {\"id\": \"195238e2\", \"_uid\": \"587d500e2a44\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Outfit\", \"library_name\": \"Outfit\", \"description\": \"Options carry negative words; the tunic is the fallback.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"outfit\", \"sub_categories\": [\"armor\", \"travel\", \"formal\"], \"options\": [{\"id\": \"72f8e1d7\", \"value\": \"polished plate armor\", \"weight\": 1, \"sub_categories\": [\"armor\"], \"negative\": \"rust, broken armor\"}, {\"id\": \"b553cc92\", \"value\": \"a hooded leather coat\", \"weight\": 1, \"sub_categories\": [\"travel\"]}, {\"id\": \"1955f005\", \"value\": \"a flowing robe with gold trim\", \"weight\": 1, \"sub_categories\": [\"formal\"]}, {\"id\": \"9f7a6c18\", \"value\": \"a patched linen tunic\", \"weight\": 1, \"sub_categories\": [\"travel\"], \"fallback\": true}]}, \"payload_hash\": \"3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755\", \"example\": true, \"bundle_origin\": \"5db12ff2afae\"}, {\"id\": \"bc15a82d\", \"_uid\": \"67b4876b270e\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Colors\", \"library_name\": \"Colors\", \"description\": \"Switched off: only read through @{} references.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"color\", \"sub_categories\": [], \"options\": [{\"id\": \"7d1e78ef\", \"value\": \"auburn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6c3528de\", \"value\": \"silver\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6eda3f2\", \"value\": \"jet black\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"645b75a6\", \"value\": \"copper\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c7331bc4\", \"value\": \"pale blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5693e178\", \"value\": \"emerald\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77\", \"example\": true, \"bundle_origin\": \"86b8e329b2aa\"}], \"bundles\": [{\"_uid\": \"55b935057561\", \"library_id\": \"7e3d3ec2\", \"start_idx\": 0, \"end_idx\": 4, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Character\", \"color\": \"#4f8cff\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"b5d51fd04042\", \"library_id\": \"37af0127\", \"start_idx\": 1, \"end_idx\": 2, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Look\", \"color\": \"#9b6bff\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"5db12ff2afae\", \"library_id\": \"b748104b\", \"start_idx\": 3, \"end_idx\": 3, \"enabled\": true, \"collapsed\": false, \"inserted_at_hash\": \"\", \"name\": \"Outfit\", \"color\": \"#e0a030\", \"parent_uid\": \"55b935057561\", \"example\": true}, {\"_uid\": \"86b8e329b2aa\", \"library_id\": \"805bdfa4\", \"start_idx\": 4, \"end_idx\": 4, \"enabled\": false, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Shared lists\", \"color\": \"#7a7f8a\", \"parent_uid\": \"55b935057561\", \"example\": true}]}"
+  }
+ },
+ "WP_PromptAssembler": {
+  "type": "WP_PromptAssembler",
+  "size": [
+   420,
+   520
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "template",
+    "name": "template",
+    "type": "STRING",
+    "widget": {
+     "name": "template"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "negative_template",
+    "name": "negative_template",
+    "shape": 7,
+    "type": "STRING",
+    "widget": {
+     "name": "negative_template"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "prompt",
+    "name": "prompt",
+    "type": "STRING",
+    "links": []
+   },
+   {
+    "localized_name": "negative",
+    "name": "negative",
+    "type": "STRING",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_PromptAssembler"
+  },
+  "widgets_values": [
+   "$hero, $hair, $eyes, wearing $outfit, $scene, $style",
+   "lowres, bad anatomy, watermark, $negatives",
+   ""
+  ],
+  "widgets_values_named": {
+   "template": "$hero, $hair, $eyes, wearing $outfit, $scene, $style",
+   "negative_template": "lowres, bad anatomy, watermark, $negatives",
+   "assembler-helper": ""
+  }
+ },
+ "WP_PromptCleaner": {
+  "type": "WP_PromptCleaner",
+  "size": [
+   480,
+   520
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "blocklist",
+    "name": "blocklist",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "prompt",
+    "name": "prompt",
+    "type": "STRING",
+    "widget": {
+     "name": "prompt"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "negative",
+    "name": "negative",
+    "shape": 7,
+    "type": "STRING",
+    "widget": {
+     "name": "negative"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "prompt",
+    "name": "prompt",
+    "type": "STRING",
+    "links": []
+   },
+   {
+    "localized_name": "negative",
+    "name": "negative",
+    "type": "STRING",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_PromptCleaner"
+  },
+  "widgets_values": [
+   "",
+   "",
+   "{\"mode\":\"tags\",\"intensity\":\"balanced\",\"rules_override\":{},\"blocklist\":{\"kind\":\"list\",\"entries\":[]}}"
+  ],
+  "widgets_values_named": {
+   "prompt": "",
+   "negative": "",
+   "wp_cleaner": "{\"mode\":\"tags\",\"intensity\":\"balanced\",\"rules_override\":{},\"blocklist\":{\"kind\":\"list\",\"entries\":[]}}"
+  }
+ },
+ "WP_Debug": {
+  "type": "WP_Debug",
+  "size": [
+   524,
+   380
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   }
+  ],
+  "outputs": [],
+  "properties": {
+   "Node name for S&R": "WP_Debug"
+  },
+  "widgets_values": [
+   ""
+  ],
+  "widgets_values_named": {
+   "wp_viewer": ""
+  }
+ },
+ "PrimitiveStringMultiline": {
+  "type": "PrimitiveStringMultiline",
+  "size": [
+   560,
+   110
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "value",
+    "name": "value",
+    "type": "STRING",
+    "widget": {
+     "name": "value"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "STRING",
+    "name": "STRING",
+    "type": "STRING",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "PrimitiveStringMultiline"
+  },
+  "widgets_values": [
+   "your character's trigger words"
+  ],
+  "widgets_values_named": {
+   "value": "your character's trigger words"
+  }
+ },
+ "WP_ContextInjector": {
+  "type": "WP_ContextInjector",
+  "size": [
+   570,
+   320
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "upstream",
+    "name": "upstream",
+    "shape": 7,
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "name": "input_0",
+    "type": "*",
+    "link": null
+   },
+   {
+    "name": "input_1",
+    "type": "*",
+    "link": null
+   },
+   {
+    "name": "input_2",
+    "type": "*",
+    "link": null
+   },
+   {
+    "name": "input_3",
+    "type": "*",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_ContextInjector"
+  },
+  "widgets_values": [
+   "{\"version\": 1, \"rows\": [{\"_uid\": \"7f8586c3301a\", \"kind\": \"socket\", \"slot_name\": \"input_0\", \"binding\": \"lora_hero_words\", \"enabled\": true, \"internal\": true}, {\"_uid\": \"0ad022cb7927\", \"kind\": \"socket\", \"slot_name\": \"input_1\", \"binding\": \"lora_outfit_words\", \"enabled\": true, \"internal\": true}, {\"_uid\": \"5ab4f38cf708\", \"kind\": \"socket\", \"slot_name\": \"input_2\", \"binding\": \"lora_style_words\", \"enabled\": true, \"internal\": true}]}"
+  ],
+  "widgets_values_named": {
+   "wp_rows": "{\"version\":1,\"rows\":[{\"_uid\":\"f729338a10cf\",\"kind\":\"socket\",\"slot_name\":\"input_0\",\"binding\":\"\",\"enabled\":true,\"internal\":false,\"_collapsed\":true},{\"_uid\":\"01d48ee2ccf3\",\"kind\":\"socket\",\"slot_name\":\"input_1\",\"binding\":\"\",\"enabled\":true,\"internal\":false,\"_collapsed\":true},{\"_uid\":\"15faadb47a79\",\"kind\":\"socket\",\"slot_name\":\"input_2\",\"binding\":\"\",\"enabled\":true,\"internal\":false,\"_collapsed\":true}],\"bundles\":[]}"
+  }
+ },
+ "WP_Toggles": {
+  "type": "WP_Toggles",
+  "size": [
+   560,
+   300
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "upstream",
+    "name": "upstream",
+    "shape": 7,
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_Toggles"
+  },
+  "widgets_values": [
+   "{\"version\": 1, \"mode\": \"any\", \"group_var\": \"\", \"rows\": [{\"id\": \"c248fdcf\", \"kind\": \"label\", \"name\": \"LoRAs\", \"color\": 5}, {\"id\": \"75b9b8f2\", \"kind\": \"toggle\", \"name\": \"LoRA character\", \"var\": \"lora_character\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"218efd65\", \"kind\": \"toggle\", \"name\": \"Use its own clothes\", \"var\": \"lora_clothes\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"needs\": \"75b9b8f2\"}, {\"id\": \"c86c6752\", \"kind\": \"toggle\", \"name\": \"Style LoRA\", \"var\": \"style_lora\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"2db72368\", \"kind\": \"label\", \"name\": \"Extras\", \"color\": 3}, {\"id\": \"1a5c7a2d\", \"kind\": \"toggle\", \"name\": \"Settings from the model\", \"var\": \"model_settings\", \"on\": true, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\", \"hide_var\": true}]}"
+  ],
+  "widgets_values_named": {
+   "wp_toggles": "{\"version\": 1, \"mode\": \"any\", \"group_var\": \"\", \"rows\": [{\"id\": \"c248fdcf\", \"kind\": \"label\", \"name\": \"LoRAs\", \"color\": 5}, {\"id\": \"75b9b8f2\", \"kind\": \"toggle\", \"name\": \"LoRA character\", \"var\": \"lora_character\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"218efd65\", \"kind\": \"toggle\", \"name\": \"Use its own clothes\", \"var\": \"lora_clothes\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"needs\": \"75b9b8f2\"}, {\"id\": \"c86c6752\", \"kind\": \"toggle\", \"name\": \"Style LoRA\", \"var\": \"style_lora\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\"}, {\"id\": \"2db72368\", \"kind\": \"label\", \"name\": \"Extras\", \"color\": 3}, {\"id\": \"1a5c7a2d\", \"kind\": \"toggle\", \"name\": \"Settings from the model\", \"var\": \"model_settings\", \"on\": true, \"pin\": false, \"out\": 0, \"style\": \"switch\", \"control\": \"bypass\", \"hide_var\": true}]}"
+  }
+ },
+ "LoraLoader": {
+  "type": "LoraLoader",
+  "size": [
+   290.4380859375,
+   126
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "model",
+    "name": "model",
+    "type": "MODEL",
+    "link": null
+   },
+   {
+    "localized_name": "clip",
+    "name": "clip",
+    "type": "CLIP",
+    "link": null
+   },
+   {
+    "localized_name": "lora_name",
+    "name": "lora_name",
+    "type": "COMBO",
+    "widget": {
+     "name": "lora_name"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "strength_model",
+    "name": "strength_model",
+    "type": "FLOAT",
+    "widget": {
+     "name": "strength_model"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "strength_clip",
+    "name": "strength_clip",
+    "type": "FLOAT",
+    "widget": {
+     "name": "strength_clip"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "MODEL",
+    "name": "MODEL",
+    "type": "MODEL",
+    "links": []
+   },
+   {
+    "localized_name": "CLIP",
+    "name": "CLIP",
+    "type": "CLIP",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "LoraLoader"
+  },
+  "widgets_values": [
+   null,
+   1,
+   1
+  ],
+  "widgets_values_named": {
+   "lora_name": null,
+   "strength_model": 1,
+   "strength_clip": 1
+  }
+ },
+ "CheckpointLoaderSimple": {
+  "type": "CheckpointLoaderSimple",
+  "size": [
+   270,
+   98
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "ckpt_name",
+    "name": "ckpt_name",
+    "type": "COMBO",
+    "widget": {
+     "name": "ckpt_name"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "MODEL",
+    "name": "MODEL",
+    "type": "MODEL",
+    "links": []
+   },
+   {
+    "localized_name": "CLIP",
+    "name": "CLIP",
+    "type": "CLIP",
+    "links": []
+   },
+   {
+    "localized_name": "VAE",
+    "name": "VAE",
+    "type": "VAE",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "CheckpointLoaderSimple"
+  },
+  "widgets_values": [
+   null
+  ],
+  "widgets_values_named": {
+   "ckpt_name": null
+  }
+ },
+ "CLIPTextEncode": {
+  "type": "CLIPTextEncode",
+  "size": [
+   420,
+   120
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "clip",
+    "name": "clip",
+    "type": "CLIP",
+    "link": null
+   },
+   {
+    "localized_name": "text",
+    "name": "text",
+    "type": "STRING",
+    "widget": {
+     "name": "text"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "CONDITIONING",
+    "name": "CONDITIONING",
+    "type": "CONDITIONING",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "CLIPTextEncode"
+  },
+  "widgets_values": [
+   ""
+  ],
+  "widgets_values_named": {
+   "text": ""
+  }
+ },
+ "EmptyLatentImage": {
+  "type": "EmptyLatentImage",
+  "size": [
+   270,
+   106
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "width",
+    "name": "width",
+    "type": "INT",
+    "widget": {
+     "name": "width"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "height",
+    "name": "height",
+    "type": "INT",
+    "widget": {
+     "name": "height"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "batch_size",
+    "name": "batch_size",
+    "type": "INT",
+    "widget": {
+     "name": "batch_size"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "LATENT",
+    "name": "LATENT",
+    "type": "LATENT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "EmptyLatentImage"
+  },
+  "widgets_values": [
+   1024,
+   1024,
+   1
+  ],
+  "widgets_values_named": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  }
+ },
+ "KSampler": {
+  "type": "KSampler",
+  "size": [
+   270,
+   262
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "model",
+    "name": "model",
+    "type": "MODEL",
+    "link": null
+   },
+   {
+    "localized_name": "positive",
+    "name": "positive",
+    "type": "CONDITIONING",
+    "link": null
+   },
+   {
+    "localized_name": "negative",
+    "name": "negative",
+    "type": "CONDITIONING",
+    "link": null
+   },
+   {
+    "localized_name": "latent_image",
+    "name": "latent_image",
+    "type": "LATENT",
+    "link": null
+   },
+   {
+    "localized_name": "seed",
+    "name": "seed",
+    "type": "INT",
+    "widget": {
+     "name": "seed"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "steps",
+    "name": "steps",
+    "type": "INT",
+    "widget": {
+     "name": "steps"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "cfg",
+    "name": "cfg",
+    "type": "FLOAT",
+    "widget": {
+     "name": "cfg"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "sampler_name",
+    "name": "sampler_name",
+    "type": "COMBO",
+    "widget": {
+     "name": "sampler_name"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "scheduler",
+    "name": "scheduler",
+    "type": "COMBO",
+    "widget": {
+     "name": "scheduler"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "denoise",
+    "name": "denoise",
+    "type": "FLOAT",
+    "widget": {
+     "name": "denoise"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "LATENT",
+    "name": "LATENT",
+    "type": "LATENT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "KSampler"
+  },
+  "widgets_values": [
+   0,
+   "randomize",
+   28,
+   6,
+   "dpmpp_2m",
+   "karras",
+   1
+  ],
+  "widgets_values_named": {
+   "seed": 0,
+   "control_after_generate": "randomize",
+   "steps": 28,
+   "cfg": 6,
+   "sampler_name": "dpmpp_2m",
+   "scheduler": "karras",
+   "denoise": 1
+  }
+ },
+ "VAEDecode": {
+  "type": "VAEDecode",
+  "size": [
+   140,
+   46
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "samples",
+    "name": "samples",
+    "type": "LATENT",
+    "link": null
+   },
+   {
+    "localized_name": "vae",
+    "name": "vae",
+    "type": "VAE",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "IMAGE",
+    "name": "IMAGE",
+    "type": "IMAGE",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "VAEDecode"
+  }
+ },
+ "WP_Bookmark": {
+  "type": "WP_Bookmark",
+  "size": [
+   183,
+   30
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [],
+  "outputs": [],
+  "properties": {},
+  "widgets_values": [
+   "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 310}, \"zoomMode\": \"fixed\", \"zoom\": 0.97, \"shortcut\": \"Alt+6\", \"order\": 6}"
+  ],
+  "widgets_values_named": {
+   "wp_bookmark": "{\"version\": 1, \"color\": \"\", \"icon\": \"image\", \"hidden\": false, \"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 310}, \"zoomMode\": \"fixed\", \"zoom\": 0.97, \"shortcut\": \"Alt+6\", \"order\": 6}"
+  }
+ },
+ "SaveImage": {
+  "type": "SaveImage",
+  "size": [
+   460,
+   520
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "images",
+    "name": "images",
+    "type": "IMAGE",
+    "link": null
+   },
+   {
+    "localized_name": "filename_prefix",
+    "name": "filename_prefix",
+    "type": "STRING",
+    "widget": {
+     "name": "filename_prefix"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "images",
+    "name": "images",
+    "type": "IMAGE",
+    "links": null
+   }
+  ],
+  "properties": {},
+  "widgets_values": [
+   "wp-example/single"
+  ],
+  "widgets_values_named": {
+   "filename_prefix": "wp-example/single"
+  }
+ },
+ "WP_ModelInfo": {
+  "type": "WP_ModelInfo",
+  "size": [
+   490,
+   320
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "upstream",
+    "name": "upstream",
+    "shape": 7,
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "model",
+    "name": "model",
+    "shape": 7,
+    "type": "MODEL",
+    "link": null
+   },
+   {
+    "localized_name": "family",
+    "name": "family",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "variant",
+    "name": "variant",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "name",
+    "name": "name",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_ModelInfo"
+  },
+  "widgets_values": [
+   "{\"version\":1,\"rules\":[{\"variant\":\"noobai\",\"pattern\":\"noob\"},{\"variant\":\"pony\",\"pattern\":\"pony|pdxl\"},{\"variant\":\"illustrious\",\"pattern\":\"illustrious|ilxl\"},{\"variant\":\"animagine\",\"pattern\":\"animagine\"}],\"family\":\"\",\"variant\":\"\",\"name\":\"\",\"internal\":{\"family\":true,\"variant\":true,\"name\":true}}"
+  ],
+  "widgets_values_named": {
+   "wp_model_info": "{\"version\":1,\"rules\":[{\"variant\":\"noobai\",\"pattern\":\"noob\"},{\"variant\":\"pony\",\"pattern\":\"pony|pdxl\"},{\"variant\":\"illustrious\",\"pattern\":\"illustrious|ilxl\"},{\"variant\":\"animagine\",\"pattern\":\"animagine\"}],\"family\":\"\",\"variant\":\"\",\"name\":\"\",\"internal\":{\"family\":true,\"variant\":true,\"name\":true}}"
+  }
+ },
+ "WP_VarToInt": {
+  "type": "WP_VarToInt",
+  "size": [
+   420,
+   180
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "index",
+    "name": "index",
+    "type": "INT",
+    "widget": {
+     "name": "index"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "default",
+    "name": "default",
+    "type": "INT",
+    "widget": {
+     "name": "default"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "value",
+    "name": "value",
+    "type": "INT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "var_name": "$size",
+   "Node name for S&R": "WP_VarToInt"
+  },
+  "widgets_values": [
+   "$size",
+   0,
+   1024
+  ],
+  "widgets_values_named": {
+   "wp_var_name": "$size",
+   "index": 0,
+   "default": 1024
+  }
+ },
+ "WP_VarToFloat": {
+  "type": "WP_VarToFloat",
+  "size": [
+   420,
+   180
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "index",
+    "name": "index",
+    "type": "INT",
+    "widget": {
+     "name": "index"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "default",
+    "name": "default",
+    "type": "FLOAT",
+    "widget": {
+     "name": "default"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "value",
+    "name": "value",
+    "type": "FLOAT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "var_name": "$cfg",
+   "Node name for S&R": "WP_VarToFloat"
+  },
+  "widgets_values": [
+   "$cfg",
+   0,
+   6
+  ],
+  "widgets_values_named": {
+   "wp_var_name": "$cfg",
+   "index": 0,
+   "default": 6
+  }
+ },
+ "WP_VarToChoice": {
+  "type": "WP_VarToChoice",
+  "size": [
+   420,
+   220
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "match",
+    "name": "match",
+    "type": "COMBO",
+    "widget": {
+     "name": "match"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "fallback",
+    "name": "fallback",
+    "type": "COMBO",
+    "widget": {
+     "name": "fallback"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "if_no_match",
+    "name": "if_no_match",
+    "type": "COMBO",
+    "widget": {
+     "name": "if_no_match"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "choice",
+    "name": "choice",
+    "type": "*",
+    "links": []
+   }
+  ],
+  "properties": {
+   "var_name": "$sampler",
+   "Node name for S&R": "WP_VarToChoice"
+  },
+  "widgets_values": [
+   "$sampler",
+   "loose",
+   "euler",
+   "use fallback"
+  ],
+  "widgets_values_named": {
+   "wp_var_name": "$sampler",
+   "match": "loose",
+   "fallback": "euler",
+   "if_no_match": "use fallback"
+  }
+ },
+ "WP_NodeGroup": {
+  "type": "WP_NodeGroup",
+  "size": [
+   360,
+   350
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "label": "WP Mode Relay",
+    "name": "node_1",
+    "type": "*",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "name": "nodes",
+    "type": "WP_NODES",
+    "links": null
+   }
+  ],
+  "properties": {}
+ },
+ "WP_ModeRelay": {
+  "type": "WP_ModeRelay",
+  "size": [
+   400,
+   180
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "label": "WP Model Info",
+    "name": "node_1",
+    "type": "*",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "name": "drives",
+    "type": "WP_NODES",
+    "links": []
+   }
+  ],
+  "properties": {}
+ },
+ "WP_ContextLoop": {
+  "type": "WP_ContextLoop",
+  "size": [
+   400,
+   440
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "values",
+    "name": "values",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "seed",
+    "name": "seed",
+    "type": "INT",
+    "widget": {
+     "name": "seed"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "count",
+    "name": "count",
+    "type": "INT",
+    "widget": {
+     "name": "count"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "shape": 6,
+    "type": "PIPELINE_CONTEXT",
+    "links": []
+   },
+   {
+    "localized_name": "loop_config",
+    "name": "loop_config",
+    "type": "WP_CONTEXT_LOOP_CONFIG",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_ContextLoop"
+  },
+  "widgets_values": [
+   7,
+   "randomize",
+   9,
+   "{\"strategy\": \"hash_index\", \"override_seed\": false, \"iteration_var_name\": \"iteration\", \"bypass\": false, \"iteration_internal\": true, \"total_internal\": true, \"seed_locks\": {}, \"bypass_frames\": [], \"sweep\": {\"enabled\": true, \"limit\": 64, \"hold_others\": true, \"axes\": [{\"uid\": \"587d500e2a44\", \"label\": \"Outfit\", \"option_ids\": [\"72f8e1d7\", \"b553cc92\", \"1955f005\"]}, {\"uid\": \"f9b0aec1ce3c\", \"label\": \"Time of day\", \"option_ids\": [\"7c740b5b\", \"7ddc9c86\", \"a681b8ca\"]}]}}"
+  ],
+  "widgets_values_named": {
+   "seed": 7,
+   "control_after_generate": "randomize",
+   "count": 9,
+   "wp_context_loop_config": "{\"strategy\": \"hash_index\", \"override_seed\": false, \"iteration_var_name\": \"iteration\", \"bypass\": false, \"iteration_internal\": true, \"total_internal\": true, \"seed_locks\": {}, \"bypass_frames\": [], \"sweep\": {\"enabled\": true, \"limit\": 64, \"hold_others\": true, \"axes\": [{\"uid\": \"587d500e2a44\", \"label\": \"Outfit\", \"option_ids\": [\"72f8e1d7\", \"b553cc92\", \"1955f005\"]}, {\"uid\": \"f9b0aec1ce3c\", \"label\": \"Time of day\", \"option_ids\": [\"7c740b5b\", \"7ddc9c86\", \"a681b8ca\"]}]}}"
+  }
+ },
+ "WP_VarToBool": {
+  "type": "WP_VarToBool",
+  "size": [
+   420,
+   180
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "context",
+    "name": "context",
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "index",
+    "name": "index",
+    "type": "INT",
+    "widget": {
+     "name": "index"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "default",
+    "name": "default",
+    "type": "BOOLEAN",
+    "widget": {
+     "name": "default"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "value",
+    "name": "value",
+    "type": "BOOLEAN",
+    "links": []
+   }
+  ],
+  "properties": {
+   "var_name": "$quick_preview",
+   "Node name for S&R": "WP_VarToBool"
+  },
+  "widgets_values": [
+   "$quick_preview",
+   0,
+   false
+  ],
+  "widgets_values_named": {
+   "wp_var_name": "$quick_preview",
+   "index": 0,
+   "default": false
+  }
+ },
+ "ComfySwitchNode": {
+  "type": "ComfySwitchNode",
+  "size": [
+   270,
+   78
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "on_false",
+    "name": "on_false",
+    "shape": 7,
+    "type": "LATENT",
+    "link": null
+   },
+   {
+    "localized_name": "on_true",
+    "name": "on_true",
+    "shape": 7,
+    "type": "LATENT",
+    "link": null
+   },
+   {
+    "localized_name": "switch",
+    "name": "switch",
+    "type": "BOOLEAN",
+    "widget": {
+     "name": "switch"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "output",
+    "name": "output",
+    "type": "LATENT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "ComfySwitchNode"
+  },
+  "widgets_values": [
+   false
+  ],
+  "widgets_values_named": {
+   "switch": false
+  }
+ },
+ "WP_LabelGrid": {
+  "type": "WP_LabelGrid",
+  "size": [
+   520,
+   430
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "images",
+    "name": "images",
+    "type": "IMAGE",
+    "link": null
+   },
+   {
+    "localized_name": "labels",
+    "name": "labels",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "label_text",
+    "name": "label_text",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "title",
+    "name": "title",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "row_headers",
+    "name": "row_headers",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "column_headers",
+    "name": "column_headers",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "images",
+    "name": "images",
+    "shape": 6,
+    "type": "IMAGE",
+    "links": null
+   },
+   {
+    "localized_name": "grid",
+    "name": "grid",
+    "type": "IMAGE",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_LabelGrid"
+  },
+  "widgets_values": [
+   "{\"label\": \"\", \"position\": \"none\", \"align\": \"center\", \"font\": \"default\", \"font_size\": 0, \"text_color\": \"#ffffff\", \"label_color\": \"#000000\", \"grid\": true, \"arrange\": \"auto\", \"columns\": 0, \"rows_from\": \"part:1\", \"row_headers\": \"\", \"columns_from\": \"part:2\", \"column_headers\": \"\", \"title\": \"Same hero and place: three outfits \\u00d7 three times\", \"gap\": 8, \"margin\": 16, \"background\": \"#ffffff\", \"header_color\": \"#000000\", \"cell_width\": 512}"
+  ],
+  "widgets_values_named": {
+   "wp_label_grid": "{\"label\": \"\", \"position\": \"none\", \"align\": \"center\", \"font\": \"default\", \"font_size\": 0, \"text_color\": \"#ffffff\", \"label_color\": \"#000000\", \"grid\": true, \"arrange\": \"auto\", \"columns\": 0, \"rows_from\": \"part:1\", \"row_headers\": \"\", \"columns_from\": \"part:2\", \"column_headers\": \"\", \"title\": \"Same hero and place: three outfits \\u00d7 three times\", \"gap\": 8, \"margin\": 16, \"background\": \"#ffffff\", \"header_color\": \"#000000\", \"cell_width\": 512}"
+  }
+ },
+ "WP_SeedList": {
+  "type": "WP_SeedList",
+  "size": [
+   400,
+   340
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "loop_config",
+    "name": "loop_config",
+    "shape": 7,
+    "type": "WP_CONTEXT_LOOP_CONFIG",
+    "link": null
+   },
+   {
+    "localized_name": "base_seed",
+    "name": "base_seed",
+    "type": "INT",
+    "widget": {
+     "name": "base_seed"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "count",
+    "name": "count",
+    "type": "INT",
+    "widget": {
+     "name": "count"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "seed",
+    "name": "seed",
+    "shape": 6,
+    "type": "INT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_SeedList"
+  },
+  "widgets_values": [
+   42,
+   "randomize",
+   9,
+   "{\"strategy\":\"hash_index\",\"override_seed\":false,\"override_count\":true,\"override_strategy\":true,\"seed_locks\":{}}"
+  ],
+  "widgets_values_named": {
+   "base_seed": 42,
+   "control_after_generate": "randomize",
+   "count": 9,
+   "wp_seed_list_config": "{\"strategy\":\"hash_index\",\"override_seed\":false,\"override_count\":true,\"override_strategy\":true,\"seed_locks\":{}}"
+  }
+ },
+ "WP_ImageFilter": {
+  "type": "WP_ImageFilter",
+  "size": [
+   490,
+   430
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "images",
+    "name": "images",
+    "type": "IMAGE",
+    "link": null
+   },
+   {
+    "localized_name": "latent",
+    "name": "latent",
+    "shape": 7,
+    "type": "LATENT",
+    "link": null
+   },
+   {
+    "localized_name": "masks",
+    "name": "masks",
+    "shape": 7,
+    "type": "MASK",
+    "link": null
+   },
+   {
+    "localized_name": "positive",
+    "name": "positive",
+    "shape": 7,
+    "type": "CONDITIONING",
+    "link": null
+   },
+   {
+    "localized_name": "negative",
+    "name": "negative",
+    "shape": 7,
+    "type": "CONDITIONING",
+    "link": null
+   },
+   {
+    "localized_name": "positive_text",
+    "name": "positive_text",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "negative_text",
+    "name": "negative_text",
+    "shape": 7,
+    "type": "STRING",
+    "link": null
+   },
+   {
+    "localized_name": "context",
+    "name": "context",
+    "shape": 7,
+    "type": "PIPELINE_CONTEXT",
+    "link": null
+   },
+   {
+    "localized_name": "extra_1",
+    "name": "extra_1",
+    "shape": 7,
+    "type": "*",
+    "link": null
+   },
+   {
+    "localized_name": "extra_2",
+    "name": "extra_2",
+    "shape": 7,
+    "type": "*",
+    "link": null
+   },
+   {
+    "localized_name": "clip",
+    "name": "clip",
+    "shape": 7,
+    "type": "CLIP",
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "images",
+    "name": "images",
+    "shape": 6,
+    "type": "IMAGE",
+    "links": []
+   },
+   {
+    "localized_name": "latent",
+    "name": "latent",
+    "shape": 6,
+    "type": "LATENT",
+    "links": []
+   },
+   {
+    "localized_name": "masks",
+    "name": "masks",
+    "shape": 6,
+    "type": "MASK",
+    "links": null
+   },
+   {
+    "localized_name": "positive",
+    "name": "positive",
+    "shape": 6,
+    "type": "CONDITIONING",
+    "links": []
+   },
+   {
+    "localized_name": "negative",
+    "name": "negative",
+    "shape": 6,
+    "type": "CONDITIONING",
+    "links": []
+   },
+   {
+    "localized_name": "positive_text",
+    "name": "positive_text",
+    "shape": 6,
+    "type": "STRING",
+    "links": null
+   },
+   {
+    "localized_name": "negative_text",
+    "name": "negative_text",
+    "shape": 6,
+    "type": "STRING",
+    "links": null
+   },
+   {
+    "localized_name": "context",
+    "name": "context",
+    "shape": 6,
+    "type": "PIPELINE_CONTEXT",
+    "links": null
+   },
+   {
+    "localized_name": "extra_1",
+    "name": "extra_1",
+    "shape": 6,
+    "type": "*",
+    "links": null
+   },
+   {
+    "localized_name": "extra_2",
+    "name": "extra_2",
+    "shape": 6,
+    "type": "*",
+    "links": null
+   },
+   {
+    "localized_name": "picks",
+    "name": "picks",
+    "type": "STRING",
+    "links": null
+   },
+   {
+    "localized_name": "labels",
+    "name": "labels",
+    "shape": 6,
+    "type": "STRING",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "WP_ImageFilter"
+  },
+  "widgets_values": [
+   "{\"mode\":\"pause\",\"send_as\":\"same_shape\",\"timeout\":600,\"on_timeout\":\"keep_all\"}"
+  ],
+  "widgets_values_named": {
+   "wp_image_filter": "{\"mode\":\"pause\",\"send_as\":\"same_shape\",\"timeout\":600,\"on_timeout\":\"keep_all\"}"
+  }
+ },
+ "LatentUpscaleBy": {
+  "type": "LatentUpscaleBy",
+  "size": [
+   270,
+   82
+  ],
+  "flags": {},
+  "mode": 0,
+  "inputs": [
+   {
+    "localized_name": "samples",
+    "name": "samples",
+    "type": "LATENT",
+    "link": null
+   },
+   {
+    "localized_name": "upscale_method",
+    "name": "upscale_method",
+    "type": "COMBO",
+    "widget": {
+     "name": "upscale_method"
+    },
+    "link": null
+   },
+   {
+    "localized_name": "scale_by",
+    "name": "scale_by",
+    "type": "FLOAT",
+    "widget": {
+     "name": "scale_by"
+    },
+    "link": null
+   }
+  ],
+  "outputs": [
+   {
+    "localized_name": "LATENT",
+    "name": "LATENT",
+    "type": "LATENT",
+    "links": []
+   }
+  ],
+  "properties": {
+   "Node name for S&R": "LatentUpscaleBy"
+  },
+  "widgets_values": [
+   "nearest-exact",
+   1.5
+  ],
+  "widgets_values_named": {
+   "upscale_method": "nearest-exact",
+   "scale_by": 1.5
+  }
+ }
+}
