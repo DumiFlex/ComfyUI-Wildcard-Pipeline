@@ -78,6 +78,7 @@ from engine.ai.pack.neg_tidy import dedupe, fit_ratings, tidy_negative
 from engine.ai.pack.plan import _NEGATIVEISH, MAX_TAGS, _row_var, _slug_var
 from engine.ai.pack.settings import MAX_SWEEP_OPTIONS, parse_run, parse_settings
 from engine.modules.derivation_handler import _ctx_get
+from engine.negatives import with_slot
 
 MAX_SLOTS = 24
 MAX_AXES = 4
@@ -1925,6 +1926,12 @@ def wired_payload(plan: dict[str, Any], key: str, built: dict[str, Any]) -> dict
         payload, said = adult_check(out["kind"], out["payload"], plan)
         if said:
             out = {**out, "payload": payload, "warnings": [*out["warnings"], *said]}
+    if out["kind"] == "template" and parse_settings(plan.get("settings"))["negatives"] == "auto":
+        # Negatives are opt-in: a negative without the slot would drop the
+        # variables' negatives this setting asks for.
+        neg = out["payload"].get("negative_template")
+        if isinstance(neg, str):
+            out = {**out, "payload": {**out["payload"], "negative_template": with_slot(neg)}}
     return out
 
 

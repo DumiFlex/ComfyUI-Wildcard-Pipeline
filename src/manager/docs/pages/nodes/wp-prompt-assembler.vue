@@ -85,10 +85,11 @@ import VarToken from "../../../components/docs/VarToken.vue";
         caption="Hair, Weather and Quality feed an Assembler with both outputs wired. The negative preview shows the words collected from the variables the template printed."
       />
       <ul>
-        <li>Put your standing negative in the negative template, e.g.
-          <code>lowres, bad anatomy, $negatives</code>.</li>
-        <li>Leave it empty to output only the collected words. Without
-          <VarToken>$negatives</VarToken> they're added at the end.</li>
+        <li>A new Assembler starts with <VarToken>$negatives</VarToken>: just the collected words.
+          Add your standing negative around it, e.g. <code>lowres, bad anatomy, $negatives</code>.</li>
+        <li>Without <VarToken>$negatives</VarToken> the negative is only what you write, and an empty
+          box is an empty negative. Workflows saved before this get <VarToken>$negatives</VarToken>
+          added when they load, so they print the same.</li>
         <li>Repeated tags are dropped, also when written with a weight like
           <code>(blurry:1.2)</code>.</li>
         <li><b>Clear template</b> empties the negative template too.</li>

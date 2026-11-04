@@ -25,6 +25,7 @@ from engine.ai import refs as ai_refs
 from engine.ai import scripts as ai_scripts
 from engine.modules.combine_handler import CombineHandler
 from engine.modules.fixed_values_handler import FixedValuesHandler
+from engine.negatives import with_slot
 from engine.syntax.tokenize import tokenize_text
 from engine.syntax.types import TokenKind
 
@@ -112,8 +113,8 @@ and read its variable here. Order it the way the model reads best (subject \
 first, then details, then style and quality).
 negative: the standing negative prompt. Write $negatives where the negative \
 words of the variables the prompt used should go (e.g. "$negatives, lowres, \
-bad hands, watermark"); without $negatives they are added at the end. "" \
-gives just those words.\
+bad hands, watermark", or just "$negatives"); without $negatives they are \
+left out.\
 """
 
 
@@ -524,6 +525,9 @@ def compile_template(raw: Any, *, catalog: dict[str, Any] | None = None,
     if re.search(r"\$\w+[^$]{0,40}\s(?:OR|or)\s[^$]{0,40}\$", text):
         warnings.append("It joins picks with \"or\", but the Assembler prints every one; "
                         "read the one pick instead")
+    # Negatives are opt-in: a negative without the slot would drop every
+    # variable's negatives, which no draft means to do.
+    negative = with_slot(negative)
     return {"payload": {"template_string": text, "negative_template": negative},
             "preview": [text] + ([f"Negative: {negative}"] if negative else []),
             "warnings": warnings}

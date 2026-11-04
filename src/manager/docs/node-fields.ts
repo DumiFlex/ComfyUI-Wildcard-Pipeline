@@ -216,7 +216,7 @@ export const NODE_FIELDS = {
     ports: [
       { term: "context (in)", sockets: ["in:context"], desc: "The variables from a WP Context (or anything that ends in one)." },
       { term: "template", sockets: ["in:template"], desc: "Your prompt with $variables in it." },
-      { term: "negative_template", sockets: ["in:negative_template"], desc: "Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go." },
+      { term: "negative_template", sockets: ["in:negative_template"], desc: "Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative)." },
       { term: "prompt (out)", sockets: ["out:prompt"], desc: "The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner." },
       { term: "negative (out)", sockets: ["out:negative"], desc: "The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode." },
     ],

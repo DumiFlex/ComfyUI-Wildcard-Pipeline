@@ -157,7 +157,12 @@ type TemplateEditorNode = Parameters<typeof tmplMod.create>[0];
 type AssemblerHelperNode = Parameters<typeof asmMod.mountHelper>[0];
 
 interface NodeData { name: string }
-interface NodeType { prototype: { onNodeCreated?: (this: AssemblerHelperNode, ...args: unknown[]) => void } }
+interface NodeType {
+  prototype: {
+    onNodeCreated?: (this: AssemblerHelperNode, ...args: unknown[]) => void;
+    onConfigure?: (this: AssemblerHelperNode, info: unknown) => void;
+  };
+}
 
 // Build the settings array eagerly — `app` is the same singleton ComfyUI
 // will hand back at runtime, so onChange callbacks captured here read the
@@ -407,8 +412,16 @@ app.registerExtension({
     const orig = nt.prototype.onNodeCreated;
     nt.prototype.onNodeCreated = function (this: AssemblerHelperNode, ...args: unknown[]) {
       orig?.apply(this, args);
+      asmMod.markNegativeOptIn(this);
       asmMod.mountHelper(this);
       dimWidgetsWhileSkipped(this, ["template", "negative_template"]);
+    };
+    // Negatives became opt-in: a node saved before that gets `$negatives`
+    // added once, so the workflow prints the same negative as before.
+    const origConfigure = nt.prototype.onConfigure;
+    nt.prototype.onConfigure = function (this: AssemblerHelperNode, info: unknown) {
+      origConfigure?.apply(this, [info]);
+      asmMod.migrateNegativeOptIn(this, info);
     };
   },
 

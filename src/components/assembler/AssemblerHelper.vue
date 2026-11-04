@@ -296,7 +296,7 @@ const negPreview = computed(() =>
 
 /** Only worth a row when there is something to show. */
 const showNegative = computed(
-  () => negPreview.value.text !== "" || (props.negativeTemplate ?? "").trim() !== "",
+  () => negPreview.value.text !== "",
 );
 
 const isResolved = computed(() => {

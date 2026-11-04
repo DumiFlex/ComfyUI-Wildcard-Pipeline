@@ -349,7 +349,8 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "WP_PromptAssembler"
+        "Node name for S&R": "WP_PromptAssembler",
+        "wp_negatives_opt_in": true
       },
       "widgets_values": [
         "$head $shot, $subject, $build, $skin, $hair, $facial_hair, $eyes, $makeup, wearing $outfit $shoes_line, $accessories, $pose, $expression, $place $time, $light, $angle, $focus, $palette$tail",
@@ -494,7 +495,8 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "WP_PromptAssembler"
+        "Node name for S&R": "WP_PromptAssembler",
+        "wp_negatives_opt_in": true
       },
       "widgets_values": [
         "$shot · $light",

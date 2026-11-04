@@ -262,31 +262,47 @@ def has_slot(template: str) -> bool:
     return bool(_SLOT_RE.search(template or ""))
 
 
+def with_slot(template: str | None) -> str:
+    """``template`` with a ``$negatives`` slot, added at the end when missing.
+
+    Since negatives became opt-in, a negative box without ``$negatives`` is
+    just its own text. Workflows, templates and drafts written before that
+    relied on the old rule (empty box = the collected words, text without
+    the slot = the words added at the end), so they go through this once to
+    keep printing the same thing: ``""`` → ``"$negatives"``, ``"lowres"`` →
+    ``"lowres, $negatives"``. Mirrors ``withSlot`` in ``src/extension/negatives.ts``.
+    """
+    tpl = (template or "").rstrip()
+    if has_slot(tpl):
+        return template or ""
+    tpl = tpl.rstrip(",").rstrip()
+    return f"{tpl}, {NEGATIVES_SLOT}" if tpl.strip() else NEGATIVES_SLOT
+
+
 def render_negative(
     template: str, collected: str, resolve_raw: Callable[[str], str],
 ) -> str:
     """Fill the Assembler's negative template.
 
-    ``$negatives`` marks where the collected words go. An empty template is
-    just the collected words; a template without the slot gets them appended.
-    ``resolve_raw`` renders the template's other text (its ``$vars``) without
-    tidying. Tags the template already contains are dropped from the
-    collected words so nothing is said twice.
+    ``$negatives`` marks where the collected words go, and only a template
+    that has it gets them: without the slot the negative is just the
+    template's own text, and an empty template is an empty negative. New
+    Assemblers start with ``$negatives``; older workflows get it added on
+    load (``with_slot``). ``resolve_raw`` renders the template's other text
+    (its ``$vars``) without tidying. Tags the template already contains are
+    dropped from the collected words so nothing is said twice.
     """
     tpl = template or ""
     if not tpl.strip():
-        return collected
+        return ""
     pieces = _SLOT_RE.split(tpl)
     rendered = [resolve_raw(p) if p else "" for p in pieces]
+    if len(pieces) == 1:
+        return tidy(rendered[0])
     fixed_tags: list[str] = []
     for r in rendered:
         fixed_tags.extend(split_tags(r))
     words = join_unique([collected], skip=fixed_tags)
-    if len(pieces) == 1:
-        base = tidy(rendered[0])
-        if not words:
-            return base
-        return f"{base}, {words}" if base else words
     return tidy(words.join(rendered))
 
 
