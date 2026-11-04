@@ -330,8 +330,9 @@ function coverAt(canvasEl: Element, x: number, y: number, skip: readonly Element
 }
 
 /** ComfyUI's pane for the canvas: what the side panel and the bottom panel
- *  (console, shortcuts) leave, below the top menu. */
-const CANVAS_PANEL = "#graph-canvas-panel";
+ *  (console, shortcuts) leave, below the top menu. The id came with
+ *  frontend 1.55; older ones only have the class. */
+export const CANVAS_PANEL = "#graph-canvas-panel, .graph-canvas-panel";
 
 function visible(el: Element): boolean {
   const cs = getComputedStyle(el);
@@ -380,12 +381,33 @@ const MENU_GAP = 4;
  * down. A floating run bar (`position: fixed`) is no bar of the menu.
  */
 function paneTop(pane: Element, paneBox: DOMRect): number {
-  const menu = pane.closest("[data-testid=\"graph-canvas-gutter\"]")?.previousElementSibling;
+  const menu = menuAbove(pane, paneBox);
   if (!menu) return paneBox.top;
   const bars = pieces(menu, (el) => getComputedStyle(el).position !== "fixed");
   if (!bars.length) return paneBox.top;
   const bottom = Math.max(...bars.map((b) => b.getBoundingClientRect().bottom));
   return Math.min(paneBox.top, bottom + MENU_GAP);
+}
+
+/**
+ * The top menu: the element just before the pane's column, found the same
+ * way on every frontend (1.54+ wraps the pane in a `graph-canvas-gutter`
+ * group, older ones in a PrimeVue splitter; the menu is the sibling before
+ * it). Only an element that sits ABOVE the pane counts, so a side panel's
+ * splitter gutter next to it never does.
+ */
+function menuAbove(pane: Element, paneBox: DOMRect): Element | null {
+  let el: Element | null = pane;
+  for (let depth = 0; el && depth < 4; depth++) {
+    const prev: Element | null = el.previousElementSibling;
+    if (prev) {
+      const b = prev.getBoundingClientRect();
+      const above = b.bottom <= paneBox.top + 1 && b.right > paneBox.left && b.left < paneBox.right;
+      return above ? prev : null;
+    }
+    el = el.parentElement;
+  }
+  return null;
 }
 
 /** The free part of the canvas, in page px. */

@@ -14,7 +14,12 @@ and never moves the dock or a jump.
    card and the inline progress line under the run bar, so the menu grows
    while a workflow runs and pushes the pane down. `paneTop()` takes the
    bottom of the menu's bars (breadcrumb, run bar card; a `position: fixed`
-   floating run bar is no bar) plus ComfyUI's 4 px gap instead.
+   floating run bar is no bar) plus ComfyUI's 4 px gap instead. The menu is
+   found by `menuAbove()`: the sibling just before the pane's column (the
+   `graph-canvas-gutter` group on 1.54+, the PrimeVue splitter before that),
+   only if it sits above the pane. Frontends before 1.55 have no
+   `#graph-canvas-panel` id, so the pane is also matched by its
+   `.graph-canvas-panel` class.
 2. **Floating pieces in the pane** (`paneOverlays`): the first
    pointer-taking element down each branch: minimap, zoom controls. Boxes to
    keep clear of.

@@ -84,7 +84,7 @@ onMounted(() => {
   requestAnimationFrame(place);
   if (typeof ResizeObserver !== "undefined") {
     observer = new ResizeObserver(place);
-    for (const el of [canvasElement(), document.querySelector("#graph-canvas-panel")]) if (el) observer.observe(el);
+    for (const el of [canvasElement(), document.querySelector("#graph-canvas-panel, .graph-canvas-panel")]) if (el) observer.observe(el);
   }
 });
 onBeforeUnmount(() => {
