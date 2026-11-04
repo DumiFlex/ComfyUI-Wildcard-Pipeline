@@ -32,7 +32,7 @@ const emit = defineEmits<{
 const summary = computed(() => {
   if (props.linked) return "driven by the connected input";
   const t = props.modelValue.trim().replace(/\s+/g, " ");
-  return t || "empty: just the variables' negatives";
+  return t || "empty: no negative";
 });
 </script>
 

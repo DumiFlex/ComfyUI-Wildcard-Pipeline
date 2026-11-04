@@ -313,7 +313,7 @@ def test_template_with_a_pick_keeps_its_first_branch_and_says_so():
     out = pack.compile_item(plan, tkey, {}, {"template": "a {red|blue} $scarf",
                                              "negative": "{lowres|blurry}, bad hands"})
     assert out["payload"]["template_string"] == "a red $scarf"
-    assert out["payload"]["negative_template"] == "lowres, bad hands"
+    assert out["payload"]["negative_template"] == "lowres, bad hands, $negatives"
     assert sum("Assembler can't pick" in w for w in out["warnings"]) == 2
 
 

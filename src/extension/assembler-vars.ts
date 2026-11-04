@@ -9,6 +9,22 @@
 /** The reserved slot's bare name in the Assembler's negative template. */
 export const NEGATIVES_VAR = "negatives";
 
+const SLOT = `$${NEGATIVES_VAR}`;
+const SLOT_TEST = /\$negatives(?![A-Za-z0-9_])/;
+
+/** `template` with a `$negatives` slot, added at the end when missing
+ *  (mirror of engine `with_slot`). Negatives are opt-in: without the slot
+ *  the box is only its own text. Boxes written before that relied on the
+ *  old rule (empty = the collected words, text without the slot = the words
+ *  added at the end), so a workflow saved then goes through this once on
+ *  load and prints the same thing. */
+export function withSlot(template: string | null | undefined): string {
+  const tpl = (template ?? "").trimEnd();
+  if (SLOT_TEST.test(tpl)) return template ?? "";
+  const base = tpl.replace(/,\s*$/, "").trimEnd();
+  return base.trim() ? `${base}, ${SLOT}` : SLOT;
+}
+
 const BARE_VAR_RE = /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)/g;
 
 /**

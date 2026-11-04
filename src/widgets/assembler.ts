@@ -20,6 +20,7 @@ import { reactiveFromGraph } from "../extension/reactive";
 import { pushToast } from "../components/shared/toast-store";
 import { templateInsertAtCaret } from "../extension/_stashes";
 import type { NegativesTable } from "../extension/negatives";
+import { withSlot } from "../extension/assembler-vars";
 import { applySeedLocks, deriveLoopSeeds } from "../components/shared/seed-derive";
 
 const PREVIEW_SEED = 42;
@@ -69,6 +70,32 @@ function negativeTemplateOf(node: AssemblerNode): string {
 function writeNegativeTemplate(node: AssemblerNode, next: string) {
   const w = negativeTemplateWidget(node);
   if (w) w.value = next;
+}
+
+/** `node.properties` key marking an Assembler whose negative box follows the
+ *  opt-in rule (no `$negatives` = only the box's own text). Every new node
+ *  gets it; a node loaded without it was saved under the old rule and gets
+ *  `$negatives` added once (`withSlot`), so it prints the same negative. */
+export const NEG_SLOT_PROP = "wp_negatives_opt_in";
+
+/** Mark a freshly created Assembler: its default box already has the slot. */
+export function markNegativeOptIn(node: AssemblerNode): void {
+  const n = node as { properties?: Record<string, unknown> };
+  if (!n.properties) n.properties = {};
+  n.properties[NEG_SLOT_PROP] = true;
+}
+
+/** After a workflow load: an Assembler saved before negatives became opt-in
+ *  (its saved properties lack the mark) gets `$negatives` added to its box. */
+export function migrateNegativeOptIn(node: AssemblerNode, info: unknown): void {
+  const saved = (info as { properties?: Record<string, unknown> } | null | undefined)?.properties;
+  if (saved?.[NEG_SLOT_PROP] !== true) {
+    const w = negativeTemplateWidget(node);
+    if (w && (typeof w.value === "string" || w.value == null)) {
+      w.value = withSlot(typeof w.value === "string" ? w.value : "");
+    }
+  }
+  markNegativeOptIn(node);
 }
 
 /** Library identity of the template currently loaded into this
@@ -659,8 +686,9 @@ export function mountHelper(node: AssemblerNode) {
               // Confirm only when overwriting non-empty work; loading
               // onto an empty template applies immediately. The negative box
               // counts only when the loaded row would overwrite it.
+              const negNow = negativeTemplateOf(node).trim();
               const negativeAtRisk =
-                typeof row.negative_template === "string" && negativeTemplateOf(node).trim() !== "";
+                typeof row.negative_template === "string" && negNow !== "" && negNow !== withSlot("");
               if (templateOf(node).trim() || negativeAtRisk) {
                 askConfirm({
                   title: "Replace the current template?",

@@ -148,7 +148,7 @@ def test_template_create_and_edit():
     e = lib.run("edit_template", {"id": "Portrait", "negative": "lowres"})
     assert e["op"] == {**e["op"], "op": "update", "kind": "template", "id": "tttt0001",
                        "body": {"template_string": "$look, $quality",
-                                "negative_template": "lowres"}}
+                                "negative_template": "lowres, $negatives"}}
     info = lib.run("update_info", {"id": "tttt0001", "tags_add": ["portrait"]})
     assert info["op"]["kind"] == "template"
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  withSlot,
   buildNegativePreview,
   entriesForReads,
   hasSlot,
@@ -55,9 +56,10 @@ describe("tag handling", () => {
 });
 
 describe("renderNegative", () => {
-  it("empty template is just the words", () => {
-    expect(renderNegative("", "blonde, lowres", identity)).toBe("blonde, lowres");
-    expect(renderNegative("   ", "blonde", identity)).toBe("blonde");
+  it("an empty template is an empty negative (negatives are opt-in)", () => {
+    expect(renderNegative("", "blonde, lowres", identity)).toBe("");
+    expect(renderNegative("   ", "blonde", identity)).toBe("");
+    expect(renderNegative("$negatives", "blonde, lowres", identity)).toBe("blonde, lowres");
   });
 
   it("places the words at the slot and skips tags the template says", () => {
@@ -66,11 +68,18 @@ describe("renderNegative", () => {
     );
   });
 
-  it("appends when there is no slot", () => {
-    expect(renderNegative("worst quality", "blonde, lowres", identity)).toBe(
-      "worst quality, blonde, lowres",
-    );
+  it("without a slot the negative is only the template's own text", () => {
+    expect(renderNegative("worst quality", "blonde, lowres", identity)).toBe("worst quality");
     expect(renderNegative("worst quality", "", identity)).toBe("worst quality");
+  });
+
+  it("withSlot adds the slot to boxes written under the old rule", () => {
+    expect(withSlot("")).toBe("$negatives");
+    expect(withSlot(null)).toBe("$negatives");
+    expect(withSlot("lowres, watermark")).toBe("lowres, watermark, $negatives");
+    expect(withSlot("lowres, ")).toBe("lowres, $negatives");
+    expect(withSlot("$negatives, lowres")).toBe("$negatives, lowres");
+    expect(withSlot("$negativesX")).toBe("$negativesX, $negatives");
   });
 
   it("an empty collection leaves no stray comma at the slot", () => {
@@ -114,7 +123,7 @@ describe("follow usage", () => {
   it("builds the preview: follows usage, dedupes, attributes tags", () => {
     const p = buildNegativePreview({
       template: "$hair, $outfit",
-      negativeTemplate: "",
+      negativeTemplate: "$negatives",
       resolved,
       negatives: table,
       resolveRaw: identity,
