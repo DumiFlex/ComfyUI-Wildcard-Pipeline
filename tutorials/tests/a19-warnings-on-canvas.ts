@@ -35,7 +35,7 @@ tutorial(
       await t.wire(up, "context", nodes.ctx, "upstream");
       await t.beat(1000);
       await t.say("The missing var is gone. The second Hero row is blue now: it replaces the hero from upstream.");
-      await t.callout("blue", t.moduleRow(nodes.ctx, "Hero").locator(".wp-conflict-badge, .wp-conflict-dot").first(), "Blue: just so you know", 5);
+      await t.callout("blue", t.moduleRow(nodes.ctx, "Hero").locator(".wp-conflict-badge").first(), "Blue: just so you know", 5);
       await t.waitVoice();
       await t.uncallout("blue");
       await t.say("Blue is for your information. Amber is worth a look. Red points at something that's gone, like a deleted wildcard.");
