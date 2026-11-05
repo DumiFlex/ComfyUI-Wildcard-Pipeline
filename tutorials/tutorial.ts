@@ -522,7 +522,12 @@ export class Tutor {
     }, wanted);
     // The search box opens on a double click on empty canvas; when the click is taken for something
     // else (a click just before it), try once more rather than typing into the canvas.
-    const searchOpen = () => this.page.evaluate(() => document.activeElement?.tagName === "INPUT");
+    const searchOpen = () =>
+      this.page.evaluate(() => {
+        // Only the node search box counts: a focused field on a node would take the typed name.
+        const el = document.activeElement;
+        return el?.tagName === "INPUT" && !el.closest("[data-node-id]") && !!el.closest('[role="dialog"], .comfy-vue-node-search-container, .p-dialog, .litesearchbox');
+      });
     await this.click(at, { double: true });
     await sleep(500);
     if (!(await searchOpen())) {
