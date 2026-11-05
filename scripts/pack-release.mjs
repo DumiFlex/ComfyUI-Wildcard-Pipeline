@@ -68,6 +68,8 @@ const SHIP_PATHS = [
   "locales",
   // The WP Label & Grid font folder: users drop font files here.
   "fonts",
+  // ComfyUI lists a pack's `example_workflows/` in its workflow templates.
+  "example_workflows",
 ];
 
 /**
@@ -84,7 +86,7 @@ const DEV_ONLY = new Set([
   ".release-please-manifest.json", "CHANGELOG.md", "CLAUDE.md", "config", "conftest.py",
   "eslint.config.js", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "release-please-config.json",
   "scripts", "src", "tests", "tsconfig.json", "tsconfig.node.json",
-  "vite.config.mts", "vitest.config.ts", "SECURITY.md", "bench", "eslint-baseline.json",
+  "vite.config.mts", "vitest.config.ts", "SECURITY.md", "bench", "eslint-baseline.json", "tutorials",
 ]);
 
 function assertShipListIsTotal() {
