@@ -37,7 +37,10 @@ tutorial(
 
     await t.h.step("Apply, then save", async () => {
       await t.say("Apply puts them in the editor. They're yours to change, and Save keeps them.");
-      await t.click(page.locator('[data-test="ai-apply"]:visible').last());
+      // The Add panel's button is "Add N options" (ai-draft-add); other panels say ai-apply.
+      const apply = page.locator('[data-test="ai-draft-add"], [data-test="ai-apply"]').last();
+      await t.scrollTo(apply, { at: 0.6 });
+      await t.click(apply);
       await t.beat(1200);
       await t.callout("save", page.locator('[data-test="save-btn"]'), "Nothing is saved until you do", 4);
       await t.waitVoice();
