@@ -21,7 +21,15 @@ tutorial(
       await t.callout("on", page.locator('[data-test="ai-enabled"]'), "On", 3);
       await t.waitVoice();
       await t.uncallout("on");
-      await t.callout("who", [page.locator('[data-test="ai-provider"]'), page.locator('[data-test="ai-model"]')], "Where the model runs, and which", 6);
+      // The model list loads when the assistant is turned on; on a preset config it can still be
+      // the plain text field, so ask the server for the list first.
+      if (!(await page.locator('[data-test="ai-model"]').isVisible())) {
+        const refresh = page.locator('[data-test="ai-models-refresh"]');
+        if (await refresh.isEnabled().catch(() => false)) await refresh.click();
+        await page.locator('[data-test="ai-model"]').waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
+      }
+      const model = page.locator('[data-test="ai-model"], [data-test="ai-model-input"]').first();
+      await t.callout("who", [page.locator('[data-test="ai-provider"]'), model], "Where the model runs, and which", 6);
       await t.say("Pick where the model runs: a local server like LM Studio or Ollama, or a cloud provider with a key. Then pick the model. This one is a nine billion parameter model on this PC.");
       await t.waitVoice();
       await t.uncallout("who");
