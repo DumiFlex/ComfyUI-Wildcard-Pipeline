@@ -29,12 +29,20 @@ name: Release
 # makes don't start other workflows, so CI would never run on the release PR
 # and publishing would not reach the Registry. GitHub reserves the GITHUB_
 # prefix for its own tokens, hence the name. A failed publish can be retried
-# with "Re-run failed jobs"; the draft release waits until then.
+# with "Re-run failed jobs"; the draft release waits until then. A re-run
+# builds the same commit, so when the fix is a code change, merge it into main
+# and run this workflow by hand on main with `tag` set (e.g. v2.21.0): publish,
+# sync-dev and clear-notes then run for that draft from main's head.
 
 on:
   push:
     branches: [main, beta]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Publish this existing draft release (e.g. v2.21.0) from main's head"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -94,15 +102,19 @@ jobs:
 
   publish:
     needs: release
-    if: needs.release.outputs.release_created == 'true'
+    if: needs.release.outputs.release_created == 'true' || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
-      TAG: ${{ needs.release.outputs.tag_name }}
+      TAG: ${{ needs.release.outputs.tag_name || inputs.tag }}
       VERSION: ${{ needs.release.outputs.version }}
     steps:
-      # The release PR's merge commit, which is what the tag points at.
+      - name: Version from a hand-run tag
+        if: env.VERSION == ''
+        run: echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+      # The release PR's merge commit, which is what the tag points at (main's
+      # head on a hand run).
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -147,7 +159,7 @@ jobs:
       - name: Sync main back into dev
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          TAG: ${{ needs.release.outputs.tag_name }}
+          TAG: ${{ needs.release.outputs.tag_name || inputs.tag }}
         run: |
           # Merging the dev→main PR can auto-delete dev (it was that PR's head
           # branch). Put it back at the release commit; nothing is lost, since
@@ -175,7 +187,7 @@ jobs:
     needs: [release, publish, sync-dev]
     runs-on: ubuntu-latest
     env:
-      TAG: ${{ needs.release.outputs.tag_name }}
+      TAG: ${{ needs.release.outputs.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v5
         with:
