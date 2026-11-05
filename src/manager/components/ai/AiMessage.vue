@@ -322,8 +322,21 @@ function callout(tone: Tone, rest: Inline[]): VNode {
 /** A GitHub alert quote: the callout look around all of its blocks. */
 function calloutBlocks(tone: Tone, blocks: Block[]): VNode {
   return h("div", { class: "wp-ai-msg__callout", "data-tone": tone, "data-test": "ai-msg-alert" }, [
-    calloutIcon(tone), h("div", { class: "wp-ai-msg__callout-body" }, blocks.map(block)),
+    calloutIcon(tone), h("div", { class: "wp-ai-msg__callout-body" }, blocks.map(calloutBlock)),
   ]);
+}
+
+/** A block inside a callout: a paragraph that opens with its own "💡" / "Tip:" loses that
+ *  marker instead of drawing a second callout inside the first (a 9B wrote "> [!TIP]" then
+ *  "> 💡 Use …", which showed a tip inside a tip). */
+function calloutBlock(b: Block): VNode {
+  if (b.t === "p") {
+    const co = calloutOf(b.c);
+    return h("p", inline(co ? co.rest : b.c));
+  }
+  if (b.t === "quote" && !b.tone) return h("blockquote", b.blocks.map(calloutBlock));
+  if (b.t === "quote") return h("div", b.blocks.map(calloutBlock));
+  return block(b);
 }
 
 function block(b: Block): VNode {

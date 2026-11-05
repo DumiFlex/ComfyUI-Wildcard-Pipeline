@@ -151,6 +151,15 @@ describe("AiMessage", () => {
     expect(w.find("blockquote").exists()).toBe(false);
   });
 
+  it("never draws a tip inside a tip", () => {
+    const w = mount(AiMessage, { props: { text: "> [!TIP]\n> 💡 Use tags in rules.\n\n> [!NOTE]\n> **Tip:** keep it short." } });
+    const alerts = w.findAll("[data-test='ai-msg-alert']");
+    expect(alerts.length).toBe(2);
+    expect(w.findAll(".wp-ai-msg__callout").length).toBe(2);
+    expect(alerts[0].text()).toBe("Use tags in rules.");
+    expect(alerts[1].text()).toBe("keep it short.");
+  });
+
   it("shows a key-combo code span as keys", () => {
     const w = mount(AiMessage, { props: { text: "Press `Ctrl+Enter`, `Shift + Click` or `Esc`; type `red` or `A`." } });
     const keys = w.findAll("[data-test='ai-msg-keys']");
