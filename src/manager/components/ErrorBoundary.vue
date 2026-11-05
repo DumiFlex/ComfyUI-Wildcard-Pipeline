@@ -12,6 +12,8 @@
  */
 import { onErrorCaptured, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import Button from "@/kit/Button.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 
 const error = ref<Error | null>(null);
 const showStack = ref(false);
@@ -19,7 +21,7 @@ const route = useRoute();
 
 onErrorCaptured((err) => {
   error.value = err instanceof Error ? err : new Error(String(err));
-  // eslint-disable-next-line no-console
+   
   console.error("[ErrorBoundary]", err);
   return false;
 });
@@ -55,24 +57,28 @@ watch(
         restore them, or switch to another tab to keep working.
       </p>
       <div class="wp-error__detail">
-        <button
-          type="button"
-          class="wp-btn wp-btn--ghost wp-btn--sm"
+        <Button
+          variant="ghost"
+          size="sm"
+          :icon="showStack ? 'pi-chevron-up' : 'pi-chevron-down'"
+          :aria-expanded="showStack"
           @click="showStack = !showStack"
         >
-          <i :class="`pi ${showStack ? 'pi-chevron-up' : 'pi-chevron-down'}`" />
           {{ showStack ? "Hide details" : "Show details" }}
-        </button>
-        <pre v-if="showStack" class="wp-error__stack">{{ error.message }}
-{{ error.stack }}</pre>
+        </Button>
+        <CodeBlock
+          v-if="showStack"
+          class="wp-error__stack"
+          :code="`${error.message}\n${error.stack ?? ''}`"
+          title="Error details"
+          size="sm"
+          default-wrap
+          max-height="280px"
+        />
       </div>
       <div class="wp-error__actions">
-        <button type="button" class="wp-btn wp-btn--primary" @click="reload">
-          <i class="pi pi-refresh" />Reload page
-        </button>
-        <button type="button" class="wp-btn wp-btn--ghost" @click="reset">
-          <i class="pi pi-times" />Dismiss
-        </button>
+        <Button variant="primary" icon="pi-refresh" @click="reload">Reload page</Button>
+        <Button variant="ghost" icon="pi-times" @click="reset">Dismiss</Button>
       </div>
       <p class="wp-error__path">
         Path: <code>{{ route.fullPath }}</code>
@@ -96,19 +102,19 @@ watch(
   text-align: center;
   padding: 44px 32px;
   background: var(--wp-bg-2);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 38%, var(--wp-border));
-  border-radius: 12px;
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 38%, var(--wp-border));
+  border-radius: min(12px, var(--wp-radius-cap, 999px));
 }
 .wp-error__icon {
   width: 52px;
   height: 52px;
   margin: 0 auto 16px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 22%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 22%, transparent);
+  color: var(--wp-danger);
   font-size: 22px;
 }
 .wp-error__title {
@@ -126,20 +132,7 @@ watch(
 .wp-error__detail {
   margin: 10px 0 18px;
 }
-.wp-error__stack {
-  margin: 12px 0 0;
-  padding: 12px 14px;
-  background: var(--wp-bg-3);
-  border-radius: 6px;
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  text-align: left;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--wp-text-muted);
-  max-height: 280px;
-  overflow: auto;
-}
+.wp-error__stack { margin: 12px 0 0; text-align: left; }
 .wp-error__actions {
   display: flex;
   gap: 10px;
@@ -161,6 +154,6 @@ watch(
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   background: var(--wp-bg-3);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 </style>

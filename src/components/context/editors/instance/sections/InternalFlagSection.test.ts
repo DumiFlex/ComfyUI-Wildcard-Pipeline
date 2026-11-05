@@ -7,8 +7,8 @@ describe("InternalFlagSection", () => {
     const wrapper = renderSection(InternalFlagSection, {
       library: true, modelValue: null,
     });
-    const cb = wrapper.find('input[data-test="if-toggle"]');
-    expect((cb.element as HTMLInputElement).checked).toBe(true);
+    const cb = wrapper.find('[data-test="if-toggle"]');
+    expect(cb.attributes("aria-checked")).toBe("true");
     expect(wrapper.find('[data-test="if-reset"]').exists()).toBe(false);
   });
 
@@ -16,8 +16,8 @@ describe("InternalFlagSection", () => {
     const wrapper = renderSection(InternalFlagSection, {
       library: false, modelValue: true,
     });
-    const cb = wrapper.find('input[data-test="if-toggle"]');
-    expect((cb.element as HTMLInputElement).checked).toBe(true);
+    const cb = wrapper.find('[data-test="if-toggle"]');
+    expect(cb.attributes("aria-checked")).toBe("true");
     expect(wrapper.find('[data-test="if-reset"]').exists()).toBe(true);
   });
 
@@ -25,9 +25,7 @@ describe("InternalFlagSection", () => {
     const wrapper = renderSection(InternalFlagSection, {
       library: false, modelValue: null,
     });
-    const cb = wrapper.find('input[data-test="if-toggle"]');
-    (cb.element as HTMLInputElement).checked = true;
-    await cb.trigger("change");
+    await wrapper.find('[data-test="if-toggle"]').trigger("click");
     expect(getEmittedUpdate<boolean | null>(wrapper)).toBe(true);
   });
 
@@ -35,9 +33,7 @@ describe("InternalFlagSection", () => {
     const wrapper = renderSection(InternalFlagSection, {
       library: false, modelValue: true,
     });
-    const cb = wrapper.find('input[data-test="if-toggle"]');
-    (cb.element as HTMLInputElement).checked = false;
-    await cb.trigger("change");
+    await wrapper.find('[data-test="if-toggle"]').trigger("click");
     expect(getEmittedUpdate<boolean | null>(wrapper)).toBe(false);
   });
 

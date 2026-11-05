@@ -9,6 +9,7 @@
  * leaving a dead band here.
  */
 import { computed, defineAsyncComponent } from "vue";
+import ListRow from "@/kit/ListRow.vue";
 import type { VarProducer } from "../../extension/graph";
 
 const RichTextInput = defineAsyncComponent(() => import("../../manager/components/RichTextInput.vue"));
@@ -31,7 +32,7 @@ const emit = defineEmits<{
 const summary = computed(() => {
   if (props.linked) return "driven by the connected input";
   const t = props.modelValue.trim().replace(/\s+/g, " ");
-  return t || "empty: just the variables' negatives";
+  return t || "empty: no negative";
 });
 </script>
 
@@ -41,24 +42,24 @@ const summary = computed(() => {
     :class="{ 'wp-negbox--collapsed': collapsed }"
     data-test="neg-template-box"
   >
-    <button
-      type="button"
+    <ListRow
+      size="sm"
+      :icon="collapsed ? 'pi-chevron-right' : 'pi-chevron-down'"
       class="wp-negbox__head"
       :aria-expanded="!collapsed"
       aria-controls="wp-negbox-body"
       data-test="neg-template-toggle"
+      :data-wp-socket="collapsed ? 'negative_template' : undefined"
       :title="collapsed ? 'Show the negative template' : 'Hide the negative template'"
       @click="emit('toggle')"
     >
-      <i
-        :class="['pi', collapsed ? 'pi-chevron-right' : 'pi-chevron-down', 'wp-negbox__chev']"
-        aria-hidden="true"
-      />
-      <span class="wp-negbox__label">negative</span>
-      <span v-if="collapsed" class="wp-negbox__summary" data-test="neg-template-summary">{{ summary }}</span>
-      <span v-else-if="linked" class="wp-negbox__summary">driven by the connected input</span>
-    </button>
-    <div v-if="!collapsed" class="wp-negbox__body">
+      <span class="wp-negbox__line">
+        <span class="wp-negbox__label">negative</span>
+        <span v-if="collapsed" class="wp-negbox__summary" data-test="neg-template-summary">{{ summary }}</span>
+        <span v-else-if="linked" class="wp-negbox__summary">driven by the connected input</span>
+      </span>
+    </ListRow>
+    <div v-if="!collapsed" class="wp-negbox__body" data-wp-socket="negative_template">
       <RichTextInput
         :model-value="modelValue"
         surface="assembler"
@@ -92,27 +93,20 @@ const summary = computed(() => {
   color: var(--wp-text);
 }
 .wp-negbox--collapsed { height: 30px; }
+/* A kit ListRow (sm) in the negative's danger colour, held at the 26px header. */
 .wp-negbox__head {
-  display: flex;
-  align-items: center;
+  --wp-list-row-icon: var(--wp-danger);
   gap: 6px;
   height: 26px;
+  min-height: 26px;
   flex: 0 0 26px;
-  min-width: 0;
   padding: 0 2px;
-  border: 0;
-  background: transparent;
   color: var(--wp-danger);
   font: 500 11px/1 var(--wp-font-sans);
   text-transform: lowercase;
-  cursor: pointer;
-  text-align: left;
 }
-.wp-negbox__head:focus-visible {
-  outline: 1px solid var(--wp-danger);
-  outline-offset: 1px;
-}
-.wp-negbox__chev { font-size: 9px; }
+.wp-negbox__head:hover:not(:disabled) { color: var(--wp-danger); }
+.wp-negbox__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wp-negbox__summary {
   flex: 1 1 auto;
   min-width: 0;

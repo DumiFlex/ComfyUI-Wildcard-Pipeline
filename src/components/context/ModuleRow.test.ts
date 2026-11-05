@@ -168,17 +168,14 @@ describe("ModuleRow.vue — per-frame enable/disable", () => {
     const frame = ref<number | null>(2);
     const ctx = makeCtx({ currentFrame: frame, effectiveEnabled: () => false });
     const wrapper = mountRow(ctx, module({ enabled: true }));
-    const checkbox = wrapper.find('input[type="checkbox"]');
-    expect(checkbox.exists()).toBe(true);
-    expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+    expect(wrapper.get('[data-test="module-enabled"]').attributes("aria-checked")).toBe("false");
   });
 
   it("checkbox is checked when effectiveEnabled is true (base-off but on for this frame)", () => {
     const frame = ref<number | null>(2);
     const ctx = makeCtx({ currentFrame: frame, effectiveEnabled: () => true });
     const wrapper = mountRow(ctx, module({ enabled: false }));
-    const checkbox = wrapper.find('input[type="checkbox"]');
-    expect((checkbox.element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.get('[data-test="module-enabled"]').attributes("aria-checked")).toBe("true");
   });
 
   it("shows an off-#k badge when frameEnableOverride is 'off'", () => {
@@ -199,7 +196,7 @@ describe("ModuleRow.vue — per-frame enable/disable", () => {
     expect(badge.text()).toContain("#3");
   });
 
-  it("checkbox change calls ctx.toggleEnabled with the row index", async () => {
+  it("checkbox click calls ctx.toggleEnabled with the row index", async () => {
     const frame = ref<number | null>(2);
     const calls: number[] = [];
     const ctx = makeCtx({
@@ -207,7 +204,30 @@ describe("ModuleRow.vue — per-frame enable/disable", () => {
       toggleEnabled: (idx) => { calls.push(idx); },
     });
     const wrapper = mountRow(ctx, module({ enabled: true }));
-    await wrapper.find('input[type="checkbox"]').trigger("change");
+    await wrapper.get('[data-test="module-enabled"]').trigger("click");
     expect(calls).toEqual([0]);
+  });
+});
+
+describe("ModuleRow.vue — EXAMPLE chip", () => {
+  const missing = makeCtx({ isMissingFromLibrary: () => true });
+
+  it("shows EXAMPLE instead of MISSING on a missing example row", () => {
+    const w = mountRow(missing, module({ example: true }));
+    expect(w.find('[data-test="mod-example"]').exists()).toBe(true);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+    expect(w.find(".wp-state-missing").exists()).toBe(false);
+  });
+
+  it("leaves the chip to the bundle header for a row inside a bundle", () => {
+    const w = mountRow(missing, module({ example: true, bundle_origin: "bundle-1" } as Partial<ModuleEntry>));
+    expect(w.find('[data-test="mod-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+  });
+
+  it("shows MISSING on a missing row without the flag", () => {
+    const w = mountRow(missing, module());
+    expect(w.find('[data-test="mod-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(true);
   });
 });

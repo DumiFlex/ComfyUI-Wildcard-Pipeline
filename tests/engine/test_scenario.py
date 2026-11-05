@@ -166,6 +166,7 @@ def test_warnings_are_grouped_with_their_seeds():
     assert len(groups) == 1
     assert groups[0]["count"] == 30
     assert groups[0]["seeds"] == list(range(20))  # capped list, full count
+    assert isinstance(groups[0]["detail"], dict)  # kept as data, not a repr
 
 
 def test_a_failing_seed_is_recorded_not_fatal(monkeypatch):

@@ -12,6 +12,9 @@ import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
 import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
 import { isNegativeMode } from "../../extension/derivation-conditions";
+import Button from "@/kit/Button.vue";
+import Disclosure from "@/kit/Disclosure.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 
 const props = defineProps<{
   step: TraceStep;
@@ -23,7 +26,6 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "goto-step", key: string): void;
-  (e: "copy", text: string): void;
   (e: "focus-node", nodeId: string): void;
 }>();
 
@@ -114,13 +116,14 @@ function modeGlyph(mode: string | undefined): string {
       <div v-if="step.appliedBy.length" class="wp-dbg-detail__block">
         <div class="wp-dbg-detail__label">Re-weighted by</div>
         <div v-for="(c, i) in step.appliedBy" :key="i" class="wp-dbg-detail__line" data-test="dbg-applied-constraint">
-          <button
+          <Button
             v-if="c.stepKey"
-            type="button"
+            variant="link"
+            size="sm"
             class="wp-dbg-link"
-            title="Show this constraint in the trace"
+            hint="Show this constraint in the trace"
             @click="emit('goto-step', c.stepKey)"
-          ><span class="wp-dbg-kind-dot" />{{ c.name }}</button>
+          ><span class="wp-dbg-kind-dot" />{{ c.name }}</Button>
           <span v-else class="wp-dbg-link wp-dbg-link--static"><span class="wp-dbg-kind-dot" />{{ c.name }}</span>
           <span class="wp-dbg-dim">because <code>${{ refName(c.source) }}</code> is</span>
           <code>{{ c.sourceValue || '""' }}</code>
@@ -132,9 +135,12 @@ function modeGlyph(mode: string | undefined): string {
     <template v-if="step.kind === 'derivation' && d?.rules">
       <div v-if="d.rules.length > 1" class="wp-dbg-rules__bar">
         <span class="wp-dbg-dim">{{ d.rules.length }} rules, {{ d.rules.filter((r) => ruleOutcome(r).tone === "ok").length }} fired</span>
-        <button type="button" class="wp-dbg-linkbtn" data-test="dbg-rules-all" @click="setAllRules(!allRulesOpen)">
-          {{ allRulesOpen ? "Fold all" : "Open all" }}
-        </button>
+        <Button
+          size="sm"
+          variant="link"
+          data-test="dbg-rules-all"
+          @click="setAllRules(!allRulesOpen)"
+        >{{ allRulesOpen ? "Fold all" : "Open all" }}</Button>
       </div>
       <div
         v-for="(rule, ri) in d.rules"
@@ -143,24 +149,23 @@ function modeGlyph(mode: string | undefined): string {
         :class="[`is-${ruleOutcome(rule).tone}`, { 'is-folded': !ruleOpen(rule, ri) }]"
         data-test="dbg-rule"
       >
-        <button
-          type="button"
-          class="wp-dbg-rule__head"
-          :aria-expanded="ruleOpen(rule, ri)"
-          data-test="dbg-rule-head"
-          @click="toggleRule(rule, ri)"
+        <Disclosure
+          size="sm"
+          lazy
+          :open="ruleOpen(rule, ri)"
+          :trigger-attrs="{ 'data-test': 'dbg-rule-head' }"
+          @update:open="toggleRule(rule, ri)"
         >
-          <i class="pi pi-chevron-right wp-dbg-rule__chev" aria-hidden="true" />
-          <span class="wp-dbg-rule__name">Rule {{ ri + 1 }}</span>
-          <span class="wp-dbg-rule__outcome" data-test="dbg-rule-outcome">{{ ruleOutcome(rule).text }}</span>
-          <span v-if="!ruleOpen(rule, ri) && rule.action" class="wp-dbg-rule__peek">
-            <code>${{ rule.action.target }}</code>
-            <span :class="{ 'wp-dbg-neg-mode': isNegativeMode(rule.action.mode) }">{{ modeGlyph(rule.action.mode) }}</span>
-            {{ actionShown(rule.action) }}
-            <span v-if="ruleActions(rule).length > 1" class="wp-dbg-dim">+{{ ruleActions(rule).length - 1 }}</span>
-          </span>
-        </button>
-        <template v-if="ruleOpen(rule, ri)">
+          <template #summary>
+            <span class="wp-dbg-rule__name">Rule {{ ri + 1 }}</span>
+            <span class="wp-dbg-rule__outcome" data-test="dbg-rule-outcome">{{ ruleOutcome(rule).text }}</span>
+            <span v-if="!ruleOpen(rule, ri) && rule.action" class="wp-dbg-rule__peek">
+              <code>${{ rule.action.target }}</code>
+              <span :class="{ 'wp-dbg-neg-mode': isNegativeMode(rule.action.mode) }">{{ modeGlyph(rule.action.mode) }}</span>
+              {{ actionShown(rule.action) }}
+              <span v-if="ruleActions(rule).length > 1" class="wp-dbg-dim">+{{ ruleActions(rule).length - 1 }}</span>
+            </span>
+          </template>
           <div
             v-for="b in rule.branches ?? []"
             :key="b.index"
@@ -209,7 +214,7 @@ function modeGlyph(mode: string | undefined): string {
             />
           </div>
           </template>
-        </template>
+        </Disclosure>
       </div>
     </template>
     <p v-else-if="step.kind === 'derivation' && step.status === 'ok'" class="wp-dbg-dim wp-dbg-detail__note">
@@ -272,28 +277,27 @@ function modeGlyph(mode: string | undefined): string {
     </div>
 
     <div class="wp-dbg-detail__meta">
-      <button
+      <CopyButton
         v-if="step.seed"
-        type="button"
+        :text="step.seed"
+        :label="step.seedLocked ? 'Copy the locked seed' : 'Copy the seed this module rolled with'"
         class="wp-dbg-meta-btn"
-        :title="step.seedLocked ? 'Locked seed. Click to copy.' : 'Seed this module rolled with. Click to copy.'"
-        @click="emit('copy', step.seed)"
-      ><i :class="['pi', step.seedLocked ? 'pi-lock' : 'pi-hashtag']" /> {{ step.seed }}</button>
-      <button
+      ><i :class="['pi', step.seedLocked ? 'pi-lock' : 'pi-hashtag']" aria-hidden="true" /> {{ step.seed }}</CopyButton>
+      <CopyButton
         v-if="step.id"
-        type="button"
+        :text="step.id"
+        label="Copy module id"
         class="wp-dbg-meta-btn"
-        title="Copy module id"
-        @click="emit('copy', step.id)"
-      ><i class="pi pi-id-card" /> {{ step.id }}</button>
-      <button
+      ><i class="pi pi-id-card" aria-hidden="true" /> {{ step.id }}</CopyButton>
+      <Button
         v-if="canFocus && step.nodeId"
-        type="button"
-        class="wp-dbg-meta-btn"
+        size="sm"
+        variant="outline"
+        icon="pi-arrow-up-right"
         data-test="dbg-focus-node"
-        title="Select the node this ran in"
+        hint="Select the node this ran in"
         @click="emit('focus-node', step.nodeId)"
-      ><i class="pi pi-arrow-up-right" /> show node</button>
+      >Show node</Button>
     </div>
   </div>
 </template>
@@ -313,7 +317,7 @@ function modeGlyph(mode: string | undefined): string {
   align-items: center;
   gap: 4px;
   padding: 2px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2, var(--wp-bg2));
   color: var(--wp-text-muted);
   font-size: 10px;
@@ -332,21 +336,14 @@ function modeGlyph(mode: string | undefined): string {
 .wp-dbg-detail__line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
 .wp-dbg-detail__line code, .wp-dbg-var { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-dim { color: var(--wp-text-dim); }
-.wp-dbg-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  font: 600 11px/1.4 var(--wp-font-sans);
-  color: var(--wp-kind-constraint);
-  cursor: pointer;
+/* The plain span and the kit link Button share this look. */
+.wp-dbg-link, .wp-dbg-link.wp-btn {
+  display: inline-flex; align-items: center; gap: 5px; height: auto; min-height: 0; padding: 0;
+  font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-kind-constraint);
 }
-.wp-dbg-link:hover { text-decoration: underline; }
 .wp-dbg-link--static { cursor: default; }
 .wp-dbg-link--static:hover { text-decoration: none; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; background: var(--wp-kind-constraint); }
+.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; background: var(--wp-kind-constraint); }
 .wp-dbg-dim code { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-detail__note { margin: 0; font-style: italic; }
 .wp-dbg-rule {
@@ -359,25 +356,8 @@ function modeGlyph(mode: string | undefined): string {
   background: var(--wp-bg-deep, var(--wp-bg));
 }
 .wp-dbg-rules__bar { display: flex; align-items: center; justify-content: space-between; font-size: 10px; }
-.wp-dbg-linkbtn {
-  all: unset;
-  cursor: pointer;
-  font-size: 10px;
-  color: var(--wp-accent-text, var(--wp-accent));
-}
-.wp-dbg-linkbtn:hover { text-decoration: underline; }
-.wp-dbg-linkbtn:focus-visible { outline: 1px solid var(--wp-accent); outline-offset: 1px; }
-.wp-dbg-rule__head {
-  all: unset;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  cursor: pointer;
-}
-.wp-dbg-rule__head:focus-visible { outline: 1px solid var(--wp-accent); outline-offset: 2px; }
-.wp-dbg-rule__chev { font-size: 7px; color: var(--wp-text-dim); transition: transform var(--wp-motion-quick, 0.12s) ease; }
-.wp-dbg-rule:not(.is-folded) .wp-dbg-rule__chev { transform: rotate(90deg); }
+.wp-dbg-rule :deep(.wp-disclosure__trigger) { gap: 8px; padding: 0 2px; }
+.wp-dbg-rule :deep(.wp-disclosure__content) { display: flex; flex-direction: column; gap: 3px; padding-left: 14px; }
 .wp-dbg-rule__result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--wp-text-muted); }
 .wp-dbg-rule__peek {
   flex: 1;
@@ -416,8 +396,8 @@ function modeGlyph(mode: string | undefined): string {
 }
 /* A later action of the same clause (THEN ... AND ...). */
 .wp-dbg-and { font: 600 9px/1.5 var(--wp-font-sans); text-transform: uppercase; color: var(--wp-kind-derivation); }
-.wp-dbg-neg-mode { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red, #e5484d); }
-.wp-dbg-neg-text { color: var(--wp-red, #e5484d); }
+.wp-dbg-neg-mode { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red); }
+.wp-dbg-neg-text { color: var(--wp-red); }
 .wp-dbg-ref {
   display: flex;
   align-items: baseline;
@@ -427,13 +407,13 @@ function modeGlyph(mode: string | undefined): string {
 }
 .wp-dbg-ref__arrow { color: var(--wp-text-dim); }
 .wp-dbg-ref__name { font-family: var(--wp-font-mono); color: var(--wp-kind-wildcard); white-space: nowrap; }
-.wp-dbg-detail__error { margin: 0; color: var(--wp-red, #e5484d); font-family: var(--wp-font-mono); word-break: break-word; }
+.wp-dbg-detail__error { margin: 0; color: var(--wp-red); font-family: var(--wp-font-mono); word-break: break-word; }
 .wp-dbg-detail__warn { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
 .wp-dbg-detail__warn-label { font-weight: 600; color: var(--wp-warn); }
-.wp-dbg-detail__warn.is-error .wp-dbg-detail__warn-label { color: var(--wp-red, #e5484d); }
+.wp-dbg-detail__warn.is-error .wp-dbg-detail__warn-label { color: var(--wp-red); }
 .wp-dbg-detail__warn.is-info .wp-dbg-detail__warn-label { color: var(--wp-info, var(--wp-accent)); }
 .wp-dbg-detail__meta { display: flex; flex-wrap: wrap; gap: 4px; }
-.wp-dbg-meta-btn {
+.wp-copy-btn.wp-dbg-meta-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -447,4 +427,6 @@ function modeGlyph(mode: string | undefined): string {
 }
 .wp-dbg-meta-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, var(--wp-border)); }
 .wp-dbg-meta-btn .pi { font-size: 9px; }
+.wp-dbg-link.wp-btn :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.wp-dbg-link.wp-btn :deep(.wp-btn__label) { line-height: inherit; }
 </style>

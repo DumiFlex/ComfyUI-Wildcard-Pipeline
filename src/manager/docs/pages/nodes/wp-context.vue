@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
+import Banner from "@/kit/Banner.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
+import DocDetails from "../../../components/docs/DocDetails.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const ports = [
-  { term: "upstream (in)", desc: "Connect an earlier WP Context here to chain them together. Its variables flow through and can be overridden by modules in this node. Leave unconnected to start a fresh chain." },
-  { term: "seed", desc: "Controls the random picks inside this node. Change it to get a different roll; right-click → Convert widget to input to drive it from a seed widget or the WP Context Loop." },
-  { term: "modules", desc: "The stack of modules inside this node — wildcards, fixed values, combines, constraints, and bundles. Add modules by clicking the + button. Drag rows to reorder." },
-  { term: "context (out)", desc: "The resolved variable map produced by this node. Wire it into a WP Prompt Assembler, WP Debug, WP Context Injector, or another WP Context." },
-];
 </script>
 
 <template>
@@ -22,66 +19,78 @@ const ports = [
     icon="pi pi-sitemap"
     tone="node"
     node-id="WP_Context"
-    blurb="The heart of the pipeline. Build a stack of modules, roll them with a seed, and send resolved $variables downstream to an Assembler or Debug node."
+    blurb="The heart of the pipeline. Stack modules from your library, roll them with a seed, and send the $variables on to an Assembler."
   >
-    <DocSection title="What it's for">
+    <DocSection title="What it does">
       <p>
-        A <b>WP Context</b> is where you define the named values that power your prompt.
-        Add a wildcard module and it becomes <VarToken>$subject</VarToken>. Add a fixed-value
-        module and it becomes <VarToken>$style</VarToken>. When you press Generate the node
-        rolls every module with your seed and hands a complete map of
-        <VarToken>$variable</VarToken> → value to whatever is wired downstream.
+        Add a wildcard and the node rolls it into <VarToken>$subject</VarToken>; add a fixed value
+        and you get <VarToken>$style</VarToken>. On every Generate the node runs its modules from
+        top to bottom and passes the finished list of variables to the next node.
       </p>
-      <p>
-        Chain two Context nodes together — the downstream one can add new variables or
-        override ones set above. The last write wins, so a downstream
-        <VarToken>$subject</VarToken> replaces the upstream one.
-      </p>
-      <DocImage
+      <DocUseWhen
+        :good="[
+          'One per pack or per character',
+          'A second, chained Context that adds to or replaces the first',
+        ]"
+        :better="[
+          'Text typed onto the canvas or an LLM caption: use WP Context Injector',
+        ]"
+      />
+      <DocAnnotated
         src="images/docs/wp-context.png"
-        ratio="16 / 6"
-        caption="A WP Context with three modules in its stack (Starter subject wildcard, Starter scene combine flagged orange MISSING VAR because $mood isn't published, Starter style fixed) wired into a WP Prompt Assembler. The assembler chip strip lists the three upstream $vars; the resolved preview shows 'cat, oil painting,, masterpiece, highly detailed' — the empty slot where $scene would have rendered makes the missing-var warning concrete."
+        ratio="1720 / 752"
+        caption="Two WP Contexts from the One image example: Character (its bundles open, each row with its lock, globe and bin) feeds Scene."
       />
     </DocSection>
 
-    <DocSection title="Inputs &amp; outputs">
-      <DocKeyList :items="ports" />
+    <DocSection title="Use it">
+      <ol>
+        <li>Click <b>Add module</b> and pick from your library, or <b>Add Bundle</b> for a saved
+          group.</li>
+        <li>Mind the order: modules run top to bottom. A combine that reads
+          <VarToken>$mood</VarToken> goes below the wildcard that picks it, and a constraint goes
+          between its two wildcards.</li>
+        <li>Wire <code>context</code> into a <b>WP Prompt Assembler</b> and write a template such as
+          <VarToken>a photo of $subject</VarToken>.</li>
+      </ol>
+      <p>
+        Drag a row by its handle to reorder it or move it to another Context. Untick a row to switch
+        it off. Right-click a row for Edit, Duplicate, Hold across run, Save to library and more.
+      </p>
     </DocSection>
 
-    <DocSection title="Per-module behaviour in a loop">
-      <p>
-        When a <b>WP Context Loop</b> drives this node, each module chooses how it behaves across
-        the batch through its Runtime settings:
-      </p>
-      <ul>
-        <li>
-          <b>Hold across run</b> — the module resolves once at the first frame and reuses that exact
-          value on every frame of the run (the resolved value, not just the seed — constrained
-          picks and nested <code>@{}</code> refs stay frozen too), then re-rolls next run. The
-          “keep this element steady for the whole batch” switch. Flip it from the module's Runtime
-          settings, or right-click the row and pick <b>Hold across run</b> for a two-click toggle.
-        </li>
-        <li>
-          <b>Per-frame overrides</b> — using the loop's <b>edit frame</b> selector you can give one
-          frame its own pick, seed lock, or enable/disable for any module in the stack, leaving the
-          rest of the batch on the base.
-        </li>
-      </ul>
+    <DocSection title="Inputs and outputs">
+      <DocFields node="WP_Context" group="ports" />
+    </DocSection>
+
+    <DocSection title="What the row markers mean">
+      <DocFields node="WP_Context" group="markers" />
     </DocSection>
 
     <DocSection title="Good to know">
-      <DocCallout variant="tip">
-        Lock a module's seed (via the module's instance options) to freeze that pick across
-        all <b>WP Context Loop</b> iterations — handy for holding the art style steady while
-        the subject varies across a batch.
-      </DocCallout>
-      <DocCallout variant="tip">
-        Modules you add to a WP Context are <b>snapshots</b>, not live links. If you edit a module
-        in the library afterward, the Context doesn't change under you — it flags that row as
-        <b>drifted</b> so you can pull (sync) the updated version when you're ready. That keeps a
-        saved workflow reproducible: it won't silently change because you edited a module somewhere
-        else.
-      </DocCallout>
+      <ul>
+        <li><b>Chaining:</b> a later Context can set the same variable again, and the later value
+          wins. See <DocRef id="context-chaining" />.</li>
+        <li><b>Keep a pick steady:</b> Lock pick / Lock seed keeps it for good, Hold across run for
+          one Generate. See <DocRef id="seeds-and-loops" />.</li>
+        <li><b>Duplicate</b> renames the copy's variable (<code>$hair</code> becomes
+          <code>$hair_2</code>) so the copy rolls on its own.</li>
+        <li><b>Rows are copies.</b> Editing a module in the library doesn't change the workflow until
+          you Refresh the row, so a saved workflow keeps giving the same results.</li>
+      </ul>
+      <DocDetails title="Where @{} references look">
+        <p>
+          A reference such as <VarToken>@{color}</VarToken> looks for its wildcard among this node's
+          rows first (even a switched-off row), then in the library of the machine that runs the
+          workflow. The same goes for a reference inside a referenced wildcard, at every level. Keep
+          the wildcards a reference needs on the node and a workflow you share works on someone
+          else's machine too. In the editor, hover the chip: its card says
+          <b>pool: this node</b> or <b>pool: library</b>. WP Debug shows where each pick came from.
+        </p>
+      </DocDetails>
+      <Banner tone="info" note>
+        Wire a <b>WP Debug</b> to the output to see exactly what each module picked.
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

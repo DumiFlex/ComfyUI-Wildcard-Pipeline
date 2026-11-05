@@ -228,3 +228,46 @@ def test_double_insert_each_constraint_reads_its_own_source_pick():
             f"seed {seed}: copy-2 must read its OWN source 'short' "
             f"(exclude positive -> melancholic)"
         )
+
+
+
+def test_double_insert_same_target_keeps_each_copy_to_its_own_target():
+    """Same as above but both copies' targets share ONE library uuid, so
+    both constraints name the same target. Each copy's constraint governs
+    only its own copy's target: copy 1 never re-weights copy 2's target."""
+    w1 = _hair_src("wwww0001", "long", "long", uid="uidw1000001", bundle_origin="B1")
+    c1 = _constraint("wwww0001", "tttt0001", matrix=_BOTH_ROWS,
+                     uid="uidc1000001", bundle_origin="B1")
+    t1 = _mood_target("tttt0001", uid="uidt1000001", bundle_origin="B1")
+    w2 = _hair_src("wwww0001", "short", "short", uid="uidw2000001", bundle_origin="B2")
+    c2 = _constraint("wwww0001", "tttt0001", matrix=_BOTH_ROWS,
+                     uid="uidc2000001", bundle_origin="B2")
+    t2 = _mood_target("tttt0001", uid="uidt2000001", bundle_origin="B2")
+    for seed in range(20):
+        ctx = _run([w1, c1, t1, w2, c2, t2], seed=seed)
+        by_origin = ctx["__wp_picks__"]["tttt0001"]["by_origin"]
+        assert by_origin["B1"]["value"] == "joyful", seed
+        # Copy 1's rule would exclude this; only copy 2's applies here.
+        assert by_origin["B2"]["value"] == "melancholic", seed
+        assert ctx["__wp_constraint_hits__"] == {"uidc1000001": 1, "uidc2000001": 1}
+
+
+def test_bundle_constraint_still_reaches_a_target_in_another_bundle():
+    """A constraint in bundle B1 whose target sits in a different bundle
+    (which has no copy of that constraint) still applies there."""
+    from engine.context import strip_internals
+    w1 = _hair_src("wwww0001", "long", "long", uid="uidw1000001", bundle_origin="B1")
+    c1 = _constraint("wwww0001", "tttt0001", matrix=_BOTH_ROWS,
+                     uid="uidc1000001", bundle_origin="B1")
+    t = _mood_target("tttt0001", uid="uidt9000001", bundle_origin="OTHER")
+    for seed in range(20):
+        assert strip_internals(_run([w1, c1, t], seed=seed))["mood"] == "joyful"
+
+
+def test_manual_constraint_still_reaches_targets_inside_bundles():
+    from engine.context import strip_internals
+    w = _hair_src("wwww0001", "long", "long", uid="uidw1000001", bundle_origin="B1")
+    c = _constraint("wwww0001", "tttt0001", matrix=_BOTH_ROWS, uid="uidc0000001")
+    t = _mood_target("tttt0001", uid="uidt1000001", bundle_origin="B1")
+    for seed in range(20):
+        assert strip_internals(_run([w, c, t], seed=seed))["mood"] == "joyful"

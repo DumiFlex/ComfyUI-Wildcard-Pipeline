@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
 import StaleBanner from "../components/StaleBanner.vue";
+import { usePageWidth } from "../composables/usePageWidth";
 import ErrorBoundary from "../components/ErrorBoundary.vue";
-import ToastHost from "../components/ui/ToastHost.vue";
+import ToastHost from "@/kit/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
 import FeedbackModal from "../components/FeedbackModal.vue";
 import CommandPalette from "../components/CommandPalette.vue";
 import ShortcutsHelp from "../components/ShortcutsHelp.vue";
 import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
 import { useUiStore } from "../stores/uiStore";
+import { useAiConfig } from "../composables/useAiConfig";
+import { useAiChat } from "../composables/useAiChat";
+import { useAskHandoff } from "../composables/useAskHandoff";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
 import { useStaleStore } from "../stores/staleStore";
@@ -25,6 +29,7 @@ import { useCascadeStore } from "../cascade/cascade-store";
 import { useGuidedPublishStore } from "../import-export/guided-publish-store";
 import { repairLibraryOnce } from "../import-export/uuid-repair-boot";
 import { api } from "../api/client";
+import { libraryVersion } from "../composables/useLibraryChanged";
 import {
   hashes as libraryHashes,
   bundleHashes as libraryBundleHashes,
@@ -33,6 +38,14 @@ import {
 } from "../../components/context/drift-store";
 
 const ui = useUiStore();
+const aiChat = useAiChat();
+const aiConfig = useAiConfig();
+// Loaded the first time the assistant opens, so the manager doesn't pay for
+// it when the assistant is off.
+const AiChatDrawer = defineAsyncComponent(() => import("../components/ai/AiChatDrawer.vue"));
+const AiSelectionChip = defineAsyncComponent(() => import("../components/ai/AiSelectionChip.vue"));
+// "Ask about this page" in the canvas help frame lands here (`?ask=`).
+useAskHandoff();
 const commandIndex = useCommandIndex();
 const recent = useRecentStore();
 const stale = useStaleStore();
@@ -156,6 +169,44 @@ function onVisibilityChange(): void {
   }
 }
 
+const pageEl = ref<HTMLElement | null>(null);
+usePageWidth(pageEl);
+
+// Which catalogs have loaded at least once. Recently opened is pruned
+// against them only then, so a failed fetch never empties it.
+const catalogsLoaded = { modules: false, bundles: false };
+function fetchModuleCatalog(): Promise<void> {
+  return moduleStore.fetchCatalog().then(() => { catalogsLoaded.modules = true; });
+}
+function fetchBundleCatalog(): Promise<void> {
+  return bundleStore.fetchCatalog().then(() => { catalogsLoaded.bundles = true; });
+}
+function pruneRecent(): void {
+  if (!catalogsLoaded.modules || !catalogsLoaded.bundles) return;
+  recent.prune(new Set([...moduleStore.catalog, ...bundleStore.catalog].map((r) => r.id)));
+}
+
+/** Fetch every library list some page has loaded, after a change the
+ *  drift poll can't be relied on to catch in time (a cascade delete or
+ *  undo, a chat card applied or undone). The stores are the one copy the
+ *  list pages, editors and sidebar read, so refreshing them here keeps
+ *  every page live without each one watching for changes itself. */
+async function refreshLibrary(): Promise<void> {
+  const jobs: Promise<unknown>[] = [
+    fetchModuleCatalog(),
+    fetchBundleCatalog(),
+    templateStore.fetchCatalog(),
+    categoryStore.fetchAll(),
+  ];
+  if (moduleStore.listed) jobs.push(moduleStore.fetchAll());
+  if (bundleStore.listed) jobs.push(bundleStore.fetchAll());
+  if (templateStore.listed) jobs.push(templateStore.fetchAll());
+  await Promise.allSettled(jobs);
+  cascadeStore.rebuildFromCatalogs(moduleStore.catalog, bundleStore.catalog, categoryStore.items);
+  pruneRecent();
+}
+watch(libraryVersion, () => { void refreshLibrary(); });
+
 onMounted(() => {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("wp:server-restarted", onServerRestarted);
@@ -173,18 +224,19 @@ onMounted(() => {
   // user navigates to them. AppLayout mounts once for the entire SPA
   // lifetime, so this is a one-time cost per app load.
   // After all three fetches complete, bootstrap the cascade reverse-dep
-  // index so PillCountBadges in editors show real counts immediately.
+  // index so the "used by" counts in editors show real numbers immediately.
   // Errors on individual fetches are swallowed — the lazy list-view
   // fetches still run on actual usage if a fetch fails here.
   Promise.all([
-    moduleStore.fetchCatalog().catch(() => undefined),
-    bundleStore.fetchCatalog().catch(() => undefined),
+    fetchModuleCatalog().catch(() => undefined),
+    fetchBundleCatalog().catch(() => undefined),
     templateStore.fetchCatalog().catch(() => undefined),
     categoryStore.fetchAll().catch(() => undefined),
   ]).then(() => {
     cascadeStore.rebuildFromCatalogs(
       moduleStore.catalog, bundleStore.catalog, categoryStore.items,
     );
+    pruneRecent();
     // One-time repair of any pre-existing non-8-hex module/bundle ids (a
     // `coloruni`-style id can't be nested-referenced). Gated + fire-and-forget;
     // refresh the catalogs + cascade index only if it actually rekeyed rows.
@@ -233,11 +285,12 @@ onMounted(() => {
     () => hashesFingerprint(libraryHashes.value),
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
-      moduleStore.fetchCatalog()
+      fetchModuleCatalog()
         .then(() => {
           cascadeStore.rebuildFromCatalogs(
             moduleStore.catalog, bundleStore.catalog, categoryStore.items,
           );
+          pruneRecent();
           // Library changed (insert / delete / edit, from ANY surface) —
           // re-run the community update check so per-row pills track
           // reality without a manual refresh: a pill clears after an
@@ -255,11 +308,12 @@ onMounted(() => {
     () => hashesFingerprint(libraryBundleHashes.value),
     (next, prev) => {
       if (prev === undefined || prev === "" || next === prev) return;
-      bundleStore.fetchCatalog()
+      fetchBundleCatalog()
         .then(() => {
           cascadeStore.rebuildFromCatalogs(
             moduleStore.catalog, bundleStore.catalog, categoryStore.items,
           );
+          pruneRecent();
           // See the module-hash watch above — same recheck, for bundle
           // inserts / deletes / edits (#4 / #6).
           void communityUpdateStore.check({
@@ -285,9 +339,13 @@ onBeforeUnmount(() => {
     <a href="#wp-main" class="wp-skip-link">Skip to main content</a>
     <StaleBanner />
     <AppTopbar />
-    <div class="wp-body" :data-collapsed="ui.sidebarCollapsed || undefined">
+    <div
+      class="wp-body"
+      :data-collapsed="ui.sidebarCollapsed || undefined"
+      :data-ai-chat="aiChat.open.value || undefined"
+    >
       <AppSidebar @action="onNavAction" />
-      <main id="wp-main" class="wp-content" tabindex="-1">
+      <main id="wp-main" ref="pageEl" class="wp-content" tabindex="-1">
         <ErrorBoundary>
           <RouterView v-slot="{ Component, route }">
             <Transition name="route-fade" mode="out-in">
@@ -304,6 +362,8 @@ onBeforeUnmount(() => {
         </ErrorBoundary>
       </main>
     </div>
+    <AiChatDrawer v-if="aiChat.open.value" />
+    <AiSelectionChip v-if="aiConfig.ready.value" />
     <ToastHost />
     <TweaksPanel />
     <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
@@ -339,6 +399,11 @@ onBeforeUnmount(() => {
 .route-fade-enter-from { opacity: 0; transform: translateY(6px); }
 .route-fade-leave-to { opacity: 0; transform: translateY(-4px); }
 .route-fade-leave-active { transition-duration: 100ms; }
+
+/* Wide screens make room for the assistant chat instead of covering the page. */
+@media (min-width: 1200px) {
+  .wp-body[data-ai-chat] > .wp-content { margin-right: min(var(--wp-ai-chat-w, 440px), 100vw); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .route-fade-enter-active,

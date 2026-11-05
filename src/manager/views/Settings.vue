@@ -9,17 +9,21 @@
  * search hit), so links, the command palette and the back button all work.
  * Every row a search can land on is listed in `settings-index.ts`.
  */
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import Icon from "../components/ui/Icon.vue";
+import Icon from "@/kit/Icon.vue";
+import ListRow from "@/kit/ListRow.vue";
 import GeneralSection from "../components/settings/sections/GeneralSection.vue";
 import AppearanceSection from "../components/settings/sections/AppearanceSection.vue";
 import EditingSection from "../components/settings/sections/EditingSection.vue";
 import AutocompleteSection from "../components/settings/sections/AutocompleteSection.vue";
 import CanvasSection from "../components/settings/sections/CanvasSection.vue";
 import TestRunnerSection from "../components/settings/sections/TestRunnerSection.vue";
+import AiSection from "../components/settings/sections/AiSection.vue";
 import LibrarySection from "../components/settings/sections/LibrarySection.vue";
 import AdvancedSection from "../components/settings/sections/AdvancedSection.vue";
+import AboutSection from "../components/settings/sections/AboutSection.vue";
 import {
   SECTIONS,
   isSectionId,
@@ -40,11 +44,15 @@ const COMPONENTS: Record<SectionId, Component> = {
   autocomplete: AutocompleteSection,
   canvas: CanvasSection,
   "test-runner": TestRunnerSection,
+  ai: AiSection,
   library: LibrarySection,
   advanced: AdvancedSection,
+  about: AboutSection,
 };
 
 const active = computed<SectionId>(() => (isSectionId(props.section) ? props.section : "general"));
+/** Sections laid out in two columns, so they use the page's full width. */
+const WIDE = new Set<SectionId>(["ai"]);
 const activeDef = computed(() => SECTIONS.find((s) => s.id === active.value) ?? SECTIONS[0]);
 
 const query = ref("");
@@ -86,20 +94,17 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
 </script>
 
 <template>
-  <div class="wp-page wp-settings">
+  <div class="wp-page wp-settings" :data-wide="!searching && WIDE.has(active) ? 'true' : undefined">
     <aside class="wp-settings__nav" aria-label="Settings sections">
       <h1 class="wp-settings__title">Settings</h1>
-      <div class="wp-settings__search">
-        <Icon name="pi-search" />
-        <input
-          v-model="query"
-          type="search"
-          placeholder="Search settings"
-          aria-label="Search settings"
-          data-test="settings-search"
-          @keydown="onSearchKey"
-        >
-      </div>
+      <SearchInput
+        v-model="query"
+        class="wp-settings__search"
+        placeholder="Search settings"
+        aria-label="Search settings"
+        data-test="settings-search"
+        @keydown="onSearchKey"
+      />
       <nav class="wp-settings__sections">
         <RouterLink
           v-for="s in SECTIONS"
@@ -125,11 +130,10 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
         </header>
         <ul v-if="results.length" class="wp-settings__results" data-test="settings-results">
           <li v-for="r in results" :key="r.key">
-            <button type="button" class="wp-settings__result" :data-test="`settings-result-${r.key}`" @click="openResult(r)">
+            <ListRow class="wp-settings__result" :description="r.hint" :data-test="`settings-result-${r.key}`" @click="openResult(r)">
               <span class="wp-settings__result-where">{{ sectionLabel(r.section) }}</span>
               <span class="wp-settings__result-label">{{ r.label }}</span>
-              <span class="wp-settings__result-hint">{{ r.hint }}</span>
-            </button>
+            </ListRow>
           </li>
         </ul>
         <p v-else class="wp-settings__blurb">Nothing matches. Try a shorter word.</p>
@@ -151,36 +155,18 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   grid-template-columns: 220px minmax(0, 1fr);
   gap: var(--wp-space-8, 32px);
   align-items: start;
-  max-width: 1080px;
+  /* The same frame for every section, so the section list doesn't jump
+     sideways when a wide section (AI assistant) opens. */
+  max-width: none;
 }
+/* Sticky at the scroll area's own top: a larger offset than the page's top
+   padding pushed the list below the section heading before any scroll. */
 .wp-settings__nav {
   position: sticky;
-  top: var(--wp-space-6);
+  top: 0;
 }
-.wp-settings__title { font-size: 20px; margin: 0 0 var(--wp-space-5); }
-.wp-settings__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius);
-  padding: 0 var(--wp-space-4);
-  color: var(--wp-text-dim);
-  margin-bottom: var(--wp-space-5);
-}
-.wp-settings__search:focus-within { border-color: var(--wp-accent-500); }
-.wp-settings__search input {
-  flex: 1;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--wp-text);
-  font: inherit;
-  font-size: var(--wp-text-sm);
-  outline: none;
-}
+.wp-settings__title { font-size: 20px; line-height: 28px; margin: 0 0 var(--wp-space-5); }
+.wp-settings__search { margin-bottom: var(--wp-space-5); }
 .wp-settings__sections { display: flex; flex-direction: column; gap: 2px; }
 .wp-settings__section-link {
   display: flex;
@@ -198,34 +184,30 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   color: var(--wp-accent-text);
   font-weight: 600;
 }
-.wp-settings__main { min-width: 0; max-width: 780px; }
+.wp-settings__main { min-width: 0; max-width: 1100px; }
+/* A section with a side column (AI assistant) takes the rest of the width. */
+.wp-settings[data-wide="true"] .wp-settings__main { max-width: none; }
 .wp-settings__head { margin-bottom: var(--wp-space-6); }
-.wp-settings__h2 { font-size: 18px; margin: 0; }
+.wp-settings__h2 { font-size: 18px; line-height: 28px; margin: 0; }
 .wp-settings__blurb { margin: 4px 0 0; font-size: var(--wp-text-sm); color: var(--wp-text-dim); }
 .wp-settings__results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
+/* A kit list row drawn as a card: where it lives, its name, then its hint. */
 .wp-settings__result {
-  width: 100%;
-  display: grid;
-  gap: 2px;
-  text-align: left;
   padding: var(--wp-space-4) var(--wp-space-5);
   background: var(--wp-bg-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg, 10px);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
+.wp-settings__result :deep(.wp-list-row__label) { display: grid; gap: 2px; white-space: normal; }
 .wp-settings__result:hover { border-color: var(--wp-accent-500); }
 .wp-settings__result-where { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--wp-text-dim); }
-.wp-settings__result-label { font-weight: 600; font-size: var(--wp-text-sm); }
-.wp-settings__result-hint { font-size: 12px; color: var(--wp-text-dim); }
+.wp-settings__result-label { font-weight: 600; font-size: var(--wp-text-sm); color: var(--wp-text); }
+.wp-settings__result :deep(.wp-list-row__desc) { font-size: 12px; }
 
-@media (max-width: 860px) {
-  .wp-settings { grid-template-columns: minmax(0, 1fr); gap: var(--wp-space-5); }
-  .wp-settings__nav { position: static; }
-  .wp-settings__sections { flex-direction: row; flex-wrap: wrap; }
-}
+/* Page area narrower than 660px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="660"] .wp-settings { grid-template-columns: minmax(0, 1fr); gap: var(--wp-space-5); }
+.wp-content[data-lt~="660"] .wp-settings__nav { position: static; }
+.wp-content[data-lt~="660"] .wp-settings__sections { flex-direction: row; flex-wrap: wrap; }
 </style>
 
 <style>
@@ -238,7 +220,7 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   font-size: 11px;
   line-height: 1.6;
   padding: 1px 9px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border-strong, var(--wp-border));
   color: var(--wp-text-muted);
   white-space: nowrap;
@@ -247,13 +229,13 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
   content: "";
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: status dot */
   background: currentColor;
   opacity: 0.8;
 }
 .wp-set-pill[data-tone="ok"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 40%, transparent); }
 .wp-set-pill[data-tone="warn"] { color: var(--wp-warn); border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent); }
-.wp-set-error { margin: 0 0 var(--wp-space-5); font-size: var(--wp-text-sm); color: var(--wp-danger, #f87171); }
+.wp-set-error { margin: 0 0 var(--wp-space-5); font-size: var(--wp-text-sm); color: var(--wp-danger); }
 .wp-set-callout {
   margin: 0 0 var(--wp-space-6);
   padding: var(--wp-space-4) var(--wp-space-5);

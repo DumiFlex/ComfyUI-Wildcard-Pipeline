@@ -27,3 +27,5 @@ declare module "/scripts/ui/components/buttonGroup.js";
 // the bundle).
 declare const __APP_VERSION__: string;
 declare const __APP_LICENSE__: string;
+/** The installed @dumiflex/wp-kit version (from its package.json). */
+declare const __KIT_VERSION__: { version: string };

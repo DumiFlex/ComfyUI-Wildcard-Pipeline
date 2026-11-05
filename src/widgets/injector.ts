@@ -512,7 +512,7 @@ export function create(node: InjectorNode, inputName: string) {
       if (v !== currentJson.value) currentJson.value = v;
     },
   });
-  attachThemeDetector(host!.widget.element, app);
+  host.onCleanup(attachThemeDetector(host.widget.element, app));
 
   // Visual collapse of the dynamic input wires onto input_0's pin.
   // Predicate matches ONLY `input_N` slots so any fixed input (e.g.

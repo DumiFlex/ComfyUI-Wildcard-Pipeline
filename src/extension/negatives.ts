@@ -35,7 +35,7 @@ export type NegativesTable = Record<string, NegativeEntry[]>;
 export const NEGATIVES_SLOT = "$negatives";
 /** Its bare name, for `$` suggestion lists and missing-var scans. Lives in
  *  the small startup-side module; re-exported here for convenience. */
-export { NEGATIVES_VAR, missingAssemblerVars } from "./assembler-vars";
+export { NEGATIVES_VAR, missingAssemblerVars, withSlot } from "./assembler-vars";
 
 const WEIGHT_WRAP = /^\(+\s*(.*?)\s*(?::\s*[0-9.]+)?\s*\)+$/;
 const SLOT_RE = /\$negatives(?![A-Za-z0-9_])/;
@@ -96,26 +96,26 @@ export function tidy(text: string): string {
   return out.trim().replace(/^,+|,+$/g, "").trim();
 }
 
-/** Fill the negative template (mirror of engine `render_negative`). */
+/** Fill the negative template (mirror of engine `render_negative`).
+ *  Negatives are opt-in: only a template with `$negatives` gets the
+ *  collected words; without it the negative is just the template's own
+ *  text, and an empty template is an empty negative. */
 export function renderNegative(
   template: string,
   collected: string,
   resolveRaw: (text: string) => string,
 ): string {
   const tpl = template ?? "";
-  if (!tpl.trim()) return collected;
+  if (!tpl.trim()) return "";
   const pieces = tpl.split(SLOT_RE_G);
   const rendered = pieces.map((p) => (p ? resolveRaw(p) : ""));
+  if (pieces.length === 1) return tidy(rendered[0] ?? "");
   const fixed: string[] = [];
   for (const r of rendered) fixed.push(...splitTags(r));
   const words = joinUnique([collected], fixed);
-  if (pieces.length === 1) {
-    const base = tidy(rendered[0]);
-    if (!words) return base;
-    return base ? `${base}, ${words}` : words;
-  }
   return tidy(rendered.join(words));
 }
+
 
 /** One `$var` read a template made: binding + pick index (`null` = all). */
 export interface VarRead {

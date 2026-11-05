@@ -34,10 +34,13 @@
 // `app.menu.settingsGroup` isn't there (older ComfyUI builds, headless
 // hosts, etc.).
 
-import wpLogoSvg from "../components/shared/wp-logo.svg?raw";
+import wpLogoSvg from "@/kit/wp-logo.svg?raw";
 
 const SPA_PATH = "/wp/dashboard";
 const TOOLTIP = "Wildcard Pipeline Workspace (opens in a new window)";
+/** The Bookmarks dock button: our other action-bar button, styled like the
+ *  manager's (filled, square corners, white icon) but keeping its own icon. */
+export const BOOKMARK_TOOLTIP = "Bookmarks (Wildcard Pipeline)";
 const POPUP_FEATURES = "width=1280,height=900,resizable=yes,scrollbars=yes,status=yes";
 const BUTTON_GROUP_CLASS = "wp-top-menu-group";
 const BUTTON_MARKER_CLASS = "wp-top-menu-button";
@@ -52,6 +55,10 @@ const MIN_VERSION_FOR_ACTION_BAR: readonly [number, number, number] = [1, 33, 9]
 // ticks into ComfyUI's boot, so 120 frames (~2s at 60fps) is far past
 // the realistic worst case.
 const MAX_ATTACH_ATTEMPTS = 120;
+// Icon-swap budget for the actionbar path. Larger than the attach budget:
+// the button is mounted by ComfyUI's Vue actionbar, which can land well
+// after first paint on a slow boot (~10s at 60fps).
+const MAX_ICON_FRAMES = 600;
 
 interface AppMenu { settingsGroup?: { element: HTMLElement } }
 interface AppLike { menu?: AppMenu }
@@ -197,7 +204,8 @@ function injectStyles(): void {
   const style = document.createElement("style");
   style.id = STYLE_ELEMENT_ID;
   style.textContent = `
-    button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS} {
+    button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS},
+    button[aria-label="${BOOKMARK_TOOLTIP}"].${BUTTON_MARKER_CLASS} {
       background-color: var(--primary-bg) !important;
       border: 1px solid transparent;
       border-radius: 4px !important;
@@ -209,7 +217,8 @@ function injectStyles(): void {
       padding-right: 6px !important;
       transition: background-color 0.2s ease;
     }
-    button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS}:hover {
+    button[aria-label="${TOOLTIP}"].${BUTTON_MARKER_CLASS}:hover,
+    button[aria-label="${BOOKMARK_TOOLTIP}"].${BUTTON_MARKER_CLASS}:hover {
       background-color: var(--primary-hover-bg) !important;
     }
   `;
@@ -226,6 +235,9 @@ function injectStyles(): void {
  * whether to keep polling (button not yet mounted) or stop.
  */
 function applyBrandIcon(): number {
+  // The bookmark button takes the same look; its PrimeIcons glyph stays.
+  document.querySelectorAll<HTMLButtonElement>(`button[aria-label="${BOOKMARK_TOOLTIP}"]`)
+    .forEach((btn) => btn.classList.add(BUTTON_MARKER_CLASS));
   const buttons = document.querySelectorAll<HTMLButtonElement>(
     `button[aria-label="${TOOLTIP}"]`,
   );
@@ -258,16 +270,18 @@ function applyBrandIcon(): number {
  * tame.
  *
  * Loop terminates the first frame at least one matching button is
- * found AND has been processed.
+ * found AND has been processed, or after `maxFrames` frames — if the
+ * running frontend never renders a matching button (renamed label,
+ * removed actionbar) an uncapped loop would be a permanent 60 Hz
+ * `querySelectorAll`. rAF does not tick in a hidden tab, so a slow
+ * background boot does not burn the budget.
  */
-export function startIconReplaceLoop(): void {
+export function startIconReplaceLoop(maxFrames = MAX_ICON_FRAMES): void {
   if (typeof document === "undefined") return;
   injectStyles();
+  let frames = 0;
   const tick = (): void => {
-    const touched = applyBrandIcon();
-    if (touched === 0) {
-      requestAnimationFrame(tick);
-    }
+    if (applyBrandIcon() === 0 && ++frames < maxFrames) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }

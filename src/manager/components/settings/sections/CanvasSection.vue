@@ -4,12 +4,12 @@
  * Pipeline, editable here too (see `useCanvasSettings` for how the two stay
  * in step), plus the one run setting the engine reads from the server.
  */
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
-import Toggle from "../../ui/Toggle.vue";
-import Select from "../../ui/Select.vue";
-import Input from "../../ui/Input.vue";
-import type { SelectOption } from "../../ui/select-types";
-import SettingGroup from "../SettingGroup.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
+import Select from "@/kit/Select.vue";
+import type { SelectOption } from "@/kit/select-types";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { CANVAS_SETTINGS, type CanvasSettingGroup, type CanvasSettingMeta } from "../../../../extension/settings-catalog";
 import { canvasKey } from "../settings-index";
@@ -75,10 +75,9 @@ async function commitDepth(): Promise<void> {
       for="wildcard-max-ref-depth"
     >
       <span v-if="depthSaved" class="wp-set-pill" data-tone="ok">Saved</span>
-      <Input
-        id="wildcard-max-ref-depth"
-        v-model.number="depthDraft"
-        type="number"
+      <WpNumber id="wildcard-max-ref-depth" v-model.number="depthDraft"
+        size="md"
+        commit="input"
         :min="1"
         :max="32"
         :step="1"
@@ -100,8 +99,9 @@ async function commitDepth(): Promise<void> {
       :hint="s.tooltip"
       :setting-key="canvasKey(s.id)"
     >
-      <Toggle
+      <WpSwitch
         v-if="s.type === 'boolean'"
+        size="md"
         :model-value="canvas.values.value[s.id] === true"
         :aria-label="s.name"
         :disabled="!canvas.loaded.value"

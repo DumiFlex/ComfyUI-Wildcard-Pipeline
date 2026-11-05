@@ -13,22 +13,28 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
-import Card from "../components/ui/Card.vue";
-import Button from "../components/ui/Button.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
+import Card from "@/kit/Card.vue";
+import Button from "@/kit/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
 import DerivationRuleCard from "../components/DerivationRuleCard.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
-import ListFilter from "../components/ui/ListFilter.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import ListFilter from "@/kit/ListFilter.vue";
 import { derivationRuleHaystack } from "../utils/listFilter";
 import { loraByModelRule } from "../utils/derivation-presets";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import AiDerivationPanel from "../components/ai/AiDerivationPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
-import { useToast } from "../composables/useToast";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
+import { useToast } from "@/kit/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useRecentStore } from "../stores/recentStore";
@@ -46,7 +52,7 @@ import { DERIVATION_OPS } from "../../components/context/editors/_shared/derivat
 import { isConditionGroup, isNegativeMode, simplifyCondition } from "../../extension/derivation-conditions";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
+import Chip from "@/kit/Chip.vue";
 import type {
   DerivationAction,
   DerivationBranch,
@@ -86,7 +92,7 @@ async function onEntityDeleteClick(): Promise<void> {
 
 function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
   cascadeDialogOpen.value = false;
-  moduleStore.remove(props.id!);
+  moduleStore.removeLocal(props.id!);
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
   toast.push({
@@ -130,6 +136,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -145,9 +154,33 @@ function snapshot(): string {
   });
 }
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+/** The AI panel holds rules the user hasn't added yet. */
+const aiPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
+
+/** The chat's draft this new derivation was opened with (Save creates it at
+ *  the id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+const fillFromChat = registerOpenEditor({
+  id: props.id, type: "derivation", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
+  name, description, tags, categoryId, contentRating,
+  payload: () => currentPayload() as unknown as Record<string, unknown>,
+  setPayload: (p) => {
+    const next = p as Partial<DerivationPayload>;
+    if (Array.isArray(next.rules)) rules.value = next.rules.map(migrateRule);
+  },
+});
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiDerivationPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
 
 const draft = useEditorDraft({
   kind: "derivation",
@@ -344,8 +377,47 @@ onMounted(async () => {
       router.replace("/derivations");
     }
   }
+  loaded.value = true;
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed derivation, unsaved.
+  const fromChat = props.id ? null : fillFromChat();
+  chatDraft = fromChat;
+  if (fromChat) {
+    toast.push({
+      severity: "info", summary: "From the assistant",
+      detail: fromChat.newCategory
+        ? `Check it and Save to keep it. It suggested a new category, "${fromChat.newCategory}": create it from the Category picker if you want it.`
+        : "Check it and Save to keep it.",
+    });
+  }
 });
+
+function addAiRules(incoming: DerivationRule[]): void {
+  // A rule that keeps an existing rule's id changes that rule in place.
+  const next = [...rules.value];
+  let changed = 0;
+  for (const raw of incoming) {
+    const rule = migrateRule(raw);
+    const at = next.findIndex((r) => r.id === rule.id);
+    if (at >= 0) {
+      next[at] = rule;
+      changed += 1;
+    } else {
+      next.push(rule);
+    }
+  }
+  rules.value = next;
+  const added = incoming.length - changed;
+  toast.push({
+    severity: "success",
+    summary: [
+      added ? `Added ${added} rule${added === 1 ? "" : "s"}` : "",
+      changed ? `changed ${changed}` : "",
+    ].filter(Boolean).join(", ").replace(/^c/, "C"),
+    detail: "Check them, then Save.",
+    life: 3000,
+  });
+}
 
 function addRule() {
   rules.value = [...rules.value, blankRule()];
@@ -438,6 +510,18 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   });
 }
 
+/** The payload as Save stores it. */
+function currentPayload(): DerivationPayload {
+  // Save the simplest equivalent condition: a group of one collapses to its
+  // member, so a branch only needs schema v7 when it really combines tests.
+  return {
+    rules: rules.value.map((r) => ({
+      ...r,
+      branches: r.branches.map((b) => ({ ...b, condition: simplifyCondition(b.condition) })),
+    })),
+  };
+}
+
 async function save() {
   if (!name.value.trim()) {
     toast.push({ severity: "warn", summary: "Name required" });
@@ -446,15 +530,7 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    // Save the simplest equivalent condition: a group of one collapses to its
-    // member, so a branch only needs schema v7 when it really combines tests.
-    const payload: DerivationPayload = {
-      rules: rules.value.map((r) => ({
-        ...r,
-        branches: r.branches.map((b) => ({ ...b, condition: simplifyCondition(b.condition) })),
-      })),
-    };
-    const newPayload = payload as unknown as Record<string, unknown>;
+    const newPayload = currentPayload() as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(
@@ -478,9 +554,9 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "derivation", name: name.value });
     } else {
-      // New mode: the new row id is not surfaced here; mount-time push fires
-      // next time the user opens this item.
-      await moduleStore.create({
+      // New mode: a chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "derivation",
         name: name.value,
         description: description.value,
@@ -489,6 +565,8 @@ async function save() {
         content_rating: contentRating.value,
         payload: newPayload,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -527,6 +605,8 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading derivation"
     :title="isEdit ? 'Edit derivation' : 'New derivation'"
     back-route="/derivations"
     back-label="Derivations"
@@ -549,9 +629,9 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       />
     </template>
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'derivation'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'derivation'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
       <CommunityRowActions
         v-if="currentRow"
@@ -570,14 +650,17 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       >Delete</Button>
     </template>
     <IdentityCard
+      ref="identityCard"
+      ai-kind="derivation"
+      :ai-payload="() => ({ rules })"
       :name="name"
       :description="description"
       :category-id="categoryId"
       :tags="tags"
+      :content-rating="contentRating"
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
-      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
       @update:content-rating="(v) => (contentRating = v)"
     />
@@ -617,6 +700,14 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           @click="ruleBulkToggleMode"
         >{{ ruleBulkActive ? "Done" : "Bulk edit" }}</Button>
         <Button
+          v-if="ai.config.value?.enabled"
+          size="sm"
+          :variant="aiOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="drv-ai"
+          @click="aiOpen = !aiOpen"
+        >AI</Button>
+        <Button
           size="sm"
           variant="ghost"
           icon="pi-microchip"
@@ -650,6 +741,17 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           />
         </div>
       </template>
+      <AiDerivationPanel
+        v-if="aiOpen && ai.config.value?.enabled"
+        ref="aiPanelRef"
+        :name="name"
+        :rules="rules"
+        :description="description"
+        :labels="tags"
+        @add="addAiRules"
+        @close="aiOpen = false"
+        @update:pending="(v: boolean) => (aiPending = v)"
+      />
       <p class="wp-card__hint">
         Each rule runs independently. Inside a rule, branches evaluate top-to-bottom — the first matching IF/ELIF wins; the optional ELSE only fires when no branch matched.
       </p>
@@ -666,7 +768,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
       >
         <b>No rule matches this filter</b>
         All {{ rules.length }} are still here — only the view is filtered.
-        <button type="button" class="drv-clearlink" @click="ruleQuery = ''">Clear filter</button>
+        <Button variant="link" size="sm" class="drv-clearlink" @click="ruleQuery = ''">Clear filter</Button>
       </div>
 
       <div v-else class="rules-stack" data-test="rules-stack">
@@ -676,21 +778,14 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
           class="rule-row"
           :class="{ 'rule-row--selected': ruleBulkActive && ruleBulkIsSelected(rule.id) }"
         >
-          <button
+          <Checkbox
             v-if="ruleBulkActive"
-            type="button"
-            class="wp-check rule-row__check"
-            role="checkbox"
-            :aria-checked="ruleBulkIsSelected(rule.id)"
-            :data-checked="ruleBulkIsSelected(rule.id) ? 'true' : 'false'"
+            :model-value="ruleBulkIsSelected(rule.id)"
+            class="rule-row__check"
             :aria-label="`Select rule ${idx + 1}`"
             :data-test="`drv-check-${idx}`"
-            @click="ruleBulkToggle(rule.id)"
-          >
-            <svg v-if="ruleBulkIsSelected(rule.id)" viewBox="0 0 12 12" fill="none" style="display:block">
-              <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </button>
+            @update:model-value="ruleBulkToggle(rule.id)"
+          />
           <DerivationRuleCard
             class="rule-row__card"
             :model-value="rule"
@@ -716,22 +811,22 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="derivation"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
@@ -755,12 +850,7 @@ defineExpose({ rules, addRule, addLoraByModelRule, removeRule, applyRestore });
 .rule-row { display: flex; align-items: flex-start; gap: 10px; }
 .rule-row__card { flex: 1 1 auto; min-width: 0; }
 .rule-row__check { margin-top: 14px; flex: 0 0 auto; }
-.drv-clearlink {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-  margin-left: var(--wp-space-3);
-}
+.drv-clearlink { margin-left: var(--wp-space-3); }
 .rule-row--selected .rule-row__card {
   outline: 2px solid color-mix(in oklab, var(--wp-accent) 45%, transparent);
   outline-offset: 2px;

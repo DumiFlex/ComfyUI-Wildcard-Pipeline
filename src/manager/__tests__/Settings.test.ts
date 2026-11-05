@@ -120,7 +120,7 @@ describe("Settings › General", () => {
   it("usage stats default on and the toggle remembers off", async () => {
     const { wrap } = await mountAt("general");
     const store = useUiStore();
-    const toggle = wrap.get('[data-test="settings-usage-stats"]').get("button");
+    const toggle = wrap.get('[data-test="settings-usage-stats"]');
     expect(store.usageStats).toBe(true);
     expect(toggle.attributes("aria-checked")).toBe("true");
     await toggle.trigger("click");
@@ -180,8 +180,8 @@ describe("Settings › Canvas", () => {
 
   it("ref recursion limit saves to the server, clamped to 1–32", async () => {
     const { wrap } = await mountAt("canvas");
-    const input = wrap.get('[data-test="settings-wildcard-max-ref-depth"]').get("input");
-    expect(Number(input.element.value)).toBe(8);
+    const input = wrap.get('[data-test="settings-wildcard-max-ref-depth"]');
+    expect(Number((input.element as HTMLInputElement).value)).toBe(8);
     await input.setValue("100");
     await input.trigger("blur");
     await flushPromises();
@@ -202,7 +202,7 @@ describe("Settings › Canvas", () => {
 describe("Settings › Test Runner", () => {
   it("stores the defaults a new scenario starts with", async () => {
     const { wrap } = await mountAt("test-runner");
-    await wrap.get('[data-test="settings-tr-count"]').get("input").setValue("25");
+    await wrap.get('[data-test="settings-tr-count"]').setValue("25");
     expect(useUiStore().testRunnerDefaults.count).toBe(25);
     expect(JSON.parse(localStorage.getItem("wp-test-runner-defaults") ?? "{}").count).toBe(25);
     wrap.unmount();
@@ -217,7 +217,7 @@ describe("Settings › Advanced", () => {
     const { wrap } = await mountAt("advanced");
     const bp = wrap.findComponent({ name: "BrowserPrefsCard" });
     await bp.find("[data-test='browser-prefs-reset']").trigger("click");
-    bp.findComponent({ name: "ConfirmDialog" }).vm.$emit("confirm");
+    bp.findComponent({ name: "ConfirmModal" }).vm.$emit("confirm");
     await wrap.vm.$nextTick();
     expect(localStorage.getItem("wp.releaseCheck")).toBeNull();
     expect(localStorage.getItem("wp-theme-mode")).toBeNull();

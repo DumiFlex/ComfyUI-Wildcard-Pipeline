@@ -7,9 +7,11 @@
  * Kept thin since the 2026-05-09 extraction; previous body lived
  * inline alongside two verbatim copies for combine + fixed_values.
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import SeedLockControls from "../../_shared/SeedLockControls.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 
 const props = defineProps<{ module: ModuleEntry; frameActive?: boolean }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -44,46 +46,39 @@ function onMatchInput(e: Event): void {
   <section class="runtime">
     <span class="runtime__label">Runtime</span>
     <SeedLockControls :module="module" label="Lock pick" @update="emit('update', $event)" />
-    <button
-      type="button"
-      class="toggle"
-      :class="{ 'toggle--on': internal }"
+    <WpSwitch
+      variant="chip"
+      icon="pi-eye-slash"
+      label="Hide from prompt"
       data-test="runtime-hide"
-      role="switch"
-      :aria-checked="internal"
-      :disabled="frameActive || undefined"
-      @click="onHideClick"
-    >
-      <i class="pi pi-eye-slash" aria-hidden="true" />
-      Hide from prompt
-    </button>
-    <button
-      type="button"
-      class="toggle"
-      :class="{ 'toggle--on': held }"
+      :model-value="internal"
+      :disabled="frameActive"
+      @update:model-value="onHideClick"
+    />
+    <WpSwitch
+      variant="chip"
+      icon="pi-link"
+      label="Hold across run"
       data-test="runtime-hold"
-      role="switch"
-      :aria-checked="held"
-      :disabled="frameActive || undefined"
-      @click="onHoldClick"
-    >
-      <i class="pi pi-link" aria-hidden="true" />
-      Hold across run
-    </button>
+      :model-value="held"
+      :disabled="frameActive"
+      @update:model-value="onHoldClick"
+    />
     <label class="match" :class="{ 'match--on': matchVar }" data-test="runtime-match">
       <i class="pi pi-equals" aria-hidden="true" />
       <span>Match variable</span>
-      <span class="match__sigil">$</span>
-      <input
+      <Input
+        size="sm"
+        mono
+        prefix="$"
         class="match__input"
-        type="text"
         spellcheck="false"
         placeholder="model_variant"
         data-test="runtime-match-input"
-        :value="matchVar"
+        :model-value="matchVar"
         :disabled="frameActive || undefined"
         @change="onMatchInput"
-      >
+      />
     </label>
     <p
       v-if="matchVar"
@@ -114,54 +109,20 @@ function onMatchInput(e: Event): void {
   letter-spacing: 0.14em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 10px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  font: 11px var(--wp-font-sans);
-  color: var(--wp-text-muted, var(--wp-text2));
-  cursor: pointer;
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.toggle:hover { border-color: var(--wp-border-soft, var(--wp-border)); }
-.toggle .pi { font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
-.toggle--on {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.10);
-}
-.toggle--on .pi { color: var(--wp-accent-text, var(--wp-text)); }
-.toggle:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 .match {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 3px 4px 3px 10px;
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
   background: var(--wp-bg-deep, var(--wp-bg));
 }
 .match .pi { font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
 .match--on { border-color: var(--wp-accent); color: var(--wp-accent-text, var(--wp-text)); }
-.match__sigil { font-family: var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); margin-right: -4px; }
-.match__input {
-  width: 120px;
-  padding: 2px 6px;
-  border: 1px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 2px;
-  background: var(--wp-bg2);
-  color: var(--wp-text);
-  font: 11px var(--wp-font-mono, monospace);
-}
-.match__input:disabled { opacity: 0.45; cursor: not-allowed; }
+.match .match__input { width: 120px; }
 .runtime__frame-hint {
   margin: 4px 0 0;
   font: 10px var(--wp-font-sans);

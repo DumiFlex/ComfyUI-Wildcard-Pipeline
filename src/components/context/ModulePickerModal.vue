@@ -1,6 +1,6 @@
 <template>
   <ModalShell :visible="visible" @close="$emit('close')">
-    <div class="wp-picker" ref="rootEl" tabindex="-1">
+    <div ref="rootEl" class="wp-picker" tabindex="-1">
 
       <!-- Header -->
       <header class="wp-picker__head">
@@ -15,9 +15,7 @@
             </span>
           </div>
         </div>
-        <button type="button" class="wp-picker__close" aria-label="Close" @click="$emit('close')">
-          <i class="pi pi-times" aria-hidden="true"></i>
-        </button>
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" @click="$emit('close')" />
       </header>
 
       <!-- Toolbar: search + kind tabs + compact filter buttons.
@@ -33,48 +31,39 @@
              flex-row so the toolbar's outer column layout doesn't
              stack each icon onto its own line. -->
         <div class="wp-picker__toolbar-top">
-        <div class="wp-picker__search" :class="{ 'is-focused': searchFocused }">
-          <i class="pi pi-search wp-picker__search-icon" aria-hidden="true"></i>
-          <input
-            ref="searchInput"
-            v-model="searchTerm"
-            type="text"
-            placeholder="Search modules by name or var…"
-            aria-label="Search modules"
-            data-testid="picker-search"
-            @focus="searchFocused = true"
-            @blur="searchFocused = false"
-          />
-          <span v-if="searchTerm" class="wp-picker__search-clear" @click="searchTerm = ''">
-            <i class="pi pi-times" aria-hidden="true"></i>
-          </span>
-        </div>
+        <SearchInput
+          ref="searchInput"
+          v-model="searchTerm"
+          class="wp-picker__search"
+          size="sm"
+          placeholder="Search modules by name or var…"
+          aria-label="Search modules"
+          data-testid="picker-search"
+        />
 
-        <!-- Inline icon-only quick toggles. Each is a thin square
-             button next to search. Active state = accent fill. -->
-        <button
+        <!-- Inline icon-only quick toggles (Button `pressed`), next to
+             search. On = accent tint. -->
+        <Button
           v-if="hasFavoritesInData"
-          type="button"
-          class="wp-picker__icon-btn"
-          :class="{ 'wp-picker__icon-btn--active': favoritesOnly }"
-          :title="favoritesOnly ? 'Showing favorites only · click to clear' : 'Show favorites only'"
+          size="sm"
+          variant="outline"
+          :icon="favoritesOnly ? 'pi-star-fill' : 'pi-star'"
+          :pressed="favoritesOnly"
+          :aria-label="favoritesOnly ? 'Showing favorites only, click to clear' : 'Show favorites only'"
           data-testid="picker-filter-favorites"
           @click="favoritesOnly = !favoritesOnly"
-        >
-          <i :class="['pi', favoritesOnly ? 'pi-star-fill' : 'pi-star']" aria-hidden="true"></i>
-        </button>
-        <button
+        />
+        <Button
           v-if="alreadyAddedSet.size > 0"
-          type="button"
-          class="wp-picker__icon-btn"
-          :class="{ 'wp-picker__icon-btn--active': hideAlreadyAdded }"
-          :title="hideAlreadyAdded ? `Hiding ${alreadyAddedSet.size} already-added modules · click to show` : `Hide ${alreadyAddedSet.size} already-added modules`"
+          size="sm"
+          variant="outline"
+          :icon="hideAlreadyAdded ? 'pi-eye-slash' : 'pi-eye'"
+          :pressed="hideAlreadyAdded"
+          :aria-label="hideAlreadyAdded ? `Hiding ${alreadyAddedSet.size} already-added modules, click to show` : `Hide ${alreadyAddedSet.size} already-added modules`"
           data-testid="picker-filter-hide-added"
           data-test="hide-added-toggle"
           @click="hideAlreadyAdded = !hideAlreadyAdded"
-        >
-          <i :class="['pi', hideAlreadyAdded ? 'pi-eye-slash' : 'pi-eye']" aria-hidden="true"></i>
-        </button>
+        />
 
         <!-- Filters popover trigger. Renders only when there's
              actually category or tag data to filter on. Badge shows
@@ -85,22 +74,23 @@
           v-if="usedCategories.length || availableTags.length"
           class="wp-picker__filters-pop"
         >
-          <button
-            type="button"
-            class="wp-picker__icon-btn wp-picker__filter-trigger"
-            :class="{ 'wp-picker__icon-btn--active': activePopoverCount > 0 || filtersOpen }"
-            :title="filtersOpen ? 'Close filters' : 'More filters'"
+          <Button
+            size="sm"
+            variant="outline"
+            class="wp-picker__filter-trigger"
+            icon="pi-filter"
+            :pressed="activePopoverCount > 0 || filtersOpen"
             :aria-expanded="filtersOpen"
+            aria-label="Filters"
+            :hint="filtersOpen ? 'Close filters' : 'More filters'"
             data-testid="picker-filter-trigger"
             @click="filtersOpen = !filtersOpen"
-          >
-            <i class="pi pi-filter" aria-hidden="true"></i>
-            <span
-              v-if="activePopoverCount > 0"
-              class="wp-picker__filter-badge"
-              aria-label="active filter count"
-            >{{ activePopoverCount }}</span>
-          </button>
+          />
+          <span
+            v-if="activePopoverCount > 0"
+            class="wp-picker__filter-badge"
+            aria-label="active filter count"
+          >{{ activePopoverCount }}</span>
 
           <!-- Popover panel. Anchored under the trigger button.
                Click-outside closes via the `wp-picker__pop-shield`
@@ -111,16 +101,14 @@
             <div v-if="filtersOpen" class="wp-picker__pop" data-testid="picker-filter-pop">
               <div v-if="usedCategories.length" class="wp-picker__pop-section">
                 <div class="wp-picker__pop-label">CATEGORY</div>
-                <select
+                <WpSelect
                   class="wp-picker__filter-cat-select"
-                  :value="selectedCategoryId ?? ''"
+                  :model-value="selectedCategoryId ?? ''"
+                  :options="[{ value: '', label: 'All categories' }, ...usedCategories.map((c) => ({ value: c.id, label: c.name }))]"
                   aria-label="Filter by category"
                   data-testid="picker-filter-category"
-                  @change="selectedCategoryId = ($event.target as HTMLSelectElement).value || null"
-                >
-                  <option value="">All categories</option>
-                  <option v-for="c in usedCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
+                  @update:model-value="(v) => selectedCategoryId = String(v) || null"
+                />
               </div>
 
               <div v-if="availableTags.length" class="wp-picker__pop-section">
@@ -129,58 +117,44 @@
                   <span class="wp-picker__pop-label-hint">click to AND-narrow</span>
                 </div>
                 <div class="wp-picker__filter-tags">
-                  <button
+                  <Chip
                     v-for="tag in availableTags"
                     :key="tag"
-                    type="button"
                     class="wp-picker__tag-chip"
-                    :class="{ 'wp-picker__tag-chip--active': selectedTags.has(tag) }"
+                    :pressed="selectedTags.has(tag)"
                     :data-testid="`picker-tag-${tag}`"
                     @click="toggleTag(tag)"
-                  >{{ tag }}</button>
+                  >{{ tag }}</Chip>
                 </div>
               </div>
 
-              <button
+              <Button
                 v-if="hasActiveFilter"
-                type="button"
-                class="wp-picker__pop-clear"
+                size="sm"
+                variant="ghost"
+                icon="pi-filter-slash"
                 data-testid="picker-filter-clear"
                 @click="clearAllFilters"
-              >
-                <i class="pi pi-filter-slash" aria-hidden="true"></i>
-                Clear all filters
-              </button>
+              >Clear all filters</Button>
             </div>
           </Transition>
         </div>
         </div><!-- /wp-picker__toolbar-top -->
 
-        <div class="wp-picker-tabs" role="tablist">
-          <button
-            type="button"
-            data-test="picker-tab-all"
-            data-testid="picker-tab-all"
-            :class="['wp-picker-tab', { active: kindFilter === 'all' }]"
-            role="tab"
-            :aria-selected="kindFilter === 'all'"
-            @click="kindFilter = 'all'"
-          ><i class="pi pi-th-large" />All <span class="wp-pill-count">{{ totalCount }}</span></button>
-
-          <button
-            v-for="(label, kind) in KIND_LABELS"
-            :key="kind"
-            type="button"
-            :data-test="`picker-tab-${kind}`"
-            :data-k="kind"
-            :class="['wp-picker-tab', { active: kindFilter === kind }]"
-            role="tab"
-            :aria-selected="kindFilter === kind"
-            @click="kindFilter = kind as KindFilter"
-          ><i :class="kindIcon(kind)" />{{ label }}
-            <span class="wp-pill-count">{{ countByKind(kind) }}</span>
-          </button>
-        </div>
+        <WpTabs
+          v-model="kindFilter"
+          class="wp-picker-tabs"
+          :tabs="kindTabs"
+          size="sm"
+          aria-label="Module kinds"
+          test-prefix="picker-tab"
+        >
+          <template #tab="{ tab }">
+            <i class="pi wp-picker-tab__icon" :class="tab.icon" :data-k="tab.id" aria-hidden="true" />
+            <span>{{ tab.label }}</span>
+            <span class="wp-pill-count">{{ tab.count }}</span>
+          </template>
+        </WpTabs>
       </div>
 
       <!-- Click-shield: when popover is open, a transparent layer
@@ -195,34 +169,18 @@
 
       <!-- Body: scrollable list grouped by kind -->
       <div class="wp-picker__body">
-        <div
-          v-if="loading"
-          class="wp-picker__skel"
-          aria-busy="true"
-          aria-live="polite"
-          aria-label="Loading modules"
-        >
+        <!-- First load only: a reopen keeps the list it has and refreshes
+             it quietly, so the rows don't flash back to grey shapes. -->
+        <div v-if="loading && !modules.length" class="wp-picker__skel">
           <template v-for="g in 2" :key="g">
-            <div class="wp-picker__skel-head">
-              <span class="wp-skel wp-skel--text wp-picker__skel-label"></span>
-              <span class="wp-picker__skel-line"></span>
-              <span class="wp-skel wp-skel--text wp-picker__skel-tally"></span>
-            </div>
-            <div v-for="i in 4" :key="`${g}-${i}`" class="wp-picker__skel-row">
-              <span class="wp-skel wp-picker__skel-check"></span>
-              <span class="wp-skel wp-picker__skel-icon"></span>
-              <span class="wp-picker__skel-main">
-                <span class="wp-skel wp-skel--text wp-picker__skel-name"></span>
-                <span class="wp-skel wp-skel--text wp-picker__skel-var"></span>
-              </span>
-              <span class="wp-skel wp-skel--text wp-picker__skel-uuid"></span>
-            </div>
+            <Skeleton width="84px" class="wp-picker__skel-head" :label="g === 1 ? 'Loading modules' : undefined" />
+            <Skeleton shape="row" icon="square" :lines="4" class="wp-picker__skel-rows" />
           </template>
         </div>
         <div v-else-if="loadError" class="wp-picker__state wp-picker__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
           {{ loadError }}
-          <button type="button" class="wp-picker__retry" @click="reload">Retry</button>
+          <Button size="sm" @click="reload">Retry</Button>
         </div>
         <div v-else-if="filteredModules.length === 0" class="wp-picker__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
@@ -231,22 +189,24 @@
             All matching modules are already in this Context.
           </template>
           <template v-else>No modules in this category.</template>
-          <button
+          <Button
             v-if="isHideAddedSuppressing"
-            type="button"
-            class="wp-picker__create"
+            size="sm"
+            variant="outline"
+            icon="pi-eye"
             data-testid="picker-show-already-added"
-            title="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
+            hint="Turn off the hide-already-added filter so you can re-add an existing module as a sibling."
             @click="hideAlreadyAdded = false"
-          ><i class="pi pi-eye" aria-hidden="true"></i> Show already added</button>
-          <button
+          >Show already added</Button>
+          <Button
             v-else-if="!searchTerm"
-            type="button"
-            class="wp-picker__create"
+            size="sm"
+            variant="outline"
+            icon="pi-plus"
             data-testid="picker-create-module"
-            :title="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
+            :hint="`Open the library to create a new ${kindFilter === 'all' ? 'module' : (KIND_SINGULAR[kindFilter] ?? 'module')}`"
             @click="createInSpa"
-          ><i class="pi pi-plus" aria-hidden="true"></i> {{ createLabel }}</button>
+          >{{ createLabel }}</Button>
         </div>
 
         <template v-else>
@@ -256,10 +216,9 @@
               <span class="wp-picker__section-line"></span>
               <span class="wp-picker__section-count">{{ group.items.length }}</span>
             </div>
-            <button
+            <ListRow
               v-for="row in group.items"
               :key="row.id"
-              type="button"
               :class="['wp-picker__row', { 'is-already-added': isAlreadyAdded(row.id) }]"
               :data-kind="row.type"
               :data-checked="selected.has(row.id) ? '' : null"
@@ -270,23 +229,25 @@
               :title="isPickable(row) ? (isAlreadyAdded(row.id) ? 'Already in this Context. Click to add as sibling — binding will be auto-suffixed.' : '') : 'Module has no payload — cannot embed.'"
               @click="isPickable(row) && onRowClick(row)"
             >
-              <span
-                class="wp-picker__check"
-                data-test="picker-checkbox"
-                :class="{ on: selected.has(row.id) }"
-                aria-hidden="true"
-              >
-                <i v-if="selected.has(row.id)" class="pi pi-check"></i>
-              </span>
-              <span class="wp-picker__row-icon" :data-kind="row.type">
-                <i :class="['pi', kindIcon(row.type)]" aria-hidden="true"></i>
-              </span>
+              <template #start>
+                <span
+                  class="wp-picker__check"
+                  data-test="picker-checkbox"
+                  :class="{ on: selected.has(row.id) }"
+                  aria-hidden="true"
+                >
+                  <i v-if="selected.has(row.id)" class="pi pi-check"></i>
+                </span>
+                <span class="wp-picker__row-icon" :data-kind="row.type">
+                  <i :class="['pi', kindIcon(row.type)]" aria-hidden="true"></i>
+                </span>
+              </template>
               <span class="wp-picker__row-main">
                 <span class="wp-picker__row-name">{{ row.name }}</span>
                 <span class="wp-picker__row-var">{{ subtitleFor(row) }}</span>
               </span>
-              <span class="wp-picker__row-uuid">{{ shortUuid(row.id) }}</span>
-            </button>
+              <template #end><span class="wp-picker__row-uuid">{{ shortUuid(row.id) }}</span></template>
+            </ListRow>
           </template>
         </template>
       </div>
@@ -299,14 +260,7 @@
             picked
           </span>
           <span class="wp-picker__selection-spacer"></span>
-          <button
-            type="button"
-            class="wp-picker__selection-clear"
-            @click="selected.clear()"
-            data-testid="picker-clear"
-          >
-            Clear
-          </button>
+          <Button size="sm" variant="ghost" data-testid="picker-clear" @click="selected.clear()">Clear</Button>
         </div>
         <div class="wp-picker__selection-chips">
           <span
@@ -324,14 +278,13 @@
               class="wp-picker__sel-name"
               :title="byId.get(id)?.name ?? id"
             >{{ byId.get(id)?.name ?? id }}</span>
-            <button
-              type="button"
+            <WpIconButton
+              variant="bare"
+              icon="pi-times"
               class="wp-picker__sel-close"
-              :aria-label="`Remove ${byId.get(id)?.name ?? id}`"
+              :label="`Remove ${byId.get(id)?.name ?? id}`"
               @click="selected.delete(id)"
-            >
-              <i class="pi pi-times" aria-hidden="true"></i>
-            </button>
+            />
           </span>
         </div>
       </div>
@@ -339,20 +292,21 @@
       <!-- Footer -->
       <footer class="wp-picker__footer">
         <span class="wp-picker__hint">
-          <kbd>↑</kbd><kbd>↓</kbd> nav
-          · <kbd>tab</kbd> kind
-          · <kbd>space</kbd> toggle · <kbd>⌘↵</kbd> add
-          · <kbd>esc</kbd> cancel
+          <Kbd keys="↑" size="sm" /><Kbd keys="↓" size="sm" /> nav
+          · <Kbd keys="Tab" size="sm" /> kind
+          · <Kbd keys="Space" size="sm" /> toggle · <Kbd keys="Mod+Enter" size="sm" /> add
+          · <Kbd keys="Esc" size="sm" /> cancel
         </span>
         <span class="wp-picker__footer-spacer"></span>
-        <button type="button" class="wp-picker__btn" @click="$emit('close')">Cancel</button>
-        <button
-          type="button"
-          class="wp-picker__btn wp-picker__btn--primary"
+        <Button size="sm" @click="$emit('close')">Cancel</Button>
+        <Button
+          size="sm"
+          variant="primary"
+          icon="pi-plus"
           data-test="picker-add-btn"
           :disabled="selected.size === 0"
           @click="commitAdd"
-        ><i class="pi pi-plus" aria-hidden="true"></i> Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</button>
+        >Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</Button>
       </footer>
     </div>
   </ModalShell>
@@ -375,9 +329,18 @@
  * Every embeddable kind with a payload is pickable. Rows render
  * disabled only when their payload is missing (broken library entry).
  */
+import Kbd from "@/kit/Kbd.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import Skeleton from "@/kit/Skeleton.vue";
+import WpSelect from "@/kit/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
+import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
+import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
+import ListRow from "@/kit/ListRow.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 
 interface PickerModule {
   id: string;
@@ -423,8 +386,7 @@ const loading = ref(false);
 const loadError = ref<string | null>(null);
 
 const searchTerm = ref("");
-const searchFocused = ref(false);
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null);
 const rootEl = ref<HTMLDivElement | null>(null);
 
 // Use reactive() so Vue can track .has()/.size/.add()/.delete()/.clear() individually
@@ -596,6 +558,16 @@ const KIND_LABELS: Record<string, string> = {
   derivation:   "Derivations",
   constraint:   "Constraints",
 };
+
+const kindTabs = computed((): TabItem<KindFilter>[] => [
+  { id: "all", label: "All", icon: "pi-th-large", count: totalCount.value },
+  ...Object.entries(KIND_LABELS).map(([kind, label]) => ({
+    id: kind as KindFilter,
+    label,
+    icon: kindIcon(kind).replace(/^pi\s+/, ""),
+    count: countByKind(kind),
+  })),
+]);
 
 // Empty-state "create" deep-links into the manager SPA's new-module editor
 // for the active kind (the picker runs on the canvas; the SPA is the
@@ -812,7 +784,7 @@ function getRowButtons(): HTMLButtonElement[] {
 
 function getKindTabs(): HTMLButtonElement[] {
   if (!rootEl.value) return [];
-  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>(".wp-picker-tab"));
+  return Array.from(rootEl.value.querySelectorAll<HTMLButtonElement>('.wp-picker-tabs [role="tab"]'));
 }
 
 // ── Capture-phase key isolation ───────────────────────────────────
@@ -892,7 +864,7 @@ function captureKeyDown(e: KeyboardEvent) {
   }
 
   const target = e.target as HTMLElement | null;
-  const inSearch = target === searchInput.value;
+  const inSearch = target === searchInput.value?.el;
 
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
 
@@ -987,67 +959,15 @@ watch(
 onBeforeUnmount(detachCaptureListeners);
 </script>
 
-<style>
-/* `wp-skel` family is shared with BundlePickerModal — import unscoped
- * so the keyframe + base rules dedupe across consumers and aren't
- * subject to per-component scoping rewrites. */
-@import "../shared/_skeleton.css";
-</style>
-
 <style scoped>
 /* Tokens via global tokens.css. Keep selectors prefixed `wp-picker__`
  * so this component never collides with SPA Manager classes. */
 
-/* Skeleton frames — geometry mirrors `.wp-picker__row` + the section
- * head pattern so the placeholder layout matches the loaded list and
- * doesn't shift on resolve. Rows get a faint translucent wash so each
- * row reads as a distinct shape against the modal body (loaded rows
- * are transparent until hover; the skeleton needs a touch more
- * visual weight or the stack reads as floating bars). */
+/* Skeleton frames: a section head and four rows per kind group, in the
+ * loaded list's padding so nothing shifts when it lands. */
 .wp-picker__skel { padding: 6px 8px 8px; }
-.wp-picker__skel-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 8px 6px;
-}
-.wp-picker__skel-label { width: 84px; height: 11px; }
-.wp-picker__skel-line {
-  flex: 1;
-  height: 1px;
-  background: var(--wp-border);
-}
-.wp-picker__skel-tally { width: 22px; height: 11px; }
-.wp-picker__skel-row {
-  display: grid;
-  grid-template-columns: 18px 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  height: 40px;
-  padding: 0 10px;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--wp-text) 3%, transparent);
-  margin-bottom: 2px;
-}
-.wp-picker__skel-check { width: 16px; height: 16px; border-radius: 4px; }
-.wp-picker__skel-icon { width: 22px; height: 22px; border-radius: 4px; }
-.wp-picker__skel-main {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.wp-picker__skel-name { width: 38%; min-width: 80px; max-width: 220px; height: 12px; }
-.wp-picker__skel-var { width: 60px; height: 9px; opacity: 0.7; }
-.wp-picker__skel-uuid { width: 64px; height: 10px; }
-
-/* Width variation so the rows don't read as a perfectly aligned grid —
- * a real library has names of varying length, so a perfectly identical
- * stack tells the eye "this is fake" instantly. */
-.wp-picker__skel-row:nth-child(3n) .wp-picker__skel-name { width: 28%; }
-.wp-picker__skel-row:nth-child(3n+1) .wp-picker__skel-name { width: 46%; }
-.wp-picker__skel-row:nth-child(4n) .wp-picker__skel-var { width: 80px; }
-.wp-picker__skel-row:nth-child(4n+2) .wp-picker__skel-var { width: 46px; }
+.wp-picker__skel-head { padding: 12px 8px 6px; }
+.wp-picker__skel-rows { padding: 0 10px; }
 
 .wp-picker {
   background: var(--wp-bg-2);
@@ -1105,23 +1025,6 @@ onBeforeUnmount(detachCaptureListeners);
   margin-left: 6px;
   font-weight: 400;
 }
-.wp-picker__close {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
-}
-.wp-picker__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-picker__close:focus-visible {
-  outline: none;
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
-}
-.wp-picker__close .pi { font-size: 11px; }
 
 /* ── Toolbar ─────────────────────────────────────────────────────── */
 .wp-picker__toolbar {
@@ -1139,77 +1042,22 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 6px;
 }
 .wp-picker__toolbar-top > .wp-picker__search { flex: 1; min-width: 0; }
-.wp-picker__search {
-  position: relative;
-  height: 28px;
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  display: flex; align-items: center;
-  padding: 0 8px;
-  gap: 6px;
-  transition: border-color var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease;
-}
-.wp-picker__search.is-focused,
-.wp-picker__search:focus-within {
-  border-color: var(--wp-accent-500);
-  background: var(--wp-bg-2);
-}
-.wp-picker__search-icon { font-size: 11px; color: var(--wp-text-dim); flex-shrink: 0; }
-.wp-picker__search input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font-size: 12px;
-  font-family: var(--wp-font);
-}
-.wp-picker__search input::placeholder { color: var(--wp-text-dim); }
-.wp-picker__search-clear {
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  font-size: 10px;
-  padding: 2px;
-  border-radius: 999px;
-  transition: color var(--wp-motion-quick) ease;
-}
-.wp-picker__search-clear:hover { color: var(--wp-text); }
 
-.wp-picker-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--wp-border);
-  align-items: center;
-}
-.wp-picker-tab {
-  background: transparent;
-  border: none;
-  padding: 9px 12px;
-  font: 500 11px/1 var(--wp-font-sans);
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-bottom: 2px solid transparent;
-}
-.wp-picker-tab:hover { color: var(--wp-text); }
-.wp-picker-tab.active { color: var(--wp-text); border-bottom-color: var(--wp-accent); }
-.wp-picker-tab .pi { font-size: 13px; }
-.wp-picker-tab[data-k="wildcard"]    .pi { color: var(--wp-kind-wildcard); }
-.wp-picker-tab[data-k="fixed_values"] .pi { color: var(--wp-kind-fixed); }
-.wp-picker-tab[data-k="combine"]     .pi { color: var(--wp-kind-combine); }
-.wp-picker-tab[data-k="derivation"]  .pi { color: var(--wp-kind-derivation); }
-.wp-picker-tab[data-k="constraint"]  .pi { color: var(--wp-kind-constraint); }
+/* The kind tabs are the shared WpTabs; the icons wear their kind colour. */
+.wp-picker-tabs { padding: 0 12px; }
+.wp-picker-tab__icon { font-size: 13px; }
+.wp-picker-tab__icon[data-k="wildcard"]     { color: var(--wp-kind-wildcard); }
+.wp-picker-tab__icon[data-k="fixed_values"] { color: var(--wp-kind-fixed); }
+.wp-picker-tab__icon[data-k="combine"]      { color: var(--wp-kind-combine); }
+.wp-picker-tab__icon[data-k="derivation"]   { color: var(--wp-kind-derivation); }
+.wp-picker-tab__icon[data-k="constraint"]   { color: var(--wp-kind-constraint); }
 .wp-pill-count {
   font-family: var(--wp-font-mono);
   font-size: 10px;
   color: var(--wp-text-dim);
   background: var(--wp-bg-3);
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   border: 1px solid var(--wp-border);
 }
 
@@ -1221,7 +1069,7 @@ onBeforeUnmount(detachCaptureListeners);
   padding: 4px 8px 8px;
 }
 .wp-picker__body::-webkit-scrollbar { width: 8px; }
-.wp-picker__body::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08)); border-radius: 999px; }
+.wp-picker__body::-webkit-scrollbar-thumb { background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.08)); border-radius: var(--wp-radius-cap, 999px); }
 
 .wp-picker__state {
   padding: 32px 16px;
@@ -1234,32 +1082,7 @@ onBeforeUnmount(detachCaptureListeners);
   gap: 8px;
 }
 .wp-picker__state .pi { font-size: 18px; color: var(--wp-text-dim); }
-.wp-picker__state--error { color: var(--wp-danger, #fca5a5); }
-.wp-picker__create {
-  margin-top: 4px;
-  height: 30px;
-  padding: 0 14px;
-  display: inline-flex; align-items: center; gap: 7px;
-  background: var(--wp-accent-600); border: 1px solid var(--wp-accent-500);
-  color: #fff; border-radius: 7px;
-  font: 500 12px var(--wp-font-sans); cursor: pointer;
-  transition: background var(--wp-motion-quick) ease;
-}
-.wp-picker__create:hover { background: var(--wp-accent-500); }
-.wp-picker__create .pi { font-size: 11px; color: #fff; }
-.wp-picker__retry {
-  margin-top: 8px;
-  height: 28px;
-  padding: 0 12px;
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  color: var(--wp-text);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-}
-.wp-picker__retry:hover { background: var(--wp-bg-4); }
+.wp-picker__state--error { color: var(--wp-danger); }
 
 .wp-picker__section-head {
   display: flex; align-items: center; gap: 8px;
@@ -1279,25 +1102,16 @@ onBeforeUnmount(detachCaptureListeners);
   text-transform: none;
 }
 
+/* A kit ListRow: checkbox + kind icon in front, name + subtitle, short id at the end. */
 .wp-picker__row {
-  /* Always 4-column grid: checkbox | icon | main | uuid.
-   * Checkbox (18px) is always rendered. */
-  display: grid;
-  grid-template-columns: 18px 24px minmax(0, 1fr) auto;
-  align-items: center;
   gap: 10px;
-  width: 100%;
   height: 36px;
+  min-height: 36px;
   padding: 0 8px;
-  background: transparent;
-  border: none;
-  border-radius: 5px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  transition: background var(--wp-motion-quick) ease;
 }
+.wp-picker__row :deep(.wp-list-row__start) { gap: 10px; }
 .wp-picker__row:hover { background: var(--wp-bg-3); }
 .wp-picker__row:focus-visible {
   /* Keyboard focus. The SPA's outset accent halo
@@ -1313,14 +1127,15 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__row[data-checked]:focus-visible {
   /* Selected + focused: keep the purple tint of the checked state
    * but swap the low-opacity ring for the bright focus stroke. */
-  background: rgba(139, 92, 246, 0.18);
+  background: rgba(99, 102, 241, 0.18);
   box-shadow: inset 0 0 0 1.5px var(--wp-accent-500);
 }
 .wp-picker__row[data-checked] {
-  background: rgba(139, 92, 246, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.42);
+  background: rgba(99, 102, 241, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.42);
 }
-.wp-picker__row[data-disabled] {
+.wp-picker__row[data-disabled],
+.wp-picker__row:disabled {
   cursor: not-allowed;
   opacity: 0.42;
 }
@@ -1336,7 +1151,7 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__check {
   width: 16px; height: 16px;
   border: 1.4px solid var(--wp-border-strong);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-3);
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -1344,7 +1159,7 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__check .pi {
   font-size: 9px;
-  color: #fff;
+  color: var(--wp-on-accent);
 }
 .wp-picker__row[data-checked] .wp-picker__check,
 .wp-picker__check.on {
@@ -1354,7 +1169,7 @@ onBeforeUnmount(detachCaptureListeners);
 
 .wp-picker__row-icon {
   width: 22px; height: 22px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -1414,25 +1229,14 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__selection-count strong {
   font-family: var(--wp-font-mono);
-  color: #fff;
+  color: var(--wp-on-accent);
   background: var(--wp-accent-600);
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 11px;
   margin-right: 4px;
 }
 .wp-picker__selection-spacer { flex: 1; }
-.wp-picker__selection-clear {
-  background: transparent;
-  border: none;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  font-size: 11.5px;
-  font-family: inherit;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.wp-picker__selection-clear:hover { color: var(--wp-text); background: var(--wp-bg-3); }
 
 .wp-picker__selection-chips {
   display: flex; align-items: center; gap: 6px;
@@ -1444,7 +1248,7 @@ onBeforeUnmount(detachCaptureListeners);
   padding: 0 4px 0 8px;
   background: var(--wp-bg-3);
   border: 1px solid var(--wp-border-strong);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: 11.5px;
   color: var(--wp-text);
   font-weight: 500;
@@ -1458,7 +1262,7 @@ onBeforeUnmount(detachCaptureListeners);
 }
 .wp-picker__sel-dot {
   width: 7px; height: 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   flex-shrink: 0;
 }
 .wp-picker__sel-chip[data-kind="wildcard"]    .wp-picker__sel-dot { background: var(--wp-kind-wildcard); }
@@ -1466,17 +1270,7 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__sel-chip[data-kind="derivation"]  .wp-picker__sel-dot { background: var(--wp-kind-derivation); }
 .wp-picker__sel-chip[data-kind="constraint"]  .wp-picker__sel-dot { background: var(--wp-kind-constraint); }
 .wp-picker__sel-chip[data-kind="fixed_values"] .wp-picker__sel-dot { background: var(--wp-kind-fixed); }
-.wp-picker__sel-close {
-  width: 16px; height: 16px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  border-radius: 999px;
-}
-.wp-picker__sel-close:hover { background: var(--wp-bg-4); color: var(--wp-text); }
-.wp-picker__sel-close .pi { font-size: 8px; }
+.wp-picker__sel-close { flex-shrink: 0; }
 
 /* ── Footer ──────────────────────────────────────────────────────── */
 .wp-picker__footer {
@@ -1488,9 +1282,7 @@ onBeforeUnmount(detachCaptureListeners);
   color: var(--wp-text-dim);
   font-size: 11px;
 }
-/* Hint strip — keycap-style kbd chips matching BundlePicker so both
- * pickers feel like the same family. Raised look via 2px bottom
- * border, monospaced label, neutral chip color. */
+/* Hint strip: the keys are the kit's Kbd. */
 .wp-picker__hint {
   display: inline-flex;
   align-items: center;
@@ -1499,85 +1291,12 @@ onBeforeUnmount(detachCaptureListeners);
   color: var(--wp-text-dim, var(--wp-text-muted));
   font: 500 11px/1 var(--wp-font-sans);
 }
-.wp-picker__hint kbd {
-  font: 600 10px/1 var(--wp-font-mono, monospace);
-  background: var(--wp-bg2, var(--wp-bg-3));
-  border: 1px solid var(--wp-border);
-  border-bottom-width: 2px;
-  color: var(--wp-text);
-  border-radius: 3px;
-  padding: 2px 5px;
-  margin: 0 1px;
-}
 .wp-picker__footer-spacer { flex: 1; }
-.wp-picker__btn {
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 6px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  display: inline-flex; align-items: center; gap: 6px;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-picker__btn:hover:not(:disabled) {
-  background: var(--wp-bg-4);
-  border-color: var(--wp-border-strong);
-}
-.wp-picker__btn:focus-visible {
-  outline: none;
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
-}
-.wp-picker__btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.wp-picker__btn--primary {
-  background: var(--wp-accent-600);
-  border-color: var(--wp-accent-500);
-  color: #fff;
-}
-.wp-picker__btn--primary:hover:not(:disabled) { background: var(--wp-accent-500); }
-.wp-picker__btn--primary:focus-visible {
-  /* Already on-accent; brighten the halo a notch so the ring is
-   * visible against the violet body. */
-  border-color: var(--wp-accent-300);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-300) 35%, transparent);
-}
 
 /* ── Inline filter buttons (toolbar) ────────────────────────────
  * Square icon buttons sitting next to the search box. Off = ghost
  * outline + muted icon; on = accent fill. Match the visual weight
  * of the kind tabs so the toolbar reads as one cohesive row. */
-.wp-picker__icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  /* Match search-box height (28px) so the toolbar row aligns. */
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  color: var(--wp-text3);
-  cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
-  flex-shrink: 0;
-}
-.wp-picker__icon-btn:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border2);
-}
-.wp-picker__icon-btn--active {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: #fff;
-}
-.wp-picker__icon-btn--active:hover { filter: brightness(1.1); color: #fff; }
-.wp-picker__icon-btn .pi { font-size: 12px; }
 
 /* Filter-trigger badge — small pill in the corner showing how many
  * dimensions inside the popover are active. */
@@ -1588,9 +1307,9 @@ onBeforeUnmount(detachCaptureListeners);
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border-radius: 7px;
-  background: var(--wp-amber, #ffd400);
-  color: #000;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
+  background: var(--wp-amber);
+  color: color-mix(in srgb, var(--wp-amber) 15%, black);
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px;
   font-weight: 700;
@@ -1647,25 +1366,6 @@ onBeforeUnmount(detachCaptureListeners);
   font-style: italic;
   text-transform: none;
 }
-.wp-picker__pop-clear {
-  background: none;
-  border: 1px dashed var(--wp-border2);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text2);
-  cursor: pointer;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 10px;
-  padding: 5px 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-.wp-picker__pop-clear:hover {
-  color: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
-.wp-picker__pop-clear .pi { font-size: 10px; }
 
 /* Click-shield — covers the rest of the modal so a click outside
  * the popover closes it. Transparent. Excluded from the popover's
@@ -1692,35 +1392,30 @@ onBeforeUnmount(detachCaptureListeners);
 
 /* Tag chips inside popover (same visual as before, just in a
  * tighter container). */
-.wp-picker__tag-chip {
-  display: inline-flex;
-  align-items: center;
+
+
+/* The kit Chip toggles, in the picker's own outline look: transparent when
+ * off, the accent tint when on. Tags read in mono. */
+.wp-chip.wp-picker__tag-chip {
+  height: auto;
   gap: 4px;
-  background: transparent;
+  padding: 2px 8px;
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
-  color: var(--wp-text3);
+  border-radius: min(9px, var(--wp-radius-cap, 999px));
+  background: transparent;
+  color: var(--wp-text3, var(--wp-text-dim));
   font-family: var(--wp-font-mono, monospace);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 2px 8px;
-  cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
 }
-.wp-picker__tag-chip:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border2);
-}
-.wp-picker__tag-chip--active {
+.wp-chip.wp-picker__tag-chip:hover { color: var(--wp-text); border-color: var(--wp-border2, var(--wp-border-strong)); }
+.wp-chip.wp-picker__tag-chip[aria-pressed="true"] {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   border-color: var(--wp-accent);
   color: var(--wp-accent);
 }
-.wp-picker__tag-chip--active:hover {
-  background: color-mix(in srgb, var(--wp-accent) 28%, transparent);
-  color: var(--wp-accent2, var(--wp-accent));
-}
+.wp-chip.wp-picker__tag-chip[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--wp-accent) 28%, transparent); }
 
 .wp-picker__filter-tags {
   display: flex;
@@ -1734,29 +1429,5 @@ onBeforeUnmount(detachCaptureListeners);
 
 /* Category dropdown — same chrome as before but full-width inside
  * the popover panel. Hide native browser arrow + draw our own. */
-.wp-picker__filter-cat-select {
-  width: 100%;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-  font-size: 11px;
-  padding: 5px 22px 5px 8px;
-  cursor: pointer;
-  outline: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
-                    linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position: calc(100% - 12px) 50%, calc(100% - 7px) 50%;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-}
-.wp-picker__filter-cat-select:focus { border-color: var(--wp-accent); }
-.wp-picker__filter-cat-select option {
-  background: var(--wp-bg2);
-  color: var(--wp-text);
-}
+.wp-picker__filter-cat-select { width: 100%; height: 26px; }
 </style>

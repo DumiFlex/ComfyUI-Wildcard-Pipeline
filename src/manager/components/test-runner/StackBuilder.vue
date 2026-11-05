@@ -9,9 +9,10 @@
  * focused one) opens its inspector.
  */
 import { computed, ref } from "vue";
-import Button from "../ui/Button.vue";
-import Icon, { ICON_SM } from "../ui/Icon.vue";
-import Toggle from "../ui/Toggle.vue";
+import Button from "@/kit/Button.vue";
+import Input from "@/kit/Input.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
+import Popover from "@/kit/Popover.vue";
 import ModulePicker from "./ModulePicker.vue";
 import { KIND_META } from "./kinds";
 import type { BundleRow, ModuleRow, ScenarioStackItem } from "../../api/types";
@@ -149,8 +150,9 @@ function removePin(name: string): void {
         <div class="wp-trs__top">
           <span class="wp-trs__step">{{ i + 1 }}</span>
           <span class="wp-trs__kind">{{ KIND_META[v.kind].label }}</span>
-          <Toggle
+          <WpSwitch
             class="wp-trs__switch"
+            size="sm"
             :model-value="v.enabled"
             :aria-label="v.enabled ? `Switch off ${v.name}` : `Switch on ${v.name}`"
             data-test="stack-toggle"
@@ -172,30 +174,34 @@ function removePin(name: string): void {
           title="The template is plain text with no $variables, @{references} or {a|b} choices, so it writes the same value on every run."
           data-test="stack-fixed"
         >template reads nothing, same text every run</span>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
+          icon="pi-times"
           class="wp-trs__remove"
           :aria-label="`Remove ${v.name}`"
           title="Remove"
           data-test="stack-remove"
           @click.stop="removeAt(i)"
-        ><Icon name="pi-times" :size="ICON_SM" /></button>
+        />
       </li>
       <li class="wp-trs__add-wrap">
-        <button
-          type="button"
-          class="wp-trs__add"
-          :aria-expanded="pickerOpen"
-          data-test="stack-add"
-          @click="pickerOpen = !pickerOpen"
-        ><Icon name="pi-plus" :size="ICON_SM" /> Add module or bundle</button>
-        <ModulePicker
-          v-if="pickerOpen"
-          :modules="modules"
-          :bundles="bundles"
-          @pick="add"
-          @close="pickerOpen = false"
-        />
+        <Popover v-model:open="pickerOpen" label="Add to stack">
+          <template #trigger="{ props: triggerProps }">
+            <Button
+              v-bind="triggerProps"
+              variant="add"
+              icon="pi-plus"
+              class="wp-trs__add"
+              data-test="stack-add"
+            >Add module or bundle</Button>
+          </template>
+          <ModulePicker
+            :modules="modules"
+            :bundles="bundles"
+            @pick="add"
+          />
+        </Popover>
       </li>
     </ol>
 
@@ -203,15 +209,15 @@ function removePin(name: string): void {
       <span class="wp-trs__pins-label">Pinned values</span>
       <span v-for="[name, value] in pinEntries" :key="name" class="wp-trs__pin" data-test="pin">
         <code>${{ name }}</code> = <span class="wp-trs__pin-val">"{{ value }}"</span>
-        <button type="button" :aria-label="`Remove pin $${name}`" @click="removePin(name)"><Icon name="pi-times" :size="ICON_SM" /></button>
+        <Button variant="ghost" size="sm" icon="pi-times" class="wp-trs__pin-x" :aria-label="`Remove pin $${name}`" @click="removePin(name)" />
       </span>
       <span v-if="!pinEntries.length && !pinFormOpen" class="wp-trs__pins-hint">
         Stand in for a value an upstream node would pass in, e.g. <code>$subject</code>.
       </span>
       <form v-if="pinFormOpen" class="wp-trs__pin-form" @submit.prevent="addPin">
-        <input id="wp-tr-pin-name" v-model="pinName" placeholder="$name" aria-label="Variable name" data-test="pin-name">
+        <Input id="wp-tr-pin-name" v-model="pinName" size="sm" placeholder="$name" aria-label="Variable name" data-test="pin-name" />
         <span>=</span>
-        <input id="wp-tr-pin-value" v-model="pinValue" placeholder="value" aria-label="Pinned value" data-test="pin-value">
+        <Input id="wp-tr-pin-value" v-model="pinValue" size="sm" placeholder="value" aria-label="Pinned value" data-test="pin-value" />
         <Button size="sm" type="submit" :disabled="!pinNameValid" data-test="pin-add">Pin</Button>
         <Button size="sm" variant="ghost" @click="pinFormOpen = false">Cancel</Button>
       </form>
@@ -265,14 +271,6 @@ function removePin(name: string): void {
   color: var(--kc); text-transform: uppercase; letter-spacing: .05em;
 }
 .wp-trs__switch { flex: none; min-height: 0; }
-/* A quieter, smaller switch than the form one: seven of them sit in a row. */
-.wp-trs__switch :deep(.wp-toggle) { width: 26px; height: 14px; }
-.wp-trs__switch :deep(.wp-toggle)::after { width: 10px; height: 10px; }
-.wp-trs__switch :deep(.wp-toggle[data-on="true"]) {
-  background: color-mix(in oklab, var(--wp-accent-600) 55%, var(--wp-bg-3));
-  border-color: color-mix(in oklab, var(--wp-accent-500) 60%, var(--wp-border));
-}
-.wp-trs__switch :deep(.wp-toggle[data-on="true"])::after { transform: translateX(12px); }
 .wp-trs__name {
   font-weight: var(--wp-weight-medium); line-height: var(--wp-line-base);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -283,27 +281,21 @@ function removePin(name: string): void {
   font-size: var(--wp-text-xs); color: var(--wp-warn); line-height: var(--wp-line-xs);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.wp-trs__remove {
+/* The kit's × button, as a round badge on the card's corner. */
+.wp-trs__remove.wp-btn {
   position: absolute; top: calc(-1 * var(--wp-space-4)); right: calc(-1 * var(--wp-space-4));
-  width: 22px; height: 22px; border-radius: 50%; /* audit-exempt: round close badge */
-  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: min(50%, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-4); color: var(--wp-text-muted); border: 1px solid var(--wp-border-strong);
   opacity: 0; transition: opacity .12s;
 }
 .wp-trs__card:hover .wp-trs__remove, .wp-trs__card:focus-within .wp-trs__remove { opacity: 1; }
-.wp-trs__remove:hover { color: var(--wp-danger-text); border-color: var(--wp-danger); }
-.wp-trs__remove:focus-visible { opacity: 1; outline: 2px solid var(--wp-border-focus); }
+.wp-trs__remove.wp-btn:hover { color: var(--wp-danger-text); border-color: var(--wp-danger); }
+.wp-trs__remove:focus-visible { opacity: 1; }
 @media (hover: none) { .wp-trs__remove { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .wp-trs__card, .wp-trs__remove { transition: none; } }
 .wp-trs__add-wrap { position: relative; display: flex; }
-.wp-trs__add {
-  min-width: 160px; border: 1px dashed var(--wp-border-strong); background: none;
-  border-radius: var(--wp-radius); color: var(--wp-text-muted); cursor: pointer;
-  padding: var(--wp-space-5); display: inline-flex; align-items: center; gap: var(--wp-space-3);
-  font-size: var(--wp-text-sm);
-}
-.wp-trs__add:hover { border-color: var(--wp-accent-500); color: var(--wp-accent-text); }
-.wp-trs__add:focus-visible { outline: 2px solid var(--wp-border-focus); }
+/* The kit's dashed add button, as tall as the cards beside it. */
+.wp-trs__add.wp-btn { height: auto; min-width: 160px; padding: var(--wp-space-5); border-radius: var(--wp-radius); font-size: var(--wp-text-sm); font-weight: var(--wp-weight-medium); }
 .wp-trs__pins {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--wp-space-4);
   padding: var(--wp-space-4) var(--wp-space-6); font-size: var(--wp-text-sm);
@@ -324,8 +316,7 @@ function removePin(name: string): void {
 }
 .wp-trs__pin code { color: var(--wp-accent-text); }
 .wp-trs__pin-val { color: var(--wp-success); }
-.wp-trs__pin button { background: none; border: 0; color: var(--wp-text-dim); cursor: pointer; display: inline-flex; padding: var(--wp-space-1); }
-.wp-trs__pin button:hover { color: var(--wp-text); }
+.wp-trs__pin-x.wp-btn { width: 18px; height: 18px; min-width: 0; padding: 0; color: var(--wp-text-dim); }
 .wp-trs__pin-form { display: inline-flex; align-items: center; gap: var(--wp-space-3); }
 .wp-trs__pin-form input {
   background: var(--wp-bg-1); color: var(--wp-text); border: 1px solid var(--wp-border);

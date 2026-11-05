@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Checkbox from "@/kit/Checkbox.vue";
 /**
  * Constraint ExceptionsSection — library exception list + extras
  * section. Library rows: checkbox toggles `disabled_exception_keys`,
@@ -13,12 +14,15 @@
  * "+ Add extra exception" button at bottom appends a blank row
  * defaulting to mode=allow factor=1.
  */
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { encodeKey } from "../../instance/keys";
 import { patchInstance } from "../../instance/patch";
 import RichTextPreview from "../../../../../manager/components/RichTextPreview.vue";
-import Select, { type SelectOption } from "../../../../../manager/components/ui/Select.vue";
+import Select, { type SelectOption } from "@/kit/Select.vue";
+import Button from "@/kit/Button.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 
 type Mode = "allow" | "exclude" | "boost" | "reduce" | "only";
 
@@ -225,6 +229,11 @@ function onLibCheckboxChange(exc: LibraryException, checked: boolean): void {
   ));
 }
 
+/** The mode chip's tooltip: what a click turns it into. */
+function cycleHint(mode: Mode): string {
+  return `${MODE_META[mode].label}. Click for ${MODE_META[MODE_CYCLE[mode]].label}`;
+}
+
 function onLibModeCycle(exc: LibraryException): void {
   const key = libKey(exc);
   const next = MODE_CYCLE[effectiveMode(exc)];
@@ -239,13 +248,11 @@ function onLibModeCycle(exc: LibraryException): void {
   ));
 }
 
-function onLibFactorChange(exc: LibraryException, ev: Event): void {
-  const raw = Number((ev.target as HTMLInputElement).value);
-  if (!Number.isFinite(raw) || raw < 0) return;
-  // Snap to 3 decimals so float-fuzz tails (from native arrow step,
-  // autofill, etc.) never leak into stored overrides. Honours legit
-  // 2-decimal precision a user might explicitly type.
-  const value = Math.round(raw * 1000) / 1000;
+/** A typed or stepped factor for a library exception (WpNumber already
+ *  snaps float fuzz). Setting it back to the library value drops the
+ *  override. */
+function setLibFactor(exc: LibraryException, value: number): void {
+  if (!Number.isFinite(value) || value < 0) return;
   const key = libKey(exc);
   const map = { ...factorOverrides.value };
   if (value === exc.factor) {
@@ -256,30 +263,6 @@ function onLibFactorChange(exc: LibraryException, ev: Event): void {
   emit("update", patchInstance(props.module, "exception_factor_overrides",
     Object.keys(map).length > 0 ? map : null,
   ));
-}
-
-/** Arrow-key / wheel handlers for both the library and extra factor
- *  inputs — route through the rounded `bumpLibFactor` / `bumpExtraFactor`
- *  helpers so native browser float-step doesn't surface fuzz. */
-function onLibFactorKeydown(exc: LibraryException, ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") { ev.preventDefault(); bumpLibFactor(exc, 1); }
-  else if (ev.key === "ArrowDown") { ev.preventDefault(); bumpLibFactor(exc, -1); }
-}
-function onLibFactorWheel(exc: LibraryException, ev: WheelEvent): void {
-  const target = ev.target as HTMLInputElement;
-  if (document.activeElement !== target) return;
-  ev.preventDefault();
-  bumpLibFactor(exc, ev.deltaY < 0 ? 1 : -1);
-}
-function onExtraFactorKeydown(idx: number, ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") { ev.preventDefault(); bumpExtraFactor(idx, 1); }
-  else if (ev.key === "ArrowDown") { ev.preventDefault(); bumpExtraFactor(idx, -1); }
-}
-function onExtraFactorWheel(idx: number, ev: WheelEvent): void {
-  const target = ev.target as HTMLInputElement;
-  if (document.activeElement !== target) return;
-  ev.preventDefault();
-  bumpExtraFactor(idx, ev.deltaY < 0 ? 1 : -1);
 }
 
 // ── Extras ─────────────────────────────────────────────────────────
@@ -316,26 +299,6 @@ function onAddExtra(): void {
 // decimal so 1.0 ± 0.1 doesn't drift to floating-point noise.
 const FACTOR_STEP = 0.1;
 
-function bumpLibFactor(exc: LibraryException, dir: 1 | -1): void {
-  const next = Math.max(0, Math.round((effectiveFactor(exc) + dir * FACTOR_STEP) * 10) / 10);
-  const key = libKey(exc);
-  const map = { ...factorOverrides.value };
-  if (next === exc.factor) {
-    delete map[key];
-  } else {
-    map[key] = next;
-  }
-  emit("update", patchInstance(props.module, "exception_factor_overrides",
-    Object.keys(map).length > 0 ? map : null,
-  ));
-}
-
-function bumpExtraFactor(idx: number, dir: 1 | -1): void {
-  const exc = extras.value[idx];
-  if (!exc) return;
-  const next = Math.max(0, Math.round((exc.factor + dir * FACTOR_STEP) * 10) / 10);
-  onExtraFieldChange(idx, "factor", next);
-}
 </script>
 
 <template>
@@ -353,37 +316,17 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       ]"
       :data-test="`ex-row-${i}`"
     >
-      <!-- Styled checkbox matching OptionRow's wildcard pattern — a
-           role-checkbox span with inline SVG tick. Replaces the bare
-           native input for visual parity with the wildcard / fixed-
-           values edit modals. Hidden when stranded: a broken constraint
+      <!-- The kit Checkbox, as on OptionRow and ValueRow. Hidden when stranded: a broken constraint
            is a read-only snapshot, so the enable/disable toggle is gone. -->
-      <span
+      <Checkbox
         v-if="!stranded"
         class="ex__check"
-        :class="{ 'ex__check--on': !disabledKeys.has(libKey(exc)) }"
+        size="sm"
+        :model-value="!disabledKeys.has(libKey(exc))"
         :data-test="`ex-cb-${i}`"
-        role="checkbox"
-        :aria-checked="!disabledKeys.has(libKey(exc))"
-        tabindex="0"
         aria-label="Enable this exception"
-        @click="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
-        @keydown.space.prevent="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
-        @keydown.enter.prevent="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
-      >
-        <svg
-          v-if="!disabledKeys.has(libKey(exc))"
-          class="ex__check-tick"
-          width="8"
-          height="8"
-          viewBox="0 0 12 12"
-          aria-hidden="true"
-        >
-          <path d="M2.5 6.5 L5 9 L9.5 3.5"
-                fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </span>
+        @update:model-value="onLibCheckboxChange(exc, disabledKeys.has(libKey(exc)))"
+      />
       <span class="ex__pair">
         <span class="ex__src">
           <span
@@ -421,17 +364,19 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       </span>
       <!-- Editable: click-to-cycle chip with glyph + label. Read-only
            (stranded): the same colored chip as a static span — no cycle. -->
-      <button
+      <Button
         v-if="!stranded"
-        type="button"
+        size="sm"
+        variant="outline"
         class="ex__mode-chip"
         :class="`ex__mode-chip--${effectiveMode(exc)}`"
+        :hint="cycleHint(effectiveMode(exc))"
         :data-test="`ex-mode-${i}`"
         @click="onLibModeCycle(exc)"
       >
         <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[effectiveMode(exc)].glyph }}</span>
         {{ MODE_META[effectiveMode(exc)].label }}
-      </button>
+      </Button>
       <span
         v-else
         class="ex__mode-chip ex__mode-chip--ro"
@@ -452,38 +397,17 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
         class="ex__factor-wrap"
         @wheel.stop
       >
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          class="ex__factor-input"
-          :data-test="`ex-factor-${i}`"
+        <WpNumber
+          class="ex__factor-num"
+          :model-value="effectiveFactor(exc)"
+          :min="0"
+          :step="FACTOR_STEP"
           aria-label="Exception factor"
-          :value="effectiveFactor(exc)"
-          @change="(ev) => onLibFactorChange(exc, ev)"
-          @keydown="(ev) => onLibFactorKeydown(exc, ev as KeyboardEvent)"
-          @wheel="(ev) => onLibFactorWheel(exc, ev as WheelEvent)"
+          :up-label="`Increase factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
+          :down-label="`Decrease factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
+          :data-test="`ex-factor-${i}`"
+          @update:model-value="(n) => n !== null && setLibFactor(exc, n)"
         />
-        <span class="ex__spin">
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            :aria-label="`Increase factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
-            @click="bumpLibFactor(exc, 1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-          </svg></button>
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            :aria-label="`Decrease factor for ${excSrc(exc, props.sourceOptionsById)} → ${excTgt(exc, props.targetOptionsById)}`"
-            @click="bumpLibFactor(exc, -1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-          </svg></button>
-        </span>
       </span>
     </div>
 
@@ -569,59 +493,40 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
           />
         </template>
       </Select>
-      <button
-        type="button"
+      <Button
+        size="sm"
+        variant="outline"
         class="ex__mode-chip"
         :class="`ex__mode-chip--${exc.mode}`"
+        :hint="cycleHint(exc.mode)"
         @click="onExtraModeCycle(i)"
       >
         <span class="ex__mode-glyph" aria-hidden="true">{{ MODE_META[exc.mode].glyph }}</span>
         {{ MODE_META[exc.mode].label }}
-      </button>
+      </Button>
       <span
         v-if="exc.mode === 'boost' || exc.mode === 'reduce'"
         class="ex__factor-wrap"
         @wheel.stop
       >
-        <input
-          type="number"
-          step="0.1"
-          min="0"
-          class="ex__factor-input"
+        <WpNumber
+          class="ex__factor-num"
+          :model-value="exc.factor"
+          :min="0"
+          :step="FACTOR_STEP"
           aria-label="Extra factor"
-          :value="exc.factor"
-          @change="(ev) => onExtraFieldChange(i, 'factor', Math.round((Number((ev.target as HTMLInputElement).value) || 1) * 1000) / 1000)"
-          @keydown="(ev) => onExtraFactorKeydown(i, ev as KeyboardEvent)"
-          @wheel="(ev) => onExtraFactorWheel(i, ev as WheelEvent)"
+          up-label="Increase extra factor"
+          down-label="Decrease extra factor"
+          @update:model-value="(n) => n !== null && onExtraFieldChange(i, 'factor', n)"
         />
-        <span class="ex__spin">
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            aria-label="Increase extra factor"
-            @click="bumpExtraFactor(i, 1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-          </svg></button>
-          <button
-            type="button"
-            class="ex__spin-btn"
-            tabindex="-1"
-            aria-label="Decrease extra factor"
-            @click="bumpExtraFactor(i, -1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-          </svg></button>
-        </span>
       </span>
-      <button
-        type="button"
-        class="ex__trash"
+      <WpIconButton
+        icon="pi-trash"
+        tone="danger"
         :data-test="`ex-extra-trash-${i}`"
-        aria-label="Remove extra exception"
+        label="Remove extra exception"
         @click="onExtraTrash(i)"
-      ><i class="pi pi-trash" /></button>
+      />
       </template>
     </div>
     </div>
@@ -633,13 +538,15 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
       {{ onlyLinkSources.length === 1 ? "it" : "them" }} can be picked.
     </p>
 
-    <button
+    <Button
       v-if="!stranded"
-      type="button"
-      class="ex__add-extra"
+      size="sm"
+      variant="add"
+      icon="pi-plus"
+      block
       data-test="ex-add-extra"
       @click="onAddExtra"
-    ><i class="pi pi-plus" /> Add extra exception</button>
+    >Add extra exception</Button>
 
     <!-- Stranded snapshot has no editable list; a hint points to the
          reattach banner above (mirrors the SPA read-only exceptions). -->
@@ -680,7 +587,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
 .ex__row:last-of-type { border-bottom: 0; }
 .ex__row--extra {
   background: rgba(251, 146, 60, 0.06);
-  border-left: 2px solid var(--wp-status-modified, #fb923c);
+  border-left: 2px solid var(--wp-status-modified);
   padding-left: 6px;
 }
 
@@ -694,20 +601,20 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   padding-left: 6px;
 }
 .ex__row--boost:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-success, #22c55e) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-success) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-success) 5%, transparent);
 }
 .ex__row--reduce:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-warn, #f97316) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-warn, #f97316) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-warn) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-warn) 5%, transparent);
 }
 .ex__row--only:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-info, #3b82f6) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-info) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-info) 5%, transparent);
 }
 .ex__row--exclude:not(.ex__row--extra) {
-  border-left-color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, transparent);
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 5%, transparent);
+  border-left-color: color-mix(in srgb, var(--wp-danger) 60%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 5%, transparent);
 }
 .ex__pair {
   flex: 1;
@@ -722,14 +629,14 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   color: var(--wp-constraint-source-text);
   background: color-mix(in oklab, var(--wp-constraint-source) 12%, transparent);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in oklab, var(--wp-constraint-source) 30%, transparent);
 }
 .ex__tgt {
   color: var(--wp-constraint-target-text);
   background: color-mix(in oklab, var(--wp-constraint-target) 12%, transparent);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   border: 1px solid color-mix(in oklab, var(--wp-constraint-target) 30%, transparent);
 }
 .ex__arrow { color: var(--wp-text-dim, var(--wp-text3)); }
@@ -742,27 +649,7 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
   min-width: 0;
 }
 
-/* Styled checkbox — mirror of OptionRow's `.opt__check` pattern so
- * users see one consistent on/off control across wildcard / fixed-
- * values / constraint edit modals. */
-.ex__check {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  background: var(--wp-bg);
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.ex__check-tick { display: block; }
-.ex__check--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
+.ex__check { flex-shrink: 0; }
 
 /* Null-option chip — shown in the src/tgt cell when the exception
  * targets the wildcard's null option (value === ""). Visually distinct
@@ -791,27 +678,22 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
 .ex__row--off .ex__arrow {
   opacity: 0.5;
 }
-.ex__row--off .ex__mode-chip {
-  opacity: 0.5;
-  text-decoration: line-through;
-}
-.ex__row--off .ex__factor-wrap {
-  opacity: 0.5;
-}
+.ex__row--off /* The read-only chip is a span; the editable one is a Button, whose size,
+ * focus ring and hover it keeps (the compound `.wp-btn` selectors beat its
+ * scoped rules on a tie). */
 .ex__mode-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: transparent;
   border: 1px solid var(--wp-border);
   color: var(--wp-text);
   font: 600 9px var(--wp-font-sans);
   text-transform: uppercase;
   padding: 2px 6px;
-  border-radius: 3px;
-  cursor: pointer;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   white-space: nowrap;
 }
+.wp-btn.ex__mode-chip { padding: 0 8px; font-size: 10px; text-transform: uppercase; border-radius: var(--wp-radius-sm); }
 /* Glyph mirrors the matrix cell icons (↑ ↓ × ·) — mono so it lines up. */
 .ex__mode-glyph {
   font-family: var(--wp-font-mono, monospace);
@@ -831,122 +713,27 @@ function bumpExtraFactor(idx: number, dir: 1 | -1): void {
  * reduce = orange/warn, exclude = red/danger. Allow uses the accent
  * (purple-ish) because it's a "neutral pass-through" — visually distinct
  * from boost's green so users don't confuse `allow ×1` with `boost ×1.5`. */
-.ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
-.ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger, #e05252) 22%, transparent); color: var(--wp-danger, #e05252); }
-.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success, #6bc96f) 22%, transparent); color: var(--wp-success, #6bc96f); }
-.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); }
-.ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn, #f59e0b) 22%, transparent); color: var(--wp-warn, #f59e0b); }
-.ex__factor-wrap {
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  width: 64px;
-  height: 22px;
-  overflow: hidden;
-}
-.ex__factor-wrap:focus-within { border-color: var(--wp-accent); }
-.ex__factor-input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 10px var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
-  text-align: right;
-  width: 100%;
-  min-width: 0;
-  -moz-appearance: textfield;
-}
-.ex__factor-input::-webkit-outer-spin-button,
-.ex__factor-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.ex__factor-input:focus { outline: none; color: var(--wp-text); }
-.ex__spin {
-  display: flex;
-  flex-direction: column;
-  width: 14px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.ex__spin-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  line-height: 0;
-}
-.ex__spin-btn + .ex__spin-btn {
-  border-top: 1px solid var(--wp-border);
-}
-.ex__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99, 102, 241, 0.10); }
+.ex__mode-chip.ex__mode-chip--allow { background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-text)); }
+.ex__mode-chip.ex__mode-chip--exclude { background: color-mix(in srgb, var(--wp-danger) 22%, transparent); color: var(--wp-danger); }
+.ex__mode-chip.ex__mode-chip--boost { background: color-mix(in srgb, var(--wp-success) 22%, transparent); color: var(--wp-success); }
+.ex__mode-chip.ex__mode-chip--only { background: color-mix(in srgb, var(--wp-info) 22%, transparent); color: var(--wp-info); }
+.ex__mode-chip.ex__mode-chip--reduce { background: color-mix(in srgb, var(--wp-warn) 22%, transparent); color: var(--wp-warn); }
+.ex__factor-wrap { display: inline-flex; width: 64px; }
+.ex__factor-num { width: 100%; }
 .ex__extra-badge {
   font: 600 8px var(--wp-font-sans);
   text-transform: uppercase;
   padding: 1px 5px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--wp-status-modified, #fb923c) 22%, transparent);
-  color: var(--wp-status-modified, #fb923c);
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
+  background: color-mix(in srgb, var(--wp-status-modified) 22%, transparent);
+  color: var(--wp-status-modified);
 }
-.ex__trash {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  font-size: 11px;
-  flex-shrink: 0;
-  transition: background 0.12s, color 0.12s;
-}
-.ex__trash:hover {
-  background: color-mix(in srgb, var(--wp-danger, #e05252) 18%, transparent);
-  border-color: color-mix(in srgb, var(--wp-danger, #e05252) 50%, transparent);
-  color: var(--wp-danger, #e05252);
-}
-.ex__trash:active {
-  background: color-mix(in srgb, var(--wp-danger, #e05252) 30%, transparent);
-}
-.ex__trash .pi { font-size: 11px; line-height: 1; }
-.ex__add-extra {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 1px dashed var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-  padding: 5px 10px;
-  font: 11px var(--wp-font-sans);
-  border-radius: 3px;
-  cursor: pointer;
-  margin-top: 8px;
-}
-.ex__add-extra:hover {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.ex__add-extra .pi { font-size: 10px; }
 .ex__only-note {
   margin: 8px 0 0;
   font: 400 11px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.ex__only-note-glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
+.ex__only-note-glyph { color: var(--wp-info); margin-right: 4px; }
 .ex__readonly-hint {
   margin: 8px 0 0;
   font: 10px var(--wp-font-sans);

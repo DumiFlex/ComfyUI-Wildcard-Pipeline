@@ -14,10 +14,9 @@
  * Import tab uses today, but v1 fails loudly so users see the conflict
  * instead of silently overwriting their own work.
  *
- * Exposed globally as `window.__wpcRuntime.install` (see manager
- * bootstrap) so the community embed bundle — loaded into the same
- * document via dynamic import — can call into this pipeline directly
- * without re-implementing migrations or duplicating the commit shape.
+ * Served to the framed community embed as the bridge's `install`
+ * request (community/hostRuntime.ts + frameBridge.ts), so it reuses
+ * this pipeline instead of re-implementing migrations or the commit shape.
  */
 
 import { api } from "../api/client";
@@ -31,7 +30,7 @@ import {
   MAX_KNOWN_SCHEMA_VERSION,
   type RawPayload,
 } from "./migrations";
-import { parsePayload, type IntegrityWarning } from "./parse";
+import { type IntegrityWarning } from "./parse";
 import {
   buildCommitPayload,
   type CommitOk,
@@ -432,8 +431,9 @@ export function enforceClashSafety(
  * Install a fully-validated community payload into the live library.
  *
  * Pipeline:
- *   1. ``parsePayload`` re-runs schema validation + migration chain +
- *      integrity check. Same guard the Import tab uses.
+ *   1. ``parseCheckedPayload`` re-runs the envelope checks, migration
+ *      chain, per-row payload shape check and integrity check. Same guard
+ *      the Import tab uses.
  *   2. Convert every entity into an ``add`` decision (no picker;
  *      server collision detection surfaces dupes).
  *   3. ``buildCommitPayload`` → POST ``/import/commit``.
@@ -451,7 +451,10 @@ export async function installEnvelope(
   opts: InstallOptions,
 ): Promise<InstallResult> {
   const raw = "raw" in input ? input.raw : JSON.stringify(input.envelope);
-  const parsed = parsePayload(raw);
+  // Lazy: the shape check brings Zod, which must not ride in the canvas
+  // ContextWidget chunk (see shape-check.ts).
+  const { parseCheckedPayload } = await import("./shape-check");
+  const parsed = parseCheckedPayload(raw);
   if (!parsed.ok) {
     return {
       ok: false,

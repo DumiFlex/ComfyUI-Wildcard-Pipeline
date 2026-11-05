@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import Kbd from "@/kit/Kbd.vue";
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -19,11 +21,16 @@ import VarToken from "../../../components/docs/VarToken.vue";
     <DocSection title="What it's for">
       <p>
         The Test Runner, in the manager sidebar, runs a stack of your library modules through the
-        real engine, one chain seed per run, and shows what comes out. Use it to check that a
+        real engine, once per seed, and shows what comes out. Use it to check that a
         wildcard's options all come up, that a constraint actually fires, or that a combine reads
         the variables you think it does, before you wire anything on the canvas.
       </p>
-      <DocFlow
+      <DocImage
+        src="images/docs/test-runner.png"
+        ratio="2 / 1"
+        caption="An empty Test Runner: saved scenarios on the left, the stack and pinned values in the middle, and Range / Random seeds with Run at the top."
+      />
+      <DocFlow figure="test-runner-flow"
         :stages="[
           { icon: 'pi pi-box', name: 'Scenario', sub: 'stack + pins + seeds', tone: 'neutral' },
           { icon: 'pi pi-play', name: 'Run', sub: 'real engine, seeded', tone: 'node' },
@@ -39,7 +46,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <p>
         A scenario is what one Context node would hold, saved so you can run it again. Press
         <b>New</b> in the rail, then <b>Add module or bundle</b>. Cards run left to right, like the
-        modules on a Context; drag them (or Alt + arrow keys) to reorder, and use a card's switch to
+        modules on a Context; drag them (or <Kbd keys="Alt" size="sm" /> + arrow keys) to reorder, and use a card's switch to
         leave it out of a run without removing it.
       </p>
       <DocKeyList
@@ -51,7 +58,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         ]"
       />
       <p>
-        <b>Save</b> (Ctrl + S) keeps the scenario, and the pin icon keeps it at the top of the rail.
+        <b>Save</b> (<Kbd keys="Mod+S" size="sm" />) keeps the scenario, and the pin icon keeps it at the top of the rail.
         From a module or bundle editor, <b>Send to Test Runner</b> opens a quick run with just that
         item, and <b>In N scenarios</b> lists the saved scenarios that use it.
       </p>
@@ -110,10 +117,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         baseline in one go, and each row then reads <em>matches</em> or <em>N changed</em>. When the
         result is the new normal, <b>Use this run as baseline</b> replaces it.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Compare needs the same seeds on both sides. A Range scenario always has them; for a Random
         one, <b>Run the baseline's seeds</b> reruns exactly the seeds the baseline used.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

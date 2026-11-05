@@ -54,12 +54,14 @@ Thumbs.db
 !/docs/import-export-contract.md
 # Network behaviour + download hardening, linked from the README
 !/docs/network-access.md
-# Curated release highlights — read by .releaserc.js at release time, so it
-# must be tracked (the release step commits the cleared file back).
+# Rules every custom control follows, linked from CLAUDE.md
+!/docs/component-standard.md
+# What may move the Bookmarks dock, linked from CLAUDE.md and bookmark.ts
+!/docs/bookmark-dock-placement.md
+# Curated release highlights — the release body, read by
+# scripts/release/release-notes.mjs at release time, so it must be tracked.
 !/docs/release-notes/
 
-# Semantic release
-.releaserc.local.js
 
 # Throwaway design / scratch artifacts (mockups, screenshots, demos)
 /_temp/
@@ -76,3 +78,9 @@ wp-settings.json
 
 # Playwright MCP session artifacts (page snapshots, console logs).
 .playwright-mcp/
+theme-audit-out/
+
+# Tutorial videos: the voice model, spoken lines and rendered videos are made locally
+tutorials/voice/cache/
+tutorials/voice/models/
+tutorials/out/

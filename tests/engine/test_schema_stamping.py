@@ -7,6 +7,8 @@ from engine.migrations import (
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
     FALLBACK_SCHEMA_VERSION,
+    MAX_KNOWN_SCHEMA_VERSION,
+    NEGATED_TESTS_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
@@ -184,6 +186,15 @@ def test_fixed_value_and_combine_negatives():
     assert schema_version_for_payload(combine) == NEGATIVES_SCHEMA_VERSION
 
 
+def test_combine_negative_override_in_a_bundle_child():
+    def bundle(override):
+        return {"children": [{"id": "abababab", "type": "combine", "name": "c",
+                              "payload": {"template": "$a", "output_var": "c"},
+                              "instance": {"negative_override": override}}]}
+    assert schema_version_for_payload(bundle("blurry")) == NEGATIVES_SCHEMA_VERSION
+    assert schema_version_for_payload(bundle("")) == CURRENT_SCHEMA_VERSION
+
+
 def test_add_to_negative_action_and_bundle_child():
     row = _derivation_row(_TEST)
     row["payload"]["rules"][0]["branches"][0]["action"]["mode"] = "negative"
@@ -233,3 +244,24 @@ def test_fallback_option_needs_v9():
     assert schema_version_for_payload({"children": [row]}) == FALLBACK_SCHEMA_VERSION
     instance = {"instance": {"options": [{"id": "o1", "value": "x", "fallback": True}]}}
     assert schema_version_for_payload(instance) == FALLBACK_SCHEMA_VERSION
+
+
+def _negated_row(op, nested=False):
+    test = {"var": "a", "op": op, "value": "x"}
+    cond = ({"match": "any", "conditions": [{"var": "b", "op": "equals", "value": "1"}, test]}
+            if nested else test)
+    return {"id": "dddddddd", "type": "derivation", "name": "d", "payload": {"rules": [{
+        "id": "r1", "branches": [{"condition": cond, "action": {
+            "target_var": "c", "mode": "replace", "value": "y"}}]}]}}
+
+
+@pytest.mark.parametrize("op,nested,expected", [
+    ("not_equals", False, CURRENT_SCHEMA_VERSION),
+    ("not_exists", False, CURRENT_SCHEMA_VERSION),
+    ("not_contains", False, NEGATED_TESTS_SCHEMA_VERSION),
+    ("not_matches", True, NEGATED_TESTS_SCHEMA_VERSION),
+])
+def test_negated_tests_need_v10(op, nested, expected):
+    assert schema_version_for_payload(_negated_row(op, nested)) == expected
+    assert schema_version_for_payload({"children": [_negated_row(op, nested)]}) == expected
+    assert MAX_KNOWN_SCHEMA_VERSION >= NEGATED_TESTS_SCHEMA_VERSION

@@ -69,18 +69,22 @@ function cellFactor(
   const rawRow = (matrix ?? {})[sourceTag];
   if (!rawRow) return 1;
   // `only` makes the row an allow-list: an option carrying no tag the row
-  // mentions is shut out, and an unmentioned accepts-axis member offers 0. A
-  // neutral (`allow`) cell is not a mention.
+  // mentions is shut out, and inside an accepts axis the row rules on (any
+  // member mentioned) an unmentioned member offers 0; an axis the row never
+  // mentions stays neutral, so a target that is also the source of another
+  // agreement is not shut out by a row about its classify tags. A neutral
+  // (`allow`) cell is not a mention.
   const hasOnly = rowHasOnly(rawRow);
   const row = hasOnly
     ? Object.fromEntries(Object.entries(rawRow).filter(([, r]) => r && r.mode !== "allow"))
     : rawRow;
   if (hasOnly && !optTags.some((t) => row[t] !== undefined)) return EXCLUDE;
-  const unruled = hasOnly ? 0 : 1;
   const axes = targetAxes ?? {};
   const axisOf: Record<string, string> = {};
+  const unruledIn: Record<string, number> = {};
   for (const [ax, members] of Object.entries(axes)) {
     for (const t of members ?? []) axisOf[t] = ax;
+    unruledIn[ax] = hasOnly && (members ?? []).some((m) => row[m] !== undefined) ? 0 : 1;
   }
   let factor = 1;
   const axisMembers: Record<string, string[]> = {};
@@ -97,8 +101,9 @@ function cellFactor(
       (axisMembers[ax] ??= []).push(t);
     }
   }
-  for (const members of Object.values(axisMembers)) {
+  for (const [ax, members] of Object.entries(axisMembers)) {
     let best = 0;
+    const unruled = unruledIn[ax] ?? 1;
     for (const t of members) {
       const rule = row[t];
       const r = rule ? applyRule(rule) : unruled;

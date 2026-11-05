@@ -1,6 +1,10 @@
 <!-- src/manager/components/RefChip.vue -->
 <script setup lang="ts">
-import { computed, inject, ref, onBeforeUnmount } from "vue";
+import { copyText } from "@/kit/clipboard";
+import Button from "@/kit/Button.vue";
+import { computed, inject, ref, onBeforeUnmount, shallowRef, watch } from "vue";
+import Popover from "@/kit/Popover.vue";
+import { varColorIndex } from "../../components/shared/var-color";
 import { KIND_ICON_MAP } from "../../components/shared/kind-icons";
 import { parse, readsAs, matches } from "@/manager/parsing/subcatFilter";
 import { splitRefFilter } from "@/widgets/richTokenize";
@@ -101,6 +105,12 @@ interface Props {
    *  safe direction, since a caller that forgets the prop is exactly the
    *  caller with no handler wired. */
   remappable?: boolean;
+  /** Card-only mode. The host draws the `$name` itself as coloured text (an
+   *  editable run, not an atom) and hands the hovered element in here; the
+   *  chip renders nothing of its own and shows its hover card next to that
+   *  element while it is set. `null` closes the card the usual way (after the
+   *  short bridge delay, so the pointer can still reach it). */
+  cardAnchor?: HTMLElement | null;
 }
 
 /** Structural mirror of `extension/graph.ts:VarProducer`, declared locally so
@@ -150,6 +160,7 @@ const props = withDefaults(defineProps<Props>(), {
   producer: undefined,
   graphAware: false,
   remappable: false,
+  cardAnchor: undefined,
 });
 
 
@@ -327,6 +338,9 @@ const isKindAware = computed(() =>
 const toneStyle = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {};
   if (isKindAware.value) out["--wp-refchip-tone"] = KIND_TONE[props.moduleKind];
+  // A `$var` is drawn as coloured text, in the same per-name colour the
+  // template text, the assembler's variable strip and the `$` popover use.
+  if (!isRef.value) out["--wp-refchip-var-tone"] = `var(--wp-var-${varColorIndex(props.name)})`;
   return out;
 });
 
@@ -343,6 +357,12 @@ function onClick(ev: MouseEvent): void {
   // Ref-kind only: resolved chips open the edit popover (`click`); broken
   // chips open the remap popup (`remap`). Var-kind chips are pure marks.
   if (!isRef.value) return;
+  // The click opens a panel at the chip (the filter picker or the remap
+  // popup), so the info card steps aside rather than covering it. It used to
+  // go on its own: the panel's backdrop took the pointer off the chip.
+  if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
+  hoverTimer = undefined;
+  hoverOpen.value = false;
   if (props.resolved) emit("click", ev);
   else emit("remap", ev);
 }
@@ -353,7 +373,6 @@ function onClick(ev: MouseEvent): void {
 // options change). Var chips show the binding + resolved state.
 const HOVER_DELAY_MS = 280;
 const hoverOpen = ref(false);
-const popPos = ref<{ top: number; left: number; flip: boolean }>({ top: 0, left: 0, flip: false });
 let hoverTimer: number | undefined;
 
 /** Pools this Context node holds, when a Context node is an ancestor. Absent
@@ -397,6 +416,14 @@ const optionStats = computed<{ total: number; matched: number } | null>(() => {
 
 /** True when this node supplies the pool, so the chip can say so. */
 const poolFromNode = computed(() => pool.value?.source === "context");
+
+/** Open the module in the library editor. Not for a wildcard only this node
+ *  holds (the library has no row for it, so the page would 404). */
+const canOpen = computed(() => {
+  void cacheVersion.value;
+  if (!props.resolved) return false;
+  return !(poolFromNode.value && props.uuid && lookup(props.uuid) === undefined);
+});
 
 /** Human label for the winning pool. Names the module when the node supplies
  *  it, because a node can hold a renamed copy of a library row. */
@@ -442,19 +469,8 @@ const foreignPoolNote = computed<string | null>(() => {
   return `also in ${where} — other nodes don't share pools`;
 });
 
-function positionPop(el: HTMLElement): void {
-  const r = el.getBoundingClientRect();
-  const POP_H = 120;
-  const gap = 6;
-  const margin = 8;
-  const spaceBelow = window.innerHeight - r.bottom;
-  const flip = spaceBelow < POP_H + gap + margin && r.top > spaceBelow;
-  popPos.value = {
-    top: flip ? Math.max(margin, r.top - gap) : r.bottom + gap,
-    left: Math.max(margin, Math.min(r.left, window.innerWidth - 280 - margin)),
-    flip,
-  };
-}
+/** The chip the open card hangs from (the Popover follows it on scroll). */
+const popAnchor = shallowRef<HTMLElement | null>(null);
 
 function onEnter(ev: MouseEvent): void {
   const el = ev.currentTarget as HTMLElement | null;
@@ -467,10 +483,18 @@ function onEnter(ev: MouseEvent): void {
       // computed that every render would re-evaluate.
       foreignHomes.value = foreignLookup?.(props.uuid) ?? [];
     }
-    positionPop(el);
+    popAnchor.value = el;
     hoverOpen.value = true;
   }, HOVER_DELAY_MS);
 }
+
+// Card-only mode: the host tells us which element is hovered. Same open delay
+// and the same close bridge as a real chip, so both behave alike.
+watch(() => props.cardAnchor, (el) => {
+  if (props.cardAnchor === undefined) return;
+  if (el) onEnter({ currentTarget: el } as unknown as MouseEvent);
+  else onLeave();
+}, { immediate: true });
 
 function onLeave(): void {
   if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
@@ -510,7 +534,7 @@ const copied = ref(false);
 let copiedTimer: number | undefined;
 function copyId(): void {
   if (!props.uuid) return;
-  void navigator.clipboard?.writeText(props.uuid);
+  void copyText(props.uuid);
   copied.value = true;
   if (copiedTimer !== undefined) window.clearTimeout(copiedTimer);
   copiedTimer = window.setTimeout(() => { copied.value = false; }, 1200);
@@ -519,7 +543,40 @@ function openInNewWindow(): void {
   if (editHref.value) window.open(editHref.value, "_blank", "noopener");
 }
 
-onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverTimer); });
+/** The Popover moves the card with its chip on scroll; once the chip has
+ *  scrolled out of view (or left the page) the card closes. A scroll inside
+ *  the card itself changes nothing. */
+function closeIfChipGone(ev: Event): void {
+  const from = ev.target as Element | null;
+  if (from?.closest?.(".wp-refchip-pop")) return;
+  const el = popAnchor.value;
+  if (!el || !el.isConnected) { hoverOpen.value = false; return; }
+  const r = el.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) {
+    hoverOpen.value = false;
+  }
+}
+watch(hoverOpen, (open) => {
+  if (typeof window === "undefined") return;
+  if (open) {
+    window.addEventListener("scroll", closeIfChipGone, true);
+  } else {
+    window.removeEventListener("scroll", closeIfChipGone, true);
+    popAnchor.value = null;
+  }
+});
+
+/** Escape or a press outside the card and its chip. */
+function onCardOpenChange(open: boolean): void {
+  if (!open) hoverOpen.value = false;
+}
+
+onBeforeUnmount(() => {
+  if (hoverTimer !== undefined) window.clearTimeout(hoverTimer);
+  if (typeof window !== "undefined") {
+    window.removeEventListener("scroll", closeIfChipGone, true);
+  }
+});
 </script>
 
 <template>
@@ -530,6 +587,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       'wp-refchip--ref': kind === 'ref',
       'wp-refchip--unresolved': !resolved,
       'wp-refchip--filtered': isFiltered,
+      'wp-refchip--card-only': cardAnchor !== undefined,
     }"
     :style="toneStyle"
     :title="filterTitle"
@@ -589,18 +647,22 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
       <i v-if="showNoNull" class="pi pi-ban wp-refchip__nonull"></i>
     </span>
 
-    <!-- Info-only hover card (issues #3 / #8). The <Teleport> lives INSIDE the
-         chip span so the component stays single-root (wrapper.classes/attributes
-         keep working); it renders only a placeholder here and moves the card to
-         <body> — fixed + pointer-events:none so it escapes overflow + never
-         steals the hover. Mirrors the constraint-pair popover. -->
-    <Teleport to="body">
-    <div
-      v-if="hoverOpen"
+    <!-- Info hover card (issues #3 / #8): a Popover against the chip. It lives
+         INSIDE the chip span so the component stays single-root
+         (wrapper.classes/attributes keep working); the panel itself goes to
+         <body>, so it escapes overflow. It stays open while the pointer is
+         over it (Copy id / Open) and never takes focus. Mirrors the
+         constraint-pair card. -->
+    <!-- The kit Popover's own prop, turning its focus move OFF. -->
+    <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+    <Popover :autofocus="false"
+      :open="hoverOpen"
+      :anchor="popAnchor"
+      role="group"
+      :label="kind === 'ref' ? 'Reference' : 'Variable'"
       class="wp-refchip-pop"
-      :class="{ 'wp-refchip-pop--up': popPos.flip }"
-      :style="{ top: popPos.top + 'px', left: popPos.left + 'px' }"
       data-test="refchip-hover"
+      @update:open="onCardOpenChange"
       @mouseenter="onCardEnter"
       @mouseleave="onCardLeave"
     >
@@ -667,29 +729,27 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
         <!-- Actions. The card is interactive here (unlike the var branch) —
              copy the id, or open the linked module in a new window. Copy works
              even for a broken ref (the id is still known); open is gated on the
-             ref resolving, since a missing module would 404. -->
+             ref resolving to a library row, since a missing module would 404. -->
         <div v-if="uuid" class="wp-refchip-pop__acts" data-test="refchip-acts">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             class="wp-refchip-pop__act"
+            :icon="copied ? 'pi-check' : 'pi-copy'"
             data-test="refchip-copy-id"
             title="Copy the module id"
             @click.stop="copyId"
-          >
-            <i :class="copied ? 'pi pi-check' : 'pi pi-copy'" aria-hidden="true"></i>
-            {{ copied ? "Copied" : "Copy id" }}
-          </button>
-          <button
-            v-if="resolved"
-            type="button"
+          >{{ copied ? "Copied" : "Copy id" }}</Button>
+          <Button
+            v-if="canOpen"
+            variant="ghost"
+            size="sm"
             class="wp-refchip-pop__act"
+            icon="pi-external-link"
             data-test="refchip-open-new"
             title="Open the linked module in a new window"
             @click.stop="openInNewWindow"
-          >
-            <i class="pi pi-external-link" aria-hidden="true"></i>
-            Open
-          </button>
+          >Open</Button>
         </div>
       </template>
       <template v-else>
@@ -731,8 +791,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
           {{ graphAware ? "no upstream producer — binds at runtime" : "binds at runtime" }}
         </div>
       </template>
-    </div>
-    </Teleport>
+    </Popover>
   </span>
 </template>
 
@@ -743,7 +802,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   gap: 3px;
   padding: 0 5px;
   margin: 1px 1px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   border: 1px solid;
   font: 10px/1.4 var(--wp-font-mono);
   /* Selectable, so a selection that spans the chip actually PAINTS over it.
@@ -761,14 +820,33 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
    clearly marked as part of the selection. */
 .wp-refchip ::selection,
 .wp-refchip::selection {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
-  color: var(--wp-text, #e7e7ee);
+  background: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
+  color: var(--wp-text);
 }
-.wp-refchip--var {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent);
-  color: var(--wp-success);
+/* A `$var` is syntax-coloured text, not a boxed chip (Dumi, 2026-10-14: the
+   green chip served no purpose, the hover card is what matters). No fill, no
+   border, no icon, and the surrounding text's own font, so it sits in the
+   sentence like any word; the colour is the variable's own `--wp-var-N`. */
+.wp-refchip.wp-refchip--var {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--wp-weight-semibold, 600);
+  color: var(--wp-refchip-var-tone, var(--wp-accent-text));
+  cursor: help;
 }
+.wp-refchip--var > .wp-refchip__icon { display: none; }
+/* No name (a bare `$`): the danger colour with a wavy rule, still no box. */
+.wp-refchip--var.wp-refchip--unresolved {
+  background: none;
+  color: var(--wp-danger);
+  text-decoration: underline wavy color-mix(in srgb, var(--wp-danger) 70%, transparent);
+  text-underline-offset: 3px;
+}
+.wp-refchip--var.wp-refchip--unresolved:hover { background: none; }
+.wp-refchip--card-only { display: none; }
 /* Ref chip tone is sourced from `--wp-refchip-tone` — set per-instance
  * via inline style when `moduleKind` differs from `wildcard`. The
  * fallback to `--wp-kind-wildcard` keeps legacy (no-prop) callers on
@@ -780,13 +858,13 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
    Colour is set here rather than inherited because the accessor sits inside
    the label, which carries the chip's own colour. */
 .wp-refchip__accessor {
-  color: var(--wp-axis, #fbbf24);
+  color: var(--wp-axis);
   font-weight: var(--wp-weight-semibold);
 }
 
 /* `.neg` reads the variable's negatives, not a tag: the negative red. */
 .wp-refchip__accessor--neg {
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 
 /* The pick-index segment (`.0`). Deliberately UNaccented — it shares the
@@ -804,28 +882,28 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
    one. The engine renders such a read as an empty string, so without this the
    only symptom is a word silently missing from the prompt. */
 .wp-refchip__accessor--unknown {
-  color: var(--wp-warn, #f59e0b);
+  color: var(--wp-warn);
   text-decoration: underline wavy
-    color-mix(in srgb, var(--wp-warn, #f59e0b) 70%, transparent);
+    color-mix(in srgb, var(--wp-warn) 70%, transparent);
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
 
 .wp-refchip--ref {
-  background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 50%, transparent);
+  background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard)) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard)) 50%, transparent);
   color: var(--wp-refchip-tone, var(--wp-kind-wildcard));
   cursor: pointer;
 }
-.wp-refchip--ref:hover { background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard, #a855f7)) 25%, transparent); }
+.wp-refchip--ref:hover { background: color-mix(in srgb, var(--wp-refchip-tone, var(--wp-kind-wildcard)) 25%, transparent); }
 .wp-refchip--unresolved {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 50%, transparent);
   color: var(--wp-danger);
   cursor: pointer;
 }
 .wp-refchip--unresolved:hover {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 25%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 25%, transparent);
 }
 .wp-refchip__icon { font-size: 8px; opacity: 0.75; }
 /* PrimeIcon variant (moduleKind set) — sized to align with the unicode glyph baseline. */
@@ -839,7 +917,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   align-items: center;
   gap: 2px;
   margin-left: 1px;
-  color: var(--wp-status-modified, #fbbf24);
+  color: var(--wp-status-modified);
   cursor: help;
 }
 /* Node-supplied pool. Deliberately the same hue as the funnel rather than a
@@ -854,30 +932,6 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 .wp-refchip__funnel { font-size: 8px; line-height: 1; }
 .wp-refchip__nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
 
-/* Hover card — teleported to <body>; scoped styles still apply (the data-v
- * attribute travels with the teleported node).
- *
- * Sits ABOVE the popover tier (10020), not level with it: a chip can live
- * INSIDE a popover — a constraint exception's `@ref` chip renders in a Select
- * option row — so its hover card has to clear the menu it is drawn on top of.
- * At 9999 it rendered underneath and was unreadable. */
-.wp-refchip-pop {
-  position: fixed;
-  z-index: 10030;
-  width: 264px;
-  padding: 10px 12px;
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border-strong);
-  border-radius: 7px;
-  box-shadow: var(--wp-shadow-lg);
-  /* Was 10px — the "unnecessarily small" the report called out. 12px reads as a
-     panel, not a tooltip afterthought. */
-  font: 12px/1.55 var(--wp-font-mono, monospace);
-  color: var(--wp-text);
-  /* Interactive now (Copy id / Open) — the hover bridge in onLeave/onCardEnter
-     keeps it from vanishing as the pointer travels in from the chip. */
-  pointer-events: auto;
-}
 /* The action row. Full-bleed to the card edges, divided from the info above and
    between buttons, so it reads as a footer rather than two floating links. */
 .wp-refchip-pop__acts {
@@ -886,30 +940,10 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   border-top: 1px solid var(--wp-border);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-.wp-refchip-pop__act {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 5px 8px;
-  font-size: 11px;
-  white-space: nowrap;
-  color: var(--wp-text-muted);
-  background: transparent;
-  border: none;
-  border-right: 1px solid var(--wp-border);
-  cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
-}
+/* Kit ghost buttons laid edge to edge as the card's footer. */
+.wp-refchip-pop__act { flex: 1; border-radius: 0; border-right: 1px solid var(--wp-border); }
 .wp-refchip-pop__act:last-child { border-right: none; }
-.wp-refchip-pop__act:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-refchip-pop__act:focus-visible {
-  outline: none; background: var(--wp-bg-3); color: var(--wp-text);
-}
-.wp-refchip-pop__act .pi { font-size: 11px; }
-.wp-refchip-pop__act .pi-check { color: var(--wp-success, #22c55e); }
-.wp-refchip-pop--up { transform: translateY(-100%); }
+.wp-refchip-pop__act .pi-check { color: var(--wp-success); }
 .wp-refchip-pop > div { padding: 1px 0; word-break: break-word; }
 .wp-refchip-pop__head { display: flex; gap: 6px; align-items: baseline; }
 .wp-refchip-pop__name { font-weight: 600; }
@@ -917,7 +951,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--wp-text-dim);
   border: 1px solid var(--wp-border);
-  border-radius: 999px; padding: 0 6px;
+  border-radius: var(--wp-radius-cap, 999px); padding: 0 6px;
 }
 .wp-refchip-pop__uuid { color: var(--wp-text-muted); }
 .wp-refchip-pop__filter { color: var(--wp-text-dim); }
@@ -926,7 +960,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
  * opened it — an accent-purple explanation under a red chip reads as ordinary
  * information rather than a fault. */
 .wp-refchip-pop__count[data-test="refchip-broken"] {
-  color: var(--wp-danger-text, var(--wp-danger, #f87171));
+  color: var(--wp-danger-text, var(--wp-danger));
 }
 .wp-refchip-pop__broken {
   color: var(--wp-text-muted);
@@ -935,7 +969,7 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
   margin-top: 2px;
 }
 .wp-refchip-pop__broken--fix { color: var(--wp-text-dim); font-style: italic; }
-.wp-refchip-pop__nonull { color: var(--wp-status-modified, #fbbf24); margin-left: 4px; }
+.wp-refchip-pop__nonull { color: var(--wp-status-modified); margin-left: 4px; }
 /* Pool provenance — dimmer than the count it qualifies, since it is context
    for that number rather than a second fact competing with it. */
 .wp-refchip-pop__pool {
@@ -944,10 +978,10 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 }
 /* The node's snapshot and the library disagree — same amber the drift dot and
    the context-menu "Refresh from library" accent use. */
-.wp-refchip-pop__pool--drift { color: var(--wp-status-modified, #fbbf24); }
+.wp-refchip-pop__pool--drift { color: var(--wp-status-modified); }
 /* Informational, not a problem — the ref is behaving correctly, the user just
    cannot see why from anywhere else. Info blue rather than the drift amber. */
-.wp-refchip-pop__pool--foreign { color: var(--wp-info, #60a5fa); }
+.wp-refchip-pop__pool--foreign { color: var(--wp-info); }
 
 /* Producer attribution row — "wildcard · Outfit · in dusk-marten". */
 .wp-refchip-pop__producer {
@@ -967,7 +1001,28 @@ onBeforeUnmount(() => { if (hoverTimer !== undefined) window.clearTimeout(hoverT
 /* Same warning tone the internal/globe toggle uses elsewhere — this is the
    state where a var resolves but contributes nothing to the prompt. */
 .wp-refchip-pop__internal {
-  color: var(--wp-status-modified, #fbbf24);
+  color: var(--wp-status-modified);
   font-weight: 600;
+}
+</style>
+
+<style>
+@layer wp-extension {
+  /* Hover card — the Popover panel (under <body>, so not scoped; layered like
+   * the Popover's own rules, two classes so it wins over them). The outline is
+   * the Popover's inset ring, hence 1px more padding.
+   *
+   * Sits ABOVE the popover tier (10020), not level with it: a chip can live
+   * INSIDE a popover — a constraint exception's `@ref` chip renders in a Select
+   * option row — so its hover card has to clear the menu it is drawn on top of. */
+  .wp-popover.wp-refchip-pop {
+    z-index: 10030;
+    width: 264px;
+    padding: 11px 13px;
+    background: var(--wp-bg-1);
+    border-radius: min(7px, var(--wp-radius-cap, 999px));
+    /* 12px reads as a panel, not a tooltip afterthought. */
+    font: 12px/1.55 var(--wp-font-mono, monospace);
+  }
 }
 </style>

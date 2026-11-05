@@ -33,23 +33,36 @@ async function typeValue(w: any, v: string): Promise<void> {
 const lib: LibraryRow = { id: "v1", name: "lens", value: "85mm" };
 const plainDraft: DraftRow = { id: "v1", name: "lens", value: "85mm", enabled: true, libraryId: "v1" };
 
-describe("ValueRow — library negative", () => {
-  it("shows the library row's negative read-only; nothing when there is none", () => {
-    const none = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    expect(none.find('[data-test="row-neg"]').exists()).toBe(false);
-    const w = mount(ValueRow, {
-      props: { row: plainDraft, library: { ...lib, negative: "fisheye" } },
-      global: { stubs: globalStubs },
+describe("ValueRow — negative", () => {
+  const NegStub = {
+    name: "NegativeField",
+    props: ["modelValue", "disabled", "label"],
+    emits: ["update:modelValue"],
+    template: `<div class="wp-neg-stub"></div>`,
+  };
+  const stubs = { ...globalStubs, NegativeField: NegStub };
+
+  it("edits the row's negative and marks a change from the library", async () => {
+    const libNeg = { ...lib, negative: "fisheye" };
+    const same = mount(ValueRow, {
+      props: { row: { ...plainDraft, negative: "fisheye" }, library: libNeg }, global: { stubs },
     });
-    expect(w.get('[data-test="row-neg"]').text()).toBe("NEG fisheye");
+    expect(same.findComponent(NegStub).props("modelValue")).toBe("fisheye");
+    expect(same.get('[data-test="row-neg"]').classes()).not.toContain("row__neg--mod");
+    same.findComponent(NegStub).vm.$emit("update:modelValue", undefined);
+    expect(same.emitted("update")![0]).toEqual(["v1", { negative: "" }]);
+    const changed = mount(ValueRow, {
+      props: { row: { ...plainDraft, negative: "blur" }, library: libNeg }, global: { stubs },
+    });
+    expect(changed.get('[data-test="row-neg"]').classes()).toContain("row__neg--mod");
   });
 });
 
 describe("ValueRow", () => {
   it("renders $-prefixed name + value inputs", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    expect(w.find('[data-test="row-name-prefix"]').text()).toBe("$");
-    expect(w.find<HTMLInputElement>('[data-test="row-name"]').element.value).toBe("lens");
+    expect(w.find('[data-test="row-name"] .wp-input-group__affix--prefix').text()).toBe("$");
+    expect(w.find<HTMLInputElement>('[data-test="row-name"] input').element.value).toBe("lens");
     expect(valueOf(w)).toBe("85mm");
   });
 
@@ -93,13 +106,13 @@ describe("ValueRow", () => {
 
   it("checkbox is checked when enabled", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    expect(w.find('[data-test="row-check"]').classes()).toContain("row__check--on");
+    expect(w.find('[data-test="row-check"]').attributes("aria-checked")).toBe("true");
   });
 
   it("checkbox unchecked + line-through when disabled", () => {
     const draft = { ...plainDraft, enabled: false };
     const w = mount(ValueRow, { props: { row: draft, library: lib }, global: { stubs: globalStubs } });
-    expect(w.find('[data-test="row-check"]').classes()).not.toContain("row__check--on");
+    expect(w.find('[data-test="row-check"]').attributes("aria-checked")).toBe("false");
     expect(w.classes()).toContain("row--off");
   });
 
@@ -111,7 +124,7 @@ describe("ValueRow", () => {
 
   it("emits update event with new name on name input", async () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    const input = w.find<HTMLInputElement>('[data-test="row-name"]');
+    const input = w.find<HTMLInputElement>('[data-test="row-name"] input');
     input.element.value = "camera_lens";
     await input.trigger("input");
     expect(w.emitted("update")?.[0]).toEqual(["v1", { name: "camera_lens" }]);
@@ -127,7 +140,7 @@ describe("ValueRow", () => {
     // The name becomes a `$var`; only identifier chars allowed. The VALUE
     // field (below) is free-form and must NOT be sanitized.
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    const input = w.find<HTMLInputElement>('[data-test="row-name"]');
+    const input = w.find<HTMLInputElement>('[data-test="row-name"] input');
     input.element.value = "cam,era;lens!";
     await input.trigger("input");
     expect(w.emitted("update")?.[0]).toEqual(["v1", { name: "cameralens" }]);
@@ -142,7 +155,7 @@ describe("ValueRow", () => {
 
   it("library row with no override is plain (no --mod, no reset button)", () => {
     const w = mount(ValueRow, { props: { row: plainDraft, library: lib }, global: { stubs: globalStubs } });
-    expect(w.find('[data-test="row-name-wrap"]').classes()).not.toContain("row__name-wrap--mod");
+    expect(w.find('[data-test="row-name"]').attributes("data-tone")).toBeUndefined();
     expect(w.find('[data-test="row-value-wrap"]').classes()).not.toContain("row__value-wrap--mod");
     expect(w.find('[data-test="row-reset"]').exists()).toBe(false);
   });
@@ -154,10 +167,10 @@ describe("ValueRow", () => {
     expect(w.find('[data-test="row-reset"]').exists()).toBe(true);
   });
 
-  it("library row with name override gets --mod class on name wrap", () => {
+  it("library row with name override tones the name field accent", () => {
     const draft: DraftRow = { ...plainDraft, name: "camera_lens" };
     const w = mount(ValueRow, { props: { row: draft, library: lib }, global: { stubs: globalStubs } });
-    expect(w.find('[data-test="row-name-wrap"]').classes()).toContain("row__name-wrap--mod");
+    expect(w.find('[data-test="row-name"]').attributes("data-tone")).toBe("accent");
     expect(w.find('[data-test="row-reset"]').exists()).toBe(true);
   });
 

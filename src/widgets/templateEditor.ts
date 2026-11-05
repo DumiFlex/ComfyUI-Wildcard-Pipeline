@@ -29,6 +29,7 @@
 import { computed, defineAsyncComponent, h, nextTick, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import { attachThemeDetector } from "../extension/theme-detector";
 import { templateInsertAtCaret } from "../extension/_stashes";
 import {
@@ -305,7 +306,12 @@ export function create(node: EditorNode, inputName: string) {
     (node as { properties?: Record<string, unknown> }).properties,
     model.value,
   );
-  attachThemeDetector(editorHost.widget.element, app);
+  editorHost.onCleanup(attachThemeDetector(editorHost.widget.element, app));
+  // The input's dot sits level with the editor, the same as every other WP
+  // input that feeds a field. The negative box marks its own parts: the box
+  // when open, the folded line when not.
+  if (!variant.negative) editorHost.element.dataset.wpSocket = inputName;
+  editorHost.onCleanup(attachFieldSockets(node as FieldSocketNode, editorHost.element, inputName, [inputName]));
 
   // Published for the assembler helper's chip strip, which is a different
   // widget and has no other way to insert at this editor's caret. The chips

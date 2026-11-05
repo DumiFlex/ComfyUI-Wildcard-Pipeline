@@ -98,14 +98,16 @@ export interface PickEdit {
   positive?: string;
   negative?: string;
   mask?: string;
+  /** A renamed label (the default is built from the frame). */
+  label?: string;
 }
 
 /** Edits keyed by `pickKey(frame, image)`. */
 export type PickEdits = Record<string, PickEdit>;
 
 export type PickAnswer =
-  | { action: "picks"; picks: Pick[]; edits?: PickEdits }
-  | { action: "keep_all"; edits?: PickEdits }
+  | { action: "picks"; picks: Pick[]; edits?: PickEdits; labels?: Record<string, string> }
+  | { action: "keep_all"; edits?: PickEdits; labels?: Record<string, string> }
   | { action: "stop" };
 
 export function viewUrl(ref: ImageRef): string {

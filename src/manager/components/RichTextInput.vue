@@ -11,144 +11,70 @@
  * input handling (typing, deletion, autocomplete insertion, click-to-
  * edit) is wired up in Tasks 6/7/8.
  *
- * The `$` / `@` autocomplete popover is teleported to <body> and
- * positioned with `position: fixed` so it escapes any ancestor
- * `overflow: hidden` (e.g. the `.wp-rt` wrapper itself, scroll
- * containers in editor tables). The popover state is preserved here
- * verbatim from the previous implementation; the input plumbing that
- * drives it (`probeAutocomplete`, `onInput`, etc.) is currently
- * dormant because the textarea it used to read from is gone. Task 6
- * rewires those handlers against the contenteditable host + selection
- * API.
+ * The `$` / `@` autocomplete list, the filter picker and the remap popup
+ * are kit `Popover`s placed against virtual anchors (`./rich-text/anchors`):
+ * the list under the word being completed, the picker and remap popup at the
+ * chip (or the field on the insert flow).
  */
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from "vue";
+import Popover from "@/kit/Popover.vue";
+import type { VirtualAnchor } from "@/kit/floating";
 import {
-  parse,
   replaceAtom,
   serialiseVarAtom,
   type Atom,
-  type RefAtom,
   type TextAtom,
 } from "./atomicEditorModel";
 import {
-  escapeHtml, inlineTokenHtml, NEG_ACCESSOR, splitRefFilter, tokenizeRich, varAccessorParts, varBaseName,
+  escapeHtml, inlineTokenHtml, varAccessorParts, varBaseName,
 } from "../../widgets/richTokenize";
 import RefChip, { type VarProducerLike } from "./RefChip.vue";
 import SubcategoryFilterPicker from "./SubcategoryFilterPicker.vue";
 import RemapRefPopup from "./RemapRefPopup.vue";
-import { useGrowableField } from "../../components/shared/useGrowableField";
+import { useGrowableField } from "@/kit/useGrowableField";
 import { rewriteBrokenRef } from "../cascade/remap-ref-rewrite";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { SurfaceKind, ResolveWarning } from "../utils/resolveTokens";
 import { probeAutocomplete, probeModelRef, probeTagWord } from "../utils/autocompleteProbe";
 import { api } from "../api/client";
 import { newShortId } from "../utils/ids";
-import type { ModelKind, ModelSuggestion, TagCategoryName, TagSuggestion } from "../api/types";
+import type { ModelKind, ModelSuggestion, TagSuggestion } from "../api/types";
 import { loadTagAvailability } from "../utils/tagStatus";
 import {
   autocompleteSeparatorEnabled,
   completionLimit,
   completionSettingsVersion,
   completionSourceEnabled as sourceOn,
+  tagInsertStyle,
 } from "../utils/tagSetting";
-import { refRows, varRows, type SuggestionRow, expandVarsWithAxes } from "../utils/suggestion-rows";
-import { varColorClass, varColorIndex } from "../../components/shared/var-color";
+import { refRows, varRows, type SuggestionRow } from "../utils/suggestion-rows";
+import { varColorClass } from "../../components/shared/var-color";
 import { CONTEXT_POOLS_KEY, type ContextPoolMap } from "../../extension/context-pools";
+import {
+  chipFilterOf, padAtoms, parseForSurface as parseAtomsForSurface, refFilterOf,
+  serialiseAtomsLocal, serialiseRefAtom, ZWSP, ZWSP_RE, type RefAtomX, type RefFilter,
+} from "./rich-text/ref-atoms";
+import {
+  cleanPastedText, deleteRawRange, isStructuralChange, recolorBlocks,
+  spliceAtTrigger, spliceRange, spliceSpaced, visibleLength,
+} from "./rich-text/atom-edit";
+import {
+  buildWordRows, formatTagCount, groupWordSections, SOURCE_ICON,
+  tagLegendFor, wordRowCommitFor, type WordRow,
+} from "./rich-text/word-rows";
+import {
+  AC_MAX_ITEMS, axisKnownFor as axisKnownForProducers, kindTint, matchSuggestions,
+  placeholderNameFor, varSpanAttrsFor, varTint,
+} from "./rich-text/suggestions";
+import { caretAnchor, followAnchor } from "./rich-text/anchors";
+import {
+  inTextSpan, isChipEl, isTextSpan, placeCaretInText, selectCollapsed, setCaretAtSpanEdge,
+  visibleOffsetWithin,
+} from "./rich-text/caret-dom";
 
-// --- 4-segment nested-ref serialization (SP1, §3.2) -----------------------
-//
-// The canonical ref form is `@{uuid[#name][:expr][!null]}` — a boolean
-// sub-category EXPRESSION after `:` (not a comma list) plus a trailing
-// `!null` exclude-null marker. The shared `atomicEditorModel` /
-// `richTokenize` layer still models a ref's `:`-segment as the legacy
-// `subCategories: string[]` (comma-split). Rather than fork that shared
-// layer, RichTextInput owns the 4-segment view locally:
-//
-//   - The atom STREAM (text/var/ref boundaries) still comes from
-//     `atomicEditorModel.parse` — the legacy regex's `:` group is
-//     `[^}]*`, so it still captures the full `expr!null` body and the
-//     token boundary (`}`) stays correct. Only the INTERPRETATION of
-//     that body changed.
-//   - `refFilterOf` reconstructs the raw `:`-body from `subCategories`
-//     (join on `,` is loss-free for the comma-OR shorthand) and peels a
-//     trailing `!null` into the `excludeNull` flag, yielding `{expr,
-//     excludeNull}`. A freshly-applied filter stashes those on the atom
-//     directly (extra fields survive `replaceAtom`'s shallow clone), so
-//     the live edit round-trips without going through the lossy
-//     comma-split.
-//   - `serialiseAtomsLocal` emits the 4-segment form, omitting each
-//     segment when empty. It replaces `atomicEditorModel.serialise`
-//     everywhere RichTextInput needs raw text (emit value + caret-length
-//     math) so `!null` + multi-word expressions survive round-trips.
-
-/** A ref's filter, lifted out of the legacy `subCategories` list. */
-interface RefFilter {
-  /** Boolean sub-category expression (the `:` segment). Empty = none. */
-  expr: string;
-  /** Exclude-null flag (the trailing `!null` segment). */
-  excludeNull: boolean;
-}
-
-/** Ref atom augmented with the 4-segment filter view. The extra fields
- *  are optional so a plain `RefAtom` (e.g. fresh from `atomicEditorModel
- *  .parse`) is assignable; `refFilterOf` falls back to reconstructing
- *  them from `subCategories` when absent. */
-type RefAtomX = RefAtom & Partial<RefFilter>;
-
-/** Peel a trailing `!null` marker off a raw `:`-segment body, returning
- *  the pure expression + the exclude-null flag. `@{uuid:warm!null}` →
- *  `{ expr: "warm", excludeNull: true }`. The `!null` must be the whole
- *  trailing segment (the name/expr captures exclude `!`, so a `!` can
- *  only introduce the null marker). */
-function splitColonBody(body: string): RefFilter {
-  // Delegate to the single-source peel in richTokenize so the editor,
-  // RefChip, and the canvas OptionRow can never drift on `!null` handling.
-  return splitRefFilter(body);
-}
-
-/** The 4-segment filter for a ref atom. Prefers explicit `expr` /
- *  `excludeNull` (set by a live picker apply); otherwise reconstructs
- *  from the legacy `subCategories` body. */
-function refFilterOf(atom: RefAtomX): RefFilter {
-  if (atom.expr !== undefined || atom.excludeNull !== undefined) {
-    return { expr: atom.expr ?? "", excludeNull: atom.excludeNull ?? false };
-  }
-  if (atom.subCategories.length === 0) return { expr: "", excludeNull: false };
-  return splitColonBody(atom.subCategories.join(","));
-}
-
-/** Serialize one ref atom to the canonical `@{uuid[#name][:expr][!null]}`
- *  form, omitting each absent segment. */
-function serialiseRefAtom(atom: RefAtomX): string {
-  let out = "@{" + atom.uuid;
-  if (atom.name && atom.name.length > 0) out += "#" + atom.name;
-  const { expr, excludeNull } = refFilterOf(atom);
-  if (expr.length > 0) out += ":" + expr;
-  if (excludeNull) out += "!null";
-  out += "}";
-  return out;
-}
-
-/** Local replacement for `atomicEditorModel.serialise` that emits the
- *  4-segment ref form. Text / var atoms serialize identically. */
-function serialiseAtomsLocal(atoms: Atom[]): string {
-  let out = "";
-  for (const a of atoms) {
-    if (a.kind === "text") out += a.text;
-    else if (a.kind === "var") out += serialiseVarAtom(a);
-    else out += serialiseRefAtom(a);
-  }
-  return out;
-}
-
-/** Template-safe filter accessor: returns the `{expr, excludeNull}` for
- *  a ref atom, or empty defaults for any other atom kind. Lets the
- *  RefChip binding stay terse without narrowing the union inline. */
-function chipFilterOf(atom: Atom): RefFilter {
-  return atom.kind === "ref"
-    ? refFilterOf(atom)
-    : { expr: "", excludeNull: false };
-}
+// The 4-segment nested-ref view (`@{uuid[#name][:expr][!null]}`), the
+// padded-atoms invariant and the surface-aware parse live in
+// `./rich-text/ref-atoms` — pure and unit-tested there.
 
 interface Props {
   modelValue: string;
@@ -297,19 +223,7 @@ const refsEnabled = computed(() => props.surface === "wildcard" || props.allowNe
  * surface-derived default keeps the two aligned and lets a caller be explicit
  * rather than adding a third name to a growing condition.
  */
-/**
- * Surfaces that render `$var` as coloured text rather than a chip.
- *
- * Only the prompt template. Everywhere else a chip is honest — the module
- * editors let you click one to re-pick what it points at, so the border and
- * fill are advertising a real affordance. A template is prose you are writing,
- * the chip advertises nothing, and its box breaks the line rhythm of the
- * sentence at 10px inside 12px text.
- */
-const FLAT_VAR_SURFACES = new Set(["assembler"]);
-
 const PRODUCER_SURFACES = new Set(["wildcard", "fixed_values"]);
-const flatVars = computed(() => FLAT_VAR_SURFACES.has(props.surface ?? "combine"));
 
 const varsEnabled = computed(() => {
   if (props.allowVars === "on") return true;
@@ -317,13 +231,56 @@ const varsEnabled = computed(() => {
   return !PRODUCER_SURFACES.has(props.surface ?? "combine");
 });
 
+/**
+ * `$var` renders as coloured, editable text on every surface that reads vars.
+ *
+ * It used to be an atomic chip everywhere but the prompt template. Dumi
+ * (2026-10-14): the chip served no purpose; its one real feature was the hover
+ * card, and that works on text too (`onHostOver`). As text it edits like the
+ * prose around it: the caret goes inside, Backspace removes one letter, and
+ * the box no longer breaks the line rhythm. Nested `@{}` refs stay chips,
+ * because they hide an id behind a name and open a picker on click.
+ */
+const flatVars = computed(() => varsEnabled.value);
+
+/** The `$name` run under the pointer, for its hover card. The run is text in
+ *  the editable host (see `flatVars`), so the card is a card-only RefChip that
+ *  the host aims at the hovered span. */
+const varHover = ref<HTMLElement | null>(null);
+/** What the card shows. Kept after the pointer leaves, so the card does not
+ *  blank out during its short close delay. */
+const varHoverInfo = ref<{ name: string; index?: number; axis?: string }>({ name: "" });
+
+function onHostOver(ev: MouseEvent): void {
+  const target = ev.target as Element | null;
+  const el = target?.closest?.(".wp-rt-var") as HTMLElement | null;
+  if (!el || !flatVars.value) {
+    if (varHover.value) varHover.value = null;
+    return;
+  }
+  if (varHover.value === el) return;
+  const raw = (el.textContent ?? "").replace(ZWSP_RE, "").replace(/^\$/, "");
+  const parts = varAccessorParts(raw);
+  if (!parts.base) return;
+  varHoverInfo.value = { name: parts.base, index: parts.index, axis: parts.axis };
+  varHover.value = el;
+}
+
+function onHostLeave(): void {
+  varHover.value = null;
+}
+
 const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
 
 // --- Refs ---
 const hostEl = ref<HTMLDivElement | null>(null);
-const popoverEl = ref<HTMLDivElement | null>(null);
+/** The suggestion list's panel id (the Popover panel carries it). */
+const acListId = `wp-rt-ac-${useId()}`;
+function acPanel(): HTMLElement | null {
+  return typeof document === "undefined" ? null : document.getElementById(acListId);
+}
 const focused = ref(false);
 
 // Placeholder-ghost gate. The host ALWAYS carries a ZWSP pad span (padAtoms),
@@ -333,15 +290,8 @@ const focused = ref(false);
 // `<input placeholder>`.
 const isEmpty = ref((props.modelValue ?? "").length === 0);
 
-// Zero-width space rendered inside empty pad spans. Browsers can't reliably
-// land the caret inside a span that has no child text node (the kind Vue
-// emits for `{{ '' }}`) — clicking "after the last chip" then drops the
-// caret BEFORE the chip and subsequent typing inserts on the wrong side.
-// A single ZWSP gives the span a text node the caret can sit in, while
-// staying visually invisible. The read-side paths strip it back out so it
-// never reaches modelValue.
-const ZWSP = "​";
-const ZWSP_RE = /​/g;
+// `ZWSP` / `ZWSP_RE` (the caret-landing pad in empty text spans) come from
+// `./rich-text/ref-atoms`.
 
 // Autocomplete state.
 const acOpen = ref(false);
@@ -358,14 +308,6 @@ const acTrigger = ref<"$" | "@" | "tag">("$");
  *
  * Gated three ways — the setting, an installed list, and the sigil probe not
  * already owning the caret. Any one of them false and this stays silent. */
-/** 855605 -> "856k". The exact figure is noise; the order of magnitude is the
- *  whole signal, and a full number would dominate a 12px row. */
-function formatTagCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${Math.round(n / 1000)}k`;
-  return String(n);
-}
-
 const tagRows = ref<TagSuggestion[]>([]);
 const modelRows = ref<Partial<Record<ModelKind, ModelSuggestion[]>>>({});
 
@@ -402,128 +344,17 @@ const rowsQuery = ref("");
 const rowsStale = computed(() =>
   acOpen.value && acTrigger.value === "tag" && rowsQuery.value !== acQuery.value);
 
-/**
- * One row of the bare-word popover, whatever source it came from.
- *
- * Kept as ONE FLAT ARRAY even though the popover renders sections, because
- * `acActive` indexes it. Grouping the state instead would put the keyboard
- * selection in charge of two coordinates and make "skip the header" a case to
- * handle; flat, a header is simply not in the array and cannot be selected.
- */
-type WordRow =
-  | { source: "tag"; tag: TagSuggestion }
-  | { source: ModelKind; model: ModelSuggestion };
-
-/**
- * Sections, not one ranked list.
- *
- * The sources have no common ranking key: a tag ranks by post count in the tens
- * of thousands, a LoRA has no count at all — you either have the file or you do
- * not. Any flat ordering has to invent a comparison between "12,000 posts" and
- * "a file on disk", and whichever is invented, tags win on weight of numbers
- * and the user's own models sink below the fold. Sections also let each source
- * cap its own rows, so 20 tags cannot crowd out 3 matching LoRAs.
- *
- * Tags lead because that is what a prompt is mostly made of.
- */
-/** Tag rows kept when a model also matched.
- *
- *  Sections alone did not deliver what they promised. Tags lead, and a query
- *  like `lazy` matches twenty of them, so the embedding section existed but sat
- *  entirely below the fold — the user could not filter to their own models
- *  without scrolling a list they were not looking for. Capping the leading
- *  section is what actually makes the others reachable.
- *
- *  Only applied when there IS something to protect: a query matching nothing
- *  but tags still gets the full list (the "max suggestions" setting). */
-const TAGS_WHEN_MODELS_MATCH = 6;
-
-const wordRows = computed<WordRow[]>(() => {
-  const loras = modelRows.value.lora ?? [];
-  const embeddings = modelRows.value.embedding ?? [];
-  const modelsPresent = loras.length > 0 || embeddings.length > 0;
-  const tags = modelsPresent
-    ? tagRows.value.slice(0, TAGS_WHEN_MODELS_MATCH)
-    : tagRows.value;
-  return [
-    ...tags.map((tag) => ({ source: "tag" as const, tag })),
-    ...loras.map((model) => ({ source: "lora" as const, model })),
-    ...embeddings.map((model) => ({ source: "embedding" as const, model })),
-  ];
-});
+/** Flat bare-word rows (tags, then LoRAs, then embeddings) — see
+ *  `buildWordRows` for why it is flat and why tags are capped. */
+const wordRows = computed<WordRow[]>(() => buildWordRows(tagRows.value, modelRows.value));
 
 /** Rows grouped for rendering, in the same order as the flat list, with the
  *  flat index carried along so a click knows what it selected. */
-const wordSections = computed(() => {
-  const order: Array<WordRow["source"]> = ["tag", "lora", "embedding"];
-  const labels: Record<WordRow["source"], string> = {
-    tag: "tags", lora: "loras", embedding: "embeddings",
-  };
-  const out: Array<{ source: WordRow["source"]; label: string; rows: Array<{ row: WordRow; index: number }> }> = [];
-  for (const source of order) {
-    const rows = wordRows.value
-      .map((row, index) => ({ row, index }))
-      .filter((e) => e.row.source === source);
-    if (rows.length) out.push({ source, label: labels[source], rows });
-  }
-  return out;
-});
+const wordSections = computed(() => groupWordSections(wordRows.value));
 
-/** PrimeIcon per source. `pi-tags` plural is the booru tag — `pi-tag` singular
- *  is already the fixed_values module kind. `pi-asterisk` and `pi-code` were
- *  the only two candidates with no existing use anywhere in `src/`. */
-const SOURCE_ICON: Record<WordRow["source"], string> = {
-  tag: "pi pi-tags",
-  lora: "pi pi-asterisk",
-  embedding: "pi pi-code",
-};
-
-/** What a committed row puts in the document. A model inserts its FULL PATH,
- *  not its display name: two folders can hold the same filename and ComfyUI
- *  resolves by path, so inserting the short name would silently pick a
- *  different file from the one shown. */
-/**
- * What follows a committed completion.
- *
- * Opt-in `", "`, so the next tag can be typed straight away. Suppressed inside
- * a `<lora:…>` or `embedding:…` reference: there the caret is mid-syntax and a
- * comma would terminate the very reference being completed — the LoRA still
- * needs its `:weight>`.
- */
-function committedSuffix(): string {
-  if (refKind.value !== null) return "";
-  return autocompleteSeparatorEnabled() ? ", " : "";
-}
-
-function wordRowText(row: WordRow): string {
-  if (row.source === "tag") return row.tag.name;
-  // Inside an existing reference the caller already typed the marker, and
-  // `acStart` points at the path — so emitting the whole syntax again would
-  // produce `<lora:<lora:name:1.0>:1.0>`.
-  if (refKind.value !== null) return row.model.path;
-  if (row.source === "lora") return `<lora:${row.model.path}:1.0>`;
-  return `embedding:${row.model.path}`;
-}
-
-/** Categories present in the CURRENT results, in Danbooru's own order.
- *
- *  The legend appears only when more than one kind is on screen. On an
- *  all-general query every bar is the same neutral grey, and a legend naming
- *  four colours none of which are visible explains nothing — it is decoration
- *  that costs a row of height. */
-const tagLegend = computed(() => {
-  if (!tagHasCategories.value) return [];
-  const order: TagCategoryName[] = [
-    "character", "copyright", "artist", "meta", "general",
-  ];
-  const present = new Set(
-    tagRows.value
-      .map((t) => t.category_name)
-      .filter((c): c is TagCategoryName => c !== null),
-  );
-  const shown = order.filter((c) => present.has(c));
-  return shown.length > 1 ? shown : [];
-});
+/** Categories present in the CURRENT results, in Danbooru's own order —
+ *  only when more than one kind is on screen (see `tagLegendFor`). */
+const tagLegend = computed(() => tagLegendFor(tagRows.value, tagHasCategories.value));
 /** Row count for the ACTIVE mode — keyboard nav must not care which. The
  *  `@` placeholder row sits after the matches, at index `acItems.length`. */
 const acRowCount = computed(
@@ -601,14 +432,8 @@ function scheduleTagFetch(query: string): void {
 }
 const acStart = ref(-1);
 const acActive = ref(0);
-// Popup geometry — `position: fixed` viewport coordinates so the teleported
-// popover lands directly under the input regardless of ancestor overflow.
-const popupPos = ref<{ top: number; left: number; width: number; flipped: boolean }>({
-  top: 0,
-  left: 0,
-  width: 240,
-  flipped: false,
-});
+/** Where the suggestion list hangs: the trigger of the word being completed. */
+const acAnchor = shallowRef<VirtualAnchor | null>(null);
 
 // --- Step-2 SubcategoryFilterPicker state ---
 // Opened after picking an `@` ref that has declared sub_categories. Both the
@@ -651,12 +476,9 @@ const pendingInsert = ref<{ uuid: string } | null>(null);
  *  reads 0 and the chip lands at the start of the value. Capturing
  *  here lets us restore the right slice positions in `insertRefAtCursor`. */
 const pendingInsertCaret = ref<{ caret: number; acStart: number } | null>(null);
-// Anchor coordinates for the picker popover — relative to the chip
-// being edited (click-to-edit flow) or the host element (insert
-// flow). Flips above the anchor if there's no room below.
-const pickerAnchor = ref<{ top: number; left: number; flipped: boolean }>({
-  top: 0, left: 0, flipped: false,
-});
+// What the picker popover hangs from: the chip being edited (click-to-edit
+// flow) or the host element (insert flow). The Popover flips and clamps it.
+const pickerAnchor = shallowRef<VirtualAnchor | null>(null);
 
 // --- RemapRefPopup state (#3 broken-chip heal) ---
 const remapOpen = ref(false);
@@ -664,7 +486,7 @@ const remapOldUuid = ref("");
 const remapCachedName = ref("");
 const remapOldExpr = ref("");
 const remapOldExcludeNull = ref(false);
-const remapAnchor = ref<{ top: number; left: number }>({ top: 0, left: 0 });
+const remapAnchor = shallowRef<VirtualAnchor | null>(null);
 
 /** WildcardRefData the popup's dropdown + reconcile consume. RichTextInput
  *  already receives the per-uuid maps as props (uuidToName etc.), so we
@@ -680,9 +502,9 @@ const remapRefData = computed(() => ({
 }));
 
 /** Theme class to stamp on the body-teleported overlays (`@`-autocomplete
- *  popover + the SubcategoryFilterPicker anchor/backdrop).
+ *  popover + the SubcategoryFilterPicker panel).
  *
- *  Why: both overlays `<Teleport to="body">`, so they escape the host's
+ *  Why: both are Popovers, whose panels live under <body>, so they escape the host's
  *  subtree. The `--wp-*` light + dark token variants are declared on
  *  `.wp-theme-light` / `.wp-theme-dark`; when the HOST sits under a
  *  non-default theme (canvas light mode, or the SPA's light theme) the
@@ -726,153 +548,11 @@ function teleportThemeClass(): string {
 // echoed `modelValue`. `lastEmittedValue` tracks what we last emitted so
 // the `watch(props.modelValue, ...)` below can distinguish the echo
 // from a genuine outside change.
-/** Padded-atoms invariant.
- *
- *  The contenteditable host needs a `wp-rt__text` span at every position
- *  where the user might land their caret — otherwise browsers insert
- *  user-typed characters as raw text nodes directly under the host,
- *  bypassing Vue's render tracking. Without padding, Vue's v-for diff
- *  can't reconcile against the orphan text node and subsequent
- *  programmatic inserts fail to display.
- *
- *  Invariant after this normaliser:
- *    - list is never empty (minimum `[{text:""}]`)
- *    - first atom is a text atom
- *    - last atom is a text atom
- *    - no two adjacent chip atoms (text gaps in between)
- *
- *  `serialise` correctly drops empty text contributions, so the raw
- *  string round-trip is preserved.
- */
-function padAtoms(list: Atom[]): Atom[] {
-  if (list.length === 0) return [{ kind: "text", text: "" }];
-  const out: Atom[] = [];
-  if (list[0].kind !== "text") out.push({ kind: "text", text: "" });
-  for (let i = 0; i < list.length; i++) {
-    out.push(list[i]);
-    const next = list[i + 1];
-    const cur = list[i];
-    if (cur.kind !== "text" && (!next || next.kind !== "text")) {
-      out.push({ kind: "text", text: "" });
-    }
-  }
-  return out;
-}
-
-/** Parse with surface-aware atom filtering.
- *
- *  Which atom kinds collapse back to literal text varies by surface:
- *
- *    - "wildcard"     → vars collapse (`$name` literal, refs chipify)
- *    - "fixed_values" → both collapse (vars + refs literal; only inline
- *      syntax like `{a|b}` colors)
- *    - other surfaces → refs collapse (`@{uuid}` literal, vars chipify)
- *
- *  Adjacent text atoms produced by the collapse are merged so the
- *  padAtoms invariant ("no adjacent text atoms") still holds. */
-/** Lift a freshly-parsed ref atom into the 4-segment view (§3.2).
- *
- *  The shared tokenizer (`richTokenize`) still models the ref body as
- *  the legacy `subCategories` list and its name capture does not exclude
- *  `!`. So for the exclude-null-only form `@{uuid#name!null}` the `!null`
- *  leaks into `name` (no `:` to stop the name group), and for the
- *  `:expr!null` form the marker lands at the tail of the (comma-joined)
- *  body. Both are reconciled here: peel a trailing `!…` off whichever
- *  segment carries it, yielding a clean `name` + explicit `{expr,
- *  excludeNull}`. Storing the explicit fields means later `refFilterOf`
- *  reads them directly rather than re-deriving from the lossy body. */
-function chipRefAtom(atom: RefAtom): RefAtomX {
-  let name = atom.name;
-  // Body the legacy parser captured for the `:` segment (loss-free for
-  // the comma-OR shorthand).
-  const body = atom.subCategories.join(",");
-  // Exclude-null marker leaked into the name (no `:expr` present).
-  if (body.length === 0 && name && name.includes("!")) {
-    const bang = name.indexOf("!");
-    const tail = name.slice(bang + 1);
-    name = name.slice(0, bang);
-    const cleaned: RefAtomX = {
-      kind: "ref",
-      uuid: atom.uuid,
-      subCategories: [],
-      expr: "",
-      excludeNull: tail === "null",
-    };
-    if (name.length > 0) cleaned.name = name;
-    return cleaned;
-  }
-  const { expr, excludeNull } = splitColonBody(body);
-  const cleaned: RefAtomX = {
-    kind: "ref",
-    uuid: atom.uuid,
-    subCategories: [],
-    expr,
-    excludeNull,
-  };
-  if (name && name.length > 0) cleaned.name = name;
-  return cleaned;
-}
-
+/** Parse with surface-aware atom filtering: `$name` is always literal text;
+ *  `@{uuid}` refs chipify only where nested refs are enabled. Padding to the
+ *  caret-landing invariant is `padAtoms`'s job (both in `./rich-text/ref-atoms`). */
 function parseForSurface(text: string): Atom[] {
-  const atoms = parse(text);
-  const collapseSet: Set<"var" | "ref"> =
-    props.surface === "wildcard"
-      ? new Set(["var"])
-      // fixed_values and assembler both keep `$name` as literal text, for
-      // opposite reasons. fixed_values PRODUCES bindings, so a `$var` read is
-      // meaningless there. The assembler reads them constantly — but a
-      // template is prose, and an atomic chip in prose behaves like an object:
-      // one Backspace deletes the whole token, the caret cannot enter it, and
-      // it takes a pointer cursor. Collapsed, it is ordinary editable text
-      // that happens to be coloured.
-      : props.surface === "fixed_values" || props.surface === "assembler"
-        ? new Set(["var", "ref"])
-        : new Set(["ref"]);
-  // Action-value derivation inputs (allowNestedRefs) chipify `@{}` refs like
-  // the wildcard surface does — drop `ref` from the collapse set so they
-  // settle into chips instead of staying literal text.
-  if (refsEnabled.value) collapseSet.delete("ref");
-  const out: Atom[] = [];
-  for (const a of atoms) {
-    if ((a.kind === "var" || a.kind === "ref") && collapseSet.has(a.kind)) {
-      // Re-serialise back to raw text and merge into adjacent text.
-      // Refs use the 4-segment form so a collapsed-surface round-trip
-      // keeps `:expr` + `!null` intact (legacy comma body reconstructs
-      // loss-free via `refFilterOf`).
-      const raw = a.kind === "var" ? serialiseVarAtom(a) : serialiseRefAtom(a);
-      const last = out[out.length - 1];
-      if (last && last.kind === "text") {
-        // A collapsed arm folds into its surrounding run and inherits that
-        // run's blockColor (SP2b: a brace-block arm stays block-coloured even
-        // when the surface renders it as literal scaffolding text).
-        out[out.length - 1] = last.blockColor
-          ? { kind: "text", text: last.text + raw, blockColor: last.blockColor }
-          : { kind: "text", text: last.text + raw };
-      } else {
-        out.push({ kind: "text", text: raw });
-      }
-      continue;
-    }
-    // Chipified ref → lift into the 4-segment `{expr, excludeNull}` view
-    // so the filter survives the next round-trip without re-deriving
-    // from the lossy legacy body.
-    if (a.kind === "ref") {
-      out.push(chipRefAtom(a));
-      continue;
-    }
-    const last = out[out.length - 1];
-    // Only merge text atoms that share a blockColor — fusing a block's
-    // scaffolding ("multi"/"alt") with adjacent plain text (undefined) would
-    // bleed the block colour onto prose between two blocks (`{a|b} x {c|d}`).
-    if (a.kind === "text" && last && last.kind === "text" && last.blockColor === a.blockColor) {
-      out[out.length - 1] = a.blockColor
-        ? { kind: "text", text: last.text + a.text, blockColor: a.blockColor }
-        : { kind: "text", text: last.text + a.text };
-    } else {
-      out.push(a);
-    }
-  }
-  return out;
+  return parseAtomsForSurface(text, refsEnabled.value);
 }
 
 const atoms = ref<Atom[]>(padAtoms(parseForSurface(props.modelValue || "")));
@@ -930,70 +610,16 @@ function textAtomHtml(text: string): string {
   return inlineTokenHtml(text, ["ref"], varSpanAttrs);
 }
 
-/**
- * Inline attributes for one `$name` run on the prompt-template surface.
- *
- * Colour comes from the same djb2 hash the assembler's variable strip uses, so
- * a name reads identically in the template, in the strip and in the `$`
- * popover. Inline rather than a class because `.wp-rt .wp-rt-var` already sets
- * a colour at higher specificity than the global `.var-N` palette.
- *
- * A name nothing upstream writes gets the danger colour and a wavy underline
- * instead. Losing the chip lost the one cue that separated a typo from a
- * working variable, and colour alone cannot carry it — every run is coloured.
- * Only claimed where the host actually walked a graph: in the SPA every var is
- * out of scope because there is no graph to be in.
- */
-/** Whether a chip's axis is one its producer declares.
- *
- *  `undefined` means UNKNOWABLE, and that is the important case: a canvas node
- *  carries its own payload SNAPSHOT of a module, so a wildcard added before its
- *  group was promoted has `tag_groups` but no `tag_group_kinds` at all. That is
- *  indistinguishable from "declares no axes", and marking either as an error
- *  put a red squiggle under a reference that resolves perfectly well once the
- *  node's snapshot is refreshed.
- *
- *  So the warning is only claimed when the producer declares SOME axes and this
- *  is not among them — the one case where we actually know the read is wrong.
- */
+/** Whether a chip's axis is one its producer declares; `undefined` when
+ *  unknowable (see `axisKnownFor` in `./rich-text/suggestions`). */
 function axisKnownFor(atom: Atom): boolean | undefined {
-  if (atom.kind !== "var" || !atom.axis) return undefined;
-  // `.neg` is not an axis: every variable has negatives to read.
-  if (atom.axis === NEG_ACCESSOR) return true;
-  const axes = props.varProducers?.get(atom.name)?.axes;
-  if (!axes || axes.length === 0) return undefined;
-  return axes.some((a) => a.axis === atom.axis);
+  return axisKnownForProducers(atom, props.varProducers);
 }
 
+/** Inline colour / scope-warning attributes for one `$name` run on the
+ *  prompt-template surface (see `varSpanAttrsFor`). */
 function varSpanAttrs(name: string): string {
-  // `name` arrives with any accessor attached (`outfit.SHOES`). Scope is a
-  // property of the BASE variable, so checking the whole string flagged every
-  // valid axis read as an unknown variable — a correct reference wearing the
-  // error styling.
-  // Parse through the ONE grammar. The old hand-rolled slice only stripped a
-  // TRAILING index, so `outfit.0.SHOES` produced axis "0.SHOES" — no such axis
-  // declared, so a perfectly valid index-first reference got the unknown-axis
-  // warning. That is the wavy underline the assembler template showed.
-  const { base, axis = "" } = varAccessorParts(name);
-  if (props.graphAware && axis && axis !== NEG_ACCESSOR) {
-    // The base resolves but the axis does not: the engine renders that as an
-    // empty string, so without a mark the only symptom is a missing word.
-    // Only claimed when the producer declares SOME axes — see `axisKnownFor`
-    // for why an empty list has to stay silent.
-    const known = props.varProducers?.get(base)?.axes;
-    const declared = (known ?? []).some((a) => a.axis === axis);
-    if (known && known.length > 0 && props.varSuggestions.includes(base) && !declared) {
-      return ' style="color:var(--wp-warn,#f59e0b);'
-        + "text-decoration:underline wavy color-mix(in srgb,var(--wp-warn,#f59e0b) 70%,transparent);"
-        + 'text-underline-offset:3px;text-decoration-thickness:1px"';
-    }
-  }
-  if (props.graphAware && !props.varSuggestions.includes(base)) {
-    return ' style="color:var(--wp-danger,#ef4444);'
-      + "text-decoration:underline wavy color-mix(in srgb,var(--wp-danger,#ef4444) 70%,transparent);"
-      + 'text-underline-offset:3px;text-decoration-thickness:1px"';
-  }
-  return ` style="color:var(--wp-var-${varColorIndex(base)})"`;
+  return varSpanAttrsFor(name, props.graphAware, props.varSuggestions, props.varProducers);
 }
 
 /** HTML for one text atom. SP2b brace-block scaffolding (the braces, count,
@@ -1005,8 +631,15 @@ function varSpanAttrs(name: string): string {
  *  (weights, escapes) via `textAtomHtml`. Keeping the fast-path escape also
  *  leaves the span's `firstChild` a text node, so caret math stays correct. */
 function renderTextAtom(atom: TextAtom): string {
-  if (atom.blockColor) return atom.text ? escapeHtml(atom.text) : ZWSP;
-  return textAtomHtml(atom.text);
+  if (atom.blockColor) return atom.text ? escapeHtml(atom.text) + lineEndPad(atom.text) : ZWSP;
+  return textAtomHtml(atom.text) + lineEndPad(atom.text);
+}
+
+/** A ZWSP after a text that ends in a newline. `pre-wrap` draws no line box
+ *  after a trailing `\n`, so without it the new line is invisible and the
+ *  caret stays on the line above. Render-only, like every ZWSP pad. */
+function lineEndPad(text: string): string {
+  return text.endsWith("\n") ? ZWSP : "";
 }
 
 watch(() => props.modelValue, (next) => {
@@ -1109,95 +742,12 @@ function onChipClick(idx: number, ev?: MouseEvent): void {
   // the host's rect if the event target isn't a chip element.
   setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
   pickerOpen.value = true;
-  clampPickerIntoView();
 }
 
-// Rough first-paint bounds for the flip decision; the precise size (which
-// grows with the target's palette) is measured in clampPickerIntoView(),
-// which then re-anchors the popover snug against the trigger.
-const PICKER_APPROX_H = 380;
-const PICKER_W = 440;
-// The trigger's rect (chip or host) captured at open, so the post-paint
-// re-clamp can hug it using the popover's real height instead of the
-// over-estimated APPROX_H (which floated it too far from the pill).
-let pickerTriggerRect: { top: number; bottom: number; left: number } | null = null;
-
+/** Hang the picker from `el` (the clicked chip), or the field when there is none. */
 function setPickerAnchorFromElement(el: HTMLElement | null): void {
-  const fallback = hostEl.value;
-  const rect = (el ?? fallback)?.getBoundingClientRect();
-  if (!rect) return;
-  pickerTriggerRect = { top: rect.top, bottom: rect.bottom, left: rect.left };
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const flipped = spaceBelow < PICKER_APPROX_H && rect.top > spaceBelow;
-  // Clamp horizontally so the picker doesn't run off the right edge.
-  const maxLeft = window.innerWidth - PICKER_W - 8;
-  const left = Math.max(8, Math.min(rect.left, maxLeft));
-  let top = flipped ? rect.top - PICKER_APPROX_H - 6 : rect.bottom + 6;
-  // Keep both ends on-screen even before the exact measure lands.
-  top = Math.max(8, Math.min(top, window.innerHeight - PICKER_APPROX_H - 8));
-  pickerAnchor.value = { top, left, flipped };
-}
-
-/** Once the popover has painted, measure its real box and re-anchor it
- *  tight against the trigger (6px gap), then clamp into the viewport. The
- *  approximate constants can't know the exact height, so without this the
- *  flipped popover floats far above the pill / clips off a short viewport. */
-function clampPickerIntoView(): void {
-  void nextTick(() => {
-    const el = document.querySelector(".wp-subcat-picker__anchor") as HTMLElement | null;
-    if (!el || !pickerTriggerRect) return;
-    const r = el.getBoundingClientRect();
-    const gap = 6;
-    const t = pickerTriggerRect;
-    // Sit just above (flipped) or just below the trigger using the REAL height.
-    let top = pickerAnchor.value.flipped ? t.top - r.height - gap : t.bottom + gap;
-    let left = pickerAnchor.value.left;
-    if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
-    if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
-    pickerAnchor.value = { ...pickerAnchor.value, top, left };
-  });
-}
-
-/** Live re-anchor for the RemapRefPopup. The popup GROWS when the user
- *  picks a wildcard (the reconcile section + filter picker mount), so a
- *  one-shot measure isn't enough — a popup that fit below the chip at open
- *  can overflow the viewport after a pick. We measure the popup's REAL box
- *  and re-hug the chip: 6px below, flipping above only when the real height
- *  doesn't fit below; the top is clamped on-screen. Driven once on paint and
- *  again on every size change via a ResizeObserver. */
-let remapResizeObs: ResizeObserver | null = null;
-
-function anchorRemapToTrigger(el: HTMLElement): void {
-  if (!pickerTriggerRect) return;
-  const r = el.getBoundingClientRect();
-  const gap = 6;
-  const t = pickerTriggerRect;
-  const spaceBelow = window.innerHeight - t.bottom;
-  const flip = r.height > 0 && spaceBelow < r.height && t.top > spaceBelow;
-  let top = flip ? t.top - r.height - gap : t.bottom + gap;
-  let left = remapAnchor.value.left;
-  if (r.height > 0) top = Math.max(8, Math.min(top, window.innerHeight - r.height - 8));
-  if (r.width > 0) left = Math.max(8, Math.min(left, window.innerWidth - r.width - 8));
-  remapAnchor.value = { top, left };
-}
-
-function clampRemapIntoView(): void {
-  void nextTick(() => {
-    const el = document.querySelector("[data-test='remap-popup']") as HTMLElement | null;
-    if (!el) return;
-    anchorRemapToTrigger(el);
-    // Re-anchor on growth (pick expands the reconcile section). Guarded for
-    // jsdom, which has no ResizeObserver — the one-shot anchor above still runs.
-    if (typeof ResizeObserver === "undefined") return;
-    remapResizeObs?.disconnect();
-    remapResizeObs = new ResizeObserver(() => anchorRemapToTrigger(el));
-    remapResizeObs.observe(el);
-  });
-}
-
-function teardownRemapObs(): void {
-  remapResizeObs?.disconnect();
-  remapResizeObs = null;
+  const target = el ?? hostEl.value;
+  pickerAnchor.value = target ? followAnchor(target) : null;
 }
 
 // --- Suggestion list filtering. ---
@@ -1209,14 +759,8 @@ function teardownRemapObs(): void {
 // named "color". The inserted token is still the UUID — see
 // `applyAutocomplete`. Falling back to the raw UUID keeps filtering useful
 // even before `uuidToName` is hydrated.
-/** Row cap for the suggestion popover. Was 8 — with 100+ wildcards sharing
- *  near-identical display names, a query like `pose` silently truncated to
- *  the first 8 and the rest were UNREACHABLE: the popover's `max-height`
- *  never overflowed, so there was nothing to scroll and the feature read as
- *  "the scrollbar doesn't work". Raised so the list genuinely overflows and
- *  `overflow-y: auto` earns its keep; keyboard nav scrolls the active row
- *  into view via the `acActive` watcher below. */
-const AC_MAX_ITEMS = 50;
+// Row cap (`AC_MAX_ITEMS`) and the matching rules live in
+// `./rich-text/suggestions`.
 
 /** Every hit, uncapped. Split out from `acItems` so the header can report how
  *  many entries actually matched rather than how many survived the cap — with
@@ -1226,43 +770,10 @@ const acMatches = computed(() => {
   if (!acOpen.value) return [];
   if (acTrigger.value === "tag") return [];  // tag rows live in `tagRows`
   if (acTrigger.value === "@" && !refsEnabled.value) return [];
-  // Once the query carries an accessor the flat substring filter stops being
-  // the right question: `outfit.0.` matches no entry, so the list emptied and
-  // the popover vanished at exactly the point the user was reaching for an
-  // axis. (`outfit.` only ever worked by luck — "outfit.shoes" happens to
-  // contain it.) From the first dot on, offer that variable's AXES, keeping
-  // any pick index the user already typed.
-  if (acTrigger.value === "$" && acQuery.value.includes(".")) {
-    const q = acQuery.value;
-    const base = q.slice(0, q.indexOf("."));
-    const rest = q.slice(q.indexOf(".") + 1);
-    // A leading numeric segment is a pick index; the axis fragment is whatever
-    // follows it. `outfit.0.SH` -> index "0", fragment "sh".
-    const m = rest.match(/^(\d+)\.?(.*)$/);
-    const idx = m ? `.${m[1]}` : "";
-    const frag = (m ? m[2] : rest).toLowerCase();
-    const axes = props.varProducers?.get(base)?.axes ?? [];
-    const out = axes
-      .filter((a) => a.axis.toLowerCase().includes(frag))
-      .map((a) => `${base}${idx}.${a.axis}`);
-    // `.neg` reads the variable's negatives (send-to-negative). Every known
-    // variable has it; it is offered last, after the variable's own axes.
-    if (NEG_ACCESSOR.includes(frag) && (props.varSuggestions.includes(base) || axes.length)) {
-      out.push(`${base}${idx}.${NEG_ACCESSOR}`);
-    }
-    return out;
-  }
-  // `$` pool carries each variable's `accepts` axes as `name.AXIS` entries,
-  // directly after the variable they belong to. Query matching is unchanged:
-  // "out" still finds `outfit`, and now finds `outfit.SHOES` with it.
-  const pool = acTrigger.value === "@"
-    ? props.refSuggestions
-    : expandVarsWithAxes(props.varSuggestions, props.varProducers);
-  const q = acQuery.value.toLowerCase();
-  const labelOf = acTrigger.value === "@"
-    ? (uuid: string) => (props.uuidToName.get(uuid) ?? uuid).toLowerCase()
-    : (name: string) => name.toLowerCase();
-  return pool.filter((id) => labelOf(id).includes(q));
+  return matchSuggestions(
+    acTrigger.value, acQuery.value, props.varSuggestions, props.refSuggestions,
+    props.uuidToName, props.varProducers,
+  );
 });
 
 const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
@@ -1277,13 +788,7 @@ const acItems = computed(() => acMatches.value.slice(0, AC_MAX_ITEMS));
  */
 const acPlaceholderName = computed<string | null>(() => {
   if (!acOpen.value || acTrigger.value !== "@" || !refsEnabled.value) return null;
-  const q = acQuery.value;
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(q)) return null;
-  const lower = q.toLowerCase();
-  for (const name of props.uuidToName.values()) {
-    if (name.toLowerCase() === lower) return null;
-  }
-  return q;
+  return placeholderNameFor(acQuery.value, props.uuidToName);
 });
 
 /** A fresh id no library entry uses, so the placeholder stays unresolved
@@ -1310,42 +815,8 @@ function insertPlaceholderRef(name: string): void {
  * its axes, its tags — because the rows that send people here are the ones
  * whose NAMES are identical. A `$` row is identified by who writes it.
  */
-/**
- * Inline colour for a row's icon box, keyed on the module kind.
- *
- * Inline rather than a class per kind because the kind set is open — the map
- * in `kind-icons.ts` already grew a `loop` and a `category` — and a missing
- * class would silently fall back to an uncoloured box. A missing TOKEN falls
- * back to the accent instead, which still looks deliberate.
- */
-function kindTint(kind: string): Record<string, string> {
-  const token = `--wp-kind-${kind === "fixed_values" ? "fixed" : kind}`;
-  const colour = `var(${token}, var(--wp-accent-text, #c4b5fd))`;
-  return {
-    color: colour,
-    background: `color-mix(in oklab, ${colour} 16%, transparent)`,
-  };
-}
-
-/**
- * Tint for a `$` row, taken from the variable's own name.
- *
- * The assembler's variable strip sits a few pixels under this popover and
- * colours every name through `varColorClass` — same hash, eight buckets. The
- * popover painted each row by MODULE KIND instead, so the same `$quality` was
- * one colour in the list and another in the strip, and you could not match a
- * row to a chip by looking. `$` rows now take the variable's colour; `@` rows
- * keep `kindTint`, where the kind IS the identity of the thing being picked.
- *
- * The glyph shape still carries the kind, exactly as it does in the strip.
- */
-function varTint(name: string): Record<string, string> {
-  const colour = `var(--wp-var-${varColorIndex(name)})`;
-  return {
-    color: colour,
-    background: `color-mix(in oklab, ${colour} 16%, transparent)`,
-  };
-}
+// Row icon tints: `kindTint` (an `@` row, by module kind) and `varTint` (a `$`
+// row, by the variable's own name hash) come from `./rich-text/suggestions`.
 
 /** Uuids this node supplies a pool for. `undefined` in the SPA, where the
  *  injection is absent and every ref necessarily reads the library. */
@@ -1375,7 +846,7 @@ watch(acItems, (items) => {
 // so the highlight vanished and the list looked frozen.
 watch(acActive, (i) => {
   void nextTick(() => {
-    const row = popoverEl.value?.querySelectorAll<HTMLElement>(".wp-rt-suggestions__item")[i];
+    const row = acPanel()?.querySelectorAll<HTMLElement>(".wp-rt-suggestions__item")[i];
     row?.scrollIntoView({ block: "nearest" });
   });
 });
@@ -1386,26 +857,15 @@ watch(acActive, (i) => {
 // `$$sep$$` multi-pick delimiter.
 
 // --- Popup placement ---
-// Anchor to the wrapper's bounding box. We use the host's parent (`.wp-rt`)
-// rect rather than caret pixel coordinates for robustness — caret-pixel
-// math against a contenteditable is error-prone and the prototype ships
-// the same "below-the-input" behaviour. Flips above when there's no room
-// below.
+// The list hangs from the trigger of the word being completed (the caret moved
+// back over the typed query), so it starts under the `@` / `$` and stays put
+// while the word grows; the Popover flips and clamps it. A caret with no box
+// (an empty line) falls back to the field's wrapper.
 function positionPopup(): void {
   const host = hostEl.value;
   if (!host) return;
-  const wrap = host.parentElement;
-  if (!wrap) return;
-  const rect = wrap.getBoundingClientRect();
-  const POPUP_H = 240; // matches max-height in CSS (keep in sync)
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const flipped = spaceBelow < POPUP_H && rect.top > POPUP_H;
-  popupPos.value = {
-    top: flipped ? rect.top - 4 : rect.bottom + 4,
-    left: rect.left,
-    width: Math.max(200, rect.width),
-    flipped,
-  };
+  const back = acQuery.value.length + (acTrigger.value === "tag" ? 0 : 1);
+  acAnchor.value = caretAnchor(host, host.parentElement ?? host, back);
 }
 
 // --- Autocomplete probe driven by the contenteditable host's Selection ---
@@ -1550,7 +1010,6 @@ function applyAutocomplete(label: string | undefined): void {
       // typed `@` into.
       setPickerAnchorFromElement(hostEl.value);
       pickerOpen.value = true;
-      clampPickerIntoView();
     }
   } else {
     // `$var` trigger — insert var atom directly (no step-2 picker for vars).
@@ -1569,18 +1028,17 @@ function restoreCursorAtChar(targetChar: number): void {
   // Walk meaningful children + match char offset. Length accounting must
   // exclude ZWSPs so it matches the raw-text view (readHostAsText strips
   // them too).
-  const visibleLen = (s: string): number => s.replace(ZWSP_RE, "").length;
   const meaningful: { el: Node; len: number; kind: "text" | "chip" }[] = [];
   for (const child of host.childNodes) {
     if (child.nodeType === Node.TEXT_NODE) {
       const t = child.textContent ?? "";
-      const len = visibleLen(t);
+      const len = visibleLength(t);
       if (len > 0) meaningful.push({ el: child, len, kind: "text" });
     } else if (child.nodeType === Node.ELEMENT_NODE) {
       const el = child as HTMLElement;
-      if (el.classList.contains("wp-rt__text")) {
-        meaningful.push({ el, len: visibleLen(el.textContent ?? ""), kind: "text" });
-      } else if (el.classList.contains("wp-refchip")) {
+      if (isTextSpan(el)) {
+        meaningful.push({ el, len: visibleLength(el.textContent ?? ""), kind: "text" });
+      } else if (isChipEl(el)) {
         // Chip = atomic cursor stop, counts as 1 char visually but in
         // the raw text view the chip serialises to `@{uuid:sub}` (much
         // longer). We track length as the SERIALISED length so caller
@@ -1593,70 +1051,8 @@ function restoreCursorAtChar(targetChar: number): void {
       }
     }
   }
-  // Collect ALL text-node descendants of a wp-rt__text span in document
-  // order. Used to land the caret inside colored sub-spans (e.g.
-  // `<span class="wp-rt-dp-brace">{a|b|c}</span>`) without giving up
-  // the existing single-firstChild fast path.
-  const textDescendants = (root: Node): Text[] => {
-    const out: Text[] = [];
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node: Node | null = walker.nextNode();
-    while (node) {
-      out.push(node as Text);
-      node = walker.nextNode();
-    }
-    return out;
-  };
-  const placeCaretInText = (
-    range: Range,
-    el: HTMLElement | Text,
-    visibleOffset: number,
-  ): void => {
-    // Plain text-node child of host (orphan typed text) — single node.
-    if (el.nodeType === Node.TEXT_NODE) {
-      const raw = el.textContent ?? "";
-      let pos = 0;
-      let visible = 0;
-      while (pos < raw.length && visible < visibleOffset) {
-        if (raw[pos] !== "​") visible++;
-        pos++;
-      }
-      while (pos < raw.length && raw[pos] === "​") pos++;
-      range.setStart(el, pos);
-      return;
-    }
-    // wp-rt__text element — descend into text-node descendants so the
-    // caret lands inside whichever colored sub-span owns the offset.
-    const nodes = textDescendants(el);
-    if (nodes.length === 0) {
-      range.setStart(el, 0);
-      return;
-    }
-    let want = visibleOffset;
-    for (const tn of nodes) {
-      const raw = tn.textContent ?? "";
-      let nodeVisible = 0;
-      for (let i = 0; i < raw.length; i++) {
-        if (raw[i] !== "​") nodeVisible++;
-      }
-      if (want <= nodeVisible) {
-        let pos = 0;
-        let visible = 0;
-        while (pos < raw.length && visible < want) {
-          if (raw[pos] !== "​") visible++;
-          pos++;
-        }
-        while (pos < raw.length && raw[pos] === "​") pos++;
-        range.setStart(tn, pos);
-        return;
-      }
-      want -= nodeVisible;
-    }
-    // Past the last text node — land at end of last node.
-    const last = nodes[nodes.length - 1];
-    range.setStart(last, (last.textContent ?? "").length);
-  };
-
+  // Caret landing inside a text child (descending into coloured sub-spans)
+  // is `placeCaretInText` in `./rich-text/caret-dom`.
   let acc = 0;
   const range = document.createRange();
   for (const m of meaningful) {
@@ -1666,10 +1062,7 @@ function restoreCursorAtChar(targetChar: number): void {
       } else {
         range.setStartAfter(m.el);
       }
-      range.collapse(true);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
+      selectCollapsed(range);
       host.focus();
       return;
     }
@@ -1683,10 +1076,7 @@ function restoreCursorAtChar(targetChar: number): void {
     } else {
       range.setStartAfter(last.el);
     }
-    range.collapse(true);
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
+    selectCollapsed(range);
   }
   host.focus();
 }
@@ -1704,13 +1094,13 @@ function childRawLen(child: ChildNode): number {
   }
   if (child.nodeType !== Node.ELEMENT_NODE) return 0;
   const el = child as HTMLElement;
-  if (el.classList.contains("wp-refchip")) {
+  if (isChipEl(el)) {
     const idx = Number(el.getAttribute("data-atom-index"));
     const atom = atoms.value[idx];
     if (atom && atom.kind !== "text") return serialiseAtomsLocal([atom]).length;
     return 0;
   }
-  if (el.classList.contains("wp-rt__text")) {
+  if (isTextSpan(el)) {
     return (el.textContent ?? "").replace(ZWSP_RE, "").length;
   }
   return 0;
@@ -1732,11 +1122,7 @@ function chipRawSpans(): Array<[number, number]> {
   let offset = 0;
   for (const child of Array.from(host.childNodes)) {
     const len = childRawLen(child);
-    if (
-      child.nodeType === Node.ELEMENT_NODE
-      && (child as HTMLElement).classList.contains("wp-refchip")
-      && len > 0
-    ) {
+    if (isChipEl(child) && len > 0) {
       spans.push([offset, offset + len]);
     }
     offset += len;
@@ -1779,11 +1165,11 @@ function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
     }
     if (child.nodeType !== Node.ELEMENT_NODE) continue;
     const el = child as HTMLElement;
-    if (el.classList.contains("wp-refchip")) {
+    if (isChipEl(el)) {
       acc += childRawLen(child);
       continue;
     }
-    if (el.classList.contains("wp-rt__text")) {
+    if (isTextSpan(el)) {
       // Anchor on the text span itself — `targetOffset` is the child index
       // among the span's children. Sum visible-length contributions of
       // every preceding child (which may be raw text nodes or colored
@@ -1802,19 +1188,12 @@ function rangeOffsetToRaw(targetNode: Node, targetOffset: number): number {
       // colored sub-span (`<span class="wp-rt-dp-brace">{a|b|c}</span>`)
       // as well as the legacy single-firstChild text-node case.
       if (el.contains(targetNode)) {
-        let subAcc = 0;
-        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-        let tn: Node | null = walker.nextNode();
-        while (tn) {
-          if (tn === targetNode) {
-            return acc + subAcc + charsBefore(tn.textContent ?? "", targetOffset);
-          }
-          subAcc += (tn.textContent ?? "").replace(ZWSP_RE, "").length;
-          tn = walker.nextNode();
-        }
-        // Defensive — selection was inside the span but no matching text
-        // descendant found. Treat as end of span.
-        return acc + subAcc;
+        // Defensive fallback — selection was inside the span but no matching
+        // text descendant found. Treat as end of span.
+        return acc + (
+          visibleOffsetWithin(el, targetNode, targetOffset)
+          ?? visibleLength(el.textContent ?? "")
+        );
       }
       acc += childRawLen(child);
       continue;
@@ -1896,9 +1275,9 @@ function syncTextSpansToAtoms(): void {
       // user-typed text already matches `atom.text` we can skip the
       // innerHTML rewrite and preserve the live caret. When they
       // diverge, force the colored DOM tree to match.
-      const wantText = atom.text || ZWSP;
+      const wantText = (atom.text || ZWSP) + lineEndPad(atom.text);
       if (span.textContent !== wantText) {
-        span.innerHTML = textAtomHtml(atom.text);
+        span.innerHTML = textAtomHtml(atom.text) + lineEndPad(atom.text);
       }
     }
   }
@@ -1960,7 +1339,19 @@ watch(hostEpoch, () => {
 function hostDomIsStale(): boolean {
   const host = hostEl.value;
   if (!host) return false;
-  return host.querySelectorAll("[data-atom-index]").length < atoms.value.length;
+  const marked = host.querySelectorAll("[data-atom-index]");
+  if (marked.length < atoms.value.length) return true;
+  // A SECOND element claiming an atom is just as unpatchable: the browser
+  // cloned it (splitting a span, e.g. on a native line break), Vue never
+  // rendered the copy, and `syncTextSpansToAtoms` would write the atom's
+  // whole text into both, doubling the value on every edit.
+  const seen = new Set<string>();
+  for (const el of marked) {
+    const idx = el.getAttribute("data-atom-index") ?? "";
+    if (seen.has(idx)) return true;
+    seen.add(idx);
+  }
+  return false;
 }
 
 /** True while every Fragment anchor Vue needs is still in the host.
@@ -1996,23 +1387,10 @@ function hostAnchorsIntact(): boolean {
   return empties >= 2 * atoms.value.length + 2;
 }
 
-/** True when applying `next` would ADD or REMOVE atom nodes, or flip an atom
- *  between its chip and its text branch.
- *
- *  Those are exactly the renders that make Vue insert or unmount list items,
- *  and therefore the only ones that touch a fragment anchor. A same-shape
- *  apply patches text and props in place and cannot trip over a missing one,
- *  which is what keeps ordinary typing on the cheap path. */
 /** True while a host-element swap is in flight — see the `hostEpoch` bump in
  *  `applyAtoms`. Not a ref: nothing renders off it, and a plain let keeps the
  *  read in `onHostBlur` synchronous with the blur the swap itself fires. */
 let hostSwapping = false;
-
-function isStructuralApply(next: Atom[]): boolean {
-  const cur = atoms.value;
-  if (cur.length !== next.length) return true;
-  return cur.some((atom, i) => (atom.kind === "text") !== (next[i].kind === "text"));
-}
 
 function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   // `rebuild` forces a full teardown+remount instead of an in-place patch.
@@ -2044,7 +1422,7 @@ function applyAtoms(next: Atom[], opts?: { rebuild?: boolean }): void {
   if (
     hostDomIsStale() ||
     opts?.rebuild ||
-    (isStructuralApply(padded) && !hostAnchorsIntact())
+    (isStructuralChange(atoms.value, padded) && !hostAnchorsIntact())
   ) {
     hostEpoch.value += 1;
     // The swap removes the element the caret is sitting in, and the browser
@@ -2101,7 +1479,7 @@ function readHostAsAtoms(): Atom[] {
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const el = node as HTMLElement;
-    if (el.classList.contains("wp-refchip")) {
+    if (isChipEl(el)) {
       const atom = atoms.value[Number(el.getAttribute("data-atom-index"))];
       if (atom && atom.kind !== "text") out.push(atom);
       else if (atom && atom.kind === "text") pushText(atom.text);
@@ -2115,115 +1493,9 @@ function readHostAsAtoms(): Atom[] {
   return out.length > 0 ? out : [{ kind: "text", text: "" }];
 }
 
-/** Delete the raw-text span `[delStart, delEnd)` directly off a live atom
- *  list — WITHOUT re-tokenizing. This is what keeps chip formation off the
- *  delete path: text atoms are sliced char-exact; a chip is one cursor stop,
- *  so any overlap removes the WHOLE chip (the span widens to chip
- *  boundaries). No `parse`/`parseForSurface` runs, so raw text that merely
- *  looks like a chip (`$mood`, `$mood.`) survives a Backspace as plain text.
- *
- *  Offsets are in the same serialised raw-text space `rangeOffsetToRaw`
- *  produces (chip length = `serialiseAtomsLocal([atom]).length`), so the
- *  caret arithmetic lines up. Returns the new atom list plus the caret
- *  offset to restore (the start of the deleted span, widened to a chip
- *  boundary when a chip was removed). */
-function deleteRawRange(
-  live: Atom[],
-  delStart: number,
-  delEnd: number,
-): { atoms: Atom[]; caret: number } {
-  const spans: { atom: Atom; start: number; end: number }[] = [];
-  let cursor = 0;
-  for (const atom of live) {
-    const len = serialiseAtomsLocal([atom]).length;
-    spans.push({ atom, start: cursor, end: cursor + len });
-    cursor += len;
-  }
-  // Widen the deletion span to fully cover any chip it partially intersects —
-  // chips can't be half-deleted.
-  let lo = delStart;
-  let hi = delEnd;
-  for (const s of spans) {
-    if (s.atom.kind === "text") continue;
-    if (s.start < hi && s.end > lo) {
-      lo = Math.min(lo, s.start);
-      hi = Math.max(hi, s.end);
-    }
-  }
-  const out: Atom[] = [];
-  const pushAtom = (a: Atom): void => {
-    const last = out[out.length - 1];
-    if (a.kind === "text" && last && last.kind === "text") {
-      out[out.length - 1] = { kind: "text", text: last.text + a.text };
-    } else {
-      out.push(a);
-    }
-  };
-  for (const s of spans) {
-    const atom = s.atom;
-    if (s.end <= lo || s.start >= hi) {
-      pushAtom(atom); // fully outside the deletion span — keep as-is
-      continue;
-    }
-    if (atom.kind === "text") {
-      const cutFrom = Math.max(0, lo - s.start);
-      const cutTo = Math.min(atom.text.length, hi - s.start);
-      const kept = atom.text.slice(0, cutFrom) + atom.text.slice(cutTo);
-      if (kept.length > 0) pushAtom({ kind: "text", text: kept });
-      continue;
-    }
-    // Chip fully covered by [lo, hi) (widened above) — drop it.
-  }
-  return { atoms: out, caret: lo };
-}
-
-/** Re-derive brace-block scaffolding colour from the CURRENT serialised text,
- *  WITHOUT chipifying (chips are left exactly as-is, so Wave-5's "never
- *  chipify on delete" holds). Used after an atom-direct edit so the amber/green
- *  colour tracks the live text: a still-valid block keeps its colour, and
- *  breaking a block — deleting its `{`/`}`/`|` or the `$$` delimiter — drops it.
- *  Text atoms are split at block-token boundaries so a span straddling a block
- *  edge (the atom-direct read merges adjacent text) colours each side right. */
-function recolorBlocks(list: Atom[]): Atom[] {
-  const text = serialiseAtomsLocal(list);
-  if (!text) return list;
-  const colorAt: Array<"alt" | "multi" | null> = new Array(text.length).fill(null);
-  for (const tok of tokenizeRich(text)) {
-    const c = tok.kind === "dp-multi" ? "multi" : tok.kind === "dp-brace" ? "alt" : null;
-    if (!c) continue;
-    for (let k = tok.start; k < tok.end; k++) colorAt[k] = c;
-  }
-  const out: Atom[] = [];
-  const pushText = (t: string, bc: "alt" | "multi" | null): void => {
-    if (!t) return;
-    const last = out[out.length - 1];
-    if (last && last.kind === "text" && (last.blockColor ?? null) === bc) {
-      out[out.length - 1] = bc
-        ? { kind: "text", text: last.text + t, blockColor: bc }
-        : { kind: "text", text: last.text + t };
-    } else {
-      out.push(bc ? { kind: "text", text: t, blockColor: bc } : { kind: "text", text: t });
-    }
-  };
-  let off = 0;
-  for (const a of list) {
-    const len = serialiseAtomsLocal([a]).length;
-    if (a.kind === "text") {
-      let i = 0;
-      while (i < a.text.length) {
-        const c = colorAt[off + i] ?? null;
-        let j = i + 1;
-        while (j < a.text.length && (colorAt[off + j] ?? null) === c) j++;
-        pushText(a.text.slice(i, j), c);
-        i = j;
-      }
-    } else {
-      out.push(a);
-    }
-    off += len;
-  }
-  return out;
-}
+// `deleteRawRange` (atom-direct deletion that never re-tokenizes, so editing
+// can't chipify) and `recolorBlocks` (re-derive brace-block colour after such
+// an edit) live in `./rich-text/atom-edit`.
 
 function insertChipAtCaret(
   chipText: string,
@@ -2236,36 +1508,15 @@ function insertChipAtCaret(
   // live caret + acStart for the inline autocomplete path.
   const caret = caretOverride?.caret ?? currentCursorCharOffset();
   const trigStart = caretOverride?.acStart ?? acStart.value;
-  // Strip the typed trigger fragment (`@col`, `$per`) before inserting
-  // the chip. `acStart` holds the raw-text offset of the trigger `@` /
-  // `$`; the slice [acStart, caret] is the trigger + typed query text.
-  //
-  // Defensive scan-backward: if acStart is unset (-1) OR doesn't point
-  // at a valid trigger character, re-derive it by scanning back from
-  // the caret for a `$<ident>` or `@<ident>` run. Catches event-order
-  // races where Enter fires before refreshAutocompleteFromHost has
-  // probed the latest text, AND the test-seam path where __apply runs
-  // without ever calling the probe. Without this, the previously-typed
-  // `$testo` would survive alongside the freshly-inserted chip.
-  let cutFrom = trigStart >= 0 ? Math.min(trigStart, caret) : caret;
-  const cutChar = text[cutFrom];
-  if (cutChar !== "$" && cutChar !== "@") {
-    const head = text.slice(0, caret);
-    // Match a trailing trigger + typed query. `$ident` / `@ident` /
-    // `@{partial-uuid` cases. Falls back to no-op (cutFrom unchanged)
-    // when no pattern matches.
-    const m = head.match(/[$@](?:[A-Za-z_][A-Za-z0-9_]*|\{[0-9a-fA-F:,_ -]*\}?)?$/);
-    if (m) cutFrom = head.length - m[0].length;
-  }
-  const before = text.slice(0, cutFrom);
-  const after = text.slice(caret);
-  const newText = before + chipText + after;
+  // Strip the typed trigger fragment (`@col`, `$per`) before inserting the
+  // chip, re-deriving the trigger start when `acStart` is stale — see
+  // `spliceAtTrigger`.
+  const { text: newText, caret: newCaret } = spliceAtTrigger(text, caret, trigStart, chipText);
   // rebuild: this is a structural insert from a popover/modal (focus already
   // left the host), so remount the atom nodes fresh rather than patch over
   // the hand-mutated DOM — avoids the Vue insertBefore desync crash.
   applyAtoms(parseForSurface(newText), { rebuild: true });
   emitValue(newText);
-  const newCaret = (before + chipText).length;
   void nextTick(() => restoreCursorAtChar(newCaret));
 }
 
@@ -2293,26 +1544,30 @@ function insertRefAtCursor(
 }
 
 /**
- * Splice a plain booru tag over the word being typed.
+ * Commit a bare-word row (tag, LoRA, embedding) over what is being typed.
  *
  * Mirrors `insertChipAtCaret`'s raw-text splice but inserts TEXT, not a chip.
- * `$` and `@` commits build a chip because they carry engine meaning; a tag is
- * just characters in the prompt, so parsing the result yields plain text and
- * nothing renders as a pill.
+ * `$` and `@` commits build a chip because they carry engine meaning; a tag or
+ * model reference is just characters in the prompt, so parsing the result
+ * yields plain text and nothing renders as a pill.
+ *
+ * The range and text come from `wordRowCommitFor`, which is what makes a model
+ * pick leave a complete `<lora:PATH:1.0>` / `embedding:PATH` behind whether the
+ * caret was on a bare word, after a typed `<`, or inside a reference.
  *
  * Deliberately not a branch inside `insertChipAtCaret`: that function's
  * defensive re-derivation scans backwards for a `$`/`@` run, which is exactly
  * wrong for a sigil-less word and would cut from the wrong place.
  */
-function insertTagAtCursor(tag: string): void {
+function commitWordRow(row: WordRow): void {
   const text = readHostAsText();
-  const caret = currentCursorCharOffset();
-  const from = acStart.value >= 0 ? Math.min(acStart.value, caret) : caret;
-  const before = text.slice(0, from);
-  const newText = before + tag + text.slice(caret);
+  const { start, end, insert } = wordRowCommitFor(
+    text, currentCursorCharOffset(), acStart.value, row, refKind.value,
+    { separator: autocompleteSeparatorEnabled(), style: tagInsertStyle() },
+  );
+  const { text: newText, caret: newCaret } = spliceRange(text, start, end, insert);
   applyAtoms(parseForSurface(newText), { rebuild: true });
   emitValue(newText);
-  const newCaret = (before + tag).length;
   acOpen.value = false;
   tagRows.value = [];
   modelRows.value = {};
@@ -2330,7 +1585,7 @@ function insertTagAtCursor(tag: string): void {
  * and unrendered. Writing `widget.value` instead would work but replaces the
  * whole string and drops the caret.
  *
- * Deliberately does NOT consult `acStart` the way `insertTagAtCursor` does:
+ * Deliberately does NOT consult `acStart` the way `commitWordRow` does:
  * that one is completing a word the user is mid-way through typing and must
  * eat the typed prefix, whereas this one is a foreign insert and must not
  * eat anything. When the caret isn't inside the editor (never focused, or
@@ -2338,23 +1593,14 @@ function insertTagAtCursor(tag: string): void {
  * reports end-of-text, which gives an append.
  */
 function insertTextAtCaret(text: string): void {
-  const current = readHostAsText();
-  const caret = currentCursorCharOffset();
-  const before = current.slice(0, caret);
-  const after = current.slice(caret);
-  // Separate on BOTH sides. The trailing space is not cosmetic: inserting
-  // `$mood` before the word `portrait` would otherwise yield `$moodportrait`,
-  // which re-parses as a variable named `moodportrait` — the insert would
-  // quietly change which variable it inserted.
-  const lead = before && !/\s$/.test(before) ? " " : "";
-  const trail = after && !/^\s/.test(after) ? " " : "";
-  const insert = `${lead}${text}${trail}`;
-  const next = before + insert + after;
+  // Separate on BOTH sides (see `spliceSpaced`): inserting `$mood` before the
+  // word `portrait` would otherwise yield `$moodportrait`, which re-parses as
+  // a different variable. The caret sits after the token, before the
+  // trailing space, so the user can keep typing the token.
+  const { text: next, caret } = spliceSpaced(readHostAsText(), currentCursorCharOffset(), text);
   applyAtoms(parseForSurface(next), { rebuild: true });
   emitValue(next);
-  // Caret sits after the token, before the trailing space, so the user can
-  // keep typing the token rather than landing past a gap.
-  void nextTick(() => restoreCursorAtChar(before.length + lead.length + text.length));
+  void nextTick(() => restoreCursorAtChar(caret));
 }
 
 function insertVarAtCursor(name: string): void {
@@ -2459,17 +1705,9 @@ function onChipRemap(idx: number, ev?: MouseEvent): void {
   const { expr, excludeNull } = refFilterOf(atom);
   remapOldExpr.value = expr;
   remapOldExcludeNull.value = excludeNull;
-  // Reuse the picker's anchor maths to position the remap popup at the chip.
-  setPickerAnchorFromElement((ev?.currentTarget as HTMLElement | null) ?? null);
-  // Seed just BELOW the chip (not the tall-picker flip seed) so the first
-  // paint is already close — clampRemapIntoView then hugs it exactly using
-  // the popup's real height. Avoids the one-frame high-flash.
-  remapAnchor.value = {
-    top: (pickerTriggerRect?.bottom ?? pickerAnchor.value.top) + 6,
-    left: pickerAnchor.value.left,
-  };
+  const chip = (ev?.currentTarget as HTMLElement | null) ?? hostEl.value;
+  remapAnchor.value = chip ? followAnchor(chip) : null;
   remapOpen.value = true;
-  clampRemapIntoView();
 }
 
 /** Rewrite EVERY occurrence of the dead uuid in THIS field's raw text once,
@@ -2481,12 +1719,10 @@ function applyRemap(next: { uuid: string; name: string; subcatExpr: string; excl
   applyAtoms(parseForSurface(rewritten));
   emitValue(rewritten);
   remapOpen.value = false;
-  teardownRemapObs();
 }
 
 function cancelRemap(): void {
   remapOpen.value = false;
-  teardownRemapObs();
 }
 
 // Test seam — drive confirm without faking the popup click chain in jsdom.
@@ -2559,7 +1795,7 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
   applyAutocomplete(label);
 }
 
-// --- Global listeners: close popup on outside-click / scroll / resize.
+// --- Global listeners: close the list on a press outside it and the field.
 //     We attach lazily (only while open) so non-editing inputs cost nothing.
 
 /**
@@ -2583,53 +1819,67 @@ function onSuggestionMouseDown(e: MouseEvent, label: string): void {
  * popover, so firing before them changes nothing.
  */
 function onDocumentPressStart(e: Event): void {
-  const t = e.target as Node | null;
-  if (!t) return;
-  if (hostEl.value?.contains(t)) return;
-  if (popoverEl.value?.contains(t)) return;
-  acOpen.value = false;
-}
-function onWindowScroll(e: Event): void {
-  // Scrolling INSIDE the popover is the user reading the list — wheeling over
-  // it, or dragging its scrollbar. This listener is capture-phase on window,
-  // so those scrolls used to land here and close the popover outright: the
-  // list had a scrollbar that could not be used, and a scrollbar drag left a
-  // half-typed reference behind. Ignore them.
-  const t = e.target as Node | null;
-  if (t && popoverEl.value?.contains(t)) return;
-  // The popover IS the scroll target when the wheel lands on it directly
-  // (target is the element, not a descendant).
-  if (t && t === popoverEl.value) return;
-  // A genuine outside scroll moved the anchor. Re-anchor rather than close —
-  // `positionPopup` recomputes from the host's live rect, so the popover
-  // simply follows the input instead of destroying the user's in-progress
-  // token. Matches the injector menu + VarAutocompleteInput behaviour.
-  positionPopup();
-}
-function onWindowResize(): void {
-  if (acOpen.value) positionPopup();
+  const path = e.composedPath();
+  const host = hostEl.value;
+  const list = acPanel();
+  pressKeepsList = (!!host && path.includes(host)) || (!!list && path.includes(list));
+  // Read by `onAcOpenChange` while this same press is being handled, then gone.
+  setTimeout(() => { pressKeepsList = false; }, 0);
+  if (!pressKeepsList) acOpen.value = false;
 }
 
+/** True while a press inside the field or the list is being handled. The
+ *  Popover counts a press in the field as outside (its anchor is the caret,
+ *  not an element), and this keeps it open there as before. */
+let pressKeepsList = false;
+
+/** The list's Popover asks to close: Escape, or a press outside it. */
+function onAcOpenChange(open: boolean): void {
+  if (!open && !pressKeepsList) acOpen.value = false;
+}
+
+/**
+ * Re-probe when the caret moves while the list is open.
+ *
+ * The list was only re-probed on input, so moving the caret without typing
+ * (Home, Ctrl+Home, Left/Right, a click elsewhere in the field) left it open
+ * for the token the caret had just left. Enter then committed that suggestion
+ * wherever the caret now was: `$style` typed at the end, Ctrl+Home, Enter
+ * inserted `$style` at the start of the field.
+ *
+ * `selectionchange` fires for every way the caret can move, keyboard or
+ * pointer, and only after it has settled. A selection outside the field is
+ * left alone: the list's own outside-press and blur paths own that case (and
+ * the ref picker takes focus while the list is still in use).
+ */
+function onSelectionChange(): void {
+  if (!acOpen.value) return;
+  const host = hostEl.value;
+  const sel = window.getSelection();
+  if (!host || !sel || sel.rangeCount === 0) return;
+  if (!host.contains(sel.getRangeAt(0).startContainer)) return;
+  refreshAutocompleteFromHost();
+}
+
+// Listening from the moment the list opens, so these run before the Popover's
+// own outside-press listener (added once it has rows to show).
 watch(acOpen, (open) => {
   if (open) {
     void nextTick(positionPopup);
     window.addEventListener("pointerdown", onDocumentPressStart, true);
     window.addEventListener("mousedown", onDocumentPressStart, true);
-    window.addEventListener("scroll", onWindowScroll, true);
-    window.addEventListener("resize", onWindowResize);
+    document.addEventListener("selectionchange", onSelectionChange);
   } else {
     window.removeEventListener("pointerdown", onDocumentPressStart, true);
     window.removeEventListener("mousedown", onDocumentPressStart, true);
-    window.removeEventListener("scroll", onWindowScroll, true);
-    window.removeEventListener("resize", onWindowResize);
+    document.removeEventListener("selectionchange", onSelectionChange);
   }
-});
+}, { flush: "sync" });
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", onDocumentPressStart, true);
   window.removeEventListener("mousedown", onDocumentPressStart, true);
-  window.removeEventListener("scroll", onWindowScroll, true);
-  window.removeEventListener("resize", onWindowResize);
+  document.removeEventListener("selectionchange", onSelectionChange);
   window.removeEventListener("keydown", onPickerEscape, true);
 });
 
@@ -2655,7 +1905,7 @@ function readHostAsText(): string {
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const el = node as HTMLElement;
-    if (el.classList.contains("wp-refchip")) {
+    if (isChipEl(el)) {
       // Chips are atomic — read the underlying atom (via data-atom-index)
       // and reconstruct canonical syntax (`@{uuid}` / `@{uuid:sub}` /
       // `$name`), NOT the chip's rendered display text.
@@ -2677,7 +1927,7 @@ function readHostAsText(): string {
       }
       continue;
     }
-    if (el.classList.contains("wp-rt__text")) {
+    if (isTextSpan(el)) {
       // wp-rt__text spans hold the live text — user typing modifies the
       // span's textContent in place, so we read whatever's there now.
       // ZWSPs are render-only caret-landing helpers in empty pad spans;
@@ -2799,10 +2049,7 @@ function reconcileOrphanTextNodes(): void {
     let appendMode = true;
     let prev = orphan.previousSibling;
     while (prev) {
-      if (
-        prev.nodeType === Node.ELEMENT_NODE &&
-        (prev as HTMLElement).classList.contains("wp-rt__text")
-      ) {
+      if (isTextSpan(prev)) {
         target = prev as HTMLElement;
         break;
       }
@@ -2811,10 +2058,7 @@ function reconcileOrphanTextNodes(): void {
     if (!target) {
       let next = orphan.nextSibling;
       while (next) {
-        if (
-          next.nodeType === Node.ELEMENT_NODE &&
-          (next as HTMLElement).classList.contains("wp-rt__text")
-        ) {
+        if (isTextSpan(next)) {
           target = next as HTMLElement;
           appendMode = false;
           break;
@@ -2842,10 +2086,7 @@ function reconcileOrphanTextNodes(): void {
     const range = document.createRange();
     try {
       range.setStart(caretRel.node, Math.min(caretRel.offset, (caretRel.node.textContent ?? "").length));
-      range.collapse(true);
-      const s = window.getSelection();
-      s?.removeAllRanges();
-      s?.addRange(range);
+      selectCollapsed(range);
     } catch {
       // Caret restoration is best-effort; if the saved node is gone
       // (e.g. the orphan we just removed and the restoration logic
@@ -2860,6 +2101,11 @@ function reconcileOrphanTextNodes(): void {
  *  text gets inserted. */
 function onHostBeforeInput(ev: InputEvent): void {
   if (props.disabled) return;
+  if (ev.inputType === "insertParagraph" || ev.inputType === "insertLineBreak") {
+    ev.preventDefault();
+    if (props.multiline) insertNewlineAtSelection();
+    return;
+  }
   if (ev.inputType !== "insertText" && ev.inputType !== "insertCompositionText") return;
   const host = hostEl.value;
   if (!host) return;
@@ -2876,13 +2122,7 @@ function onHostBeforeInput(ev: InputEvent): void {
   // If selection is already inside a wp-rt__text span (directly OR
   // nested in a colored sub-span like wp-rt-dp-brace), nothing to do —
   // browser will insert correctly and our caret math walks descendants.
-  const targetEl: HTMLElement | null =
-    target.nodeType === Node.TEXT_NODE
-      ? (target as Text).parentElement
-      : target.nodeType === Node.ELEMENT_NODE
-        ? (target as HTMLElement)
-        : null;
-  if (targetEl && targetEl.closest(".wp-rt__text")) return;
+  if (inTextSpan(target)) return;
   // Otherwise, find a wp-rt__text span to redirect into. Pick the span
   // ADJACENT to the user's caret position — not the document-wide last
   // span. When the caret landed on a chip element (chip body), the
@@ -2898,9 +2138,7 @@ function onHostBeforeInput(ev: InputEvent): void {
     if (spans.length === 0) return;
     setCaretAtSpanEdge(spans[spans.length - 1] as HTMLElement, "end", newRange);
   }
-  newRange.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(newRange);
+  selectCollapsed(newRange, sel);
   // Don't preventDefault — browser will now insert at the new selection.
 }
 
@@ -2909,31 +2147,8 @@ function onHostBeforeInput(ev: InputEvent): void {
  *  chip or on the host root between chips, the user wanted to type
  *  ADJACENT to that anchor — not somewhere else in the input. Returns
  *  true if a position was set. */
-/**
- * Put `range` at one edge of `span`, walking to a real text node.
- *
- * With coloured sub-spans inside `wp-rt__text` (`<span class="wp-rt-dp-brace">`
- * and friends), `firstChild` / `lastChild` are not guaranteed to be text
- * nodes, and placing the caret on the span ELEMENT at offset 0 drops typing in
- * front of the whole brace block instead of inside it.
- */
-function setCaretAtSpanEdge(span: HTMLElement, edge: "start" | "end", range: Range): void {
-  const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
-  if (edge === "start") {
-    const first = walker.nextNode() as Text | null;
-    if (first) range.setStart(first, 0);
-    else range.setStart(span, 0);
-    return;
-  }
-  let last: Text | null = null;
-  let n: Node | null = walker.nextNode();
-  while (n) {
-    last = n as Text;
-    n = walker.nextNode();
-  }
-  if (last) range.setStart(last, (last.textContent ?? "").length);
-  else range.setStart(span, 0);
-}
+// `setCaretAtSpanEdge` (land on a span's first / last real text node) lives
+// in `./rich-text/caret-dom`.
 
 /**
  * Redirect a caret that is sitting on the host root into the span it is
@@ -2969,19 +2184,17 @@ function positionFromHostIndex(target: Node, offset: number, range: Range): bool
   }
   if (index < 0) return false;
 
-  const isTextSpan = (n: Node | null): n is HTMLElement =>
-    !!n && n.nodeType === Node.ELEMENT_NODE
-    && (n as HTMLElement).classList.contains("wp-rt__text");
-
   for (let i = index; i < host.childNodes.length; i++) {
-    if (isTextSpan(host.childNodes[i])) {
-      setCaretAtSpanEdge(host.childNodes[i] as HTMLElement, "start", range);
+    const child = host.childNodes[i];
+    if (isTextSpan(child)) {
+      setCaretAtSpanEdge(child as HTMLElement, "start", range);
       return true;
     }
   }
   for (let i = Math.min(index, host.childNodes.length) - 1; i >= 0; i--) {
-    if (isTextSpan(host.childNodes[i])) {
-      setCaretAtSpanEdge(host.childNodes[i] as HTMLElement, "end", range);
+    const child = host.childNodes[i];
+    if (isTextSpan(child)) {
+      setCaretAtSpanEdge(child as HTMLElement, "end", range);
       return true;
     }
   }
@@ -3004,16 +2217,14 @@ function positionAfterTarget(
       // just before the offset (if any) to find the nearest chip.
       const childBefore = host.childNodes[offset - 1] ?? null;
       const childAt = host.childNodes[offset] ?? null;
-      if (childBefore && childBefore.nodeType === Node.ELEMENT_NODE
-          && (childBefore as HTMLElement).classList.contains("wp-refchip")) {
+      if (isChipEl(childBefore)) {
         chip = childBefore as HTMLElement;
         preferFollowing = true;
-      } else if (childAt && childAt.nodeType === Node.ELEMENT_NODE
-          && (childAt as HTMLElement).classList.contains("wp-refchip")) {
+      } else if (isChipEl(childAt)) {
         chip = childAt as HTMLElement;
         preferFollowing = false;
       }
-    } else if (el.classList.contains("wp-refchip")) {
+    } else if (isChipEl(el)) {
       chip = el;
       preferFollowing = true;
     }
@@ -3022,30 +2233,13 @@ function positionAfterTarget(
   // Walk siblings to find the nearest pad span.
   let sib: Node | null = preferFollowing ? chip.nextSibling : chip.previousSibling;
   while (sib) {
-    if (sib.nodeType === Node.ELEMENT_NODE
-        && (sib as HTMLElement).classList.contains("wp-rt__text")) {
-      const span = sib as HTMLElement;
-      // Walk the first/last text-node descendant. With colored sub-
+    if (isTextSpan(sib)) {
+      // Land on the first/last text-node descendant. With colored sub-
       // spans inside `wp-rt__text`, `firstChild` may be an element
       // (e.g. wp-rt-dp-brace) instead of a text node — placing the
       // caret on the span element at offset 0 would drop typing in
       // front of the colored block instead of next to the chip.
-      const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
-      let first: Text | null = null;
-      let last: Text | null = null;
-      let n: Node | null = walker.nextNode();
-      while (n) {
-        if (!first) first = n as Text;
-        last = n as Text;
-        n = walker.nextNode();
-      }
-      if (preferFollowing && last) {
-        range.setStart(last, (last.textContent ?? "").length);
-      } else if (!preferFollowing && first) {
-        range.setStart(first, 0);
-      } else {
-        range.setStart(span, 0);
-      }
+      setCaretAtSpanEdge(sib as HTMLElement, preferFollowing ? "end" : "start", range);
       return true;
     }
     sib = preferFollowing ? sib.nextSibling : sib.previousSibling;
@@ -3134,7 +2328,7 @@ function onHostCut(ev: ClipboardEvent): void {
   }
   ev.clipboardData?.setData("text/plain", text);
   ev.preventDefault();
-  const remainder = all.slice(0, start) + all.slice(end);
+  const { text: remainder } = spliceRange(all, start, end, "");
   applyAtoms(parseForSurface(remainder));
   emitValue(remainder);
   void nextTick(() => restoreCursorAtChar(start));
@@ -3158,15 +2352,38 @@ function onHostPaste(ev: ClipboardEvent): void {
   // ZWSPs are render-only caret pads (see `readHostAsText`); one that rode
   // in on the clipboard would otherwise land in the value as an invisible
   // character nobody can see or find to delete.
-  const clean = data.replace(ZWSP_RE, "");
-  const pasted = props.multiline ? clean : clean.replace(/[\r\n]+/g, " ");
-  const before = currentText.slice(0, start);
-  const after = currentText.slice(end);
-  const newText = before + pasted + after;
+  const pasted = cleanPastedText(data, props.multiline);
+  const { text: newText, caret: newCaret } = spliceRange(currentText, start, end, pasted);
   applyAtoms(parseForSurface(newText));
   emitValue(newText);
-  const newCaret = (before + pasted).length;
   void nextTick(() => restoreCursorAtChar(newCaret));
+}
+
+/**
+ * Enter (and Shift+Enter) in a multiline field, as a plain `\n` in the value.
+ *
+ * The browser's own line break is not text: it splits the caret's
+ * `wp-rt__text` span and wraps the second half in a new `<div>` (Chromium and
+ * Firefox both do), cloning the span's `data-atom-index` along with it. Vue
+ * never rendered that clone, so it survives every patch, and from then on two
+ * spans claim one atom. `syncTextSpansToAtoms` writes the atom's whole text
+ * into BOTH, `readHostAsText` reads both back, and the value doubles on every
+ * edit: Backspace seemed to do nothing, Space copied the template again and
+ * again. The line break itself never reached the value either (`$style` then
+ * Enter then `1girl` saved as `$style1girl`).
+ *
+ * So the break goes through the same path as a paste: splice `\n` into the
+ * raw text at the selection and re-apply. `white-space: pre-wrap` on the
+ * host draws it, and the trailing ZWSP pad keeps a caret line after a final
+ * newline.
+ */
+function insertNewlineAtSelection(): void {
+  const { start, end } = currentSelectionRangeRaw();
+  const { text: next, caret } = spliceRange(readHostAsText(), start, end, "\n");
+  acOpen.value = false;
+  applyAtoms(parseForSurface(next));
+  emitValue(next);
+  void nextTick(() => restoreCursorAtChar(caret));
 }
 
 function onHostBlur(): void {
@@ -3199,34 +2416,15 @@ function onHostFocus(): void {
     const sc = range.startContainer;
     // Caret already inside a wp-rt__text (directly or via colored
     // sub-span) → leave it alone.
-    const scEl: HTMLElement | null =
-      sc.nodeType === Node.TEXT_NODE
-        ? (sc as Text).parentElement
-        : sc.nodeType === Node.ELEMENT_NODE
-          ? (sc as HTMLElement)
-          : null;
-    if (scEl && scEl.closest(".wp-rt__text")) return;
+    if (inTextSpan(sc)) return;
     const spans = host.querySelectorAll(".wp-rt__text");
     if (spans.length === 0) return;
     const span = spans[spans.length - 1] as HTMLElement;
     const r = document.createRange();
-    // Walk to the last text-node descendant so the caret lands inside
+    // Land on the last text-node descendant so the caret lands inside
     // whichever sub-span owns the trailing position.
-    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
-    let last: Text | null = null;
-    let n: Node | null = walker.nextNode();
-    while (n) {
-      last = n as Text;
-      n = walker.nextNode();
-    }
-    if (last) {
-      r.setStart(last, (last.textContent ?? "").length);
-    } else {
-      r.setStart(span, 0);
-    }
-    r.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(r);
+    setCaretAtSpanEdge(span, "end", r);
+    selectCollapsed(r, sel);
   });
 }
 
@@ -3252,7 +2450,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       const row = wordRows.value[acActive.value];
       if (row) {
         ev.preventDefault();
-        insertTagAtCursor(wordRowText(row) + committedSuffix());
+        commitWordRow(row);
         return;
       }
       // Nothing to commit — close and let Enter behave natively rather than
@@ -3432,13 +2630,13 @@ function onHostKeydown(ev: KeyboardEvent): void {
         { 'wp-rt__host--wrap': wrap && !multiline, 'wp-rt__host--empty': isEmpty },
       ]"
       :contenteditable="!disabled"
-      @scroll="updateOverflowHint"
       :aria-label="ariaLabel"
       :data-placeholder="placeholder"
       :data-multiline="multiline"
       role="textbox"
       :aria-multiline="multiline"
       spellcheck="false"
+      @scroll="updateOverflowHint"
       @focus="onHostFocus"
       @blur="onHostBlur"
       @input="onHostInput"
@@ -3447,6 +2645,8 @@ function onHostKeydown(ev: KeyboardEvent): void {
       @paste="onHostPaste"
       @copy="onHostCopy"
       @cut="onHostCut"
+      @mouseover="onHostOver"
+      @mouseleave="onHostLeave"
     >
       <template v-for="(atom, idx) in atoms" :key="idx">
         <RefChip
@@ -3482,6 +2682,21 @@ function onHostKeydown(ev: KeyboardEvent): void {
       </template>
     </div>
 
+    <!-- Hover card for the `$name` run under the pointer. -->
+    <RefChip
+      v-if="flatVars && varHoverInfo.name"
+      kind="var"
+      :card-anchor="varHover"
+      :name="varHoverInfo.name"
+      :index="varHoverInfo.index"
+      :axis="varHoverInfo.axis"
+      :resolved="true"
+      :in-scope="varSuggestions.includes(varHoverInfo.name)"
+      :producer="varProducers?.get(varHoverInfo.name)"
+      :graph-aware="graphAware"
+      data-test="rt-var-card"
+    />
+
     <!-- Resize grip, replacing `resize: vertical`.
          The native resizer recomputes height from an origin it captured at
          pointerdown and never clamps to the element's own min/max, so dragging
@@ -3515,270 +2730,265 @@ function onHostKeydown(ev: KeyboardEvent): void {
       />
     </div>
 
-    <!-- Teleport so the popover escapes ancestor overflow:hidden /
-         transformed scroll containers / table cells. -->
-    <Teleport to="body">
-      <div
-        v-if="acOpen && acRowCount > 0"
-        ref="popoverEl"
-        class="wp-rt-suggestions"
-        :class="[teleportThemeClass(), { 'wp-rt-suggestions--up': popupPos.flipped }]"
-        :data-stale="rowsStale ? '' : null"
-        :style="{
-          top: popupPos.top + 'px',
-          left: popupPos.left + 'px',
-          minWidth: popupPos.width + 'px',
-        }"
-        role="listbox"
-      >
-        <div v-if="acTrigger === 'tag'" class="wp-rt-suggestions__head">
-          <span class="wp-rt-suggestions__query">{{ acQuery }}</span>
-          <!-- Says WHICH autocomplete this is. Without a sigil in the query
-               there is otherwise nothing distinguishing it from the `$` / `@`
-               popover, which looks identical and behaves differently. -->
-          <span class="wp-rt-suggestions__src">{{ wordSections.map((s) => s.label).join(" · ") }}</span>
-          <span class="wp-rt-suggestions__count">{{ wordRows.length }}</span>
-          <!-- Names the one thing the rows cannot: that they are not for what
-               is currently typed. Without it the reflow when results land
-               reads as the list glitching. -->
-          <span v-if="rowsStale" class="wp-rt-suggestions__stale">searching…</span>
-          <span class="wp-spacer" />
-          <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
-        </div>
-        <template v-if="acTrigger === 'tag'">
-          <!-- Sections, because the sources have no common ranking key: a tag
-               ranks by post count in the tens of thousands, a model has no
-               count at all. Any single ordering has to invent a comparison
-               between "12,000 posts" and "a file on disk", and tags win it on
-               weight of numbers every time.
+    <!-- A Popover, so the list escapes ancestor overflow:hidden /
+         transformed scroll containers / table cells. Focus stays in the
+         field: it moves through the rows with the arrow keys. -->
+    <!-- The kit Popover's own prop, turning its focus move OFF. -->
+    <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+    <Popover :id="acListId" :autofocus="false"
+      :open="acOpen && acRowCount > 0"
+      :anchor="acAnchor"
+      :max-height="240"
+      role="listbox"
+      label="Suggestions"
+      class="wp-rt-suggestions"
+      :class="teleportThemeClass()"
+      :data-stale="rowsStale ? '' : null"
+      @update:open="onAcOpenChange"
+    >
+      <div v-if="acTrigger === 'tag'" class="wp-rt-suggestions__head">
+        <span class="wp-rt-suggestions__query">{{ acQuery }}</span>
+        <!-- Says WHICH autocomplete this is. Without a sigil in the query
+             there is otherwise nothing distinguishing it from the `$` / `@`
+             popover, which looks identical and behaves differently. -->
+        <span class="wp-rt-suggestions__src">{{ wordSections.map((s) => s.label).join(" · ") }}</span>
+        <span class="wp-rt-suggestions__count">{{ wordRows.length }}</span>
+        <!-- Names the one thing the rows cannot: that they are not for what
+             is currently typed. Without it the reflow when results land
+             reads as the list glitching. -->
+        <span v-if="rowsStale" class="wp-rt-suggestions__stale">searching…</span>
+        <span class="wp-spacer" />
+        <span class="wp-rt-suggestions__hint">↑↓ · Enter · Esc</span>
+      </div>
+      <template v-if="acTrigger === 'tag'">
+        <!-- Sections, because the sources have no common ranking key: a tag
+             ranks by post count in the tens of thousands, a model has no
+             count at all. Any single ordering has to invent a comparison
+             between "12,000 posts" and "a file on disk", and tags win it on
+             weight of numbers every time.
 
-               `entry.index` is the row's position in the FLAT `wordRows`, which
-               is what `acActive` indexes. Headers are not in that array, so
-               arrow-key navigation cannot land on one — no skip logic needed. -->
-          <template v-for="section in wordSections" :key="section.source">
-            <div
-              v-if="wordSections.length > 1"
-              class="wp-rt-suggestions__section"
-            >
-              <i :class="SOURCE_ICON[section.source]" aria-hidden="true" />{{ section.label }}
-            </div>
-            <button
-              v-for="entry in section.rows"
-              :key="section.source + ':' + (entry.row.source === 'tag' ? entry.row.tag.matched : entry.row.model.path)"
-              type="button"
-              class="wp-rt-suggestions__item wp-rt-tag"
-              :data-active="entry.index === acActive ? '' : null"
-              role="option"
-              :aria-selected="entry.index === acActive"
-              @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row) + committedSuffix())"
-              @mouseenter="acActive = entry.index"
-            >
-              <template v-if="entry.row.source !== 'tag'">
-                <span class="wp-rt-tag__cat" :class="`wp-rt-tag__cat--${entry.row.source}`">
-                  <i :class="SOURCE_ICON[entry.row.source]" aria-hidden="true" />
+             `entry.index` is the row's position in the FLAT `wordRows`, which
+             is what `acActive` indexes. Headers are not in that array, so
+             arrow-key navigation cannot land on one — no skip logic needed. -->
+        <template v-for="section in wordSections" :key="section.source">
+          <div
+            v-if="wordSections.length > 1"
+            class="wp-rt-suggestions__section"
+          >
+            <i :class="SOURCE_ICON[section.source]" aria-hidden="true" />{{ section.label }}
+          </div>
+          <div
+            v-for="entry in section.rows"
+            :key="section.source + ':' + (entry.row.source === 'tag' ? entry.row.tag.matched : entry.row.model.path)"
+            class="wp-rt-suggestions__item wp-rt-tag"
+            :data-active="entry.index === acActive ? '' : null"
+            role="option"
+            :aria-selected="entry.index === acActive"
+            @mousedown.prevent="commitWordRow(entry.row)"
+            @mouseenter="acActive = entry.index"
+          >
+            <template v-if="entry.row.source !== 'tag'">
+              <span class="wp-rt-tag__cat" :class="`wp-rt-tag__cat--${entry.row.source}`">
+                <i :class="SOURCE_ICON[entry.row.source]" aria-hidden="true" />
+              </span>
+              <span class="wp-rt-tag__body">
+                <span class="wp-rt-tag__name">{{ entry.row.model.name }}</span>
+                <!-- The folder is the only thing separating two files with
+                     the same name, and the insert uses the full path. -->
+                <span v-if="entry.row.model.folder" class="wp-rt-tag__sub">
+                  {{ entry.row.model.folder }}
                 </span>
-                <span class="wp-rt-tag__body">
-                  <span class="wp-rt-tag__name">{{ entry.row.model.name }}</span>
-                  <!-- The folder is the only thing separating two files with
-                       the same name, and the insert uses the full path. -->
-                  <span v-if="entry.row.model.folder" class="wp-rt-tag__sub">
-                    {{ entry.row.model.folder }}
-                  </span>
+              </span>
+            </template>
+            <template v-else>
+              <!-- Colour bar only when the loaded file HAS categories. A
+                   two-column list would otherwise show a column of identical
+                   grey bars explaining nothing. -->
+              <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is
+                   already the fixed_values module kind, so a booru tag row
+                   would have rendered identically to a library module.
+                   Tinted by category, so this one slot says both "this is a
+                   tag" and "of this kind". -->
+              <span
+                v-if="tagHasCategories"
+                class="wp-rt-tag__cat"
+                :class="entry.row.tag.category_name ? `wp-rt-tag__cat--${entry.row.tag.category_name}` : null"
+              ><i class="pi pi-tags" aria-hidden="true" /></span>
+              <span class="wp-rt-tag__body">
+                <!-- Always the tag that will be INSERTED, never the alias
+                     that matched. Enter must put exactly this on screen. -->
+                <span class="wp-rt-tag__name">{{ entry.row.tag.name }}</span>
+                <span v-if="entry.row.tag.matched !== entry.row.tag.name" class="wp-rt-tag__sub">
+                  from <span class="wp-rt-tag__alias">{{ entry.row.tag.matched }}</span>
                 </span>
-              </template>
-              <template v-else>
-                <!-- Colour bar only when the loaded file HAS categories. A
-                     two-column list would otherwise show a column of identical
-                     grey bars explaining nothing. -->
-                <!-- `pi-tags` (plural) deliberately: `pi-tag` singular is
-                     already the fixed_values module kind, so a booru tag row
-                     would have rendered identically to a library module.
-                     Tinted by category, so this one slot says both "this is a
-                     tag" and "of this kind". -->
                 <span
-                  v-if="tagHasCategories"
-                  class="wp-rt-tag__cat"
-                  :class="entry.row.tag.category_name ? `wp-rt-tag__cat--${entry.row.tag.category_name}` : null"
-                ><i class="pi pi-tags" aria-hidden="true" /></span>
-                <span class="wp-rt-tag__body">
-                  <!-- Always the tag that will be INSERTED, never the alias
-                       that matched. Enter must put exactly this on screen. -->
-                  <span class="wp-rt-tag__name">{{ entry.row.tag.name }}</span>
-                  <span v-if="entry.row.tag.matched !== entry.row.tag.name" class="wp-rt-tag__sub">
-                    from <span class="wp-rt-tag__alias">{{ entry.row.tag.matched }}</span>
-                  </span>
-                  <span
-                    v-else-if="tagHasCategories && entry.row.tag.category_name"
-                    class="wp-rt-tag__sub"
-                  >{{ entry.row.tag.category_name }}</span>
-                </span>
-                <span class="wp-rt-tag__count">{{ formatTagCount(entry.row.tag.count) }}</span>
-              </template>
-            </button>
-          </template>
-          <div v-if="tagLegend.length" class="wp-rt-tag__legend">
-            <span v-for="cat in tagLegend" :key="cat">
-              <i class="pi pi-tags wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" aria-hidden="true" />{{ cat }}
-            </span>
+                  v-else-if="tagHasCategories && entry.row.tag.category_name"
+                  class="wp-rt-tag__sub"
+                >{{ entry.row.tag.category_name }}</span>
+              </span>
+              <span class="wp-rt-tag__count">{{ formatTagCount(entry.row.tag.count) }}</span>
+            </template>
           </div>
         </template>
-        <div v-else class="wp-rt-suggestions__head">
-          <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
-          <!-- The match count belongs in the header, not implied by the list
-               length: the list is capped and scrolls, so "how many did I
-               actually match" is otherwise unanswerable without scrolling.
-               Counts MATCHES, not rendered rows — and says so when the cap
-               hid some, since a silent truncation is how you conclude the
-               wildcard you are looking for does not exist. -->
-          <span class="wp-rt-suggestions__count">
-            {{ acMatches.length }} match{{ acMatches.length === 1 ? "" : "es" }}
-            <template v-if="acMatches.length > acRows.length">
-              · showing {{ acRows.length }}
-            </template>
+        <div v-if="tagLegend.length" class="wp-rt-tag__legend">
+          <span v-for="cat in tagLegend" :key="cat">
+            <i class="pi pi-tags wp-rt-tag__swatch" :class="`wp-rt-tag__cat--${cat}`" aria-hidden="true" />{{ cat }}
           </span>
-          <span class="wp-spacer" />
-          <!-- Says what the keys actually do. Choosing an `@` row goes on to
-               the filter panel rather than inserting a bare ref, so Enter is
-               labelled for where it leads. -->
-          <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
         </div>
-        <button
-          v-for="(row, i) in (acTrigger === 'tag' ? [] : acRows)"
-          :key="row.token"
-          type="button"
-          class="wp-rt-suggestions__item"
-          :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
-          :data-active="i === acActive ? '' : null"
-          role="option"
-          :aria-selected="i === acActive"
-          @mousedown="(e) => onSuggestionMouseDown(e, row.token)"
-          @mouseenter="acActive = i"
-        >
-          <!-- The glyph sits in a tinted box in its OWN kind's colour. A `$var`
-               can be written by a fixed_values or a combine as easily as by a
-               wildcard, and painting every row accent-violet throws away the
-               one cue that says which. -->
-          <span
-            class="wp-rt-suggestions__icon-box"
-            :style="acTrigger === '$' ? varTint(varBaseName(row.label)) : kindTint(row.kind)"
-            aria-hidden="true"
-          ><i :class="row.icon" /></span>
-          <span class="wp-rt-suggestions__body">
-            <span
-              class="wp-rt-suggestions__label"
-              :class="acTrigger === '$' ? varColorClass(varBaseName(row.label)) : null"
-            >
-              <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span
-              ><template v-if="row.isAxis"
-                >{{ row.label.slice(0, row.label.indexOf('.')) }}<span
-                  class="wp-rt-suggestions__axis"
-                >.{{ row.label.slice(row.label.indexOf('.') + 1) }}</span></template
-              ><template v-else>{{ row.label }}</template>
-            </span>
-            <!-- Second line: the facts that separate same-named entries. For
-                 `@` these are structural (options/axes/tags); for `$` it is
-                 the writer. Either way the row answers "which one is this?"
-                 without the user having to insert it and find out. -->
-            <span v-if="row.uuid || row.facts.length || row.producer" class="wp-rt-suggestions__sub">
-              <span v-if="row.uuid" class="wp-rt-suggestions__uuid">{{ row.uuid }}</span>
-              <template v-if="row.producer">
-                <span v-if="row.producer.verb">{{ row.producer.verb }}</span>
-                <!-- The module name is the identifying half of the sentence,
-                     so it is the part that gets picked out. -->
-                <span v-if="row.producer.moduleName" class="wp-rt-suggestions__by">
-                  {{ row.producer.moduleName }}
-                </span>
-                <span v-if="row.producer.moduleName && row.producer.tail" class="wp-rt-suggestions__sep">·</span>
-                <span v-if="row.producer.tail" class="wp-rt-suggestions__node">{{ row.producer.tail }}</span>
-              </template>
-              <span
-                v-for="fact in row.facts"
-                :key="fact"
-                class="wp-rt-suggestions__fact"
-              >{{ fact }}</span>
-              <!-- Same mark the chip and the filter header carry, so "this is
-                   the node's copy" reads identically wherever it appears. -->
-              <span
-                v-if="row.fromNode"
-                class="wp-rt-suggestions__origin"
-                data-test="suggestion-origin-node"
-              ><i class="pi pi-database" aria-hidden="true" /> this node</span>
-              <span v-if="row.badge" class="wp-rt-suggestions__badge">{{ row.badge }}</span>
-              <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
-            </span>
-          </span>
-          <!-- Funnel marks the rows that lead to a filter — i.e. the ones
-               whose wildcard declares tags to filter by. Shown on the active
-               row only: on every row it becomes a column of noise, and the
-               next step applies to the row you are on. -->
-          <i
-            v-if="row.filterable && i === acActive"
-            class="pi pi-filter wp-rt-suggestions__funnel"
-            aria-hidden="true"
-          />
-        </button>
-        <!-- Reference a module that does not exist yet. Inserts the red broken
-             chip under this name; clicking it later repoints it. -->
-        <button
-          v-if="acPlaceholderName"
-          type="button"
-          class="wp-rt-suggestions__item wp-rt-suggestions__item--placeholder"
-          :data-active="acActive === acItems.length ? '' : null"
-          role="option"
-          :aria-selected="acActive === acItems.length"
-          data-test="suggestion-placeholder"
-          @mousedown.prevent="insertPlaceholderRef(acPlaceholderName)"
-          @mouseenter="acActive = acItems.length"
-        >
-          <span class="wp-rt-suggestions__icon-box wp-rt-suggestions__icon-box--placeholder" aria-hidden="true">
-            <i class="pi pi-plus" />
-          </span>
-          <span class="wp-rt-suggestions__body">
-            <span class="wp-rt-suggestions__label">
-              Placeholder <span class="wp-rt-suggestions__placeholder-name">@{{ acPlaceholderName }}</span>
-            </span>
-            <span class="wp-rt-suggestions__sub">
-              not in the library yet · repoint it later
-            </span>
-          </span>
-        </button>
+      </template>
+      <div v-else class="wp-rt-suggestions__head">
+        <span class="wp-rt-suggestions__query">{{ acTrigger }}{{ acQuery }}</span>
+        <!-- The match count belongs in the header, not implied by the list
+             length: the list is capped and scrolls, so "how many did I
+             actually match" is otherwise unanswerable without scrolling.
+             Counts MATCHES, not rendered rows — and says so when the cap
+             hid some, since a silent truncation is how you conclude the
+             wildcard you are looking for does not exist. -->
+        <span class="wp-rt-suggestions__count">
+          {{ acMatches.length }} match{{ acMatches.length === 1 ? "" : "es" }}
+          <template v-if="acMatches.length > acRows.length">
+            · showing {{ acRows.length }}
+          </template>
+        </span>
+        <span class="wp-spacer" />
+        <!-- Says what the keys actually do. Choosing an `@` row goes on to
+             the filter panel rather than inserting a bare ref, so Enter is
+             labelled for where it leads. -->
+        <span class="wp-rt-suggestions__hint">↑↓ · {{ acTrigger === "@" ? "Enter filter" : "Enter" }} · Esc</span>
       </div>
-    </Teleport>
-
-    <!-- Backdrop click cancels the picker without inserting anything. To
-         insert an unfiltered @{uuid}, use the Skip button inside the
-         picker. The picker itself is anchored beneath (or above) the
-         clicked chip / host element via `pickerAnchor` — a popover,
-         not a modal — so it feels like a contextual control on the
-         element the user just touched. -->
-    <Teleport v-if="pickerOpen" to="body">
-      <div class="wp-subcat-picker__backdrop" :class="teleportThemeClass()" @click="cancelPicker"></div>
       <div
-        class="wp-subcat-picker__anchor"
-        :class="[teleportThemeClass(), { 'wp-subcat-picker__anchor--flipped': pickerAnchor.flipped }]"
-        :style="{
-          top: pickerAnchor.top + 'px',
-          left: pickerAnchor.left + 'px',
-        }"
-        @click.stop
+        v-for="(row, i) in (acTrigger === 'tag' ? [] : acRows)"
+        :key="row.token"
+        class="wp-rt-suggestions__item"
+        :class="{ 'wp-rt-suggestions__item--axis': row.isAxis }"
+        :data-active="i === acActive ? '' : null"
+        role="option"
+        :aria-selected="i === acActive"
+        @mousedown="(e) => onSuggestionMouseDown(e, row.token)"
+        @mouseenter="acActive = i"
       >
-        <SubcategoryFilterPicker
-          :wildcard-name="pickerWildcardName"
-          :pool-origin="pickerPoolOrigin"
-          :sub-categories="pickerSubCats"
-          :tag-groups="pickerTagGroups"
-          :option-tag-sets="pickerOptionTagSets"
-          :initial-expr="pickerInitialExpr"
-          :initial-exclude-null="pickerInitialExcludeNull"
-          :mode="pickerMode"
-          :has-null-option="pickerHasNull"
-          @apply="onPickerApply"
-          @back="onPickerBack"
-          @skip="onPickerSkip"
-          @delete="onPickerDelete"
+        <!-- The glyph sits in a tinted box in its OWN kind's colour. A `$var`
+             can be written by a fixed_values or a combine as easily as by a
+             wildcard, and painting every row accent-violet throws away the
+             one cue that says which. -->
+        <span
+          class="wp-rt-suggestions__icon-box"
+          :style="acTrigger === '$' ? varTint(varBaseName(row.label)) : kindTint(row.kind)"
+          aria-hidden="true"
+        ><i :class="row.icon" /></span>
+        <span class="wp-rt-suggestions__body">
+          <span
+            class="wp-rt-suggestions__label"
+            :class="acTrigger === '$' ? varColorClass(varBaseName(row.label)) : null"
+          >
+            <span class="wp-rt-suggestions__trigger">{{ acTrigger }}</span
+            ><template v-if="row.isAxis"
+              >{{ row.label.slice(0, row.label.indexOf('.')) }}<span
+                class="wp-rt-suggestions__axis"
+              >.{{ row.label.slice(row.label.indexOf('.') + 1) }}</span></template
+            ><template v-else>{{ row.label }}</template>
+          </span>
+          <!-- Second line: the facts that separate same-named entries. For
+               `@` these are structural (options/axes/tags); for `$` it is
+               the writer. Either way the row answers "which one is this?"
+               without the user having to insert it and find out. -->
+          <span v-if="row.uuid || row.facts.length || row.producer" class="wp-rt-suggestions__sub">
+            <span v-if="row.uuid" class="wp-rt-suggestions__uuid">{{ row.uuid }}</span>
+            <template v-if="row.producer">
+              <span v-if="row.producer.verb">{{ row.producer.verb }}</span>
+              <!-- The module name is the identifying half of the sentence,
+                   so it is the part that gets picked out. -->
+              <span v-if="row.producer.moduleName" class="wp-rt-suggestions__by">
+                {{ row.producer.moduleName }}
+              </span>
+              <span v-if="row.producer.moduleName && row.producer.tail" class="wp-rt-suggestions__sep">·</span>
+              <span v-if="row.producer.tail" class="wp-rt-suggestions__node">{{ row.producer.tail }}</span>
+            </template>
+            <span
+              v-for="fact in row.facts"
+              :key="fact"
+              class="wp-rt-suggestions__fact"
+            >{{ fact }}</span>
+            <!-- Same mark the chip and the filter header carry, so "this is
+                 the node's copy" reads identically wherever it appears. -->
+            <span
+              v-if="row.fromNode"
+              class="wp-rt-suggestions__origin"
+              data-test="suggestion-origin-node"
+            ><i class="pi pi-database" aria-hidden="true" /> this node</span>
+            <span v-if="row.badge" class="wp-rt-suggestions__badge">{{ row.badge }}</span>
+            <span v-if="row.internal" class="wp-rt-suggestions__internal">internal</span>
+          </span>
+        </span>
+        <!-- Funnel marks the rows that lead to a filter — i.e. the ones
+             whose wildcard declares tags to filter by. Shown on the active
+             row only: on every row it becomes a column of noise, and the
+             next step applies to the row you are on. -->
+        <i
+          v-if="row.filterable && i === acActive"
+          class="pi pi-filter wp-rt-suggestions__funnel"
+          aria-hidden="true"
         />
       </div>
-    </Teleport>
+      <!-- Reference a module that does not exist yet. Inserts the red broken
+           chip under this name; clicking it later repoints it. -->
+      <div
+        v-if="acPlaceholderName"
+        class="wp-rt-suggestions__item wp-rt-suggestions__item--placeholder"
+        :data-active="acActive === acItems.length ? '' : null"
+        role="option"
+        :aria-selected="acActive === acItems.length"
+        data-test="suggestion-placeholder"
+        @mousedown.prevent="insertPlaceholderRef(acPlaceholderName)"
+        @mouseenter="acActive = acItems.length"
+      >
+        <span class="wp-rt-suggestions__icon-box wp-rt-suggestions__icon-box--placeholder" aria-hidden="true">
+          <i class="pi pi-plus" />
+        </span>
+        <span class="wp-rt-suggestions__body">
+          <span class="wp-rt-suggestions__label">
+            Placeholder <span class="wp-rt-suggestions__placeholder-name">@{{ acPlaceholderName }}</span>
+          </span>
+          <span class="wp-rt-suggestions__sub">
+            not in the library yet · repoint it later
+          </span>
+        </span>
+      </div>
+    </Popover>
+
+    <!-- A press outside cancels the picker without inserting anything. To
+         insert an unfiltered @{uuid}, use the Skip button inside the
+         picker. The picker hangs beneath (or above) the clicked chip /
+         host element via `pickerAnchor` — a popover, not a modal — so it
+         feels like a contextual control on the element the user just
+         touched. Escape is `onPickerEscape`'s (back or cancel). -->
+    <!-- The kit Popover's own prop, turning its focus move OFF: focus stays
+         where it was, as before (the picker's keys are window-level). -->
+    <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+    <Popover :autofocus="false"
+      :open="pickerOpen"
+      :anchor="pickerAnchor"
+      label="Filter reference"
+      class="wp-subcat-picker__anchor"
+      :class="teleportThemeClass()"
+      @update:open="(v: boolean) => { if (!v) cancelPicker(); }"
+    >
+      <SubcategoryFilterPicker
+        :wildcard-name="pickerWildcardName"
+        :pool-origin="pickerPoolOrigin"
+        :sub-categories="pickerSubCats"
+        :tag-groups="pickerTagGroups"
+        :option-tag-sets="pickerOptionTagSets"
+        :initial-expr="pickerInitialExpr"
+        :initial-exclude-null="pickerInitialExcludeNull"
+        :mode="pickerMode"
+        :has-null-option="pickerHasNull"
+        @apply="onPickerApply"
+        @back="onPickerBack"
+        @skip="onPickerSkip"
+        @delete="onPickerDelete"
+      />
+    </Popover>
 
     <RemapRefPopup
       v-if="remapOpen"
@@ -3799,7 +3009,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt {
   position: relative;
   width: 100%;
-  background: var(--wp-bg-2, #15151f);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
   border-radius: var(--wp-radius);
   transition: border-color .12s, background .12s, box-shadow .12s;
@@ -3835,9 +3045,9 @@ function onHostKeydown(ev: KeyboardEvent): void {
   background: linear-gradient(
     to bottom,
     transparent,
-    color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 26%, transparent)
+    color-mix(in oklab, var(--wp-accent-500) 26%, transparent)
   );
-  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 60%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--wp-accent-500) 60%, transparent);
 }
 
 /* Sits in the bottom-right corner the overflow fade leaves clear. Drawn like
@@ -3853,7 +3063,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   background: repeating-linear-gradient(
     135deg,
     transparent 0 2px,
-    var(--wp-text-dim, #8a8a9a) 2px 3px
+    var(--wp-text-dim) 2px 3px
   );
   /* Clipped to a bottom-right triangle so the hatching runs parallel to the
      hypotenuse — the shape the browser's own resizer draws, which is what
@@ -3864,12 +3074,12 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt__grip:hover { opacity: 0.9; }
 
 .wp-rt--focused {
-  border-color: var(--wp-accent-500, #8b5cf6);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 25%, transparent);
-  background: var(--wp-bg-1, #11111b);
+  border-color: var(--wp-accent-500);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 25%, transparent);
+  background: var(--wp-bg-1);
 }
 .wp-rt--broken:not(.wp-rt--focused) {
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 55%, transparent);
 }
 .wp-rt--disabled {
   opacity: 0.6;
@@ -3886,7 +3096,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   border: none;
   outline: none;
   background: transparent;
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
   font-family: inherit;
   font-size: inherit;
   letter-spacing: 0;
@@ -4000,7 +3210,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   position: absolute;
   inset: 0;
   padding: inherit;
-  color: var(--wp-text-dim, #6e6e7c);
+  color: var(--wp-text-dim);
   pointer-events: none;
   white-space: pre-wrap;
   overflow: hidden;
@@ -4024,43 +3234,27 @@ function onHostKeydown(ev: KeyboardEvent): void {
 
 <style>
 /* Autocomplete popover -------------------------------------------------- *
- * NOT scoped — the popover is teleported to <body>, so a scoped selector
- * (which adds a `[data-v-…]` attribute) wouldn't match. The class names
- * are component-specific (`wp-rt-suggestions*`) so global is fine.
+ * NOT scoped — the list is a Popover panel under <body>, which a scoped
+ * selector (`[data-v-…]`) never reaches. The class names are
+ * component-specific (`wp-rt-suggestions*`) so global is fine. The Popover
+ * places, flips, caps and animates the panel; this is only its look.
  * ------------------------------------------------------------------------ */
-.wp-rt-suggestions {
-  position: fixed;
+.wp-popover.wp-rt-suggestions {
   /* POPOVER tier — above every modal overlay (9999 ModalShell … 10010
-     InjectorBindingModal). At 9999 this only cleared modals that were also
-     9999, winning on DOM order; inside a 10000+ modal it rendered behind. */
+     InjectorBindingModal). */
   z-index: 10020;
-  min-width: 200px;
+  min-width: 240px;
   max-width: 360px;
-  max-height: 240px;
   overflow-y: auto;
-  background: var(--wp-bg-2, #15151f);
-  border: 1px solid var(--wp-border-strong, rgba(255, 255, 255, 0.14));
-  border-radius: var(--wp-radius);
-  padding: 0 var(--wp-space-2) var(--wp-space-2);
-  box-shadow: var(--wp-shadow-lg, var(--wp-shadow, 0 10px 30px rgba(0, 0, 0, 0.45)));
+  background: var(--wp-bg-2);
+  /* The outline is the Popover's inset ring (1px), so the padding has 1px more. */
+  padding: 1px calc(var(--wp-space-2) + 1px) calc(var(--wp-space-2) + 1px);
+  box-shadow: inset 0 0 0 1px var(--wp-border-strong), var(--wp-shadow-lg, var(--wp-shadow-md));
   display: flex;
   flex-direction: column;
   gap: 1px;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);
-  animation: wp-rt-suggestions-in 0.12s ease-out;
-}
-.wp-rt-suggestions--up {
-  transform: translateY(-100%);
-  animation-name: wp-rt-suggestions-in-up;
-}
-@keyframes wp-rt-suggestions-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes wp-rt-suggestions-in-up {
-  from { opacity: 0; transform: translateY(calc(-100% + 4px)); }
-  to   { opacity: 1; transform: translateY(-100%); }
 }
 .wp-rt-suggestions__head {
   display: flex;
@@ -4068,15 +3262,15 @@ function onHostKeydown(ev: KeyboardEvent): void {
   gap: var(--wp-space-4);
   padding: var(--wp-space-3) var(--wp-space-5);
   font-size: var(--wp-text-xs);
-  color: var(--wp-text-dim, #6e6e7c);
-  background: var(--wp-bg-3, #1e1e2a);
+  color: var(--wp-text-dim);
+  background: var(--wp-bg-3);
   border-bottom: 1px solid var(--wp-border, rgba(255, 255, 255, 0.08));
   margin: 0 -4px var(--wp-space-2); /* audit-exempt: -4px negative margin bleeds header to popover edges */
   border-radius: var(--wp-radius) var(--wp-radius) 0 0;
 }
 .wp-rt-suggestions__query {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text);
 }
 .wp-rt-suggestions__hint {
   margin-left: auto;
@@ -4100,7 +3294,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-tag__legend {
   position: sticky;
   z-index: 1;
-  background: var(--wp-bg-1, #11111b);
+  background: var(--wp-bg-1);
   margin: 0 calc(-1 * var(--wp-space-2));
   padding-left: var(--wp-space-2);
   padding-right: var(--wp-space-2);
@@ -4143,7 +3337,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   letter-spacing: 0.08em;
   color: var(--wp-text-dim);
   border: 1px solid var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   padding: 1px 5px;
 }
 
@@ -4160,10 +3354,10 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-size: 12px;
   /* Neutral is the `general` category, which is most rows — a coloured icon
      on every line would make the coloured ones stop meaning anything. */
-  color: #6a6a7a;
+  color: var(--wp-text-dim);
 }
 
-.wp-rt-tag__cat--general   { color: #6a6a7a; }
+.wp-rt-tag__cat--general   { color: var(--wp-text-dim); }
 /* The two model sources. Their own hues rather than a category colour — a LoRA
    has no danbooru category, and reusing one would imply a relationship that
    does not exist. */
@@ -4180,7 +3374,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
 .wp-rt-suggestions__stale {
   font-size: 10px;
   letter-spacing: 0.04em;
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text);
   opacity: 0.85;
 }
 .wp-rt-suggestions[data-stale] .wp-rt-suggestions__item {
@@ -4196,7 +3390,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--wp-text3, #666);
+  color: var(--wp-text-dim);
   scroll-margin-top: 38px;
 }
 .wp-rt-suggestions__section i { font-size: 10px; opacity: 0.8; }
@@ -4271,11 +3465,13 @@ function onHostKeydown(ev: KeyboardEvent): void {
 }
 
 .wp-rt-suggestions__axis {
-  color: var(--wp-axis, #fbbf24);
+  color: var(--wp-axis);
   font-weight: var(--wp-weight-semibold);
 }
 
+/* Listbox options (role="option"): focus stays in the text, arrows move. */
 .wp-rt-suggestions__item {
+  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   gap: var(--wp-space-4);
@@ -4287,11 +3483,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
   padding: 6px var(--wp-space-5); /* audit-exempt: 6px vertical keeps two-line rows compact */
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: var(--wp-text-sm);
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
   cursor: pointer;
 }
 .wp-rt-suggestions__item[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
+  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
 }
 /* A rounded, tinted tile rather than a bare glyph: it gives the kind colour
    enough area to actually register, and keeps the label column aligned whether
@@ -4313,11 +3509,11 @@ function onHostKeydown(ev: KeyboardEvent): void {
   border-radius: 0 0 var(--wp-radius-sm) var(--wp-radius-sm);
 }
 .wp-rt-suggestions__icon-box--placeholder {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger) 15%, transparent);
+  color: var(--wp-danger);
 }
 .wp-rt-suggestions__placeholder-name {
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
   font-weight: var(--wp-weight-semibold);
 }
 .wp-rt-suggestions__body {
@@ -4334,7 +3530,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   white-space: nowrap;
 }
 .wp-rt-suggestions__trigger {
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text);
 }
 /* On a `$` row the label carries a `var-N` colour, and the sigil is part of
    the token — `$quality` is one word in the strip below, so splitting its
@@ -4353,7 +3549,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   align-items: center;
   gap: var(--wp-space-3);
   font-size: 11px; /* audit-exempt: micro disambiguator line — below scale floor */
-  color: var(--wp-text-dim, #8a8a93);
+  color: var(--wp-text-dim);
 }
 .wp-rt-suggestions__uuid {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -4364,14 +3560,14 @@ function onHostKeydown(ev: KeyboardEvent): void {
    it wants. */
 .wp-rt-suggestions__fact {
   padding: 1px 4px; /* audit-exempt: micro tile padding */
-  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: tile smaller than the radius scale */
   background: var(--wp-bg-4);
-  color: var(--wp-text-muted, #8a8a93);
+  color: var(--wp-text-muted);
   font-family: var(--wp-font, system-ui, sans-serif);
 }
 /* The writer's name — the identifying half of the producer line. */
 .wp-rt-suggestions__by {
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text);
   font-family: var(--wp-font-mono, ui-monospace, monospace);
 }
 .wp-rt-suggestions__node {
@@ -4386,7 +3582,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   padding: 0 4px; /* audit-exempt: badge inline padding */
   border-radius: var(--wp-radius-sm);
   padding: 1px 4px; /* audit-exempt: micro tile padding, matches __fact */
-  border-radius: 3px; /* audit-exempt: tile smaller than the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: tile smaller than the radius scale */
   background: color-mix(in oklab, var(--wp-warn) 20%, transparent);
   color: var(--wp-warn);
 }
@@ -4395,7 +3591,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
   align-items: center;
   gap: 3px; /* audit-exempt: glyph-to-word gap */
   padding: 0 4px; /* audit-exempt: micro tile padding, matches __fact */
-  border-radius: 3px; /* audit-exempt: tile below the radius scale */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: tile below the radius scale */
   background: color-mix(in oklab, var(--wp-info) 15%, transparent);
   color: var(--wp-info);
   font-family: var(--wp-font, system-ui, sans-serif);
@@ -4410,36 +3606,25 @@ function onHostKeydown(ev: KeyboardEvent): void {
   flex-shrink: 0;
   margin-top: 2px; /* audit-exempt: matches the leading icon's optical offset */
   font-size: 11px;
-  color: var(--wp-accent-text, #c4b5fd);
+  color: var(--wp-accent-text);
 }
 .wp-rt-suggestions__item[data-active] .wp-rt-suggestions__sub {
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
 }
 
-/* Step-2 SubcategoryFilterPicker — anchored popover next to the
-   clicked chip (or below the host on insert flow). Teleported to
-   <body> so it escapes ancestor overflow/transform contexts. Backdrop
-   is a transparent click-target full-viewport layer that cancels the
-   picker (Skip semantics — no insert). Escape key dismisses the
-   same way. */
-/* Z-index sits in the autocomplete-popover tier (9999), NOT the old
-   1000/1001. On the canvas the derivation/wildcard instance modal renders
-   on its own high-z overlay; at 1000/1001 the body-teleported picker fell
-   BEHIND that modal. The picker tracks the autocomplete popover's tier so it
-   clears every modal: those run up to 10010 (InjectorBindingModal), so the
-   old 10000/10001 was no longer above all of them. Backdrop sits just under
-   the anchor, both above the modal tier. */
-.wp-subcat-picker__backdrop {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  z-index: 10020;
-}
-.wp-subcat-picker__anchor {
-  position: fixed;
+/* Step-2 SubcategoryFilterPicker — a Popover at the clicked chip (or below
+   the host on the insert flow). The picker draws its own card, so the panel
+   is bare. Same tier as the autocomplete list, above every modal (they run
+   up to 10010, InjectorBindingModal), so the picker never falls behind the
+   canvas editor modal it was opened from. */
+.wp-popover.wp-subcat-picker__anchor {
   z-index: 10021;
-  /* Subtle drop-shadow so the popover reads as elevated even without
-     the dimmed backdrop of the previous modal version. */
+  padding: 0;
+  max-width: calc(100vw - 16px);
+  background: transparent;
+  box-shadow: none;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
+  /* Subtle drop-shadow so the popover reads as elevated. */
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
 }
 </style>

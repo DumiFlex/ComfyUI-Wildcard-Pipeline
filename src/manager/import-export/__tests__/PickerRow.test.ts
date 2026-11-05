@@ -161,8 +161,8 @@ describe("PickerRow", () => {
     expect(chip.exists()).toBe(true);
     expect(chip.text()).toBe("characters");
     // Shared primitive — not a row-local class.
-    expect(chip.attributes("class") ?? "").toContain("wp-cat-chip");
-    // Inline style from catChipStyle helper carries the user color in
+    expect(chip.attributes("class") ?? "").toContain("wp-chip--color");
+    // Chip's colour tint carries the user color in
     // some form (foreground, background, or borderColor). jsdom
     // serializes hex to rgb(), so check for either spelling.
     const style = chip.attributes("style") ?? "";
@@ -234,9 +234,9 @@ describe("PickerRow", () => {
       },
     });
     const chip = wrap.get('[data-test="dep-warn-chip"]');
-    expect(chip.attributes("class") ?? "").toContain("wp-dep-chip");
+    expect(chip.attributes("class") ?? "").toContain("wp-chip--warn");
     // Not the missing variant.
-    expect(chip.attributes("class") ?? "").not.toContain("wp-dep-chip--missing");
+    expect(chip.attributes("class") ?? "").not.toContain("wp-chip--danger");
     expect(chip.text()).toContain("Requires 2");
     // List hidden until clicked.
     expect(wrap.find('[data-test="dep-warn-list"]').exists()).toBe(false);
@@ -268,7 +268,7 @@ describe("PickerRow", () => {
       },
     });
     const chip = wrap.get('[data-test="dep-missing-chip"]');
-    expect(chip.attributes("class") ?? "").toContain("wp-dep-chip--missing");
+    expect(chip.attributes("class") ?? "").toContain("wp-chip--danger");
     expect(chip.text()).toContain("Missing 1");
     expect(wrap.find('[data-test="dep-missing-list"]').exists()).toBe(false);
     await chip.trigger("click");

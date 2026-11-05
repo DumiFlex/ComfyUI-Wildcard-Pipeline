@@ -16,20 +16,32 @@
  *   - `actions`               — trailing per-row action buttons
  *   - `expansion`             — body of the expanded-row drawer
  */
-import { computed, nextTick, ref, watch, useSlots } from "vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import { inputEl } from "../utils/kit-field-el";
+import Input from "@/kit/Input.vue";
+import Banner from "@/kit/Banner.vue";
+import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
-import Button from "./ui/Button.vue";
-import Checkbox from "./ui/Checkbox.vue";
-import Chip from "./ui/Chip.vue";
-import Modal from "./ui/Modal.vue";
-import Select from "./ui/Select.vue";
-import type { SelectOption } from "./ui/select-types";
-import RelativeDate from "./RelativeDate.vue";
-import EmptyState from "./ui/EmptyState.vue";
+import Button from "@/kit/Button.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Chip from "@/kit/Chip.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
+import Modal from "@/kit/Modal.vue";
+import Select from "@/kit/Select.vue";
+import type { SelectOption } from "@/kit/select-types";
+import RelativeDate from "@/kit/RelativeDate.vue";
+import EmptyState from "@/kit/EmptyState.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
+import { registerPageNote } from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import type { UpdateEntry } from "../stores/communityUpdateStore";
 import CommunityUpdateDialog from "./CommunityUpdateDialog.vue";
 import { matchesTags, type TagMatchMode } from "../utils/library-tags";
+import { useAiConfig } from "../composables/useAiConfig";
+
+const AiOrganizePanel = defineAsyncComponent(() => import("./ai/AiOrganizePanel.vue"));
 
 const communityUpdates = useCommunityUpdateStore();
 const updateDialogEntry = ref<UpdateEntry | null>(null);
@@ -101,11 +113,10 @@ interface ExtraFilter<R> {
   key: string;
   label: string;
   check: (item: R) => boolean;
-  /** Optional extra class on the filter chip — used by Wildcards to
-   *  color the Syntax chips so they match the colored pills in the
-   *  body's Syntax column. Same `wp-chip--syntax-*` token set keeps
-   *  the colors consistent across both surfaces. */
-  chipClass?: string;
+  /** Optional colour of the filter chip — used by Wildcards to colour
+   *  the Syntax chips like the pills in the body's Syntax column, so
+   *  users learn one colour set for both surfaces. */
+  color?: string;
 }
 
 interface Props {
@@ -142,6 +153,8 @@ interface Props {
   hideBulkSetCategory?: boolean;
   /** Hide the bulk Duplicate action — for kinds without library duplicate support (bundles). */
   hideBulkDuplicate?: boolean;
+  /** Hide "Organize with AI" — for rows that aren't modules or bundles (templates). */
+  hideAiOrganize?: boolean;
   /** When set, surfaces a dismissible error banner above the table with a Retry
    *  button. The banner replaces the empty/skeleton row, since "no items + load
    *  error" is fundamentally an error state, not an empty library. */
@@ -159,6 +172,7 @@ const props = withDefaults(defineProps<Props>(), {
   categoryOptions: () => [],
   hideBulkSetCategory: false,
   hideBulkDuplicate: false,
+  hideAiOrganize: false,
 });
 
 const emit = defineEmits<{
@@ -271,6 +285,7 @@ const activeFilterCount = computed(() => {
   return n;
 });
 
+const TAG_MATCH_OPTIONS: SegmentedOption<TagMatchMode>[] = [{ value: "any", label: "Any tag" }, { value: "all", label: "All tags" }];
 const tagMatchMode = computed<TagMatchMode>(() => (props.filter.tagMode === "all" ? "all" : "any"));
 
 function setTagMatchMode(mode: TagMatchMode) {
@@ -414,6 +429,59 @@ function isExpanded(id: string): boolean {
   return expanded.value.has(id);
 }
 
+// Tell the AI chat what this list shows, so "these" means the selection
+// (or the filtered rows) on screen.
+registerPageNote(() => {
+  const bits: string[] = [`${props.title} list, ${filteredItems.value.length} of ${props.items.length} shown`];
+  const f = props.filter;
+  const filters: string[] = [];
+  if (f.q) filters.push(`search "${f.q}"`);
+  if (f.tags?.length) filters.push(`tags ${f.tags.map((t) => `#${t}`).join(f.tagMode === "all" ? " and " : " or ")}`);
+  if (f.category) filters.push(`category ${categoryLabelById.value.get(f.category) ?? f.category}`);
+  if (f.favorites) filters.push("favorites only");
+  if (f.nsfw && f.nsfw !== "all") filters.push(f.nsfw === "nsfw" ? "18+ only" : "SFW only");
+  if (filters.length) bits.push(`filtered by ${filters.join(", ")}`);
+  const rows = selected.value.size
+    ? props.items.filter((r) => selected.value.has(r.id))
+    : filteredItems.value;
+  const label = selected.value.size ? `${selected.value.size} selected` : "rows";
+  const listed = rows.slice(0, 40).map((r) => `${r.name ?? "(unnamed)"} (${r.id})`);
+  bits.push(`${label}: ${listed.join(", ")}${rows.length > 40 ? ", …" : ""}`);
+  return bits.join(". ");
+});
+
+// The chat's `select_rows` and `organize` act on the rows this list holds.
+function listed(args: Record<string, unknown>): string[] {
+  const ids = Array.isArray(args.ids) ? args.ids.filter((x): x is string => typeof x === "string") : [];
+  const have = new Set(props.items.map((r) => r.id));
+  return ids.filter((id) => have.has(id));
+}
+function holdsAll(args: Record<string, unknown>): boolean {
+  const ids = Array.isArray(args.ids) ? args.ids : [];
+  return ids.length > 0 && listed(args).length === ids.length;
+}
+function selectFromChat(args: Record<string, unknown>): string {
+  const ids = listed(args);
+  selected.value = new Set(ids);
+  const hidden = ids.filter((id) => !filteredItems.value.some((r) => r.id === id)).length;
+  const names = props.items.filter((r) => selected.value.has(r.id)).slice(0, 20)
+    .map((r) => r.name ?? r.id).join(", ");
+  return `selected ${ids.length} row${ids.length === 1 ? "" : "s"}: ${names}`
+    + (hidden ? ` (${hidden} hidden by the list's filters)` : "");
+}
+registerAiAction("select_rows", async (args) => selectFromChat(args), holdsAll);
+
+const organizer = ref<{ run: (note: string) => Promise<string> } | null>(null);
+registerAiAction("organize", async (args) => {
+  if (!canOrganize.value) return "couldn't: Organize with AI is off on this list";
+  selectFromChat(args);
+  organizeOpen.value = true;
+  const end = Date.now() + 4000;
+  while (!organizer.value && Date.now() < end) await new Promise((r) => setTimeout(r, 60));
+  if (!organizer.value) return "couldn't: the Organize window didn't open";
+  return organizer.value.run(typeof args.note === "string" ? args.note : "");
+}, holdsAll);
+
 const focusedRowId = ref<string | null>(null);
 // The <tbody> is the keyboard entry point. We move REAL DOM focus onto
 // rows so :focus-visible tracks our roving-tabindex state (see
@@ -543,6 +611,7 @@ function emitFetch() {
 
 const tagAddOpen = ref(false);
 const tagAddValue = ref("");
+/** The `<input>` inside the kit Input, focused when the panel opens. */
 const tagAddInputRef = ref<HTMLInputElement | null>(null);
 
 const tagRemoveOpen = ref(false);
@@ -558,6 +627,14 @@ const categoryOpen = ref(false);
 const categoryValue = ref<string | null>(CATEGORY_NOT_PICKED);
 
 const deleteOpen = ref(false);
+const organizeOpen = ref(false);
+const aiConfig = useAiConfig();
+const canOrganize = computed(() => !props.hideAiOrganize && !!aiConfig.config.value?.enabled);
+
+function onOrganized() {
+  organizeOpen.value = false;
+  emit("fetch");
+}
 
 watch(tagAddOpen, async (open) => {
   if (open) {
@@ -679,16 +756,15 @@ defineExpose({
 
     <!-- Toolbar -->
     <div class="wp-page-toolbar">
-      <div class="wp-page-toolbar__search wp-input-group">
-        <span class="wp-input-group__addon"><i class="pi pi-search" aria-hidden="true" /></span>
-        <input
-          class="wp-input"
-          placeholder="Search by name, id, tag…"
-          :value="filter.q ?? ''"
-          aria-label="Search"
-          @input="(e) => { filter.q = (e.target as HTMLInputElement).value; emitFetch(); }"
-        />
-      </div>
+      <SearchInput
+        class="wp-page-toolbar__search"
+        :model-value="filter.q ?? ''"
+        placeholder="Search by name, id, tag…"
+        aria-label="Search"
+        data-ai-anchor="search"
+        data-ai-label="Search the list"
+        @update:model-value="(v) => { filter.q = v; emitFetch(); }"
+      />
       <Button
         :variant="filtersOpen ? 'outline' : 'secondary'"
         :icon="filtersOpen ? 'pi pi-filter-fill' : 'pi pi-filter'"
@@ -727,17 +803,14 @@ defineExpose({
           <div v-if="extraFilters?.length" class="wp-filter-panel__extra">
             <span class="wp-filter-panel__extra-label">Syntax</span>
             <div class="wp-filter-panel__extra-chips">
-              <button
+              <Chip
                 v-for="ef in extraFilters" :key="ef.key"
-                type="button"
-                class="wp-chip wp-chip--toggle"
-                :class="ef.chipClass"
-                :data-active="extraActive[ef.key] ? '' : null"
+                :pressed="!!extraActive[ef.key]"
+                :color="ef.color"
+                :count="matchCount(ef)"
+                size="sm"
                 @click="setExtraActiveKey(ef.key, !extraActive[ef.key])"
-              >
-                {{ ef.label }}
-                <span class="wp-dim wp-chip__count">{{ matchCount(ef) }}</span>
-              </button>
+              >{{ ef.label }}</Chip>
             </div>
           </div>
           <!-- Content-rating filter (shared across every list view).
@@ -745,13 +818,12 @@ defineExpose({
           <div class="wp-filter-panel__extra">
             <span class="wp-filter-panel__extra-label">Content</span>
             <div class="wp-filter-panel__extra-chips">
-              <button
+              <Chip
                 v-for="opt in NSFW_FILTER_OPTIONS" :key="opt.value"
-                type="button"
-                class="wp-chip wp-chip--toggle"
-                :data-active="(filter.nsfw ?? 'all') === opt.value ? '' : null"
+                :pressed="(filter.nsfw ?? 'all') === opt.value"
+                size="sm"
                 @click="filter.nsfw = opt.value"
-              >{{ opt.label }}</button>
+              >{{ opt.label }}</Chip>
             </div>
           </div>
           <div v-if="hasActiveFilters" class="wp-filter-panel__footer">
@@ -762,7 +834,7 @@ defineExpose({
     </Transition>
 
     <!-- Bulk-select bar -->
-    <div v-if="selected.size" class="wp-bulk-bar" data-test="bulk-bar">
+    <div v-if="selected.size" class="wp-bulk-bar" data-test="bulk-bar" data-ai-anchor="bulk-bar" data-ai-label="Bulk actions for the selected rows">
       <span class="wp-bulk-bar__count">
         <strong>{{ selected.size }}</strong> selected
         <span v-if="offPageSelectedCount > 0" class="wp-dim wp-bulk-bar__hint">
@@ -788,34 +860,49 @@ defineExpose({
         @click="tagRemoveOpen = true">Remove tag</Button>
       <Button v-if="!hideBulkSetCategory" variant="ghost" size="sm" icon="pi-folder" data-test="bulk-set-category-open"
         @click="categoryOpen = true">Set category</Button>
+      <Button v-if="canOrganize" variant="ghost" size="sm" icon="pi-microchip-ai" data-test="bulk-ai-organize" data-ai-anchor="organize" data-ai-label="Organize with AI"
+        @click="organizeOpen = true">Organize with AI</Button>
       <Button variant="ghost" size="sm" data-test="bulk-clear"
         @click="selected = new Set()">Clear</Button>
       <Button variant="danger" size="sm" icon="pi-trash" data-test="bulk-delete-open"
         @click="deleteOpen = true">Delete</Button>
     </div>
 
+    <!-- Organize with AI -->
+    <Modal v-if="canOrganize" :open="organizeOpen" size="lg" @update:open="organizeOpen = $event">
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title"><i class="pi pi-microchip-ai" aria-hidden="true" /> Organize with AI</h3>
+      </template>
+      <AiOrganizePanel
+        v-if="organizeOpen"
+        ref="organizer"
+        :rows="selectedItems"
+        @applied="onOrganized"
+        @close="organizeOpen = false"
+      />
+    </Modal>
+
     <!-- Tag-add modal -->
     <Modal :open="tagAddOpen" @update:open="tagAddOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Add tag to {{ selected.size }} items</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Add tag to {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
-        <input
-          ref="tagAddInputRef"
+        <Input
+          :ref="(c) => (tagAddInputRef = inputEl(c))"
           v-model="tagAddValue"
-          class="wp-input"
           data-test="bulk-tag-input"
           placeholder="Type tag name (or pick existing)"
           @keydown.enter="submitTagAdd"
         />
         <div v-if="availableTags.length" class="wp-bulk-modal-suggestions">
-          <button
+          <Chip
             v-for="t in availableTags"
             :key="t"
-            type="button"
-            class="wp-chip wp-chip--toggle"
+            :pressed="tagAddValue === t"
+            size="sm"
             @click="tagAddValue = t"
-          >{{ t }}</button>
+          >{{ t }}</Chip>
         </div>
       </div>
       <template #footer>
@@ -831,19 +918,18 @@ defineExpose({
 
     <!-- Tag-remove modal -->
     <Modal :open="tagRemoveOpen" @update:open="tagRemoveOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Remove tag from {{ selected.size }} items</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Remove tag from {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
         <div class="wp-bulk-modal-suggestions">
-          <button
+          <Chip
             v-for="t in tagsOnSelection"
             :key="t"
-            type="button"
-            class="wp-chip wp-chip--toggle"
-            :data-active="tagRemoveValue === t ? '' : null"
+            :pressed="tagRemoveValue === t"
+            size="sm"
             @click="tagRemoveValue = t"
-          >{{ t }}</button>
+          >{{ t }}</Chip>
           <span v-if="!tagsOnSelection.length" class="wp-dim">No tags on selected items.</span>
         </div>
       </div>
@@ -860,8 +946,8 @@ defineExpose({
 
     <!-- Set-category modal -->
     <Modal :open="categoryOpen" @update:open="categoryOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Set category for {{ selected.size }} items</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Set category for {{ selected.size }} items</h3>
       </template>
       <div class="wp-bulk-modal-body">
         <Select v-model="categoryValue" :options="categoryOptions" aria-label="Category" />
@@ -879,8 +965,8 @@ defineExpose({
 
     <!-- Delete confirm -->
     <Modal :open="deleteOpen" @update:open="deleteOpen = $event">
-      <template #header>
-        <h3 class="wp-modal__title">Delete {{ selected.size }} items?</h3>
+      <template #header="{ titleId }">
+        <h3 :id="titleId" class="wp-modal__title wp-mlv-modal-title">Delete {{ selected.size }} items?</h3>
       </template>
       <p>This cannot be undone.</p>
       <template #footer>
@@ -918,7 +1004,7 @@ defineExpose({
       </Chip>
       <Chip
         v-for="t in filter.tags ?? []" :key="t"
-        tone="success"
+        tone="accent"
         removable
         @remove="removeTag(t)"
       >
@@ -929,19 +1015,17 @@ defineExpose({
       <div
         v-if="(filter.tags?.length ?? 0) >= 2"
         class="wp-tag-match"
-        role="group"
-        aria-label="Match tags"
         data-test="tag-match"
       >
         <span class="wp-tag-match__label">Match</span>
-        <button
-          v-for="m in (['any', 'all'] as const)" :key="m"
-          type="button"
-          class="wp-tag-match__btn"
-          :aria-pressed="tagMatchMode === m"
-          :data-test="`tag-match-${m}`"
-          @click="setTagMatchMode(m)"
-        >{{ m === "any" ? "Any tag" : "All tags" }}</button>
+        <WpSegmented
+          size="sm"
+          :model-value="tagMatchMode"
+          :options="TAG_MATCH_OPTIONS"
+          aria-label="Match tags"
+          test-prefix="tag-match"
+          @update:model-value="setTagMatchMode"
+        />
       </div>
       <Chip
         v-for="ef in activeExtras" :key="ef.key"
@@ -959,25 +1043,23 @@ defineExpose({
          `fetch` event the toolbar's Refresh control uses. Wrapped in a
          Transition so retry-success doesn't snap the banner away. -->
     <Transition name="wp-banner">
-      <div
+      <Banner
         v-if="loadError"
-        class="wp-load-error"
-        role="alert"
+        tone="danger"
+        title="Couldn't load items"
         data-test="load-error-banner"
       >
-        <i class="pi pi-exclamation-triangle wp-load-error__icon" aria-hidden="true" />
-        <div class="wp-load-error__body">
-          <strong class="wp-load-error__title">Couldn't load items</strong>
-          <span class="wp-load-error__detail">{{ loadError }}</span>
-        </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon="pi-refresh"
-          data-test="load-error-retry"
-          @click="emitFetch"
-        >Retry</Button>
-      </div>
+        {{ loadError }}
+        <template #actions>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="pi-refresh"
+            data-test="load-error-retry"
+            @click="emitFetch"
+          >Retry</Button>
+        </template>
+      </Banner>
     </Transition>
 
     <!-- Table. Keyboard nav lives on the SCROLL WRAPPER, not the <tbody>:
@@ -991,7 +1073,7 @@ defineExpose({
       tabindex="0"
       @keydown="onTableKeydown"
     >
-      <table class="wp-table wp-table--sticky-head" :class="{ 'wp-table--empty': showEmptyRow }">
+      <table class="wp-table wp-table--sticky-head" data-ai-anchor="rows" data-ai-label="The list" :class="{ 'wp-table--empty': showEmptyRow }">
         <thead>
           <tr>
             <th scope="col" class="wp-table__select">
@@ -1031,30 +1113,21 @@ defineExpose({
                 class="wp-table__select-cell"
                 @click.stop="toggleSelect(row)"
               >
-                <button
-                  type="button"
-                  class="wp-check"
-                  role="checkbox"
-                  :aria-checked="isSelected(row)"
-                  :data-checked="isSelected(row) ? 'true' : 'false'"
+                <Checkbox
+                  :model-value="isSelected(row)"
                   aria-label="Select row"
                   tabindex="-1"
-                >
-                  <svg v-if="isSelected(row)" viewBox="0 0 12 12" fill="none" style="display:block">
-                    <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
-                </button>
+                />
               </td>
               <td>
-                <button
-                  type="button"
+                <WpIconButton
                   class="wp-row-expand-btn"
+                  variant="bare"
+                  :icon="isExpanded(row.id) ? 'pi-chevron-down' : 'pi-chevron-right'"
+                  label="Toggle row"
                   :aria-expanded="isExpanded(row.id)"
-                  aria-label="Toggle row"
                   @click="toggleExpand(row.id)"
-                >
-                  <i :class="isExpanded(row.id) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
-                </button>
+                />
               </td>
               <td v-if="showFavorite">
                 <slot name="favorite" :row="row" />
@@ -1089,15 +1162,15 @@ defineExpose({
                   <!-- Update-available indicator. Distinct pill so the
                        user can tell which rows are behind, not just
                        which rows came from community. -->
-                  <button
+                  <Chip
                     v-if="communityUpdates.entryFor(row.id)"
-                    type="button"
-                    class="wp-row-community-pill wp-row-community-pill--update wp-row-community-pill--button"
+                    as="button"
+                    tone="warn"
+                    icon="pi-arrow-up"
+                    class="wp-row-update-pill"
                     :title="updatePillTitle(row.id)"
                     @click.stop="openUpdateDialog(row.id)"
-                  >
-                    <i class="pi pi-arrow-up" />v{{ updatePillLatest(row.id) }}
-                  </button>
+                  >v{{ updatePillLatest(row.id) }}</Chip>
                   <!-- NSFW pill (engine migration 015). Stamped by the
                        IdentityCard NSFW toggle or auto-stamped at
                        community install time from `opts.origin.content_rating`. -->
@@ -1111,14 +1184,13 @@ defineExpose({
               <slot name="columns" :row="row" />
               <td v-if="showTags" @click.stop>
                 <div v-if="(row.tags ?? []).length" class="wp-row-tags">
-                  <button
+                  <Chip
                     v-for="(t, i) in (row.tags ?? []).slice(0, 3)" :key="i"
-                    type="button"
                     class="wp-row-tag-btn"
-                    :data-active="isTagActive(t) || undefined"
+                    :pressed="isTagActive(t)"
                     :title="isTagActive(t) ? `Remove tag filter '${t}'` : `Filter by tag '${t}'`"
                     @click.stop="toggleTagFilter(t)"
-                  >{{ t }}</button>
+                  >{{ t }}</Chip>
                   <span v-if="(row.tags ?? []).length > 3" class="wp-row-tag-more">+{{ (row.tags ?? []).length - 3 }}</span>
                 </div>
                 <span v-else class="wp-dim">—</span>
@@ -1148,10 +1220,12 @@ defineExpose({
               v-for="n in 6"
               :key="`skel-${n}`"
               class="wp-row-skel"
-              aria-hidden="true"
             >
               <td v-for="c in totalCols" :key="c">
-                <span class="wp-skel-bar" :style="`width:${30 + ((c * 17) % 55)}%`" />
+                <Skeleton
+                  :width="`${30 + ((c * 17 + n * 11) % 55)}%`"
+                  :label="n === 1 && c === 1 ? `Loading ${title.toLowerCase()}` : undefined"
+                />
               </td>
             </tr>
           </template>
@@ -1159,6 +1233,7 @@ defineExpose({
             <td :colspan="totalCols" class="wp-table__empty-cell">
               <slot v-if="!hasActiveFilters" name="empty">
                 <EmptyState
+                  size="page"
                   icon="pi-inbox"
                   :headline="emptyMessage"
                   variant="library"
@@ -1170,6 +1245,7 @@ defineExpose({
               </slot>
               <EmptyState
                 v-else
+                size="page"
                 icon="pi-search"
                 headline="No matches"
                 body="Try a different search term or clear the filter."
@@ -1266,10 +1342,10 @@ defineExpose({
   min-width: 18px;
   height: 18px;
   padding: 0 var(--wp-space-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   background: var(--wp-accent-500);
-  color: #fff; /* audit-exempt: white text on saturated accent-500 is theme-agnostic (≥4.5:1 both themes) */
+  color: var(--wp-on-accent);
   margin-left: var(--wp-space-2);
 }
 
@@ -1297,37 +1373,21 @@ defineExpose({
   display: flex;
   justify-content: flex-end;
 }
-/* Toggle-able chip used in the extra-filter row. Inherits the global
-   `.wp-chip` pill (999 radius, 2/8 padding, 11px font) and overrides the
-   active state with the accent tint per prototype `lists.jsx:185-211`. */
-.wp-chip--toggle {
-  cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.wp-chip--toggle:hover {
-  background: var(--wp-bg-4);
-  color: var(--wp-text);
-}
-.wp-chip--toggle[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
-.wp-chip__count {
-  font-size: var(--wp-text-xs);
-  margin-left: 2px;
-}
 
+/* Wraps: the actions run longer than the list in a wide look (TUI's
+   "[ Label ]", Soft's pill padding) or a narrow window, and they must stay
+   inside the bar. The count never breaks ("39 selected" on one line). */
 .wp-bulk-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--wp-space-5);
+  gap: var(--wp-space-3) var(--wp-space-5);
   padding: var(--wp-space-4) var(--wp-space-5);
   background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
   border-radius: var(--wp-radius);
 }
-.wp-bulk-bar__count { font-size: var(--wp-text-sm); }
+.wp-bulk-bar__count { font-size: var(--wp-text-sm); white-space: nowrap; flex: none; }
 
 .wp-active-filters {
   display: flex;
@@ -1341,34 +1401,11 @@ defineExpose({
 }
 
 /* Any / All switch for multi-tag filters. Sits inline with the chips. */
-.wp-tag-match {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-2);
-}
+.wp-tag-match { display: inline-flex; align-items: center; gap: var(--wp-space-2); }
 .wp-tag-match__label {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);
   padding: 0 var(--wp-space-2);
-}
-.wp-tag-match__btn {
-  font: inherit;
-  font-size: var(--wp-text-xs);
-  color: var(--wp-text-dim);
-  background: transparent;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  padding: 2px var(--wp-space-3);
-  cursor: pointer;
-}
-.wp-tag-match__btn:hover { color: var(--wp-text); }
-.wp-tag-match__btn[aria-pressed="true"] {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
 }
 
 .wp-table__select { width: 32px; padding-right: 0; }
@@ -1397,18 +1434,6 @@ defineExpose({
   vertical-align: middle;
 }
 
-.wp-row-expand-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: var(--wp-space-2);
-  color: var(--wp-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.wp-row-expand-btn:hover { color: var(--wp-text); }
-.wp-row-expand-btn .pi { font-size: var(--wp-text-xs); }
 
 .wp-row-fav-btn {
   background: transparent;
@@ -1420,7 +1445,7 @@ defineExpose({
   align-items: center;
   justify-content: center;
 }
-.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn, #fcd34d); }
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 .wp-row-fav-btn .pi { font-size: var(--wp-text-base); }
 
 .wp-row-name-wrap {
@@ -1454,10 +1479,10 @@ defineExpose({
   align-self: center;
   height: 18px;
   padding: 0 6px;
-  border-radius: 4px;
-  background: color-mix(in oklab, #06b6d4 12%, transparent);
-  border: 1px solid color-mix(in oklab, #06b6d4 24%, transparent);
-  color: #67e8f9;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  background: color-mix(in oklab, var(--wp-var-7) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-var-7) 24%, transparent);
+  color: var(--wp-var-7);
   font-size: 10px;
   font-weight: 500;
   line-height: 1;
@@ -1467,23 +1492,15 @@ defineExpose({
   font-size: 9px;
 }
 .wp-row-community-pill--update {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 16%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 30%, transparent);
-  color: var(--wp-warn, #f59e0b);
+  background: color-mix(in oklab, var(--wp-warn) 16%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 30%, transparent);
+  color: var(--wp-warn);
 }
-.wp-row-community-pill--button {
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.wp-row-community-pill--button:hover {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-warn, #f59e0b) 40%, transparent);
-}
+.wp-row-update-pill { align-self: center; height: 18px; }
 .wp-row-community-pill--nsfw {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 28%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  border-color: color-mix(in oklab, var(--wp-danger) 28%, transparent);
+  color: var(--wp-danger);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -1502,28 +1519,8 @@ defineExpose({
  * users can toggle a tag into the active filter set without opening
  * the filter panel. Active state mirrors the chip selection in the
  * filter-panel's tag row. */
-.wp-row-tag-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 var(--wp-space-4);
-  border: 1px solid var(--wp-border);
-  border-radius: 999px;
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
-}
-.wp-row-tag-btn:hover {
-  border-color: var(--wp-border-strong, var(--wp-border));
-  color: var(--wp-text);
-}
-.wp-row-tag-btn[data-active] {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 45%, transparent);
-  color: var(--wp-accent-text, #c4b5fd);
-}
+/* One line, cut with "…" when the column is narrow; the full tag is in the title. */
+.wp-row-tag-btn { display: inline-block; max-width: 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; }
 
 .wp-row-actions {
   display: inline-flex;
@@ -1598,7 +1595,7 @@ defineExpose({
 }
 
 .wp-row-favorite > td:first-child {
-  border-left: 2px solid var(--wp-warn, #f7b955);
+  border-left: 2px solid var(--wp-warn);
 }
 
 /* Keyboard-nav focus marker. Driven by :focus-visible only (NOT the
@@ -1664,4 +1661,6 @@ defineExpose({
   }
 }
 
+/* Modal styles its own title only (a custom #header styles its own). */
+.wp-mlv-modal-title { flex: 1; display: flex; align-items: center; gap: var(--wp-space-2); margin: 0; font-size: var(--wp-text-md); font-weight: 600; color: var(--wp-text); }
 </style>

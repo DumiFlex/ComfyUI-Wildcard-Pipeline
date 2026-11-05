@@ -18,7 +18,8 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       // cycle (2026-05-08): fixed_values now resolves `{a|b|c}` per
       // value, so it gains seed-lock parity with wildcard + combine.
       // `seed_scope` added for iteration-aware hold/vary control.
-      "values_overrides", "enabled_options", "locked_seed", "seed_scope",
+      // `internal`: the node's hide-from-prompt toggle.
+      "values_overrides", "enabled_options", "locked_seed", "seed_scope", "internal",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.combine).toEqual([
       // v2 single-pane modal exposes per-instance overrides:
@@ -27,7 +28,7 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       //   - locked_seed (parity with wildcard + fixed_values)
       //   - seed_scope (iteration-aware hold/vary control)
       //   - internal (existing hide-from-prompt toggle)
-      "template_override", "variable_binding", "locked_seed", "seed_scope", "internal",
+      "template_override", "negative_override", "variable_binding", "locked_seed", "seed_scope", "internal",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.derivation).toEqual([
       // Tier-D modal expansion (2026-05-10): per-rule + per-branch
@@ -40,6 +41,7 @@ describe("INSTANCE_FIELDS_PER_KIND registry", () => {
       "rule_order_override",
       "locked_seed",
       "internal",
+      "seed_scope",
     ]);
     expect(INSTANCE_FIELDS_PER_KIND.constraint).toEqual([
       // Tier-D modal expansion (2026-05-10): per-cell + per-exception

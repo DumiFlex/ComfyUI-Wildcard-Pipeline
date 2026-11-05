@@ -100,6 +100,7 @@ export function computeHasDangling(
 </script>
 
 <script setup lang="ts">
+import { DEFAULT_COLOUR } from "@/kit/colour-presets";
 /**
  * BundleEditor — SPA editor for library-tracked bundles.
  *
@@ -119,20 +120,27 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
-import Card from "../components/ui/Card.vue";
-import Button from "../components/ui/Button.vue";
+import { usePanelAction } from "../composables/usePanelAction";
+import Card from "@/kit/Card.vue";
+import Button from "@/kit/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
-import ColorPicker from "../components/ColorPicker.vue";
+import ColorField from "@/kit/ColorField.vue";
 import BundleChildRow from "../components/BundleChildRow.vue";
 import BundleChildPane from "../components/BundleChildPane.vue";
 import BundleAddChildModal from "../components/BundleAddChildModal.vue";
 import BundleReattachSection from "../components/BundleReattachSection.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
-import { useToast } from "../composables/useToast";
+import BundleSplitModal, { type SplitGroup } from "../components/BundleSplitModal.vue";
+import { useAiConfig } from "../composables/useAiConfig";
+import { usePackBuilder } from "../composables/usePackBuilder";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
+import { useToast } from "@/kit/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -141,7 +149,7 @@ import { useRecentStore } from "../stores/recentStore";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
+import Chip from "@/kit/Chip.vue";
 import type { BundleRow, ModuleRow } from "../api/types";
 import type { ModuleEntry } from "../../widgets/_shared";
 import {
@@ -157,6 +165,7 @@ import {
 } from "../community/community-posts";
 import { collectTransitiveDeps } from "../community/transitive-deps";
 import { downloadDepsForDangling } from "../community/download-and-reattach";
+import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{ id?: string }>();
 
@@ -188,7 +197,7 @@ async function onEntityDeleteClick(): Promise<void> {
 
 function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
   cascadeDialogOpen.value = false;
-  store.remove(props.id!);
+  store.removeLocal(props.id!);
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
   toast.push({
@@ -215,17 +224,17 @@ const addModalOpen = ref(false);
 
 /** Default bundle frame color when user hasn't picked one. Resolved
  *  at mount from the `--wp-bundle-default` CSS token (see
- *  `tokens.css`), with a slate-700 hard fallback for unit-test envs
- *  where `getComputedStyle` returns "". This keeps the editor picker,
+ *  `tokens.css`), with the kit's DEFAULT_COLOUR as the fallback for
+ *  unit-test envs where `getComputedStyle` returns "". This keeps the editor picker,
  *  the Bundles list swatch, the Dashboard swatch, and the canvas
  *  frame all paint the same colour for "no explicit colour", and
  *  retheming is a one-line token change.
  *
- *  Previous version hardcoded `#6366f1` (indigo) which diverged from
+ *  Previous version hardcoded indigo, which diverged from
  *  the slate token the canvas + dashboard actually paint with — list
  *  showed slate, picker showed indigo, neither agreed with the user
  *  intent the comment claimed. */
-const DEFAULT_COLOR_FALLBACK = "#334155";
+const DEFAULT_COLOR_FALLBACK = DEFAULT_COLOUR;
 const defaultColor = ref<string>(DEFAULT_COLOR_FALLBACK);
 
 function resolveDefaultColor(): void {
@@ -235,13 +244,8 @@ function resolveDefaultColor(): void {
   if (v) defaultColor.value = v;
 }
 
-const COLOR_PRESETS = [
-  "#6366f1", "#7c3aed", "#a78bfa", "#22d3ee", "#34d399",
-  "#fbbf24", "#f472b6", "#fb7185", "#ef4444", "#46566B",
-  "#10b981", "#f59e0b",
-];
 
-const loading = ref(false);
+const loading = ref(!!props.id);
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
 const saveError = ref<string>("");
@@ -339,7 +343,44 @@ function bundleSnapshot(): string {
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
   () => bundleSnapshot() !== bundleBaseline.value,
+  () => draft.discard()
 );
+
+// The chat reads and edits this item's info here; its children stay on
+// Save, but a change the chat saved to them shows here too.
+// A new bundle fills from a draft the chat staged (see onMounted).
+const fillFromChat = registerOpenEditor({
+  id: props.id, type: "bundle", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+  setExtra: (body) => {
+    if (!Array.isArray(body.children) && typeof body.color !== "string") return;
+    loadContent({
+      children: Array.isArray(body.children) ? body.children : children.value,
+      color: typeof body.color === "string" ? body.color : color.value,
+    });
+  },
+  rebase: () => {
+    baselineByChildId.value = snapshotBaseline(children.value);
+    bundleBaseline.value = bundleSnapshot();
+  },
+});
+// The chat's `use_panel`: a bundle has only Describe.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: {} });
+/** The chat's draft this new bundle was opened with (Save creates it at the
+ *  id the card reserved, if any, and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+
+/** Load stored children + colour into the editor (saved row or chat draft):
+ *  each child is copied so edits never touch the source. */
+function loadContent(src: { children?: unknown; color?: unknown }): void {
+  color.value = (typeof src.color === "string" && src.color) || defaultColor.value;
+  children.value = Array.isArray(src.children)
+    ? src.children
+      .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+      .map((c) => ({ ...c }))
+    : [];
+}
 
 const draft = useEditorDraft({
   kind: "bundle",
@@ -445,6 +486,21 @@ onMounted(async () => {
   }
   if (!props.id) {
     bundleBaseline.value = bundleSnapshot();
+    // "Open in editor" on a chat card: the proposed bundle, unsaved. Name,
+    // description and tags come in through the spec; the children (and a
+    // colour, if any) sit at the top level of a bundle create body.
+    chatDraft = fillFromChat();
+    if (chatDraft) {
+      const body: Record<string, unknown> = { ...chatDraft.body };
+      loadContent(body);
+      toast.push({
+        severity: "info",
+        summary: "From the assistant",
+        detail: chatDraft.newCategory
+          ? `Check it and Save to keep it. It suggested a new category, "${chatDraft.newCategory}": create it from the Category picker if you want it.`
+          : "Check it and Save to keep it.",
+      });
+    }
     return;
   }
   loading.value = true;
@@ -453,13 +509,10 @@ onMounted(async () => {
     original.value = row;
     name.value = row.name;
     description.value = row.description ?? "";
-    color.value = row.color || defaultColor.value;
     categoryId.value = row.category_id;
     tags.value = [...(row.tags ?? [])];
     contentRating.value = row.content_rating ?? "safe";
-    children.value = Array.isArray(row.children)
-      ? row.children.map((c) => ({ ...(c as Record<string, unknown>) }))
-      : [];
+    loadContent(row);
     baselineByChildId.value = snapshotBaseline(children.value);
     recent.push({ id: props.id, kind: "bundle", name: name.value });
   } catch (e) {
@@ -505,7 +558,9 @@ async function save() {
       // Create a brand-new bundle directly in the manager. (Previously
       // gated to the Context-wrap flow; the add-child picker builds the
       // same child shape edit-mode saves, so authoring here is safe.)
-      const created = await store.create(body);
+      const created = await store.create({ ...draftCreateId(chatDraft), ...body });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
       bundleBaseline.value = bundleSnapshot();
       draft.discard();
       recent.push({ id: created.id, kind: "bundle", name: created.name });
@@ -902,6 +957,83 @@ const eligibleBundles = computed<BundleRow[]>(() => {
   });
 });
 
+/* ── sub-bundles and Extend with AI ──────────────────────────────────── */
+
+const { ready: aiReady } = useAiConfig();
+const splitOpen = ref(false);
+/** Another bundle holds this one, so it can't hold sub-bundles. */
+const nestedInOther = computed(() => !!props.id && store.catalog.some(
+  (b) => b.id !== props.id && (b.children ?? []).some(
+    (c) => typeof c === "object" && c !== null
+      && (c as { type?: string; id?: string }).type === "bundle"
+      && (c as { id?: string }).id === props.id,
+  ),
+));
+const canSplit = computed(() => children.value.filter((c) => c.type !== "bundle").length >= 2);
+
+/** Create one bundle per group and put a reference where its first child
+ *  was. The new bundles are saved now; this bundle's new children are an
+ *  unsaved edit like any other. */
+async function onSplit(groups: SplitGroup[]): Promise<void> {
+  splitOpen.value = false;
+  const made: Array<{ group: SplitGroup; row: BundleRow }> = [];
+  try {
+    for (const g of groups) {
+      const members = g.members.map((n) => children.value[n]).filter(Boolean);
+      const row = await api.bundles.create({
+        name: `${name.value || "Bundle"} · ${g.name}`,
+        description: g.about,
+        tags: [...tags.value],
+        content_rating: contentRating.value,
+        children: stripBundleChildrenForSave(members),
+      });
+      made.push({ group: g, row });
+    }
+  } catch (err) {
+    // All or nothing: the ones already made would sit unused in the library.
+    await Promise.allSettled(made.map(({ row }) => api.bundles.delete(row.id)));
+    toast.push({
+      severity: "error", summary: "Couldn't make the sub-bundles",
+      detail: err instanceof Error ? err.message : String(err), life: 6000,
+    });
+    return;
+  }
+  const firstOf = new Map<number, BundleRow>();
+  const taken = new Set<number>();
+  for (const { group, row } of made) {
+    firstOf.set(group.members[0], row);
+    for (const n of group.members) taken.add(n);
+  }
+  const next: Array<Record<string, unknown>> = [];
+  children.value.forEach((c, n) => {
+    const row = firstOf.get(n);
+    if (row) {
+      next.push({
+        id: row.id, type: "bundle", name: row.name, color: row.color ?? null,
+        children: Array.isArray(row.children) ? [...row.children] : [], _resolved_from: row.id,
+      });
+    } else if (!taken.has(n)) {
+      next.push(c);
+    }
+  });
+  children.value = next as typeof children.value;
+  selectedChildId.value = null;
+  void store.fetchCatalog().catch(() => undefined);
+  toast.push({
+    severity: "success",
+    summary: `Made ${made.length} sub-bundle${made.length === 1 ? "" : "s"}`,
+    detail: "Save this bundle to keep them in it.",
+    life: 6000,
+  });
+}
+
+/** Open the pack builder aimed at this bundle. */
+function extendWithAi(): void {
+  if (!props.id) return;
+  usePackBuilder().extendBundle({ id: props.id, name: name.value || "this bundle" });
+  void router.push({ name: "pack-builder" });
+}
+
 function onToggleChild(idx: number) {
   const next = [...children.value];
   const current = next[idx];
@@ -1011,7 +1143,9 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
 
 <template>
   <EditorFrame
-    :title="isEdit ? (original?.name || 'Loading…') : 'New bundle'"
+    :title="isEdit ? (original?.name ?? '') : 'New bundle'"
+    :loading="loading"
+    loading-label="Loading bundle"
     back-route="/bundles"
     back-label="Bundles"
     :breadcrumb="breadcrumb"
@@ -1026,11 +1160,11 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   >
     <template v-if="isEdit && cascadeRefs.length > 0" #title-extra>
       <span class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
     </template>
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'bundle'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'bundle'" />
       <CommunityRowActions
         v-if="currentRow"
         :row="currentRow"
@@ -1055,26 +1189,31 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         @discard="draft.discard"
       />
     </template>
-    <div v-if="loading" class="wp-dim wp-bundle-editor__loading">Loading bundle…</div>
+    <template #loading>
+      <Skeleton shape="row" icon="square" :lines="4" />
+    </template>
 
-    <template v-else>
+    <template v-if="!loading">
       <div id="editor-section-identity">
         <IdentityCard
+          ref="identityCard"
+          ai-kind="bundle"
+          :ai-payload="() => children"
           :name="name"
           :description="description"
           :category-id="categoryId"
           :tags="tags"
+          :content-rating="contentRating"
           @update:name="(v) => (name = v)"
           @update:description="(v) => (description = v)"
           @update:category-id="(v) => (categoryId = v)"
-          :content-rating="contentRating"
           @update:tags="(v) => (tags = v)"
           @update:content-rating="(v) => (contentRating = v)"
         >
           <template #nameLeading>
-            <ColorPicker
-              v-model="color"
-              :presets="COLOR_PRESETS"
+            <ColorField v-model="color" presets
+              size="md"
+              compact
               aria-label="Bundle frame color"
             />
           </template>
@@ -1096,6 +1235,23 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         :subtitle="childrenSubtitle"
       >
         <template #actions>
+          <Button
+            v-if="isEdit && aiReady"
+            variant="ghost"
+            icon="pi-microchip-ai"
+            data-test="bd-extend-ai"
+            :disabled="dirty"
+            :title="dirty ? 'Save your changes first: the AI plans from the saved bundle' : 'Plan new modules into this bundle with the AI'"
+            @click="extendWithAi"
+          >Extend with AI</Button>
+          <Button
+            variant="ghost"
+            icon="pi-box"
+            data-test="bd-split-btn"
+            :disabled="!canSplit"
+            :title="!canSplit ? 'Needs at least two modules to group' : 'Group children into sub-bundles'"
+            @click="splitOpen = true"
+          >Make sub-bundles</Button>
           <Button
             variant="ghost"
             icon="pi-clone"
@@ -1132,15 +1288,14 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
               @drop="(e) => onDrop(idx, e)"
               @drag-end="onDragEnd"
             />
-            <button
-              type="button"
+            <Button
+              variant="add"
+              block
+              icon="pi-plus"
               class="wp-bundle-add-btn"
               data-test="bundle-add-open"
               @click="addModalOpen = true"
-            >
-              <i class="pi pi-plus" aria-hidden="true" />
-              add child from library
-            </button>
+            >Add child from library</Button>
           </div>
           <BundleChildPane
             :child="selectedChild"
@@ -1151,6 +1306,14 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
         </div>
       </Card>
 
+      <BundleSplitModal
+        :open="splitOpen"
+        :bundle-name="name"
+        :children="children"
+        :nested="nestedInOther"
+        @close="splitOpen = false"
+        @apply="onSplit"
+      />
       <BundleAddChildModal
         :visible="addModalOpen"
         :modules="moduleStore.catalog"
@@ -1164,29 +1327,29 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="bundle"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
     <!-- Confirm pulling a missing child dependency (+ its closure) from the
          community before any network/install side effect. -->
-    <ConfirmDialog
-      :visible="downloadConfirmOpen"
+    <ConfirmModal
+      :open="downloadConfirmOpen"
       title="Download dependencies"
       :body="downloadConfirmBody"
       confirm-label="Download & install"
@@ -1216,15 +1379,16 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   margin-right: var(--wp-space-2);
   color: var(--wp-text-dim);
 }
-.wp-bundle-editor__loading { padding: var(--wp-space-8) 0; text-align: center; }
 .wp-bundle-editor__empty { padding: var(--wp-space-6) 0; font-size: var(--wp-text-base); }
 
 .wp-bundle-children-grid {
   display: grid;
-  grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   gap: var(--wp-space-5);
   align-items: start;
 }
+/* Page area narrower than 860px (usePageWidth): the list over the editor. */
+.wp-content[data-lt~="860"] .wp-bundle-children-grid { grid-template-columns: minmax(0, 1fr); }
 .wp-bundle-children-stack {
   display: flex;
   flex-direction: column;
@@ -1234,29 +1398,5 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
 .wp-bundle-children-stack__drag-over {
   box-shadow: 0 -2px 0 var(--wp-accent-500);
 }
-.wp-bundle-add-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--wp-space-4);
-  width: 100%;
-  padding: var(--wp-space-4);
-  margin-top: var(--wp-space-2);
-  border: 1px dashed var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius, 4px);
-  background: transparent;
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
-}
-.wp-bundle-add-btn:hover {
-  border-style: solid;
-  border-color: var(--wp-accent-500);
-  color: var(--wp-accent-500);
-  background: color-mix(in oklab, var(--wp-accent-500) 7%, transparent);
-}
+.wp-bundle-add-btn { margin-top: var(--wp-space-2); }
 </style>

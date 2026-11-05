@@ -64,6 +64,6 @@ describe("SeedLockRow bypass (#13)", () => {
     const on = row({ bypassable: true, bypassed: true });
     expect(on.get(".srow").classes()).toContain("srow--bypassed");
     const dis = row({ bypassable: true, bypassed: false, bypassDisabled: true });
-    expect(dis.get('[data-test="seedrow-bypass"]').attributes("disabled")).toBeDefined();
+    expect(dis.get('[data-test="seedrow-bypass"]').attributes("aria-disabled")).toBe("true");
   });
 });

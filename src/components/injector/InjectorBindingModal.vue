@@ -24,9 +24,15 @@
  * there is no draft buffer, mirroring the lightweight per-row UX of
  * the inline row controls. Save = close.
  */
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import Kbd from "@/kit/Kbd.vue";
+import Input from "@/kit/Input.vue";
+import { computed, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
+import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import Popover from "@/kit/Popover.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -299,70 +305,19 @@ const positivePreviewTokens = computed<PreviewToken[]>(() => {
 const refCount = computed(() => previewTokens.value.filter((t) => t.kind === "ref").length);
 const unknownRefCount = computed(() => previewTokens.value.filter((t) => t.kind === "ref-unknown").length);
 
-// --- Insert menu placement + dismissal ---------------------------------
+// --- Insert menu ------------------------------------------------------
 //
-// The menu used to be `position: absolute` inside the modal, so it was
-// CLIPPED by the modal's scroll container — a menu opened near the bottom
-// simply disappeared below the fold. It's now teleported to <body> with
-// `position: fixed` viewport coords (the same strategy RichTextInput's
-// autocomplete popover uses) and flips above the button when there's no
-// room below.
-const menuBtnEl = ref<HTMLButtonElement | null>(null);
-const negMenuBtnEl = ref<HTMLButtonElement | null>(null);
-const activeMenuBtn = (): HTMLButtonElement | null =>
-  menuTarget.value === "negative" ? negMenuBtnEl.value : menuBtnEl.value;
-const menuEl = ref<HTMLDivElement | null>(null);
-const menuPos = ref<{ top: number; left: number; flipped: boolean }>({
-  top: 0, left: 0, flipped: false,
-});
-const MENU_MAX_H = 220; // keep in sync with `max-height` in _modal-template-ctrls.css
-const MENU_MIN_W = 200;
-
-function positionInsertMenu(): void {
-  const btn = activeMenuBtn();
-  if (!btn) return;
-  const rect = btn.getBoundingClientRect();
-  const margin = 8;
-  const spaceBelow = window.innerHeight - rect.bottom - margin;
-  const flipped = spaceBelow < MENU_MAX_H && rect.top > spaceBelow;
-  // Right-align to the button (the menu is wider than it), then clamp so a
-  // button near the left edge can't push the menu off-screen.
-  const left = Math.max(margin, Math.min(rect.right - MENU_MIN_W, window.innerWidth - MENU_MIN_W - margin));
-  menuPos.value = {
-    top: flipped ? rect.top - 4 : rect.bottom + 4,
-    left,
-    flipped,
-  };
-}
-
-/** Close when the click lands outside BOTH the menu and its trigger button.
- *  Bound on `mousedown` (not `click`) so it fires before the menu item's own
- *  click handler can be lost to a re-render, and excludes the button so the
- *  toggle doesn't immediately re-open what it just closed. */
-function onDocMouseDown(ev: MouseEvent): void {
-  const target = ev.target as Node | null;
-  if (!target) return;
-  if (menuEl.value?.contains(target)) return;
-  if (activeMenuBtn()?.contains(target)) return;
-  closeInsertMenu();
-}
-
-function openInsertMenu(): void {
-  showInsertMenu.value = true;
-  void nextTick(() => {
-    positionInsertMenu();
-    document.addEventListener("mousedown", onDocMouseDown, true);
-    window.addEventListener("scroll", positionInsertMenu, true);
-    window.addEventListener("resize", positionInsertMenu);
-  });
-}
+// One kit Popover serves both "+ $slot" buttons: it anchors to the one that
+// opened it, places and flips itself, follows it on scroll and closes on
+// Escape or a click outside (a click on its own button toggles it).
+/** The two "+ $slot" kit Buttons; their root element anchors the menu. */
+const menuBtnEl = ref<{ $el: HTMLElement } | null>(null);
+const negMenuBtnEl = ref<{ $el: HTMLElement } | null>(null);
+const menuAnchor = computed<HTMLElement | null>(() =>
+  (menuTarget.value === "negative" ? negMenuBtnEl.value : menuBtnEl.value)?.$el ?? null);
 
 function closeInsertMenu(): void {
-  if (!showInsertMenu.value) return;
   showInsertMenu.value = false;
-  document.removeEventListener("mousedown", onDocMouseDown, true);
-  window.removeEventListener("scroll", positionInsertMenu, true);
-  window.removeEventListener("resize", positionInsertMenu);
 }
 
 function toggleInsertMenu(target: "template" | "negative" = "template"): void {
@@ -370,42 +325,23 @@ function toggleInsertMenu(target: "template" | "negative" = "template"): void {
     closeInsertMenu();
     return;
   }
-  closeInsertMenu();
   menuTarget.value = target;
-  openInsertMenu();
+  showInsertMenu.value = true;
 }
 
-onBeforeUnmount(closeInsertMenu);
-
-/** Mirror the host's resolved theme onto the body-teleported menu. The
- *  `--wp-*` light/dark variants hang off `.wp-theme-light` / `.wp-theme-dark`,
- *  which the teleported node escapes — without this the menu paints with the
- *  default dark palette inside a light-themed canvas. Same helper shape as
- *  RichTextInput's `teleportThemeClass`. */
-function menuThemeClass(): string {
-  const el = menuBtnEl.value;
-  if (!el || typeof el.closest !== "function") return "";
-  const themed = el.closest(".wp-theme-light, .wp-theme-dark");
-  if (!themed) return "";
-  return themed.classList.contains("wp-theme-light") ? "wp-theme-light" : "wp-theme-dark";
-}
-
-// Esc cancels (drops draft), Cmd/Ctrl+Enter saves. Mirrors the
-// module InstanceModal keybinds so users carry one habit across both
-// editors. Bound to the overlay so it fires regardless of which inner
-// field has focus — the overlay receives the keydown bubble.
-function onKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape") {
-    ev.preventDefault();
-    // Escape dismisses the insert menu first — losing the whole draft
-    // because a dropdown happened to be open is a nasty surprise.
-    if (showInsertMenu.value) {
-      closeInsertMenu();
-      return;
-    }
-    onCancel();
+// Esc or a backdrop click cancels (drops draft), Cmd/Ctrl+Enter saves.
+// Mirrors the module InstanceModal keybinds so users carry one habit
+// across both editors. ModalShell reports both as `close`; it closes the
+// insert menu first, since losing the whole draft because a dropdown
+// happened to be open is a nasty surprise.
+function onShellClose(): void {
+  if (showInsertMenu.value) {
+    closeInsertMenu();
     return;
   }
+  onCancel();
+}
+function onKeydown(ev: KeyboardEvent): void {
   if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
     ev.preventDefault();
     onSave();
@@ -414,13 +350,8 @@ function onKeydown(ev: KeyboardEvent): void {
 </script>
 
 <template>
-  <div
-    class="ibm__overlay"
-    data-test="ibm-overlay"
-    @click.self="onCancel"
-    @keydown="onKeydown"
-  >
-    <div class="ibm" role="dialog" aria-labelledby="ibm-title" tabindex="-1">
+  <ModalShell :visible="true" labelledby="ibm-title" @close="onShellClose" @keydown="onKeydown">
+    <div class="ibm" tabindex="-1">
       <header class="ibm__head" :style="{ '--ibm-accent': headerColor }">
         <i :class="['pi', headerIcon, 'ibm__head-icon']" aria-hidden="true" />
         <div class="ibm__title-block">
@@ -430,13 +361,7 @@ function onKeydown(ev: KeyboardEvent): void {
           </div>
           <div class="ibm__sub">Injector binding · ctx[$<wbr>{{ draftBinding || "…" }}] ← {{ templateValue ? "template" : isGeneral ? "no template yet" : "socket value" }}</div>
         </div>
-        <button
-          type="button"
-          class="ibm__close"
-          aria-label="Close"
-          data-test="ibm-close"
-          @click="onCancel"
-        ><i class="pi pi-times" aria-hidden="true" /></button>
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="ibm-close" @click="onCancel" />
       </header>
 
       <section class="ibm__section">
@@ -444,19 +369,17 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-label">Binding</span>
           <span class="ibm__section-hint">variable name written to ctx</span>
         </div>
-        <div class="ibm__binding-wrap" :class="{ 'ibm__binding-wrap--empty': !draftBinding.trim() }">
-          <span class="ibm__binding-prefix">$</span>
-          <input
-            type="text"
-            class="ibm__binding-input"
-            data-test="ibm-binding"
-            :value="draftBinding"
-            :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
-            placeholder="variable_name"
-            spellcheck="false"
-            @input="onBindingInput"
-          />
-        </div>
+        <Input
+          mono
+          prefix="$"
+          :tone="draftBinding.trim() ? undefined : 'warn'"
+          data-test="ibm-binding"
+          :model-value="draftBinding"
+          :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
+          placeholder="variable_name"
+          spellcheck="false"
+          @input="onBindingInput"
+        />
       </section>
 
       <section class="ibm__section">
@@ -464,54 +387,58 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-label">Template</span>
           <span class="ibm__section-hint">{{ isGeneral ? "$ref names · $$ for literal $ · composed after socket rows" : "$slot_name refs · $$ for literal $ · empty = pass-through" }}</span>
           <div class="ibm__head-actions">
-            <div class="wp-ibm__menu-wrap">
-              <button
-                v-if="insertOptions.length > 0"
-                ref="menuBtnEl"
-                type="button"
-                class="wp-ibm__menu-btn"
-                data-test="ibm-insert-slot"
-                :title="`Insert a reference (${insertOptions.length} available)`"
-                aria-label="Insert reference"
-                :aria-expanded="showInsertMenu"
-                @click="toggleInsertMenu('template')"
-              ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
-              <Teleport to="body">
-                <div
-                  v-if="showInsertMenu"
-                  ref="menuEl"
-                  class="wp-ibm__menu"
-                  :class="[menuThemeClass(), { 'wp-ibm__menu--up': menuPos.flipped }]"
-                  :style="{ top: menuPos.top + 'px', left: menuPos.left + 'px' }"
-                  data-test="ibm-slot-menu"
-                  role="listbox"
+            <Button
+              v-if="insertOptions.length > 0"
+              ref="menuBtnEl"
+              size="sm"
+              variant="outline"
+              icon="pi-plus"
+              class="wp-ibm__menu-btn"
+              data-test="ibm-insert-slot"
+              :title="`Insert a reference (${insertOptions.length} available)`"
+              aria-label="Insert reference"
+              aria-haspopup="listbox"
+              :aria-expanded="showInsertMenu && menuTarget === 'template'"
+              @click="toggleInsertMenu('template')"
+            >{{ isGeneral ? "$ref" : "$slot" }}</Button>
+            <!-- The insert menu, shared by this button and the Negative one. -->
+            <Popover
+              :open="showInsertMenu"
+              :anchor="menuAnchor"
+              placement="bottom-end"
+              variant="menu"
+              role="listbox"
+              :max-height="220"
+              label="Insert a reference"
+              @update:open="(v: boolean) => (showInsertMenu = v)"
+            >
+              <div class="wp-ibm__menu" data-test="ibm-slot-menu" data-wp-rows>
+                <ListRow
+                  v-for="opt in insertOptions"
+                  :key="opt.slotName"
+                  size="sm"
+                  class="wp-ibm__menu-item"
+                  :data-test="`ibm-slot-item-${opt.slotName}`"
+                  role="option"
+                  :aria-selected="false"
+                  @click="insertSlotRef(opt.slotName)"
                 >
-                  <button
-                    v-for="opt in insertOptions"
-                    :key="opt.slotName"
-                    type="button"
-                    class="wp-ibm__menu-item"
-                    :data-test="`ibm-slot-item-${opt.slotName}`"
-                    role="option"
-                    :aria-selected="false"
-                    @click="insertSlotRef(opt.slotName)"
-                  >
-                    <span class="ibm__menu-name">${{ opt.slotName }}</span>
-                    <span v-if="opt.label !== opt.slotName" class="ibm__menu-label">{{ opt.label }}</span>
-                    <span v-if="opt.typeKey" class="ibm__menu-type">{{ opt.typeKey }}</span>
-                  </button>
-                </div>
-              </Teleport>
-            </div>
-            <button
+                  <span class="ibm__menu-name">${{ opt.slotName }}</span>
+                  <span v-if="opt.label !== opt.slotName" class="ibm__menu-label">{{ opt.label }}</span>
+                  <template v-if="opt.typeKey" #end><span class="ibm__menu-type">{{ opt.typeKey }}</span></template>
+                </ListRow>
+              </div>
+            </Popover>
+            <Button
               v-if="templateValue"
-              type="button"
-              class="ibm__reset"
+              size="sm"
+              variant="outline"
+              icon="pi-replay"
               data-test="ibm-template-reset"
-              title="Clear template (revert to pass-through)"
+              hint="Clear template (revert to pass-through)"
               aria-label="Clear template"
               @click="onResetTemplate"
-            ><i class="pi pi-replay" aria-hidden="true" /></button>
+            />
           </div>
         </div>
 
@@ -551,17 +478,20 @@ function onKeydown(ev: KeyboardEvent): void {
           <span class="ibm__section-label ibm__section-label--neg">Negative</span>
           <span class="ibm__section-hint">same {{ isGeneral ? "$ref" : "$slot" }} refs · replaces the variable's negatives</span>
           <div class="ibm__head-actions">
-            <button
+            <Button
               v-if="insertOptions.length > 0"
               ref="negMenuBtnEl"
-              type="button"
+              size="sm"
+              variant="outline"
+              icon="pi-plus"
               class="wp-ibm__menu-btn"
               data-test="ibm-neg-insert-slot"
               :title="`Insert a reference into the negative (${insertOptions.length} available)`"
               aria-label="Insert reference into the negative"
+              aria-haspopup="listbox"
               :aria-expanded="showInsertMenu && menuTarget === 'negative'"
               @click="toggleInsertMenu('negative')"
-            ><i class="pi pi-plus" aria-hidden="true" /> {{ isGeneral ? "$ref" : "$slot" }}</button>
+            >{{ isGeneral ? "$ref" : "$slot" }}</Button>
           </div>
         </div>
         <RichTextInput
@@ -628,24 +558,13 @@ function onKeydown(ev: KeyboardEvent): void {
 
       <footer class="ibm__foot">
         <span class="ibm__hint">
-          <kbd>Esc</kbd> cancel · <kbd>⌘↵</kbd> save
+          <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
         </span>
-        <button
-          type="button"
-          class="ibm__btn"
-          data-test="ibm-cancel"
-          @click="onCancel"
-        >Cancel</button>
-        <button
-          type="button"
-          class="ibm__btn ibm__btn--primary"
-          :disabled="!isDirty"
-          data-test="ibm-save"
-          @click="onSave"
-        >Save</button>
+        <Button size="sm" data-test="ibm-cancel" @click="onCancel">Cancel</Button>
+        <Button size="sm" variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</Button>
       </footer>
     </div>
-  </div>
+  </ModalShell>
 </template>
 
 <!-- Shared modal-template-controls partial — imported UNSCOPED so the
@@ -659,30 +578,16 @@ function onKeydown(ev: KeyboardEvent): void {
      leak-free regardless. -->
 <style>
 @import "../context/editors/_modal-template-ctrls.css";
-@import "../shared/_modal-motion.css";
 </style>
 
 <style scoped>
-@import "../shared/theme.css";
-
-.ibm__overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10010;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  box-sizing: border-box;
-}
 .ibm {
   width: 100%;
   max-width: 520px;
   background: var(--wp-bg2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius, 6px);
-  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--wp-shadow-lg);
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 48px);
@@ -722,7 +627,7 @@ function onKeydown(ev: KeyboardEvent): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 2px 6px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--ibm-accent, var(--wp-accent)) 22%, transparent);
   color: var(--ibm-accent, var(--wp-accent));
 }
@@ -731,15 +636,6 @@ function onKeydown(ev: KeyboardEvent): void {
   color: var(--wp-text-dim, var(--wp-text3));
   margin-top: 2px;
 }
-.ibm__close {
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  padding: 4px;
-}
-.ibm__close:hover { color: var(--wp-text); }
-.ibm__close .pi { font-size: 12px; }
 
 .ibm__section {
   padding: 12px 16px;
@@ -769,33 +665,6 @@ function onKeydown(ev: KeyboardEvent): void {
   gap: 6px;
 }
 
-.ibm__binding-wrap {
-  display: flex;
-  align-items: center;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.ibm__binding-wrap:focus-within { border-color: var(--wp-accent); }
-.ibm__binding-wrap--empty { border-color: var(--wp-warn); }
-.ibm__binding-prefix {
-  font: 700 13px var(--wp-font-mono);
-  color: var(--wp-accent);
-  padding: 6px 8px;
-  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
-}
-.ibm__binding-input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  outline: none;
-  font: 600 13px var(--wp-font-mono);
-  color: var(--wp-text);
-  padding: 6px 8px;
-}
-.ibm__binding-input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-
 /* Insert-slot menu button + reset button + dropdown panel + items —
  * shared with Combine's TemplateSection via
  * src/components/context/editors/_modal-template-ctrls.css.
@@ -809,13 +678,14 @@ function onKeydown(ev: KeyboardEvent): void {
   font: 400 10px var(--wp-font-sans);
   color: var(--wp-text2);
   margin-left: auto;
+  padding-left: 10px;
 }
 .ibm__menu-type {
   font: 600 9px var(--wp-font-sans);
   text-transform: lowercase;
   letter-spacing: 0.04em;
   padding: 1px 4px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-text3) 18%, transparent);
   color: var(--wp-text2);
   flex-shrink: 0;
@@ -834,7 +704,7 @@ function onKeydown(ev: KeyboardEvent): void {
   box-sizing: border-box;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
@@ -879,7 +749,7 @@ function onKeydown(ev: KeyboardEvent): void {
 .ibm__preview {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px dashed var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 8px 10px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text-muted, var(--wp-text2));
@@ -911,10 +781,10 @@ function onKeydown(ev: KeyboardEvent): void {
   font-weight: 600;
   background: color-mix(in srgb, var(--wp-accent) 12%, transparent);
   padding: 0 3px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .ibm-tok--ref-unknown {
-  color: var(--wp-status-modified, #f59e0b);
+  color: var(--wp-status-modified);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
   font-weight: 600;
@@ -931,39 +801,5 @@ function onKeydown(ev: KeyboardEvent): void {
   margin-right: auto;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
-}
-.ibm__hint kbd {
-  font: 9px var(--wp-font-mono);
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  padding: 1px 4px;
-  border-radius: 2px;
-  color: var(--wp-text-muted, var(--wp-text2));
-}
-.ibm__btn {
-  padding: 5px 12px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.ibm__btn:hover:not(:disabled) {
-  border-color: var(--wp-accent);
-  color: var(--wp-text);
-}
-.ibm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.ibm__btn--primary:hover:not(:disabled) {
-  filter: brightness(1.1);
-  color: white;
-}
-.ibm__btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

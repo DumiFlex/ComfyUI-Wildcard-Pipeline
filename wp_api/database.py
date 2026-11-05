@@ -1,15 +1,17 @@
 """/wp/api/database/* — read-only info + maintenance dispatch + location config
-+ backups (list / create / delete / staged restore)."""
++ backups (list / create / delete / restore)."""
 from __future__ import annotations
 
 import asyncio
 import json as _json
 import os
+import sqlite3
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
 
+from engine import prefs
 from engine.db import backups as db_backups
 from engine.db import config as db_config
 from engine.db.connection import (
@@ -237,14 +239,43 @@ async def list_backups(request: web.Request) -> web.Response:
 
 async def create_backup(request: web.Request) -> web.Response:
     """Manual backup. Allowed even with automatic backups switched off —
-    that switch governs what WE do unasked, not what the user asks for."""
+    that switch governs what WE do unasked, not what the user asks for.
+
+    Then prunes to "Backups to keep", which counts manual backups too; the
+    new one is the newest, so it always stays. ``pruned`` names what went.
+    An optional ``{note}`` body labels the backup.
+    """
+    note: str | None = None
+    if request.can_read_body:
+        try:
+            body = await request.json()
+        except _json.JSONDecodeError:
+            return json_error("invalid JSON body", status=400)
+        if not isinstance(body, dict) or not isinstance(body.get("note", ""), (str, type(None))):
+            return json_error("body must be an object with an optional string 'note'", status=400)
+        note = body.get("note")
     db_path = _live_db_path()
     try:
         # The online backup copies the whole file; keep it off the event loop.
-        entry = await asyncio.to_thread(db_backups.create_backup, db_path, "manual")
+        entry = await asyncio.to_thread(db_backups.create_backup, db_path, "manual", note=note)
     except FileNotFoundError:
         return json_error(f"database {db_path} does not exist", status=409)
-    return json_ok(entry, status=201)
+    pruned = await asyncio.to_thread(db_backups.prune, db_path, prefs.backups()["keep"])
+    return json_ok({**entry, "pruned": pruned}, status=201)
+
+
+async def pin_backup(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except _json.JSONDecodeError:
+        return json_error("invalid JSON body", status=400)
+    if not isinstance(body, dict) or not isinstance(body.get("pinned"), bool):
+        return json_error("body must be an object with a boolean 'pinned'", status=400)
+    try:
+        entry = db_backups.set_pinned(_live_db_path(), request.match_info["name"], body["pinned"])
+    except db_backups.BackupNotFound:
+        return json_error("backup not found", status=404)
+    return json_ok(entry)
 
 
 async def delete_backup(request: web.Request) -> web.Response:
@@ -255,7 +286,10 @@ async def delete_backup(request: web.Request) -> web.Response:
     return web.Response(status=204)
 
 
-async def stage_restore(request: web.Request) -> web.Response:
+async def restore_backup(request: web.Request) -> web.Response:
+    """Restore a backup into the live library now, no restart
+    (``db_backups.restore_now``). 409 when the backup can't be restored
+    here or the library stays locked; nothing is changed then."""
     try:
         body = await request.json()
     except _json.JSONDecodeError:
@@ -263,13 +297,23 @@ async def stage_restore(request: web.Request) -> web.Response:
     if not isinstance(body, dict) or not isinstance(body.get("name"), str):
         return json_error("body must be an object with a string 'name'", status=400)
     try:
-        path = db_backups.stage_restore(_live_db_path(), body["name"])
+        # Copies the whole library; keep it off the event loop.
+        out = await asyncio.to_thread(db_backups.restore_now, _live_db_path(), body["name"])
     except db_backups.BackupNotFound:
         return json_error("backup not found", status=404)
-    return json_ok({"pending_restore": path.name})
+    except db_backups.RestoreRefused as exc:
+        return json_error(str(exc), status=409)
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc) or "busy" in str(exc):
+            return json_error(
+                "The library is busy (a run or another change is writing to it). "
+                "Try again in a moment.", status=409)
+        raise
+    return json_ok(out)
 
 
 async def cancel_restore(request: web.Request) -> web.Response:
+    """Cancel a restore an older build staged for the next start."""
     db_backups.cancel_restore()
     return json_ok({"pending_restore": None})
 
@@ -285,6 +329,7 @@ def register(router: web.UrlDispatcher) -> None:
     # The static `/restore` routes go before `/{name}` so DELETE on the
     # restore path cancels the restore rather than looking for a backup
     # called "restore" (which the name pattern would reject anyway).
-    router.add_post("/wp/api/database/backups/restore", stage_restore)
+    router.add_post("/wp/api/database/backups/restore", restore_backup)
     router.add_delete("/wp/api/database/backups/restore", cancel_restore)
     router.add_delete("/wp/api/database/backups/{name}", delete_backup)
+    router.add_put("/wp/api/database/backups/{name}/pin", pin_backup)

@@ -8,6 +8,7 @@ drift — see engine/db/migrations_sql/012_templates.sql).
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from aiohttp import web
@@ -15,6 +16,8 @@ from aiohttp import web
 from engine.db.repositories import TemplateNotFound, TemplateRepository
 from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import validate_body_size, validate_meta
+
+_NEW_ID = re.compile(r"[0-9a-f]{8}")
 
 _UPDATABLE_FIELDS = (
     "name", "description", "category_id", "tags",
@@ -88,8 +91,20 @@ async def create_template(request: web.Request) -> web.Response:
     try:
         with db_session(request) as conn:
             repo = TemplateRepository(conn)
+            # An optional `id` (8 hex): Undo on the AI chat's delete card
+            # brings a template back at the id it had.
+            given = body.get("id")
+            if given is not None:
+                if not isinstance(given, str) or not _NEW_ID.fullmatch(given):
+                    return json_error("id must be 8 lowercase hex characters", status=400)
+                try:
+                    repo.get(given)
+                    return json_error(f"template {given} already exists", status=409)
+                except TemplateNotFound:
+                    pass
             unique_name = _auto_suffix_template_name(repo, body["name"])
             row = repo.create(
+                id=given,
                 name=unique_name,
                 template_string=body.get("template_string", ""),
                 description=body.get("description", ""),

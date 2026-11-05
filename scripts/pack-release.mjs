@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
  * pack-release.mjs — bundle the deployable file set into a zip for a
- * GitHub release asset. Called from `.releaserc.js` via the exec
- * plugin's `prepareCmd`. The result lives at
+ * GitHub release asset. Called from the publish and beta jobs in
+ * `.github/workflows/release.yml`. The result lives at
  *   dist/ComfyUI-Wildcard-Pipeline-v<version>.zip
- * and gets attached to the release by `@semantic-release/github`'s
- * `assets` config.
+ * and the job attaches it to the release with `gh release upload`.
  *
  * Contents — everything ComfyUI needs to drop into custom_nodes/:
  *   - __init__.py           (extension entry)
@@ -67,6 +66,8 @@ const SHIP_PATHS = [
   // hand-maintained, so it did not. The two artifacts silently disagreed —
   // see DEV_ONLY below for the guard that now stops that recurring.
   "locales",
+  // The WP Label & Grid font folder: users drop font files here.
+  "fonts",
 ];
 
 /**
@@ -80,10 +81,10 @@ const SHIP_PATHS = [
  */
 const DEV_ONLY = new Set([
   ".comfyignore", ".gitattributes", ".github", ".gitignore", ".husky", ".npmrc",
-  ".releaserc.js", "CHANGELOG.md", "CLAUDE.md", "config", "conftest.py",
-  "eslint.config.js", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
+  ".release-please-manifest.json", "CHANGELOG.md", "CLAUDE.md", "config", "conftest.py",
+  "eslint.config.js", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "release-please-config.json",
   "scripts", "src", "tests", "tsconfig.json", "tsconfig.node.json",
-  "vite.config.mts", "vitest.config.ts",
+  "vite.config.mts", "vitest.config.ts", "SECURITY.md", "bench", "eslint-baseline.json",
 ]);
 
 function assertShipListIsTotal() {
@@ -121,7 +122,7 @@ for (const p of SHIP_PATHS) {
 }
 
 // Use the host's `zip` CLI (always present on the ubuntu-latest runner
-// semantic-release runs from). Exclusion patterns kill sourcemaps +
+// the release workflow runs on). Exclusion patterns kill sourcemaps +
 // any python bytecode that slipped into the tree.
 const excludes = [
   "*/__pycache__/*",

@@ -1,11 +1,12 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
-import { app } from "#comfyui/app";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
   createDomWidgetHost,
   parseWidgetJsonWithRecovery,
   serializeWidgetJson,
   type MountTargetNode,
 } from "./_shared";
+import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyCleanerConfig,
@@ -24,6 +25,7 @@ const BlocklistModal = defineAsyncComponent(
 interface CleanerHostNode extends MountTargetNode {
   id?: string | number;
   mode?: number;
+  inputs?: { name: string; link: number | null }[];
 }
 
 /**
@@ -65,6 +67,11 @@ export function create(node: CleanerHostNode, inputName: string) {
         () => node.mode ?? 0,
         Object.is,
       );
+      const blocklistWired = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => node.inputs?.find((i) => i.name === "blocklist")?.link != null,
+        Object.is,
+      );
       function onUpdate(next: CleanerNodeConfig): void {
         config.value = next;
         host.setValue(serializeWidgetJson(next));
@@ -81,6 +88,7 @@ export function create(node: CleanerHostNode, inputName: string) {
           nodeMode: nodeMode.value,
           negativeReport: negativeReport.value,
           negativeWordCount: negativeWordCount.value,
+          blocklistWired: blocklistWired.value,
           "onUpdate:modelValue": onUpdate,
           "onOpen-blocklist": () => { blocklistOpen.value = true; },
         }),
@@ -146,12 +154,9 @@ export function create(node: CleanerHostNode, inputName: string) {
     // height drag. The ResizeObserver still bumps minHeight if content
     // ever needs more room.
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-    removeEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
+  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["blocklist"]));
   return host;
 }
 

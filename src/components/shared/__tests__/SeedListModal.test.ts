@@ -23,7 +23,7 @@ function modal(props = {}) {
     attachTo: document.body,
     // The modal body renders inside `<Teleport to="body">`; stubbing teleport
     // renders the children in place so the wrapper's `find()` reaches them
-    // (repo convention — see RemapRefPopup.test.ts, ConfirmDialog.test.ts).
+    // (repo convention — see RemapRefPopup.test.ts).
     global: { stubs: { teleport: true } },
   });
 }
@@ -78,9 +78,9 @@ describe("SeedListModal", () => {
   it("Copy flashes a 'Copied' indicator on click", async () => {
     const w = modal();
     const btn = () => w.find('[data-test="mx-seed-copy"]');
-    expect(btn().classes()).not.toContain("ghost--copied");
+    expect(btn().classes()).not.toContain("sm__done");
     await btn().trigger("click");
-    expect(btn().classes()).toContain("ghost--copied");
+    expect(btn().classes()).toContain("sm__done");
     expect(btn().text()).toContain("Copied");
     w.unmount(); // clears the 1.5s reset timer via onBeforeUnmount
   });
@@ -141,8 +141,8 @@ describe("SeedListModal bypass column (#13)", () => {
   it("disables the last active frame's bypass toggle", () => {
     const w = modal({ seedLocks: {}, bypassFrames: [0, 1, 2] });
     const toggles = w.findAll('[data-test="seedrow-bypass"]');
-    expect(toggles[3].attributes("disabled")).toBeDefined();
-    expect(toggles[0].attributes("disabled")).toBeUndefined();
+    expect(toggles[3].attributes("aria-disabled")).toBe("true");
+    expect(toggles[0].attributes("aria-disabled")).toBeUndefined();
   });
   it("renders out-of-range bypassed frames as inactive rows", () => {
     const w = modal({ seedLocks: {}, bypassFrames: [9] });

@@ -31,6 +31,7 @@ def cfg(**kw):
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch):
     monkeypatch.setattr(f, "LAST_PICKS", {})
+    monkeypatch.setattr(f, "LAST_LABELS", {})
     hidden = types.SimpleNamespace(unique_id="12")
     monkeypatch.setattr(WPImageFilter, "hidden", hidden, raising=False)
 
@@ -42,9 +43,12 @@ def test_schema_is_list_in_list_out_and_counts_match():
     assert schema.is_input_list is True
     assert schema.not_idempotent is True
     assert len(schema.outputs) == node_mod._OUTPUT_COUNT
-    # Every follower output is a list; `picks` is one summary string.
-    assert all(o.is_output_list for o in schema.outputs[:-1])
-    assert schema.outputs[-1].is_output_list is False
+    # Every follower output is a list; `picks` is one summary string and
+    # `labels` (added last, so old links keep their slots) one per item.
+    assert [o.name for o in schema.outputs[-2:]] == ["picks", "labels"]
+    assert all(o.is_output_list for o in schema.outputs[:-2])
+    assert schema.outputs[-2].is_output_list is False
+    assert schema.outputs[-1].is_output_list is True
     names = [i.name for i in schema.inputs]
     assert names[:10] == [
         "images", "latent", "masks", "positive", "negative",
@@ -62,7 +66,31 @@ async def test_pass_all_keeps_everything_lined_up():
     assert out.values[0] == images
     assert out.values[5] == ["red", "blue"]
     assert out.values[10] == "1:1, 1:2, 2:1, 2:2"
+    assert out.values[11] == ["#1 · 1\n#1 · 2", "#2 · 1\n#2 · 2"]
     assert f.LAST_PICKS == {}  # pass-all doesn't overwrite the remembered picks
+
+
+async def test_labels_follow_the_picks_with_the_pickers_names(monkeypatch):
+    async def fake_ask(*_a, **_k):
+        return f.Answer("picks", ((0, 1), (1, 0)), {}, {(0, 1): "hero"})
+
+    monkeypatch.setattr(WPImageFilter, "_ask", staticmethod(fake_ask))
+    loop = [types.SimpleNamespace(internals={"__wp_loop_index__": i}) for i in (4, 5)]
+    out = await WPImageFilter.execute(
+        images=[FakeBatch("a", [0, 1]), FakeBatch("b", [0])],
+        context=loop,
+        wp_image_filter=cfg(send_as="per_image"),
+    )
+    # A frame of one image has no image number; the loop index names the frame.
+    assert out.values[11] == ["hero", "#6"]
+    assert f.LAST_LABELS["12"] == {(0, 1): "hero"}
+    # Reuse keeps the names given at the last pause.
+    again = await WPImageFilter.execute(
+        images=[FakeBatch("a", [0, 1]), FakeBatch("b", [0])],
+        context=loop,
+        wp_image_filter=cfg(mode="reuse"),
+    )
+    assert again.values[11] == ["hero", "#6"]
 
 
 async def test_reuse_uses_stored_picks_and_per_image():
@@ -202,3 +230,66 @@ def test_frame_labels_carry_the_frames_variables_as_text():
     assert label["vars"]["hair"] == "red hair"
     assert "empty" not in label["vars"] and "__trace__" not in label["vars"]
     assert len(label["vars"]["long"]) == node_mod._MAX_VAR_TEXT
+
+
+def _fake_server(monkeypatch, reply=None, interrupt=False):
+    """ComfyUI's PromptServer and interrupt check, and no preview files. The
+    picker answers `reply` as soon as the request goes out."""
+    sent = []
+
+    class Server:
+        def send_sync(self, event, data):
+            sent.append((event, data))
+            if event == node_mod.EVENT_REQUEST and reply is not None:
+                f.PENDING.answer(data["token"], reply)
+
+    srv = types.ModuleType("server")
+    srv.PromptServer = types.SimpleNamespace(instance=Server())
+    mm = types.ModuleType("comfy.model_management")
+
+    def check():
+        if interrupt:
+            raise RuntimeError("interrupted")
+    mm.throw_exception_if_processing_interrupted = check
+    monkeypatch.setitem(sys.modules, "server", srv)
+    monkeypatch.setitem(sys.modules, "comfy", types.ModuleType("comfy"))
+    monkeypatch.setitem(sys.modules, "comfy.model_management", mm)
+    monkeypatch.setattr(node_mod, "_save_previews", lambda images: [[{"filename": "x.png"}]])
+    monkeypatch.setattr(node_mod, "POLL_SECONDS", 0.01)
+    return sent
+
+
+async def test_ask_waits_for_the_picker_and_closes_the_request(monkeypatch):
+    sent = _fake_server(monkeypatch, reply={"action": "picks", "picks": [[0, 1]]})
+    answer = await WPImageFilter._ask(
+        [FakeBatch("a", [0, 1])], [{}], [2],
+        {"timeout": 30, "send_as": "list", "on_timeout": "keep_all"}, "12")
+    assert answer.action == "picks" and answer.picks == ((0, 1),)
+    (ev, req), (done, info) = sent
+    assert ev == node_mod.EVENT_REQUEST and req["frames"] == [[{"filename": "x.png"}]]
+    assert done == node_mod.EVENT_DONE and info["token"] == req["token"]
+    assert f.PENDING.pending() == []
+
+
+async def test_ask_times_out_to_the_chosen_fallback(monkeypatch):
+    sent = _fake_server(monkeypatch, reply={"action": "nonsense"})
+    answer = await WPImageFilter._ask(
+        [FakeBatch("a", [0, 1])], [{}], [2],
+        {"timeout": 1, "send_as": "list", "on_timeout": "keep_first"}, "12")
+    # The malformed answer was ignored; the timeout kept the first image.
+    assert answer.action == "picks" and answer.picks == ((0, 0),)
+    assert sent[-1][0] == node_mod.EVENT_DONE
+
+
+async def test_cancelling_the_run_ends_the_wait(monkeypatch):
+    sent = _fake_server(monkeypatch, interrupt=True)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        await WPImageFilter._ask(
+            [FakeBatch("a", [0])], [{}], [1],
+            {"timeout": 0, "send_as": "list", "on_timeout": "keep_all"}, "12")
+    assert sent[-1][0] == node_mod.EVENT_DONE and f.PENDING.pending() == []
+
+
+def test_fingerprint_never_matches():
+    fp = WPImageFilter.fingerprint_inputs()
+    assert fp != fp

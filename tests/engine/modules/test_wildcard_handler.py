@@ -160,6 +160,34 @@ def test_multi_pick_unique_clamps_to_pool():
     assert len(set(out["c"].items)) == 2
 
 
+def test_multi_pick_caps_the_count_at_live_options():
+    # Weight 0 means disabled: it never fills a slot, so 3 requested from one
+    # live option gives that one option.
+    for seed in range(30):
+        out = WildcardHandler.resolve(
+            _payload([
+                {"id": "a", "value": "alpha", "weight": 1},
+                {"id": "b", "value": "beta", "weight": 0},
+                {"id": "c", "value": "gamma", "weight": 0},
+            ]),
+            instance={"variable_binding": "c", "pick_min": 2, "pick_max": 3},
+            ctx=_ctx(seed=seed),
+        )
+        assert out["c"].items == ["alpha"]
+
+
+def test_multi_pick_with_no_live_options_binds_an_empty_list():
+    out = WildcardHandler.resolve(
+        _payload([
+            {"id": "a", "value": "alpha", "weight": 0},
+            {"id": "n", "value": "", "is_null": True, "weight": 1},
+        ]),
+        instance={"variable_binding": "c", "pick_min": 1, "pick_max": 2},
+        ctx=_ctx(seed=3),
+    )
+    assert out["c"].items == []
+
+
 def test_multi_pick_seed_deterministic():
     a = WildcardHandler.resolve(
         _payload(list(_MULTI)),
@@ -775,6 +803,34 @@ def test_resolve_pinned_mode_falls_back_when_pinned_id_missing():
         ctx=ctx,
     )
     assert out == {"$x": "alpha"}  # fell through to RNG
+
+
+def test_resolve_pinned_mode_warns_when_pinned_id_missing():
+    """The fall-through is not silent: a sweep frame pinned to a deleted
+    option would otherwise roll at random without a word."""
+    ctx = _ctx(seed=1)
+    ctx["__wp_warnings__"] = []
+    payload = _payload([{"id": "a", "value": "alpha", "weight": 1}])
+    WildcardHandler.resolve(
+        payload,
+        instance={"variable_binding": "$x", "mode": "pinned", "pinned_option_id": "ghost"},
+        ctx=ctx,
+    )
+    warns = [w for w in ctx["__wp_warnings__"] if w["type"] == "pinned_option_missing"]
+    assert len(warns) == 1
+    assert warns[0]["detail"] == {"option_id": "ghost"}
+
+
+def test_resolve_pinned_mode_found_id_does_not_warn():
+    ctx = _ctx(seed=1)
+    ctx["__wp_warnings__"] = []
+    payload = _payload([{"id": "a", "value": "alpha", "weight": 1}])
+    WildcardHandler.resolve(
+        payload,
+        instance={"variable_binding": "$x", "mode": "pinned", "pinned_option_id": "a"},
+        ctx=ctx,
+    )
+    assert not [w for w in ctx["__wp_warnings__"] if w["type"] == "pinned_option_missing"]
 
 
 def test_resolve_pinned_mode_resolves_inline_syntax():

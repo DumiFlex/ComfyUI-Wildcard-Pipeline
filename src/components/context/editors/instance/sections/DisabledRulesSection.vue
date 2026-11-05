@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import WpCheck from "../../../../shared/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
 
 interface Rule {
   id: string;
@@ -60,15 +61,14 @@ function onClickReset(): void {
     <div class="wp-instance-section-head">
       <span class="wp-instance-section-title">Disabled rules</span>
       <span v-if="hasOverride" class="wp-instance-section-modified">modified</span>
-      <button
+      <Button
         v-if="hasOverride"
-        type="button"
-        class="wp-instance-section-reset"
+        size="sm"
+        variant="ghost"
+        icon="pi-replay"
         data-test="dr-reset"
         @click="onClickReset"
-      >
-        <i class="pi pi-replay" /> reset
-      </button>
+      >Reset</Button>
     </div>
     <div class="wp-instance-section-body wp-instance-section-body-col">
       <div
@@ -76,7 +76,7 @@ function onClickReset(): void {
         :key="rule.id"
         class="wp-instance-row"
       >
-        <WpCheck
+        <Checkbox
           :data-test="`dr-cb-${rule.id}`"
           :model-value="isDisabled(rule.id)"
           :aria-label="`disable rule ${rule.id}`"
@@ -109,21 +109,11 @@ function onClickReset(): void {
 }
 .wp-instance-section-modified {
   background: rgba(251, 146, 60, 0.18);
-  color: var(--wp-status-modified, #fb923c);
+  color: var(--wp-status-modified);
   padding: 1px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
-}
-.wp-instance-section-reset {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text-muted);
-  padding: 2px 6px;
-  font: 9px/1 var(--wp-font-sans);
-  cursor: pointer;
-  border-radius: 3px;
 }
 .wp-instance-section-body {
   display: flex;

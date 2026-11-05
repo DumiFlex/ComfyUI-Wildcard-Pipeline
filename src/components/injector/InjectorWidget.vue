@@ -11,10 +11,12 @@ import {
 } from "../../widgets/_shared";
 import { reorderInjectorRows } from "../../widgets/injector";
 import { shortConflictLabel, scanInjectorConflicts } from "../../extension/conflicts";
-import { applyFlip, captureRects, MOTION_FLIP_MS } from "../shared/flip";
+import { applyFlip, captureRects, MOTION_FLIP_MS } from "@/kit/flip";
 import InjectorRowComp from "./InjectorRow.vue";
-import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import InjectorBindingModal from "./InjectorBindingModal.vue";
+import Button from "@/kit/Button.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 
 // NOTE: when we wire enter/leave animations (row added on connect,
 // row removed on disconnect) we'll pass `{ classes: INJ_ANIM_CLASSES }`
@@ -186,11 +188,11 @@ const conflictByUid = computed<Record<string, RowConflict>>(() => {
 // via host.requestRelayout when this value changes.
 //
 // CSS source-of-truth dependencies (keep in lockstep):
-//   .wp-inj-toggle, .wp-inj-toggle-mark
+//   Checkbox size sm         width 12 (the on/off box)
 //   .wp-inj-type-icon       width 16
 //   .wp-inj-slot            max-width 96
 //   .wp-inj-type-chip       ~50 (font 9px × ~7 chars for "boolean")
-//   .wp-vbind-wrap          min-width 80
+//   .wp-inj-bind            min-width 80
 //   .wp-conflict-dot        7
 //   .wp-conflict-badge      max-width 88
 //   .wp-inj-action          width 20 (× 2 in cluster)
@@ -837,28 +839,27 @@ defineExpose({ addRow, addGeneralRow, removeRow });
 <template>
   <div class="wp-inj-widget" :class="{ 'wp-inj-widget--skipped': isSkipped }">
     <div class="wp-inj-header">
-      <button
-        type="button"
+      <WpIconButton
+        variant="bare"
         class="wp-inj-caret"
-        :title="collapsed ? 'Expand rows' : 'Collapse rows'"
-        :aria-label="collapsed ? 'Expand injector rows' : 'Collapse injector rows'"
+        :icon="collapsed ? 'pi-caret-right' : 'pi-caret-down'"
+        :label="collapsed ? 'Expand injector rows' : 'Collapse injector rows'"
+        :hint="collapsed ? 'Expand rows' : 'Collapse rows'"
         data-test="inj-toolbar-collapse"
         @click="collapsed = !collapsed"
-      ><i :class="['pi', collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
+      />
       <span data-test="inj-toolbar-label" class="wp-inj-header-label">injected variables</span>
       <span data-test="inj-toolbar-count" class="wp-inj-header-count">{{ enabledCount }} / {{ value.rows.length }}</span>
-      <button
-        type="button"
+      <Button
+        size="sm"
+        variant="ghost"
         class="wp-inj-collapse-conns"
-        :class="{ 'is-active': connectionsCollapsed }"
-        :title="connectionsCollapsed ? 'Show all input wires individually' : 'Merge all input wires onto a single pin'"
-        :aria-label="connectionsCollapsed ? 'Expand input connections' : 'Collapse input connections'"
+        :icon="connectionsCollapsed ? 'pi-arrows-alt' : 'pi-arrows-v'"
+        :pressed="connectionsCollapsed"
+        :hint="connectionsCollapsed ? 'Show all input wires individually' : 'Merge all input wires onto a single pin'"
         data-test="inj-toolbar-collapse-conns"
         @click="emit('toggle-connections-collapse')"
-      >
-        <i :class="['pi', connectionsCollapsed ? 'pi-arrows-alt' : 'pi-arrows-v']" aria-hidden="true" />
-        <span class="wp-inj-collapse-conns__label">{{ connectionsCollapsed ? "expand wires" : "merge wires" }}</span>
-      </button>
+      >{{ connectionsCollapsed ? "expand wires" : "merge wires" }}</Button>
     </div>
 
     <div
@@ -897,20 +898,16 @@ defineExpose({ addRow, addGeneralRow, removeRow });
       >
         ↓ Wire an upstream node's output into this node's input pin — a variable row appears here.
       </div>
-      <button
-        type="button"
-        class="wp-inj-add-general"
-        :class="{ 'wp-inj-add-general--disabled': atGeneralRowCap }"
+      <Button
+        size="sm"
+        variant="add"
+        icon="pi-plus"
+        block
         data-test="inj-add-general"
         :disabled="atGeneralRowCap"
-        :aria-disabled="atGeneralRowCap"
-        :title="atGeneralRowCap
-          ? `Maximum ${MAX_GENERAL_INJECTOR_ROWS} template rows`
-          : 'Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects'"
+        :hint="atGeneralRowCap ? undefined : 'Add a template row — composes a variable from sockets and other rows, runs after them, and survives disconnects'"
         @click="addGeneralRow"
-      >
-        <i class="pi pi-plus" aria-hidden="true" /> Add template row
-      </button>
+      >{{ atGeneralRowCap ? `Template rows full (${MAX_GENERAL_INJECTOR_ROWS} max)` : "Add template row" }}</Button>
     </div>
     </div>
     <ContextMenu
@@ -921,26 +918,20 @@ defineExpose({ addRow, addGeneralRow, removeRow });
       :header="ctxMenu.header"
       @close="ctxMenu.visible = false"
     />
-    <Teleport to="body">
-      <Transition name="wp-modal" appear>
-        <InjectorBindingModal
-          v-if="editingRow"
-          :row="editingRow"
-          :sibling-rows="value.rows"
-          :slot-types="slotTypes"
-          :slot-labels="slotLabels"
-          :references="editingRow?.kind === 'general' ? generalRowReferences : []"
-          @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
-          @close="closeEditModal"
-        />
-      </Transition>
-    </Teleport>
+    <InjectorBindingModal
+      v-if="editingRow"
+      :row="editingRow"
+      :sibling-rows="value.rows"
+      :slot-types="slotTypes"
+      :slot-labels="slotLabels"
+      :references="editingRow?.kind === 'general' ? generalRowReferences : []"
+      @update="(patch) => editingRow && updateRow(editingRow._uid, patch)"
+      @close="closeEditModal"
+    />
   </div>
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-inj-widget {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border-soft, var(--wp-border));
@@ -963,19 +954,6 @@ defineExpose({ addRow, addGeneralRow, removeRow });
   font: 500 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
 }
-.wp-inj-caret {
-  background: transparent;
-  border: none;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  padding: 0;
-  font-size: 10px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-}
-.wp-inj-caret:hover { color: var(--wp-text); }
-.wp-inj-caret .pi { font-size: 10px; }
 .wp-inj-header-label { flex: 0 0 auto; }
 .wp-inj-header-count {
   margin-left: auto;
@@ -986,33 +964,6 @@ defineExpose({ addRow, addGeneralRow, removeRow });
  * Pill-shaped button with persistent bg + border so it reads as
  * tappable at rest (no hover-required affordance). Active (collapsed):
  * accent-tinted so the mode change is obvious at a glance. */
-.wp-inj-collapse-conns {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border-soft, var(--wp-border2));
-  color: var(--wp-text-dim, var(--wp-text3));
-  font: 500 10px var(--wp-font-sans);
-  letter-spacing: 0.02em;
-  padding: 2px 7px;
-  margin-left: 4px;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
-}
-.wp-inj-collapse-conns:hover {
-  background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-bg2));
-  border-color: color-mix(in srgb, var(--wp-accent) 40%, var(--wp-border-soft, var(--wp-border2)));
-  color: var(--wp-text);
-}
-.wp-inj-collapse-conns.is-active {
-  color: var(--wp-accent-text, var(--wp-accent));
-  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-  border-color: color-mix(in srgb, var(--wp-accent) 55%, transparent);
-}
-.wp-inj-collapse-conns .pi { font-size: 10px; line-height: 1; }
-.wp-inj-collapse-conns__label { line-height: 1; }
 /* Collapse animation wrapper around .wp-inj-list. Mirrors the
  * `.wp-bundle` grid-template-rows pattern: container transitions
  * from 1fr → 0fr, inner list keeps `min-height: 0 + overflow: hidden`
@@ -1064,36 +1015,9 @@ defineExpose({ addRow, addGeneralRow, removeRow });
 /* Add-template-row button — full-width dashed affordance below the
  * rows list, mirroring the "add" pattern other WP list editors use.
  * Sits inside the list so it scrolls + collapses with the rows. */
-.wp-inj-add-general {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 4px;
-  padding: 6px 8px;
-  border: 1px dashed var(--wp-border2, var(--wp-border));
-  border-radius: var(--wp-radius-sm, 4px);
-  background: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font: 600 10px var(--wp-font-sans);
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
-}
-.wp-inj-add-general:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
-  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border2, var(--wp-border)));
-  color: var(--wp-text);
-}
 /* Disabled at the template-row cap. Mirrors the assembler toolbar
  * pattern (`.wp-asm-toolbtn:disabled`) — dim + not-allowed cursor so
  * the user reads the affordance as "intentionally inert". Tooltip
  * spells out the cap. */
-.wp-inj-add-general:disabled,
-.wp-inj-add-general--disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.wp-inj-add-general .pi { font-size: 10px; line-height: 1; }
+.wp-inj-collapse-conns { margin-left: 4px; }
 </style>

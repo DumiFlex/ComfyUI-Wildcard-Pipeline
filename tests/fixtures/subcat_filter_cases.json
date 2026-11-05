@@ -9,5 +9,8 @@
   {"expr": "(warm or cold", "valid": false, "error": "paren"},
   {"expr": "pink not warm", "valid": false, "error": "operator"},
   {"expr": "warm or null", "valid": false, "error": "reserved"},
-  {"expr": "warm or banana", "valid": false, "error": "unknown"}
+  {"expr": "warm or banana", "valid": false, "error": "unknown"},
+  {"expr": "!warm", "valid": true, "reads_as": "not warm", "matches": {"warm": false, "cold": true}},
+  {"expr": "cold and !blue", "valid": true, "reads_as": "cold and not blue", "matches": {"cold": true, "blue,cold": false, "warm": false}},
+  {"expr": "!(warm or red)", "valid": true, "reads_as": "not (warm or red)", "matches": {"cold": true, "red": false}}
 ]

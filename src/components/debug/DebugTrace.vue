@@ -4,6 +4,7 @@
  * Context node that ran it. A row says what the step wrote; clicking it
  * opens DebugStepDetail with the reasons.
  */
+import WpIconButton from "@/kit/WpIconButton.vue";
 import { nextTick, ref, watch } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugStepDetail from "./DebugStepDetail.vue";
@@ -26,7 +27,6 @@ const emit = defineEmits<{
   (e: "toggle", key: string): void;
   (e: "goto-step", key: string): void;
   (e: "row-menu", ev: MouseEvent, step: TraceStep): void;
-  (e: "copy", text: string): void;
   (e: "focus-node", nodeId: string): void;
 }>();
 
@@ -91,13 +91,13 @@ function groupTooltip(g: TraceGroup): string {
           data-test="dbg-group-title"
         >{{ groupLabel(g) }}</span>
         <span v-if="g.seed" class="wp-dbg-group__seed" title="Chain seed this node ran with">seed {{ g.seed }}</span>
-        <button
+        <WpIconButton
           v-if="canFocus && g.nodeId"
-          type="button"
           class="wp-dbg-group__focus"
-          title="Select this node on the canvas"
+          icon="pi-arrow-up-right"
+          label="Select this node on the canvas"
           @click="emit('focus-node', g.nodeId)"
-        ><i class="pi pi-arrow-up-right" aria-hidden="true" /></button>
+        />
       </header>
       <div
         v-for="s in g.steps"
@@ -215,7 +215,6 @@ function groupTooltip(g: TraceGroup): string {
             :uuid-to-name="uuidToName"
             :uuid-to-kind="uuidToKind"
             :can-focus="canFocus"
-            @copy="(t) => emit('copy', t)"
             @goto-step="(k) => emit('goto-step', k)"
             @focus-node="(id) => emit('focus-node', id)"
           />
@@ -241,19 +240,12 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-group__title--codename {
   font: 600 10.5px/1.5 var(--wp-font-mono);
   padding: 0 7px;
-  border-radius: 999px;
+  /* A finite radius, not 999px: Firefox draws a bordered full pill in pieces
+     that seam at canvas zooms like 0.64 / 0.8 (docs/component-standard.md). */
+  border-radius: min(7px, var(--wp-radius-cap, 999px)); /* ~18px tall */
   border: 1px solid var(--wp-border);
 }
-.wp-dbg-group__focus {
-  margin-left: auto;
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  padding: 0 2px;
-}
-.wp-dbg-group__focus:hover { color: var(--wp-text); }
-.wp-dbg-group__focus .pi { font-size: 10px; }
+.wp-dbg-group__focus { margin-left: auto; }
 .wp-dbg-step {
   border-top: 1px solid var(--wp-border-soft, var(--wp-border));
 }
@@ -311,7 +303,7 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-badge {
   font: 600 9px/1 var(--wp-font-mono);
   padding: 3px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2, var(--wp-bg2));
   color: var(--wp-text-dim);
   display: inline-flex;
@@ -325,21 +317,21 @@ function groupTooltip(g: TraceGroup): string {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-dim);
   background: var(--wp-bg-2, var(--wp-bg2));
 }
-.wp-dbg-status.is-error { color: var(--wp-red, #e5484d); background: color-mix(in oklab, var(--wp-red, #e5484d) 16%, transparent); }
+.wp-dbg-status.is-error { color: var(--wp-red); background: color-mix(in oklab, var(--wp-red) 16%, transparent); }
 .wp-dbg-status.is-never { color: var(--wp-warn); background: color-mix(in oklab, var(--wp-warn) 16%, transparent); }
 .wp-dbg-step.is-off .wp-dbg-step__row, .wp-dbg-step.is-frame .wp-dbg-step__row { opacity: 0.55; }
-.wp-dbg-step.is-error { box-shadow: inset 2px 0 0 var(--wp-red, #e5484d); }
+.wp-dbg-step.is-error { box-shadow: inset 2px 0 0 var(--wp-red); }
 .wp-dbg-step__chev { font-size: 8px; color: var(--wp-text-dim); transition: transform var(--wp-motion-quick, 0.12s) ease; }
 .wp-dbg-step.is-open .wp-dbg-step__chev { transform: rotate(90deg); }
 .wp-dbg-step__negs { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 0 30px; font-size: 11px; }
 .wp-dbg-step__neg { display: flex; flex-wrap: wrap; gap: 5px; align-items: baseline; }
 .wp-dbg-step__neg code { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-dbg-step__neg-label { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red, #e5484d); }
-.wp-dbg-step__neg-text { color: var(--wp-red, #e5484d); word-break: break-word; }
+.wp-dbg-step__neg-label { font: 600 10px/1.5 var(--wp-font-mono); color: var(--wp-red); }
+.wp-dbg-step__neg-text { color: var(--wp-red); word-break: break-word; }
 .wp-dbg-step__writes, .wp-dbg-step__full {
   display: flex;
   flex-direction: column;

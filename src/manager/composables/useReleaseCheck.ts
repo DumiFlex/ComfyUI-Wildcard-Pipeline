@@ -120,11 +120,14 @@ export function resetReleaseCheckSession(): void {
   checking.value = false;
   rateLimitedUntil.value = null;
   history.value = [];
+  historyLoading.value = false;
   historyFetched = false;
 }
 
 /** Once per page: the history does not change while someone reads it. */
 let historyFetched = false;
+/** The history request is in flight (What's new draws its skeleton). */
+const historyLoading = ref(false);
 
 function readHistoryCache(): { at: string; items: ReleaseSummary[] } | null {
   if (typeof localStorage === "undefined") return null;
@@ -159,6 +162,7 @@ async function loadHistory(): Promise<void> {
 
   const slug = repoSlug();
   if (!slug) return;
+  historyLoading.value = true;
   try {
     const res = await fetch(
       `https://api.github.com/repos/${slug}/releases?per_page=${HISTORY_COUNT}`,
@@ -191,6 +195,8 @@ async function loadHistory(): Promise<void> {
     }
   } catch {
     // Offline. The cached list, if any, is already painted.
+  } finally {
+    historyLoading.value = false;
   }
 }
 
@@ -435,6 +441,7 @@ export function useReleaseCheck(): {
   checking: ReturnType<typeof ref<boolean>>;
   rateLimitedUntil: ReturnType<typeof ref<number | null>>;
   history: ReturnType<typeof ref<ReleaseSummary[]>>;
+  historyLoading: ReturnType<typeof ref<boolean>>;
   loadHistory: () => Promise<void>;
   checkNow: () => Promise<void>;
 } {
@@ -473,6 +480,6 @@ export function useReleaseCheck(): {
   return {
     current, latestVersion, hasUpdate, severity,
     releaseBody, releaseUrl, lastChecked, checking, rateLimitedUntil,
-    history, loadHistory, checkNow,
+    history, historyLoading, loadHistory, checkNow,
   };
 }

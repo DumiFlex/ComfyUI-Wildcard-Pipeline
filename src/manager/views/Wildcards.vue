@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import Checkbox from "@/kit/Checkbox.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "../composables/useToast";
+import { useToast } from "@/kit/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
@@ -10,18 +12,19 @@ import ModuleListView from "../components/ModuleListView.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
-import Button from "../components/ui/Button.vue";
-import Select from "../components/ui/Select.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import EmptyState from "@/kit/EmptyState.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "@/kit/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { validateModule } from "../utils/validateModule";
 import type { ModuleRow, CategoryRow } from "../api/types";
@@ -126,19 +129,18 @@ const extraFilters = computed(() => [
   {
     key: "has-refs",
     label: "Uses nested refs",
-    chipClass: "wp-chip--syntax-ref",
+    color: "var(--wp-kind-ref)",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasRefs,
   },
   {
     key: "has-inline",
     label: "Has inline {a|b|c}",
-    chipClass: "wp-chip--syntax-dp",
+    color: "var(--wp-kind-derivation)",
     check: (m: ModuleRow) => getWildcardSyntax(m).hasInline,
   },
   {
     key: "is-referenced",
     label: "Referenced by others",
-    chipClass: "wp-chip--syntax-in",
     check: (m: ModuleRow) => {
       // Graph keyed by `mod.id` (= 8-hex uuid). See syntaxView.
       const inc = wildcardGraph.value.incoming.get(m.id);
@@ -171,15 +173,6 @@ function edit(row: ModuleRow) {
     params: { id: row.id },
     query: { returnTo: encodeURIComponent(route.fullPath) },
   });
-}
-
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
 }
 
 async function dup(row: ModuleRow) {
@@ -326,6 +319,7 @@ function issuesFor(row: ModuleRow) {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-sparkles"
         headline="No wildcards yet"
         body="Wildcards let you sample one option from a pool. Create your first to start composing prompts."
@@ -353,60 +347,54 @@ function issuesFor(row: ModuleRow) {
         </div>
         <div class="wp-field">
           <label class="wp-field__label">Favorites</label>
-          <button
-            type="button"
-            class="wp-input"
-            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
-            @click="filter.favorites = !filter.favorites; emitFetch()"
-          >
-            <span class="wp-check" :data-checked="filter.favorites ? 'true' : 'false'" aria-hidden="true">
-              <svg v-if="filter.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
-                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span>Favorites only</span>
-          </button>
+          <Checkbox
+            field
+            :model-value="!!filter.favorites"
+            label="Favorites only"
+            data-test="favorites-filter"
+            @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+          />
         </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
             Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
           </label>
-          <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
+          <Skeleton v-if="store.loading && !store.items.length" shape="chip" :lines="6" height="24px" label="Loading tags" />
+          <div v-else-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
           <div v-else class="wp-tags-row">
-            <button
+            <Chip
               v-for="t in allTags" :key="t"
-              type="button"
-              class="wp-tag-chip"
-              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              :pressed="(filter.tags ?? []).includes(t)"
+              size="sm"
               @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
-            >
-              {{ t }}
-            </button>
+            >{{ t }}</Chip>
           </div>
         </div>
       </div>
     </template>
 
     <template #favorite="{ row }">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         class="wp-row-fav-btn"
+        :icon="row.is_favorite ? 'pi-star-fill' : 'pi-star'"
         :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-pressed="row.is_favorite"
         :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
         @click.stop="fav(row)"
-      >
-        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-      </button>
+      />
     </template>
 
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -419,12 +407,12 @@ function issuesFor(row: ModuleRow) {
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-mono">{{ optionCount(row) }}</span></td>
@@ -464,7 +452,7 @@ function issuesFor(row: ModuleRow) {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'wildcard'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'wildcard'" compact />
       <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
       <CommunityRowActions :row="row" kind="module" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
@@ -506,12 +494,12 @@ function issuesFor(row: ModuleRow) {
     @confirmed="onCascadeDialogConfirmed"
     @cancelled="onCascadeDialogCancelled"
   />
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />
@@ -533,11 +521,6 @@ function issuesFor(row: ModuleRow) {
   gap: var(--wp-space-3);
 }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
-.wp-tag-chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
 
 .wp-syntax-cell {
   display: inline-flex;
@@ -551,7 +534,7 @@ function issuesFor(row: ModuleRow) {
   gap: 3px; /* audit-exempt: 3px optical gap between icon and text inside pill */
   height: 20px;
   padding: 0 var(--wp-space-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-weight: 600;
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -568,18 +551,18 @@ function issuesFor(row: ModuleRow) {
   border-color: color-mix(in oklab, var(--wp-kind-ref) 32%, transparent);
 }
 .wp-syntax-pill--in {
-  color: var(--wp-accent-text, #c4b5fd);
-  background: rgba(139, 92, 246, 0.18);
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 18%, transparent);
-  border-color: rgba(139, 92, 246, 0.35);
-  border-color: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 35%, transparent);
+  color: var(--wp-accent-text);
+  background: rgba(99, 102, 241, 0.18);
+  background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
+  border-color: rgba(99, 102, 241, 0.35);
+  border-color: color-mix(in oklab, var(--wp-accent-500) 35%, transparent);
 }
 .wp-syntax-pill--dp {
-  color: var(--wp-warn, #fcd34d);
+  color: var(--wp-warn);
   background: rgba(250, 204, 21, 0.18);
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 18%, transparent);
+  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
   border-color: rgba(250, 204, 21, 0.32);
-  border-color: color-mix(in oklab, var(--wp-warn, #facc15) 32%, transparent);
+  border-color: color-mix(in oklab, var(--wp-warn) 32%, transparent);
 }
 
 /* Light-mode overrides — must repeat here because scoped [data-v-xxx] wins specificity
@@ -591,8 +574,8 @@ function issuesFor(row: ModuleRow) {
   border-color: color-mix(in oklab, var(--wp-kind-ref) 38%, transparent);
 }
 .wp-theme-light .wp-syntax-pill--in {
-  background: rgba(139, 92, 246, 0.13);
-  border-color: rgba(139, 92, 246, 0.40);
+  background: rgba(99, 102, 241, 0.13);
+  border-color: rgba(99, 102, 241, 0.40);
 }
 .wp-theme-light .wp-syntax-pill--dp {
   /* --wp-kind-derivation flips to amber-800 (#92400e) in light mode */
@@ -617,7 +600,7 @@ function issuesFor(row: ModuleRow) {
 .wp-opts-grid__bar {
   background: var(--wp-bg-3);
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   overflow: hidden;
 }
 .wp-opts-grid__bar-fill {
@@ -625,4 +608,6 @@ function issuesFor(row: ModuleRow) {
   background: var(--wp-accent-gradient);
 }
 .wp-opts-more { margin-top: var(--wp-space-4); font-size: var(--wp-text-xs); }
+/* The favourite star: the kit ghost button, the star in the warn colour when on. */
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 </style>

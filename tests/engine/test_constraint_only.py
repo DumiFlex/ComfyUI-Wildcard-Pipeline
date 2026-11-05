@@ -193,3 +193,37 @@ def test_legacy_neutral_cell_override_reads_as_allow():
     ctx = _run([src, con, tgt], 3)
     assert not [w for w in ctx.get("__wp_warnings__", []) if w.get("type") == "handler_error"]
     assert ctx["shoes"] == "boots"
+
+
+def test_tag_link_leaves_a_target_accepts_axis_it_never_mentions_alone():
+    # The story-pack loop: Location is the target of a Time of Day -> Location
+    # `only` matrix keyed on its classify `time` tags AND carries an `accepts`
+    # `kind` group (it is the source of another agreement). The row says
+    # nothing about `kind`, so the kind tags are no allow-list to fail: the
+    # option keeps its time rule and rolls its kind freely. It used to give
+    # every unmentioned kind member 0, exclude every option and fall back.
+    src = _wildcard("src00001", "time",
+                    [_opt("dawn", ["day"]), _opt("midnight", ["night"])],
+                    sub_categories=["day", "night"])
+    kinds = ["forest", "castle"]
+    tgt = _wildcard("tgt00001", "location",
+                    [_opt("sunlit glade", ["day", "forest"]),
+                     _opt("castle court", ["day", "castle"]),
+                     _opt("moonlit ruin", ["night", "castle"])],
+                    sub_categories=["day", "night", *kinds],
+                    tag_groups={"time": ["day", "night"], "kind": kinds},
+                    tag_group_kinds={"time": "classify", "kind": "accepts"})
+    con = _constraint({"day": {"day": {"mode": "only", "factor": 1.0}},
+                       "night": {"night": {"mode": "only", "factor": 1.0}}}, [])
+    seen = set()
+    for seed in range(40):
+        ctx = _run([src, con, tgt], seed)
+        assert not [w for w in ctx["__wp_warnings__"]
+                    if w.get("type") == "constraint_excludes_all_options"], seed
+        if ctx["time"] == "dawn":
+            assert ctx["location"] in {"sunlit glade", "castle court"}, seed
+        else:
+            assert ctx["location"] == "moonlit ruin", seed
+        seen.add((ctx["location"], ctx["__wp_axes__"]["location"]["kind"]))
+    assert ("sunlit glade", "forest") in seen
+    assert ("castle court", "castle") in seen

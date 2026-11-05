@@ -21,6 +21,7 @@ export const SETTING_ID_INDICATOR = "wildcardPipeline.display.indicatorStyle";
 export const SETTING_ID_BORDER = "wildcardPipeline.display.borderHighlight";
 export const SETTING_ID_COLLAPSED = "wildcardPipeline.display.collapsedByDefault";
 export const SETTING_ID_FOCUS = "wildcardPipeline.display.focusMode";
+export const SETTING_ID_ROW_ACTIONS = "wildcardPipeline.display.rowActions";
 export const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 export const SETTING_ID_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
 export const SETTING_ID_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
@@ -84,6 +85,11 @@ export const TOAST_LIFETIME_OPTIONS = [
   { text: "Sticky (no auto-dismiss)", value: "sticky" },
 ];
 
+export const ROW_ACTIONS_OPTIONS = [
+  { text: "Always (default)", value: "always" },
+  { text: "On hover", value: "hover" },
+];
+
 export const COLLAPSE_MODE_OPTIONS = [
   { text: "Independent (default)", value: "independent" },
   { text: "Accordion (expanding one collapses siblings)", value: "accordion" },
@@ -101,8 +107,14 @@ export const BUNDLE_MASTER_OFF_OPTIONS = [
   { text: "Cascade — clear everyone", value: "cascade-all" },
 ];
 
+export const SETTING_ID_AC_TAGS = "wildcardPipeline.behavior.tagAutocomplete";
+export const SETTING_ID_AC_LORA = "wildcardPipeline.behavior.loraAutocomplete";
+export const SETTING_ID_AC_EMBEDDING = "wildcardPipeline.behavior.embeddingAutocomplete";
+export const SETTING_ID_AC_SEPARATOR = "wildcardPipeline.behavior.autocompleteSeparator";
 export const SETTING_ID_AC_MAX_SUGGESTIONS = "wildcardPipeline.behavior.autocompleteMaxSuggestions";
 export const SETTING_ID_AC_MIN_CHARS = "wildcardPipeline.behavior.autocompleteMinChars";
+export const SETTING_ID_AC_SPACES = "wildcardPipeline.behavior.autocompleteSpaces";
+export const SETTING_ID_AC_ESCAPE = "wildcardPipeline.behavior.autocompleteEscapeBrackets";
 
 export const AC_MAX_SUGGESTIONS_OPTIONS = [
   { text: "5", value: "5" },
@@ -116,6 +128,22 @@ export const AC_MIN_CHARS_OPTIONS = [
   { text: "2", value: "2" },
   { text: "3 (default)", value: "3" },
   { text: "4", value: "4" },
+];
+
+/**
+ * The canvas copies of the autocomplete settings. The manager keeps its own
+ * copies (Settings › Autocomplete) and shows these beside them in a Canvas
+ * column, kept in step with ComfyUI's panel like `CANVAS_SETTINGS`.
+ */
+export const CANVAS_AUTOCOMPLETE_SETTINGS: Array<{ id: string; type: "combo" | "boolean"; defaultValue: string | boolean }> = [
+  { id: SETTING_ID_AC_TAGS, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_LORA, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_EMBEDDING, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_SEPARATOR, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_SPACES, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_ESCAPE, type: "boolean", defaultValue: false },
+  { id: SETTING_ID_AC_MAX_SUGGESTIONS, type: "combo", defaultValue: "20" },
+  { id: SETTING_ID_AC_MIN_CHARS, type: "combo", defaultValue: "3" },
 ];
 
 /** Where a setting sits on the manager's Canvas section. */
@@ -157,6 +185,8 @@ export const CANVAS_SETTINGS: CanvasSettingMeta[] = [
     tooltip: "Independent: each module collapses on its own. Accordion: expanding a module collapses all others.", group: "behavior" },
   { id: SETTING_ID_FOCUS, name: "Focus mode", type: "boolean", defaultValue: false,
     tooltip: "Hover a module to dim the others.", group: "behavior" },
+  { id: SETTING_ID_ROW_ACTIONS, name: "Row buttons", type: "combo", options: ROW_ACTIONS_OPTIONS, defaultValue: "always",
+    tooltip: "When a module row shows its lock, internal and remove buttons. On hover keeps rows calmer; a pressed lock or internal button always shows.", group: "look" },
   { id: SETTING_ID_NEW_DISABLED, name: "New modules start disabled", type: "boolean", defaultValue: false,
     tooltip: "When on, modules added from the picker start with their toggle off. Useful when configuring before letting them run.", group: "behavior" },
   { id: SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE, name: "Confirm destructive bundle actions", type: "boolean", defaultValue: true,
@@ -179,8 +209,13 @@ export const CANVAS_SETTINGS: CanvasSettingMeta[] = [
     tooltip: "Bumps borders + text contrast. Match system honors prefers-contrast.", group: "accessibility" },
 ];
 
-/** Same-origin channel the manager uses to hand a changed canvas setting to
- *  any open canvas tab, which applies it live through ComfyUI's own store. */
+/** Same-origin channel that keeps canvas settings in step both ways: the
+ *  manager hands a change to every open canvas tab (applied through ComfyUI's
+ *  own store), and a canvas tab announces a change made in ComfyUI's panel or
+ *  the playground so an open manager page shows it at once. */
 export const CANVAS_SETTINGS_CHANNEL = "wp-canvas-settings";
 
-export interface CanvasSettingMessage { id: string; value: unknown }
+/** `source` says who sent it; a canvas ignores canvas messages, so two
+ *  canvas tabs never echo a change back and forth. Absent means the manager
+ *  (older managers sent no source). */
+export interface CanvasSettingMessage { id: string; value: unknown; source?: "manager" | "canvas" }

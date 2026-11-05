@@ -8,11 +8,14 @@
  * canonical serialised form on every SFC update so ComfyUI's widget
  * state matches what `execute()` sees.
  */
-import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { defineAsyncComponent, h, ref, watch, type Component, type EffectScope } from "vue";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import { app } from "#comfyui/app";
-import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachLoopSeedsCapture } from "./_seed-capture";
+import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
+import { nodePrevSeeds } from "../extension/_stashes";
 import {
   emptyContextLoopConfig,
   keepFramesWithin,
@@ -39,7 +42,14 @@ interface ContextLoopHostNode extends MountTargetNode, LiteNodeLike {
   properties?: Record<string, unknown>;
 }
 
-export function create(node: ContextLoopHostNode, inputName: string) {
+export function create(node: ContextLoopHostNode, inputName: string): DomWidgetHost {
+  // Run inside a host-owned effect scope: the `reactiveFromGraph` refs and
+  // watchers below live outside any component setup(), so without it their
+  // polls would outlive the node.
+  return buildInScope((scope) => build(node, inputName, scope));
+}
+
+function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope): DomWidgetHost {
   /**
    * Frame-grid collapse, persisted so it survives a workflow save.
    *
@@ -95,7 +105,7 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   // assigns a fresh array each run, so ref equality detects the change.
   const previousSeeds = reactiveFromGraph(
     node,
-    () => (node as unknown as { __wp_prev_seeds__?: number[] }).__wp_prev_seeds__ ?? null,
+    () => nodePrevSeeds.get(node) ?? null,
     Object.is,
   );
 
@@ -125,12 +135,25 @@ export function create(node: ContextLoopHostNode, inputName: string) {
       a.length === b.length && a.every((x, i) => x.label === b[i].label && x.raw === b[i].raw),
   );
 
+  // A wired `values` input sets the frame count at run time (one frame per
+  // line, times any sweep's combinations). The canvas can't read wired text,
+  // so the count follows the last run's `loop_values` payload.
+  const valuesWired = reactiveFromGraph(
+    node,
+    () => node.inputs?.find((i) => i.name === "values")?.link != null,
+    Object.is,
+  );
+  const valuesRun = ref<{ count: number; frames: number } | null>(null);
+
   // While a sweep is on, the frame count comes from the combinations, so
   // keep the stock `count` widget in step: the frame chips, seed list and
   // Seed List node all read it. The Python node recomputes the same number
   // from the config, so a stale widget can't change what runs.
   watch(
-    [() => sweepFrameCount(config.value), count],
+    [
+      () => (valuesWired.value ? (valuesRun.value?.frames ?? null) : sweepFrameCount(config.value)),
+      count,
+    ],
     ([frames]) => {
       const w = (node.widgets ?? []).find((x) => x.name === "count");
       if (w && syncCountToSweep(w, frames)) {
@@ -172,6 +195,8 @@ export function create(node: ContextLoopHostNode, inputName: string) {
           count: count.value,
           previousSeeds: previousSeeds.value,
           sweepSources: sweepSources.value,
+          valuesWired: valuesWired.value,
+          valuesCount: valuesRun.value?.count ?? null,
           "onUpdate:modelValue": onUpdate,
           chipsCollapsed: chipsCollapsed.value,
           "onUpdate:chipsCollapsed": onChipsCollapsed,
@@ -188,6 +213,7 @@ export function create(node: ContextLoopHostNode, inputName: string) {
   });
 
   host = createDomWidgetHost(node, inputName, wrapper, {
+    scope,
     initialValue: serializeContextLoopConfig(config.value),
     onValueRestored: (raw: string) => {
       // Saved properties land with the workflow, after `create()` ran.
@@ -202,9 +228,26 @@ export function create(node: ContextLoopHostNode, inputName: string) {
 
   // Capture the Loop's executed `loop_seeds` series for the modal's "lock
   // previous" button (see _seed-capture).
-  attachLoopSeedsCapture(node);
+  attachLoopSeedsCapture(node, host);
+  listenApi(host, "executed", (ev: Event) => {
+    const detail = (ev as CustomEvent<{ node: string | number; output?: unknown }>).detail;
+    if (!detail || String(detail.node) !== String(node.id)) return;
+    const out = detail.output as { loop_values?: unknown } | undefined;
+    valuesRun.value = parseLoopValues(out?.loop_values);
+  });
+  host.onCleanup(() => loopEditors.delete(node));
 
+  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["values"]));
   return host;
+}
+
+/** The node's `loop_values` UI payload (`[{count, frames}]`), or null. */
+export function parseLoopValues(raw: unknown): { count: number; frames: number } | null {
+  const first: unknown = Array.isArray(raw) ? raw[0] : null;
+  if (!first || typeof first !== "object") return null;
+  const { count, frames } = first as { count?: unknown; frames?: unknown };
+  if (typeof count !== "number" || typeof frames !== "number" || frames < 1) return null;
+  return { count, frames };
 }
 
 /**

@@ -27,12 +27,12 @@
  * canonical bundle upgrade path.
  */
 import { computed, ref } from "vue";
-import Modal from "./ui/Modal.vue";
-import Button from "./ui/Button.vue";
+import Modal from "@/kit/Modal.vue";
+import Button from "@/kit/Button.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
-import { useToast } from "../composables/useToast";
+import { useToast } from "@/kit/useToast";
 import { WPC_API_URL } from "../config/links";
 import { appendSnapshot, stripHistory } from "../utils/history";
 import { installEnvelope } from "../import-export/install";
@@ -325,7 +325,7 @@ function onDismiss() {
     <template v-if="entry">
       <header style="padding: 18px 22px; border-bottom: 1px solid var(--wp-border)">
         <h2 style="margin: 0; font-size: 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px">
-          <i class="pi pi-arrow-up" style="color: var(--wp-warn, #f59e0b)" />
+          <i class="pi pi-arrow-up" style="color: var(--wp-warn)" />
           Update available
         </h2>
         <p style="margin: 6px 0 0; color: var(--wp-text-muted); font-size: 12.5px">
@@ -395,7 +395,7 @@ function onDismiss() {
 <style scoped>
 .wpc-update-action {
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   padding: 12px 14px;
   background: var(--wp-bg-2);
 }
@@ -419,7 +419,7 @@ function onDismiss() {
   font-size: 11.5px;
   background: var(--wp-bg-3);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wpc-update-hint {
   margin-top: 8px !important;
@@ -432,10 +432,10 @@ function onDismiss() {
   gap: 8px;
   margin: 0;
   padding: 10px 12px;
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 36%, transparent);
-  color: var(--wp-danger-text, #ef4444);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 36%, transparent);
+  color: var(--wp-danger-text);
   font-size: 12.5px;
 }
 .wpc-update-error i { font-size: 14px; flex-shrink: 0; }

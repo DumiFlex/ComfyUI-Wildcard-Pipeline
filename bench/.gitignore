@@ -1,0 +1,3 @@
+# Reference images stay on each machine (see images/README.md).
+images/*
+!images/README.md

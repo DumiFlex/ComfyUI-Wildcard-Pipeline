@@ -1,0 +1,209 @@
+import { defineComponent, h, inject, type PropType, type VNode } from "vue";
+import { parseMarkdown, type Align, type Block, type Inline, type ListItem } from "../../manager/utils/chat-markdown";
+import { assetUrl, NOTE_ASSETS, parseImageTarget, parseTarget, readImageAttrs, readLinkAttrs, splitIcons, targetUrl } from "./note-format";
+import type { NoteImage } from "../../extension/note";
+import { NOTE_ACTIONS, type NoteActions } from "./note-actions";
+
+/**
+ * The note body: Markdown through the chat parser, drawn with plain
+ * elements (no v-html), plus the note syntax in note-format.ts: web and
+ * docs links (opening in a new tab), `{button}` links and `:pi-name:` icons.
+ * `wp:community/…` opens a pack in the manager's Community tab; `wp:library`
+ * is a button that runs the note's "add to library" action. A link to
+ * anything else shows its text only.
+ *
+ * Pictures: `wp:image/<id>` draws one saved in the note (`images`),
+ * `wp:asset/<name>` one the extension ships. Nothing else ever becomes an
+ * <img>, so no web address loads. A `{width=N%}` after it sets its width in
+ * percent of the note; without one it is its own size, never wider than the
+ * note.
+ */
+let actions: NoteActions | null = null;
+let pictures: Record<string, NoteImage> = {};
+function origin(): string {
+  return typeof window === "undefined" ? "" : window.location.origin;
+}
+
+function text(v: string): (VNode | string)[] {
+  return splitIcons(v).map((p) => (typeof p === "string"
+    ? p
+    : h("i", { class: ["pi", `pi-${p.icon}`, "wp-note-md__icon"], style: p.color ? { color: p.color } : undefined, "aria-hidden": "true" })));
+}
+
+/** A `wp:library` link: always a button (a text link that runs an action
+ *  would read as navigation). Off when there is nothing to add. */
+function libraryButton(n: Extract<Inline, { t: "link" }>, node: string, icon: string, color: string): VNode {
+  const own = actions;
+  const state = own?.library(node) ?? { ready: false, hint: "Open the note to use this button" };
+  const style = color ? { "--wp-note-link": color } : undefined;
+  return h("button", {
+    type: "button",
+    class: ["wp-note-md__btn", "wp-note-md__btn--action"],
+    // aria-disabled rather than disabled: the tooltip still says why.
+    title: state.hint,
+    "aria-disabled": state.ready ? undefined : "true",
+    style,
+    "data-test": "note-library-button",
+    onClick: (e: MouseEvent) => {
+      e.stopPropagation();
+      if (state.ready) own?.runLibrary(node);
+    },
+  }, [
+    h("i", { class: ["pi", `pi-${icon || "download"}`], "aria-hidden": "true" }),
+    h("span", inline(n.c)),
+  ]);
+}
+
+function link(n: Extract<Inline, { t: "link" }>, button: boolean, icon: string, color: string): VNode {
+  const target = parseTarget(n.href);
+  if (target.kind === "library") return libraryButton(n, target.node, icon, color);
+  const url = targetUrl(target, origin());
+  if (!url) return h("span", { class: "wp-note-md__plain" }, inline(n.c));
+  // Its own colour, or the note's tone (the CSS falls back to it).
+  const style = color ? { "--wp-note-link": color } : undefined;
+  const external = { href: url, target: "_blank", rel: "noopener noreferrer", title: url, draggable: "false", style };
+  if (!button) return h("a", { class: ["wp-note-md__link", { "wp-note-md__link--color": !!color }], ...external }, inline(n.c));
+  return h("a", { class: "wp-note-md__btn", ...external }, [
+    icon ? h("i", { class: ["pi", `pi-${icon}`], "aria-hidden": "true" }) : null,
+    h("span", inline(n.c)),
+    h("i", { class: "pi pi-arrow-up-right", "aria-hidden": "true" }),
+  ]);
+}
+
+function picture(n: Extract<Inline, { t: "img" }>, width: number | null): VNode {
+  const target = parseImageTarget(n.src);
+  let src: string | null = null;
+  let size: { w: number; h: number } | null = null;
+  if (target.kind === "saved") {
+    const img = pictures[target.id];
+    if (img) { src = img.src; size = img; }
+  } else if (target.kind === "asset") {
+    src = assetUrl(target.id, origin());
+    size = NOTE_ASSETS.find((a) => a.id === target.id) ?? null;
+  }
+  if (!src || !size) {
+    // A picture this note can't show: its alt text, marked as a picture.
+    return h("span", { class: "wp-note-md__nopic", "data-test": "note-image-missing" }, [
+      h("i", { class: "pi pi-image", "aria-hidden": "true" }),
+      n.alt || "Picture",
+    ]);
+  }
+  return h("img", {
+    class: "wp-note-md__img",
+    src,
+    alt: n.alt,
+    title: n.alt || undefined,
+    // Its size keeps the room while it decodes; CSS caps it at the note.
+    width: size.w,
+    height: size.h,
+    style: width === null ? undefined : { width: `${width}%` },
+    draggable: "false",
+    decoding: "async",
+    "data-test": "note-image",
+  });
+}
+
+function inline(nodes: Inline[]): (VNode | string)[] {
+  const out: (VNode | string)[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (!n) continue;
+    switch (n.t) {
+      case "text": out.push(...text(n.v)); break;
+      case "b": out.push(h("strong", inline(n.c))); break;
+      case "i": out.push(h("em", inline(n.c))); break;
+      case "s": out.push(h("s", inline(n.c))); break;
+      case "code": out.push(h("code", { class: "wp-note-md__code" }, n.v)); break;
+      case "ref": out.push(h("span", n.v)); break;
+      case "img": {
+        const next = nodes[i + 1];
+        const attrs = next?.t === "text" ? readImageAttrs(next.v) : null;
+        out.push(picture(n, attrs?.width ?? null));
+        if (attrs && next?.t === "text") {
+          const rest = next.v.slice(attrs.length);
+          if (rest) out.push(...text(rest));
+          i++;
+        }
+        break;
+      }
+      case "link": {
+        // A `{button …}` / `{#hex}` right after the link is its attribute block.
+        const next = nodes[i + 1];
+        const attrs = next?.t === "text" ? readLinkAttrs(next.v) : null;
+        out.push(link(n, !!attrs?.attrs.button, attrs?.attrs.icon ?? "", attrs?.attrs.color ?? ""));
+        if (attrs && next?.t === "text") {
+          const rest = next.v.slice(attrs.length);
+          if (rest) out.push(...text(rest));
+          i++;
+        }
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function cellStyle(align: Align): Record<string, string> | undefined {
+  return align ? { textAlign: align } : undefined;
+}
+
+function item(it: ListItem): VNode {
+  if (it.task === null) return h("li", it.blocks.map(block));
+  // A task: a read-only box (an icon, not an input: the note is read-only).
+  return h("li", { class: ["wp-note-md__task", { "wp-note-md__task--done": it.task }] }, [
+    h("i", { class: ["pi", it.task ? "pi-check-square" : "pi-stop", "wp-note-md__box"], "aria-hidden": "true" }),
+    h("span", { class: "wp-note-md__sr" }, it.task ? "Done: " : "To do: "),
+    ...it.blocks.map(block),
+  ]);
+}
+
+function block(b: Block): VNode {
+  switch (b.t) {
+    case "p": return h("p", inline(b.c));
+    case "h": return h("p", { class: ["wp-note-md__h", `wp-note-md__h--${Math.min(b.level, 4)}`], role: "heading", "aria-level": b.level }, inline(b.c));
+    case "list":
+      return h(b.ordered ? "ol" : "ul", {
+        class: { "wp-note-md__tasks": b.items.some((it) => it.task !== null) },
+        ...(b.ordered && b.start !== 1 ? { start: b.start } : {}),
+      }, b.items.map(item));
+    case "pre": return h("pre", { class: "wp-note-md__pre", "data-lang": b.lang || undefined }, b.v);
+    case "quote":
+      return h("blockquote", { class: b.tone ? ["wp-note-md__callout", `wp-note-md__callout--${b.tone}`] : undefined }, [
+        b.tone ? h("i", { class: ["pi", b.tone === "warn" ? "pi-exclamation-triangle" : "pi-info-circle", "wp-note-md__callout-icon"], "aria-hidden": "true" }) : null,
+        h("div", b.blocks.map(block)),
+      ]);
+    case "table":
+      // Fits the note's width and wraps its cells (the note lets the
+      // pointer through to the canvas, so it can't scroll sideways).
+      return h("div", { class: "wp-note-md__table" }, [
+        h("table", [
+          h("thead", [h("tr", b.head.map((c, i) => h("th", { style: cellStyle(b.align[i] ?? null) }, inline(c))))]),
+          h("tbody", b.rows.map((r) => h("tr", r.map((c, i) => h("td", { style: cellStyle(b.align[i] ?? null) }, inline(c)))))),
+        ]),
+      ]);
+    case "hr": return h("hr", { class: "wp-note-md__hr" });
+  }
+}
+
+export default defineComponent({
+  name: "NoteMarkdown",
+  props: {
+    text: { type: String, required: true },
+    /** The note's saved pictures (`NoteConfig.images`). */
+    images: { type: Object as PropType<Record<string, NoteImage>>, default: () => ({}) },
+  },
+  setup(props) {
+    const injected = inject(NOTE_ACTIONS, null);
+    return () => {
+      // The draw functions are plain recursion; they read these here.
+      actions = injected;
+      pictures = props.images;
+      try {
+        return h("div", { class: "wp-note-md" }, parseMarkdown(props.text, { images: true }).map(block));
+      } finally {
+        actions = null;
+        pictures = {};
+      }
+    };
+  },
+});

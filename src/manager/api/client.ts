@@ -1,11 +1,52 @@
+import { aiRequestContext } from "../utils/ai-context";
 import type { CommitOk, CommitPayload } from "../import-export/commit";
-import type { WildcardFilesResult } from "../import-export/wildcard-files";
+import { startDebug } from "./ai-debug";
+import { endAiRequest, startAiRequest, watchesProgress } from "./ai-progress";
+import type { WildcardFilesResult, WildcardFolder } from "../import-export/wildcard-files";
 import type {
   BundleCreateInput, BundleListResponse, BundleRow, BundleUpdateInput,
   CategoryCreateInput, CategoryRow,
   DatabaseConfig, DatabaseConfigUpdate,
-  BackupEntry, BackupList, ServerSettings, ServerSettingsPatch,
+  BackupCreated, BackupEntry, BackupList, RestoreResult, ServerSettings, ServerSettingsPatch,
+  AiConfig, AiConfigPatch, AiTestResult, AiThinkingInfo, AiIndexStatus, AiWildcardDraftRequest, AiWildcardDraftResult,
+  AiWildcardEditRequest,
+  AiWildcardEditResult,
+  AiWebFound,
+  AiDerivationDraftRequest,
+  AiTextDraftRequest,
+  AiTextDraftResult,
+  AiDerivationDraftResult,
+  AiConstraintDraftRequest,
+  AiConstraintDraftResult,
+  AiLibraryNoteSuggestRequest,
+  AiLibraryNoteSuggestResult,
+  AiOrganizeRequest,
+  AiOrganizeResult,
+  AiChatRequest,
+  AiChatResume,
+  AiChatResult,
+  AiChatRetry,
+  AiChatContext,
+  AiChatDetail,
+  AiChatEvent,
+  AiChatStreamEvent,
+  AiChatSummary,
+  AiBundleSplitGroup,
+  AiPackBuilt,
+  AiPackChangeResult,
+  AiPackCheck,
+  AiPackInstallResult,
+  AiPackItemResult,
+  AiPackPlan,
+  AiPackPlanRequest,
+  AiPackPlanResult,
+  AiPackRecommended,
+  AiPackReview,
+  AiPackSettings,
+  AiDescribeRequest,
+  AiDescribeResult,
   TagStatus, TagSuggestResponse, TagDownloadResult, LibraryTagUpdateCounts,
+  HealthCanvasFacts, HealthScan, HealthVariety,
   ModelKind, ModelSourceStatus, ModelSuggestResponse,
   DatabaseInfo, MaintenanceOp, MaintenanceResult,
   EmbedBundle,
@@ -67,7 +108,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.body !== undefined && !(init.body instanceof FormData)) {
     headers["content-type"] = "application/json";
   }
-  const resp = await fetch(path, { ...init, headers });
+  const progress = watchesProgress(path, init.method) ? startAiRequest(path) : null;
+  if (progress) headers["X-WP-Progress"] = progress;
+  const debug = startDebug(path, init.method);
+  if (debug) headers["X-WP-Debug"] = debug;
+  let resp: Response;
+  try {
+    resp = await fetch(path, { ...init, headers });
+  } finally {
+    if (progress) endAiRequest(progress);
+  }
   checkStartupId(resp);
   if (resp.status === 204) return undefined as T;
   let body: unknown;
@@ -78,6 +128,53 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(resp.status, message);
   }
   return body as T;
+}
+
+/** POST a chat turn with `stream: true` and read its NDJSON events. */
+async function streamChat(
+  body: object, onEvent: (event: AiChatStreamEvent) => void, signal?: AbortSignal,
+): Promise<AiChatResult> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const debug = startDebug("/wp/api/ai/chat", "POST");
+  if (debug) headers["X-WP-Debug"] = debug;
+  const resp = await fetch("/wp/api/ai/chat", {
+    method: "POST", body: JSON.stringify(body), signal, headers,
+  });
+  checkStartupId(resp);
+  if (!resp.ok || !resp.body) {
+    let err: unknown = null;
+    try { err = await resp.json(); } catch { err = null; }
+    throw new ApiError(resp.status,
+      (err as { error?: string } | null)?.error ?? `request failed (${resp.status})`);
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  // Set from inside `take`, so declared wide (TS would narrow them to null).
+  const got: { result: AiChatResult | null; failure: ApiError | null } = { result: null, failure: null };
+  const take = (line: string): void => {
+    if (!line.trim()) return;
+    let event: AiChatStreamEvent;
+    try { event = JSON.parse(line) as AiChatStreamEvent; } catch { return; }
+    if (event.type === "done") got.result = event.result;
+    else if (event.type === "error") got.failure = new ApiError(event.status, event.message);
+    else onEvent(event);
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl = buf.indexOf("\n");
+    while (nl >= 0) {
+      take(buf.slice(0, nl));
+      buf = buf.slice(nl + 1);
+      nl = buf.indexOf("\n");
+    }
+  }
+  take(buf + decoder.decode());
+  if (got.failure) throw got.failure;
+  if (!got.result) throw new ApiError(502, "the answer stopped before it finished");
+  return got.result;
 }
 
 function qs(params: Record<string, string | number | boolean | undefined>): string {
@@ -274,6 +371,26 @@ export const api = {
     },
   },
 
+  /** Library health: one scan over the whole library, the findings the
+   *  user ignored, and a per-bundle variety run. */
+  health: {
+    scan(canvas: HealthCanvasFacts | null) {
+      return request<HealthScan>("/wp/api/health/scan", {
+        method: "POST", body: JSON.stringify({ canvas }),
+      });
+    },
+    ignore(add: string[], remove: string[] = []) {
+      return request<{ ignored: string[] }>("/wp/api/health/ignored", {
+        method: "PUT", body: JSON.stringify({ add, remove }),
+      });
+    },
+    variety(bundleId: string, seeds = 200) {
+      return request<HealthVariety>("/wp/api/health/variety", {
+        method: "POST", body: JSON.stringify({ bundle_id: bundleId, seeds }),
+      });
+    },
+  },
+
   /** Library tags: the free-form labels on modules, bundles and templates.
    *  Not the prompt-tag autocomplete list under `tags` below. Both calls
    *  rewrite every row that carries the tag and report how many changed. */
@@ -352,18 +469,31 @@ export const api = {
     backups() {
       return request<BackupList>("/wp/api/database/backups", { method: "GET" });
     },
-    createBackup() {
-      return request<BackupEntry>("/wp/api/database/backups", { method: "POST" });
+    createBackup(note?: string) {
+      const text = note?.trim();
+      return request<BackupCreated>("/wp/api/database/backups", {
+        method: "POST",
+        ...(text ? { body: JSON.stringify({ note: text }) } : {}),
+      });
+    },
+    pinBackup(name: string, pinned: boolean) {
+      return request<BackupEntry>(`/wp/api/database/backups/${encodeURIComponent(name)}/pin`, {
+        method: "PUT",
+        body: JSON.stringify({ pinned }),
+      });
     },
     deleteBackup(name: string) {
       return request<void>(`/wp/api/database/backups/${encodeURIComponent(name)}`, { method: "DELETE" });
     },
-    stageRestore(name: string) {
-      return request<{ pending_restore: string }>("/wp/api/database/backups/restore", {
+    /** Restore a backup into the live library now (no restart). The library
+     *  as it was is saved first; `pre_restore` names that backup. */
+    restoreBackup(name: string) {
+      return request<RestoreResult>("/wp/api/database/backups/restore", {
         method: "POST",
         body: JSON.stringify({ name }),
       });
     },
+    /** Cancel a restore an older version staged for the next start. */
     cancelRestore() {
       return request<void>("/wp/api/database/backups/restore", { method: "DELETE" });
     },
@@ -378,6 +508,179 @@ export const api = {
       return request<ServerSettings>("/wp/api/settings", {
         method: "PUT",
         body: JSON.stringify(patch),
+      });
+    },
+  },
+  /** The AI assistant. Off until the user turns it on; the key is write-only. */
+  ai: {
+    config() {
+      return request<AiConfig>("/wp/api/ai/config", { method: "GET" });
+    },
+    saveConfig(patch: AiConfigPatch) {
+      return request<AiConfig>("/wp/api/ai/config", {
+        method: "PUT", body: JSON.stringify(patch),
+      });
+    },
+    /** The chat server's models, or with `"embed"` the embedding server's. */
+    models(of: "chat" | "embed" = "chat") {
+      return request<{ models: string[] }>("/wp/api/ai/models", {
+        method: "POST", body: JSON.stringify(of === "embed" ? { for: "embed" } : {}),
+      });
+    },
+    test() {
+      return request<AiTestResult>("/wp/api/ai/test", { method: "POST" });
+    },
+    /** What the chosen model takes for Thinking. */
+    thinking() {
+      return request<AiThinkingInfo>("/wp/api/ai/thinking", { method: "POST" });
+    },
+    index() {
+      return request<AiIndexStatus>("/wp/api/ai/index", { method: "GET" });
+    },
+    rebuildIndex() {
+      return request<AiIndexStatus>("/wp/api/ai/index/rebuild", { method: "POST" });
+    },
+    draftWildcard(body: AiWildcardDraftRequest, signal?: AbortSignal) {
+      return request<AiWildcardDraftResult>("/wp/api/ai/wildcard/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    editWildcard(body: AiWildcardEditRequest, signal?: AbortSignal) {
+      return request<AiWildcardEditResult>("/wp/api/ai/wildcard/edit", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftText(body: AiTextDraftRequest, signal?: AbortSignal) {
+      return request<AiTextDraftResult>("/wp/api/ai/text/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftDerivation(body: AiDerivationDraftRequest, signal?: AbortSignal) {
+      return request<AiDerivationDraftResult>("/wp/api/ai/derivation/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    describe(body: AiDescribeRequest, signal?: AbortSignal) {
+      return request<AiDescribeResult>("/wp/api/ai/describe", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    draftConstraint(body: AiConstraintDraftRequest, signal?: AbortSignal) {
+      return request<AiConstraintDraftResult>("/wp/api/ai/constraint/draft", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    /** A first draft of the "About my library" note; nothing is saved. */
+    suggestLibraryNote(body: AiLibraryNoteSuggestRequest, signal?: AbortSignal) {
+      return request<AiLibraryNoteSuggestResult>("/wp/api/ai/library-note/suggest", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    organize(body: AiOrganizeRequest, signal?: AbortSignal) {
+      return request<AiOrganizeResult>("/wp/api/ai/organize", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    async chat(body: AiChatRequest | AiChatResume | AiChatRetry, signal?: AbortSignal) {
+      return request<AiChatResult>("/wp/api/ai/chat", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    /** The chat turn streamed: `onEvent` gets each event while the model
+     *  works; resolves with the same result as `chat`. */
+    async chatStream(
+      body: AiChatRequest | AiChatResume | AiChatRetry,
+      onEvent: (event: AiChatStreamEvent) => void,
+      signal?: AbortSignal,
+    ) {
+      return streamChat({ ...(await aiRequestContext()), ...body, stream: true }, onEvent, signal);
+    },
+    /** Whether the chosen model sees images (null: the server didn't say). */
+    vision() {
+      return request<{ vision: boolean | null; model: string }>("/wp/api/ai/vision", { method: "GET" });
+    },
+    chats(q = "") {
+      return request<{ chats: AiChatSummary[] }>(`/wp/api/ai/chats${qs({ q })}`, { method: "GET" });
+    },
+    getChat(id: string) {
+      return request<AiChatDetail>(`/wp/api/ai/chats/${encodeURIComponent(id)}`, { method: "GET" });
+    },
+    patchChat(id: string, body: { title?: string; pinned?: boolean; events?: AiChatEvent[] }) {
+      return request<{ id: string; title: string; pinned: boolean;
+        /** New card bodies for fix events, by pid. */
+        fixed?: Record<string, Record<string, unknown>> }>(
+        `/wp/api/ai/chats/${encodeURIComponent(id)}`,
+        { method: "PATCH", body: JSON.stringify(body) },
+      );
+    },
+    deleteChat(id: string) {
+      return request<{ deleted: true }>(`/wp/api/ai/chats/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+    },
+    compactChat(id: string) {
+      return request<{ compacted: true; context: AiChatContext }>(
+        `/wp/api/ai/chats/${encodeURIComponent(id)}/compact`, { method: "POST" },
+      );
+    },
+    async packPlan(body: AiPackPlanRequest, signal?: AbortSignal) {
+      return request<AiPackPlanResult>("/wp/api/ai/pack/plan", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    async packItem(
+      body: { plan: AiPackPlan; built: AiPackBuilt; key: string; note?: string },
+      signal?: AbortSignal,
+    ) {
+      return request<AiPackItemResult>("/wp/api/ai/pack/item", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    /** Group a bundle's children into sub-bundles (runs of neighbours). */
+    bundleSplit(
+      body: { name: string; children: Array<Record<string, unknown>>; instruction?: string },
+      signal?: AbortSignal,
+    ) {
+      return request<{ groups: AiBundleSplitGroup[]; model: string }>("/wp/api/ai/bundle/split", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    async packChange(body: { plan: AiPackPlan; key?: string; instruction: string; request?: string }, signal?: AbortSignal) {
+      return request<AiPackChangeResult>("/wp/api/ai/pack/change", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    /** What reference images added to a graph plan add to it (one narrow call). */
+    async packImages(body: { plan: AiPackPlan; images: string[]; note?: string; request?: string }, signal?: AbortSignal) {
+      return request<AiPackChangeResult>("/wp/api/ai/pack/images", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    packSearch(body: { queries: string[] }, signal?: AbortSignal) {
+      return request<{ results: AiWebFound[] }>("/wp/api/ai/pack/search", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    async packReview(body: { plan: AiPackPlan; ai?: boolean; request?: string; recheck?: string[] }, signal?: AbortSignal) {
+      return request<AiPackReview>("/wp/api/ai/pack/review", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    /** The settings the request, the assistant's model and the chat's
+     *  suggestion point to (no model call). */
+    packRecommend(body: { request: string; suggested?: Partial<AiPackSettings> }, signal?: AbortSignal) {
+      return request<AiPackRecommended>("/wp/api/ai/pack/recommend", {
+        method: "POST", body: JSON.stringify(body), signal,
+      });
+    },
+    async packCheck(body: { plan: AiPackPlan; built: AiPackBuilt }, signal?: AbortSignal) {
+      return request<AiPackCheck>("/wp/api/ai/pack/check", {
+        method: "POST", body: JSON.stringify({ ...(await aiRequestContext()), ...body }), signal,
+      });
+    },
+    packInstall(body: { plan: AiPackPlan; built: AiPackBuilt }) {
+      return request<AiPackInstallResult>("/wp/api/ai/pack/install", {
+        method: "POST", body: JSON.stringify(body),
       });
     },
   },
@@ -484,6 +787,10 @@ export const api = {
       return request<WildcardFilesResult>("/wp/api/import/wildcard-files", {
         method: "POST", body: form,
       });
+    },
+    /** Wildcard folders of other extensions found on this machine. */
+    wildcardFolders() {
+      return request<{ folders: WildcardFolder[] }>("/wp/api/import/wildcard-folders");
     },
   },
 };

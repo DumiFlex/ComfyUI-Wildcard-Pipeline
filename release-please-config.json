@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "include-component-in-tag": false,
+  "exclude-paths": [".github", "scripts"],
+  "draft": true,
+  "force-tag-creation": true,
+  "skip-changelog": true,
+  "pull-request-header": ":robot: Merging this PR releases the version below. The GitHub release body is `docs/release-notes/next.md` (the commit list here is only a summary), and this PR merges itself once CI passes and `next.md` has notes.",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Refactoring" },
+    { "type": "revert", "section": "Reverts" },
+    { "type": "docs", "section": "Documentation", "hidden": true },
+    { "type": "style", "section": "Styles", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "build", "section": "Build", "hidden": true },
+    { "type": "ci", "section": "CI", "hidden": true },
+    { "type": "chore", "section": "Chores", "hidden": true }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "comfyui-wildcard-pipeline",
+      "extra-files": [{ "type": "toml", "path": "pyproject.toml", "jsonpath": "$.project.version" }]
+    }
+  }
+}

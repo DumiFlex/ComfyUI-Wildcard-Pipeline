@@ -2,12 +2,13 @@
 import { computed, ref, watch } from "vue";
 
 import { kindIcon } from "../../components/shared/kind-icons";
-import Button from "../components/ui/Button.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
-import Input from "../components/ui/Input.vue";
-import Modal from "../components/ui/Modal.vue";
+import Button from "@/kit/Button.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Input from "@/kit/Input.vue";
+import Modal from "@/kit/Modal.vue";
 import { useCascadeApply, type CascadeApplyRequest } from "./useCascadeApply";
 import { validateSubcatName, validateRefGrammarName, validateVariableName } from "../validation/names";
+import LoadingMark from "@/kit/LoadingMark.vue";
 
 interface Props {
   open: boolean;
@@ -144,7 +145,7 @@ function onOpenUpdate(v: boolean): void {
     @update:open="onOpenUpdate"
   >
     <div v-if="loading" class="wp-cascade-rename__body">
-      <p class="wp-cascade-rename__msg">Scanning impact…</p>
+      <p class="wp-cascade-rename__msg"><LoadingMark>Scanning impact…</LoadingMark></p>
     </div>
     <div v-else class="wp-cascade-rename__body">
       <label class="wp-cascade-rename__field">
@@ -232,14 +233,14 @@ function onOpenUpdate(v: boolean): void {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--wp-text-dim, var(--wp-text3, #8a8a93));
+  color: var(--wp-text-dim, var(--wp-text-dim));
 }
 .wp-cascade-rename__section {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--wp-text-dim, var(--wp-text3, #8a8a93));
+  color: var(--wp-text-dim, var(--wp-text-dim));
   margin-bottom: -6px;
 }
 .wp-cascade-rename__toggle {
@@ -247,9 +248,9 @@ function onOpenUpdate(v: boolean): void {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--wp-border, #38383f);
-  background: var(--wp-bg2, var(--wp-color-surface-2, #25252a));
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
+  border: 1px solid var(--wp-border);
+  background: var(--wp-bg2, var(--wp-bg-2));
   font-size: 13px;
 }
 .wp-cascade-rename__toggle-text {
@@ -261,11 +262,11 @@ function onOpenUpdate(v: boolean): void {
   font-weight: 600;
 }
 .wp-cascade-rename__hint {
-  color: var(--wp-text-dim, var(--wp-text3, #8a8a93));
+  color: var(--wp-text-dim, var(--wp-text-dim));
 }
 .wp-cascade-rename__error {
   margin: 0;
-  color: var(--wp-color-error-fg, var(--wp-danger, #ef4444));
+  color: var(--wp-color-error-fg, var(--wp-danger));
   font-size: 13px;
 }
 .wp-cascade-rename__list {
@@ -281,9 +282,9 @@ function onOpenUpdate(v: boolean): void {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--wp-border, #38383f);
-  border-radius: 6px;
-  background: var(--wp-bg2, var(--wp-color-surface-2, #25252a));
+  border: 1px solid var(--wp-border);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
+  background: var(--wp-bg2, var(--wp-bg-2));
   min-width: 0;
 }
 .wp-cascade-rename__row .wp-row-type-icon {
@@ -312,7 +313,7 @@ function onOpenUpdate(v: boolean): void {
 .wp-cascade-rename__row .wp-id {
   font-family: var(--wp-font-mono, ui-monospace, Menlo, monospace);
   font-size: 10px;
-  color: var(--wp-text-dim, var(--wp-text3, #8a8a93));
+  color: var(--wp-text-dim, var(--wp-text-dim));
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -324,7 +325,7 @@ function onOpenUpdate(v: boolean): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   flex-shrink: 0;
 }
 .wp-mod-badge--kind-wildcard {
@@ -348,11 +349,11 @@ function onOpenUpdate(v: boolean): void {
   color: var(--wp-kind-constraint);
 }
 .wp-mod-badge--kind-bundle {
-  background: color-mix(in oklab, var(--wp-bundle-default, #6366f1) 18%, transparent);
-  color: var(--wp-bundle-default, #6366f1);
+  background: color-mix(in oklab, var(--wp-bundle-default) 18%, transparent);
+  color: var(--wp-bundle-default);
 }
 .wp-mod-badge--kind-category {
-  background: color-mix(in oklab, var(--wp-text-muted, #8a8a93) 18%, transparent);
-  color: var(--wp-text-muted, #8a8a93);
+  background: color-mix(in oklab, var(--wp-text-muted) 18%, transparent);
+  color: var(--wp-text-muted);
 }
 </style>

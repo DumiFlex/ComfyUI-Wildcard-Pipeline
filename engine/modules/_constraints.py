@@ -121,6 +121,35 @@ def _select_source_pick(
     return top
 
 
+def _belongs_to_another_copy(
+    constraint: dict[str, Any],
+    firing_origin: Any,
+    constraints: list[Any],
+) -> bool:
+    """True when ``constraint`` lives in one bundle copy and the firing
+    target lives in ANOTHER copy that carries its own copy of the same
+    library constraint. That copy governs its own target, so this one stays
+    out (a bundle inserted twice keeps each copy's rules to itself).
+
+    A constraint outside any bundle, a target outside any bundle, or a
+    target whose copy has no copy of this constraint (a cross-bundle rule)
+    is unaffected: it applies as before.
+    """
+    origin = constraint.get("__constraint_bundle_origin__")
+    if not origin or not firing_origin or origin == firing_origin:
+        return False
+    lib_id = constraint.get("__constraint_library_id__")
+    if not lib_id:
+        return False
+    return any(
+        isinstance(o, dict)
+        and o.get("__constraint_library_id__") == lib_id
+        and o.get("__constraint_bundle_origin__") == firing_origin
+        and o.get("target_wildcard_id") == constraint.get("target_wildcard_id")
+        for o in constraints
+    )
+
+
 def apply_constraints_for_target(
     options: list[dict[str, Any]],
     target_uuid: str,
@@ -134,6 +163,7 @@ def apply_constraints_for_target(
     carrier_ctx=None,
     applied_out=None,
     target_axes=None,
+    firing_origin=None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Apply EVERY constraint whose reach selector covers this firing
     target instance, combined sequentially.
@@ -169,6 +199,10 @@ def apply_constraints_for_target(
     picked yet — caller code is responsible for ordering source
     wildcards before the target's roll. The warning gives the user a
     signal in WP_Debug instead of a silent no-op.
+
+    ``firing_origin`` is the firing target instance's ``bundle_origin``:
+    a constraint from another copy of the same bundle is skipped when the
+    target's own copy has its copy of it (``_belongs_to_another_copy``).
     """
     if not constraints or not isinstance(constraints, list):
         return options, False
@@ -180,6 +214,8 @@ def apply_constraints_for_target(
     any_applied = False
     for c in constraints:
         if not isinstance(c, dict) or c.get("target_wildcard_id") != target_uuid:
+            continue
+        if _belongs_to_another_copy(c, firing_origin, constraints):
             continue
         cid = c.get("__constraint_module_id__")
         src_id = c.get("source_wildcard_id")

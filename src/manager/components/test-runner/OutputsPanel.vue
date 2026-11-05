@@ -5,7 +5,9 @@
  * Click a row to open that seed's trace.
  */
 import { computed, ref } from "vue";
-import Select from "../ui/Select.vue";
+import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
+import Select from "@/kit/Select.vue";
 import type { ScenarioRunResponse } from "../../api/types";
 import { negativeSegments, orderByStack, renderValue, segmentOutput, type StackItemView } from "../../utils/scenario";
 
@@ -93,8 +95,8 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
       </p>
       <ol class="wp-tro__list">
         <li v-for="r in rows" :key="r.seed">
-          <button type="button" class="wp-tro__row" data-test="output-row" @click="emit('open', r.seed)">
-            <span class="wp-tro__seed">#{{ r.seed }}</span>
+          <ListRow class="wp-tro__row" data-test="output-row" @click="emit('open', r.seed)">
+            <template #start><span class="wp-tro__seed">#{{ r.seed }}</span></template>
             <span class="wp-tro__text">
               <template v-for="(seg, i) in r.segments" :key="i">
                 <span
@@ -125,13 +127,13 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
                 </template>
               </span>
             </span>
-            <span v-if="r.warnings" class="wp-tro__warn">{{ r.warnings }} warning{{ r.warnings === 1 ? "" : "s" }}</span>
-          </button>
+            <template v-if="r.warnings" #end><span class="wp-tro__warn">{{ r.warnings }} warning{{ r.warnings === 1 ? "" : "s" }}</span></template>
+          </ListRow>
         </li>
       </ol>
-      <button v-if="rows.length < available" type="button" class="wp-tro__more" @click="limit += PAGE">
+      <Button v-if="rows.length < available" variant="link" size="sm" class="wp-tro__more" @click="limit += PAGE">
         Show {{ Math.min(PAGE, available - rows.length) }} more
-      </button>
+      </Button>
     </template>
   </div>
 </template>
@@ -149,29 +151,27 @@ const available = computed(() => props.result.samples.filter((s) => !s.error).le
 .wp-tro__same code { color: var(--wp-accent-text); }
 .wp-tro__note code { color: var(--wp-accent-text); }
 .wp-tro__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-3); }
+/* A kit list row drawn as a card: seed, text, warnings. */
 .wp-tro__row {
-  width: 100%; text-align: left; cursor: pointer; font: inherit; color: var(--wp-text);
-  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: var(--wp-space-5); align-items: start;
+  align-items: flex-start; gap: var(--wp-space-5);
   background: var(--wp-bg-1); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
   padding: var(--wp-space-4) var(--wp-space-5);
 }
-.wp-tro__row:hover { border-color: var(--wp-border-strong); }
-.wp-tro__row:focus-visible { outline: 2px solid var(--wp-border-focus); }
+.wp-tro__row :deep(.wp-list-row__start) { width: 48px; align-self: flex-start; }
+.wp-tro__row:hover:not(:disabled) { border-color: var(--wp-border-strong); background: var(--wp-bg-1); }
+.wp-tro__row :deep(.wp-list-row__label) { overflow: visible; white-space: normal; }
 .wp-tro__seed { font: var(--wp-text-xs) var(--wp-font-mono); color: var(--wp-text-dim); padding-top: 2px; }
 .wp-tro__text { font-size: var(--wp-text-base); line-height: var(--wp-line-base); word-break: break-word; }
-.wp-tro__tok { border-radius: 3px; padding: 0 2px; background: color-mix(in oklab, currentColor 12%, transparent); } /* audit-exempt: inline token */
+.wp-tro__tok { border-radius: min(3px, var(--wp-radius-cap, 999px)); padding: 0 2px; background: color-mix(in oklab, currentColor 12%, transparent); } /* audit-exempt: inline token */
 .wp-tro__empty { color: var(--wp-text-dim); }
 .wp-tro__neg { display: block; margin-top: var(--wp-space-2); font: var(--wp-text-sm)/var(--wp-line-base) var(--wp-font-mono); color: var(--wp-text-muted); }
 .wp-tro__neg-tag {
   display: inline-block; margin-right: var(--wp-space-3); padding: 0 var(--wp-space-2);
   font: var(--wp-weight-semibold) var(--wp-text-xs) var(--wp-font-mono); letter-spacing: .04em;
-  border-radius: 3px; /* audit-exempt: inline token */
+  border-radius: min(3px, var(--wp-radius-cap, 999px)); /* audit-exempt: inline token */
   background: color-mix(in oklab, var(--wp-danger) 18%, transparent); color: var(--wp-danger-text);
 }
 .wp-tro__neg-own { color: var(--wp-danger-text); }
 .wp-tro__warn { font-size: var(--wp-text-xs); color: var(--wp-warn); white-space: nowrap; }
-.wp-tro__more {
-  align-self: flex-start; background: none; border: 0; cursor: pointer; padding: 0;
-  color: var(--wp-accent-text); font-size: var(--wp-text-sm);
-}
+.wp-tro__more { align-self: flex-start; font-size: var(--wp-text-sm); }
 </style>

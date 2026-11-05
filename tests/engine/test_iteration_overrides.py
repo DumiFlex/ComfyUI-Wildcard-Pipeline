@@ -75,7 +75,7 @@ def test_constraint_cell_factor_override_applies_only_on_its_frame():
         "id": "src-uuid",
         "payload": {
             "var_binding": "src",
-            "options": [{"id": "s0", "value": "s1", "weight": 1.0}],
+            "options": [{"id": "s0", "value": "s1", "weight": 1.0, "sub_categories": ["s1"]}],
         },
         "instance": {
             "variable_binding": "src",
@@ -108,8 +108,11 @@ def test_constraint_cell_factor_override_applies_only_on_its_frame():
         "payload": {
             "var_binding": "tgt",
             "options": [
-                {"id": "0", "value": "t1", "weight": 1.0},
-                {"id": "1", "value": "t2", "weight": 1.0},
+                # The matrix is keyed by tag, so the options carry the tags
+                # its row and column name (without them the boost never
+                # applied and the frame-3 assert only held on seed luck).
+                {"id": "0", "value": "t1", "weight": 1.0, "sub_categories": ["t1"]},
+                {"id": "1", "value": "t2", "weight": 1.0, "sub_categories": ["t2"]},
             ],
         },
         "instance": {"variable_binding": "tgt"},

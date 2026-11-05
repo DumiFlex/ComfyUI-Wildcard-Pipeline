@@ -5,6 +5,7 @@
  * way `$name.K` indexes them, and a pick's `accepts` axes show as the
  * `$name.AXIS` reads they answer.
  */
+import Button from "@/kit/Button.vue";
 import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import type { VarRow } from "./debug-model";
@@ -83,17 +84,18 @@ const nameWidth = computed(() => {
           <span v-for="t in v.tags" :key="t" class="wp-dbg-var-row__tag">{{ t }}</span>
         </div>
       </div>
-      <button
+      <Button
         v-if="v.writerKey"
-        type="button"
+        variant="link"
+        size="sm"
         class="wp-dbg-var-row__src"
-        :title="'Show in trace'"
+        hint="Show in trace"
         data-test="dbg-var-src"
         @click="emit('goto-step', v.writerKey)"
       >
         <span class="wp-dbg-kind-dot" :style="{ background: `var(--wp-kind-${v.writerKind === 'fixed' ? 'fixed' : v.writerKind})` }" />
         <span class="wp-dbg-var-row__src-name">{{ v.writerName || v.writerKind }}</span>
-      </button>
+      </Button>
       <span v-else class="wp-dbg-var-row__src wp-dbg-var-row__src--upstream" title="Came in from upstream, no module in this trace wrote it">upstream</span>
     </div>
   </div>
@@ -126,33 +128,28 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__items li { display: flex; gap: 6px; align-items: baseline; }
 .wp-dbg-var-row__idx { font: 500 9.5px/1 var(--wp-font-mono); color: var(--wp-text-dim); min-width: 16px; }
 .wp-dbg-var-row__neg { display: flex; gap: 5px; align-items: baseline; font: 500 10.5px/1.5 var(--wp-font-mono); }
-.wp-dbg-var-row__neg-mark, .wp-dbg-var-row__neg-text { color: var(--wp-red, #e5484d); }
+.wp-dbg-var-row__neg-mark, .wp-dbg-var-row__neg-text { color: var(--wp-red); }
 .wp-dbg-var-row__neg-text { min-width: 0; overflow-wrap: anywhere; }
 .wp-dbg-var-row__neg-src { flex: none; color: var(--wp-text-dim); font-family: var(--wp-font-sans); }
 .wp-dbg-var-row__extra { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .wp-dbg-var-row__axis, .wp-dbg-var-row__tag {
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-2, var(--wp-bg2));
   color: var(--wp-text-muted);
 }
 .wp-dbg-var-row__axis code { font-family: var(--wp-font-mono); color: var(--wp-kind-wildcard); }
-.wp-dbg-var-row__src {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 0;
-  padding: 1px 0;
-  color: var(--wp-text-dim);
-  font: 500 10.5px/1.5 var(--wp-font-sans);
-  cursor: pointer;
-  max-width: 150px;
-  white-space: nowrap;
+/* The plain span (upstream) and the kit link Button share this look. */
+.wp-dbg-var-row__src, .wp-dbg-var-row__src.wp-btn {
+  display: inline-flex; align-items: center; gap: 5px; height: auto; min-height: 0; padding: 1px 0;
+  color: var(--wp-text-dim); font: 500 10.5px/1.5 var(--wp-font-sans);
+  max-width: 150px; white-space: nowrap; text-decoration: none;
 }
-.wp-dbg-var-row__src:hover .wp-dbg-var-row__src-name { color: var(--wp-text); text-decoration: underline; }
+.wp-dbg-var-row__src.wp-btn:hover .wp-dbg-var-row__src-name { color: var(--wp-text); text-decoration: underline; }
 .wp-dbg-var-row__src-name { overflow: hidden; text-overflow: ellipsis; }
 .wp-dbg-var-row__src--upstream { cursor: default; font-style: italic; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; }
+.wp-dbg-var-row__src.wp-btn :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.wp-dbg-var-row__src.wp-btn :deep(.wp-btn__label) { line-height: inherit; }
 </style>

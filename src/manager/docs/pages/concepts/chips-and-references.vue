@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import Banner from "@/kit/Banner.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
@@ -10,7 +10,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
 const chipStates = [
   {
     term: "Resolved",
-    desc: "The chip points at something real. A ref chip is tinted with the colour of the module it points at (violet ✦ for a wildcard) and hovering it shows the target's id and option count. A var chip (⌘) is tinted by its name, and hovering it says which module writes it, or that it binds at runtime.",
+    desc: "The chip points at something real. A ref chip is tinted with the colour of the module it points at (violet ✦ for a wildcard) and hovering it shows the target's id and option count.",
   },
   {
     term: "Filtered",
@@ -18,7 +18,7 @@ const chipStates = [
   },
   {
     term: "Broken",
-    desc: "A red chip with a ? icon: the reference points at a module id that isn't in your library (a placeholder, a deleted module, or one never imported here). Hover shows the name it carries, when the reference stored one. Click it to point it at another module. The editors also outline the field and mark its row (an option, a derivation branch) in red, so you can find it in a long table. At run time it produces nothing and the run reports an \"Unresolved reference\" warning.",
+    desc: "A red chip with a ? icon: the reference points at a module id that isn't in your library (a placeholder, a deleted module, or one never imported here). Hover shows the name it carries, when the reference stored one. Click it to point it at another module. The editors also outline the field and mark its row (an option, a derivation branch) in red, so you can find it in a long table. At run time it produces nothing and the run reports a \"Reference not found\" warning.",
   },
 ];
 </script>
@@ -29,47 +29,49 @@ const chipStates = [
     title="Chips & references"
     icon="pi pi-tag"
     tone="neutral"
-    blurb="What the chips in text fields are, the three states they show, the @{…} reference syntax, and the sub-category filter grammar (not / and / or / parentheses)."
+    blurb="How text fields show $variables and @{…} references, what a red chip means, and how to write a tag filter (not, and, or, brackets)."
   >
-    <DocSection title="What a chip is">
+    <DocSection title="Variables and chips">
       <p>
-        Text fields that understand pipeline syntax show each <VarToken>$name</VarToken> and each
-        <VarToken kind="ref">@{…}</VarToken> reference as a <b>chip</b>: a small tinted pill instead of raw characters. A chip is one unit. The caret
-        steps over it in one move and Backspace deletes it whole, so you can't half-delete a
-        reference and leave broken syntax behind.
-      </p>
-      <p>
-        Under the chip the field still stores plain text. Copying a chip copies its syntax, and
-        pasting that syntax anywhere turns back into the same chip. There are two kinds:
+        Text fields that understand pipeline syntax colour what they recognise. Two kinds of
+        token matter here:
       </p>
       <ul>
         <li>
-          <b>Var chips</b> (<VarToken>$mood</VarToken>, <VarToken>$outfit.SHOES</VarToken>) read a
-          variable from the Context. They appear where variables can be read: combine and
-          derivation text and the Prompt Assembler template. Each name keeps the same colour
-          everywhere, so the chip in a combine matches the one in the Assembler's variable strip.
+          <b>Variables</b> (<VarToken>$mood</VarToken>, <VarToken>$outfit.SHOES</VarToken>) read a
+          variable from the Context. They are ordinary text in their own colour, wherever
+          variables can be read: combine and derivation text and the Prompt Assembler template.
+          You edit them like any other word. Each name keeps the same colour everywhere, so
+          <VarToken>$mood</VarToken> in a combine matches the one in the Assembler's variable
+          strip. Hover one to see which module writes it, or that it binds at runtime.
         </li>
         <li>
           <b>Ref chips</b> (<VarToken kind="ref">@{abcd1234#Mood}</VarToken>) embed a fresh pick
           from another module. They appear where references work: wildcard options and derivation
-          actions. They show the target's name, not its id.
+          actions. A chip shows the target's name, not its id, and it is one unit: the caret steps
+          over it in one move and Backspace deletes it whole, so you can't half-delete a reference
+          and leave broken syntax behind.
         </li>
       </ul>
+      <p>
+        Under the chip the field still stores plain text. Copying a chip copies its syntax, and
+        pasting that syntax anywhere turns back into the same chip.
+      </p>
     </DocSection>
 
     <DocSection title="The three states">
       <DocKeyList :items="chipStates" />
-      <DocCallout variant="tip">
-        A var chip never turns red just because nothing produces it yet: variables can be set at
-        run time (by an injector, a loop, or a Context further up the chain), so an unknown name
-        stays a normal chip. Its hover says <i>binds at runtime</i>, and on the canvas <i>no
-        upstream producer</i> when the graph really has none. The one var-chip warning is an
-        accessor like <VarToken>$outfit.SHOES</VarToken> whose axis the wildcard doesn't declare,
-        which is underlined because it would render empty.
-      </DocCallout>
+      <Banner tone="info" note>
+        In the library a variable never turns red just because nothing sets it yet: an Injector,
+        a loop or an earlier Context may set it when it runs. Its hover says <i>binds at
+        runtime</i>. On the canvas, where the wiring is known, a name nothing before it sets gets
+        a red wavy underline (hover: <i>no upstream producer</i>). So does
+        <VarToken>$outfit.SHOES</VarToken> when SHOES isn't an accepts group, because it would
+        print nothing.
+      </Banner>
     </DocSection>
 
-    <DocSection title="Making chips (and placeholders)">
+    <DocSection title="Inserting variables and chips (and placeholders)">
       <p>
         Type <b>$</b> to open the variable list, or <b>@</b> to open the module list. Keep typing
         to narrow the list, then pick with Enter or a click.
@@ -83,9 +85,9 @@ const chipStates = [
       <p>
         <b>Placeholders.</b> To use a variable nothing produces yet, type
         <VarToken>$</VarToken> and the name, e.g. <VarToken>$lighting</VarToken>, then a space or
-        a comma (or press Enter when the list is empty). The name becomes a chip right away and is
+        a comma (or press Enter when the list is empty). The name is
         filled in by
-        whatever module later writes <VarToken>$lighting</VarToken>. Until then it renders empty
+        whatever module later writes <VarToken>$lighting</VarToken>. Until then it prints nothing
         and the Assembler marks it as missing, which is a handy to-do marker while you build a
         template ahead of its modules.
       </p>
@@ -118,8 +120,8 @@ const chipStates = [
           <tr>
             <td>id</td>
             <td><VarToken kind="ref">@{abcd1234}</VarToken></td>
-            <td>The module's 8 lowercase hex characters. This is what the engine resolves, so
-              renaming the target never breaks the reference.</td>
+            <td>The module's 8-character id. The reference follows the id, so renaming the
+              wildcard never breaks it.</td>
           </tr>
           <tr>
             <td><code>#name</code></td>
@@ -143,17 +145,17 @@ const chipStates = [
       </table>
       <p>
         Where a plain name is enough, reach for a variable instead: <VarToken>$mood</VarToken>
-        reads the value an upstream wildcard already picked, while
+        reads the value a wildcard above already picked, while
         <VarToken kind="ref">@{…}</VarToken> rolls the referenced wildcard again, on the spot,
         from its (optionally filtered) pool.
       </p>
     </DocSection>
 
-    <DocSection title="Filter expression grammar">
+    <DocSection title="Writing a filter">
       <p>
-        A filter is plain boolean English over the referenced wildcard's sub-category names. Each
-        option is tested against its own tags, and it stays in the pool when the expression is
-        true.
+        A filter is a short sentence of tag names joined by <code>not</code>, <code>and</code> and
+        <code>or</code>. Each option is checked against its own tags and stays in when the
+        sentence is true.
       </p>
       <table class="wp-doc-syntax-table">
         <thead>
@@ -191,7 +193,7 @@ const chipStates = [
       </table>
       <ul>
         <li>
-          <b>Precedence:</b> <code>not</code> binds tightest, then <code>and</code>, then
+          <b>Order:</b> <code>not</code> goes first, then <code>and</code>, then
           <code>or</code>. So <code>a or b and c</code> means <code>a or (b and c)</code>. Use
           parentheses whenever you mean something else; they nest to any depth.
         </li>
@@ -214,8 +216,8 @@ const chipStates = [
         The filter picker checks the expression as you type. It shows how the expression
         <b>reads as</b> (fully parenthesised where it matters), how many options match, and flags
         an unknown sub-category with a <i>did you mean</i> fix. If a valid filter matches no
-        option, the reference resolves to empty at run time and raises a
-        <i>Sub-category filter matched nothing</i> warning that lists the tags the pool actually
+        option, the reference prints nothing when you run and raises a
+        <i>Filter matched no options</i> warning that lists the tags the wildcard actually
         has (see <DocRef id="warning-types" />).
       </p>
     </DocSection>

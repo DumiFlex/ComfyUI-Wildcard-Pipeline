@@ -1,3 +1,4 @@
+import { markDeleted } from "../composables/useLibraryChanged";
 import { defineStore } from "pinia";
 import { reactive, ref } from "vue";
 import { api } from "../api/client";
@@ -23,6 +24,9 @@ export const useBundleStore = defineStore("bundles", () => {
   const catalog = ref<BundleRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
+  /** Set once a list view has fetched `items`, so a library refresh only
+   *  re-fetches what some page has already loaded. */
+  const listed = ref(false);
 
   async function fetchAll() {
     loading.value = true;
@@ -33,6 +37,7 @@ export const useBundleStore = defineStore("bundles", () => {
       if (filter.favorites) params.favorites = true;
       const res = await api.bundles.list(params);
       items.value = res.items;
+      listed.value = true;
     } finally {
       loading.value = false;
     }
@@ -77,6 +82,13 @@ export const useBundleStore = defineStore("bundles", () => {
 
   async function remove(id: string) {
     await api.bundles.delete(id);
+    removeLocal(id);
+  }
+
+  /** Drop a row the cascade flow already deleted on the server (a second
+   *  DELETE there would 404 before the list updates). */
+  function removeLocal(id: string) {
+    markDeleted([id]);
     items.value = items.value.filter((i) => i.id !== id);
     catalog.value = catalog.value.filter((i) => i.id !== id);
   }
@@ -91,7 +103,7 @@ export const useBundleStore = defineStore("bundles", () => {
   }
 
   return {
-    items, catalog, loading, filter,
-    fetchAll, fetchCatalog, get, create, update, remove, toggleFavorite,
+    items, catalog, loading, filter, listed,
+    fetchAll, fetchCatalog, get, create, update, remove, removeLocal, toggleFavorite,
   };
 });

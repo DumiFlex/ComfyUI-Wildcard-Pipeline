@@ -16,7 +16,7 @@ import {
 } from "./derivation-ops";
 
 describe("derivation-ops registry", () => {
-  it("DERIVATION_OPS lists exactly the 10 ops in spec'd order", () => {
+  it("DERIVATION_OPS lists exactly the 12 ops in spec'd order", () => {
     // 2026-05-24 added is_empty / is_not_empty for the null-wildcard
     // option feature; the legacy presence quartet stays for back-compat
     // reads. Authoring UI now only surfaces the 4 compare ops + the
@@ -32,6 +32,9 @@ describe("derivation-ops registry", () => {
       "is_unset",
       "is_empty",
       "is_not_empty",
+      // Schema v10: the NOT toggle's negations of contains / matches.
+      "not_contains",
+      "not_matches",
     ]);
   });
 

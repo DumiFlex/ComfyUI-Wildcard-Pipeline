@@ -7,6 +7,7 @@ themselves the frozen snapshot package, so re-snapshotting at insert
 time is a no-op."""
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from aiohttp import web
@@ -23,6 +24,8 @@ from wp_api._helpers import (
 )
 from wp_api._validators import validate_body_size, validate_meta
 from wp_api.modules import _hydrate_constraint_exceptions
+
+_NEW_ID = re.compile(r"[0-9a-f]{8}")
 
 _UPDATABLE_FIELDS = (
     "name", "description", "color", "category_id", "tags",
@@ -383,6 +386,17 @@ async def create_bundle(request: web.Request) -> web.Response:
             if err is not None:
                 return json_error(err, status=400)
             repo = BundleRepository(conn)
+            # An optional `id` (8 hex): Undo on the AI chat's delete card
+            # brings a bundle back at the id it had.
+            given = body.get("id")
+            if given is not None:
+                if not isinstance(given, str) or not _NEW_ID.fullmatch(given):
+                    return json_error("id must be 8 lowercase hex characters", status=400)
+                try:
+                    repo.get(given)
+                    return json_error(f"bundle {given} already exists", status=409)
+                except BundleNotFound:
+                    pass
             # Bundle references resolved against live repo state — must
             # happen inside the session so the check sees committed rows.
             err = _validate_bundle_refs(children_raw, repo, self_id=None)
@@ -405,6 +419,7 @@ async def create_bundle(request: web.Request) -> web.Response:
                 children=children,
                 is_favorite=bool(body.get("is_favorite", False)),
                 content_rating=body.get("content_rating", "safe"),
+                id=given,
             )
             row["children"] = _expand_bundle_children(row.get("children") or [], repo)
     except ValueError as e:

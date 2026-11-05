@@ -4,7 +4,7 @@ Grammar (precedence not > and > or; or/and are n-ary, flattened):
     expr  := or
     or    := and ( ("or" | ",") and )*
     and   := unary ( "and" unary )*
-    unary := "not" unary | atom
+    unary := ("not" | "!") unary | atom
     atom  := SUBCAT | "(" or ")"
 
 Mirror: src/manager/parsing/subcatFilter.ts — keep behavior identical
@@ -18,7 +18,7 @@ from typing import Any
 RESERVED = {"and", "or", "not", "null"}
 # A sub-category NAME is one safe token (see validate_subcat_name).
 _NAME_RE = re.compile(r"^[^\s()!,#:}@{$]+$")
-_TOKEN_RE = re.compile(r"\s*(\(|\)|,|[^\s()!,#:}@{$]+)")
+_TOKEN_RE = re.compile(r"\s*(\(|\)|,|!|[^\s()!,#:}@{$]+)")
 
 
 class ParseError(ValueError):
@@ -34,7 +34,9 @@ def _tokenize(s: str) -> list[str]:
             if s[i:].strip() == "":  # only trailing whitespace left
                 break
             raise ParseError(f"unexpected character {s[i]!r}")
-        out.append(m.group(1))
+        # `!warm` is read as `not warm` (the spelling most people and models
+        # reach for first).
+        out.append("not" if m.group(1) == "!" else m.group(1))
         i = m.end()
     return out
 

@@ -18,6 +18,7 @@
  * its own.
  */
 
+import { copyText } from "@/kit/clipboard";
 import type { Router } from "vue-router";
 import type { BundleRow, ModuleRow } from "../api/types";
 import {
@@ -32,6 +33,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
   FALLBACK_SCHEMA_VERSION,
+  NEGATED_TESTS_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
   SP3_REACH_SCHEMA_VERSION,
@@ -222,7 +224,7 @@ const NEG_ACCESSOR_RE = /\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])
 
 /**
  * Walk `node` (object/array, any depth) looking for a non-empty `negative`
- * string, a derivation action whose mode is `negative`, a derivation clause
+ * (or combine instance `negative_override`) string, a derivation action whose mode is `negative`, a derivation clause
  * with more than one action (`extra_actions`), or text reading `$name.neg`.
  * An empty negative is stored as absent and never needs v8. Mirror of
  * `engine/migrations/stamping.py:uses_negatives`.
@@ -230,8 +232,9 @@ const NEG_ACCESSOR_RE = /\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])
 export function usesNegatives(node: unknown): boolean {
   if (Array.isArray(node)) return node.some((child) => usesNegatives(child));
   if (!isPlainObject(node)) return false;
-  const neg = node.negative;
-  if (typeof neg === "string" && neg.trim() !== "") return true;
+  for (const neg of [node.negative, node.negative_override]) {
+    if (typeof neg === "string" && neg.trim() !== "") return true;
+  }
   if (isNegativeMode(node.mode) && "target_var" in node) return true;
   if (Array.isArray(node.extra_actions) && node.extra_actions.length > 0) return true;
   for (const value of Object.values(node)) {
@@ -258,8 +261,24 @@ export function usesFallbackOption(node: unknown): boolean {
 }
 
 /**
+ * True when ANY derivation test (nested groups included) uses `not_contains`
+ * or `not_matches`. Mirror of `engine/migrations/stamping.py:uses_negated_tests`.
+ */
+export function usesNegatedTests(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some((child) => usesNegatedTests(child));
+  if (!isPlainObject(node)) return false;
+  if ((node.op === "not_contains" || node.op === "not_matches") && "var" in node) return true;
+  for (const value of Object.values(node)) {
+    if (value && typeof value === "object" && usesNegatedTests(value)) return true;
+  }
+  return false;
+}
+
+/**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `NEGATED_TESTS_SCHEMA_VERSION` (10) when ANY derivation test uses
+ *     `not_contains` / `not_matches` (`usesNegatedTests`).
  *   - `FALLBACK_SCHEMA_VERSION` (9) when ANY wildcard option is flagged as
  *     the fallback (`usesFallbackOption`).
  *   - `NEGATIVES_SCHEMA_VERSION` (8) when ANY option, fixed value or combine
@@ -288,6 +307,7 @@ export function usesFallbackOption(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesNegatedTests(payload)) return NEGATED_TESTS_SCHEMA_VERSION;
   if (usesFallbackOption(payload)) return FALLBACK_SCHEMA_VERSION;
   if (usesNegatives(payload)) return NEGATIVES_SCHEMA_VERSION;
   if (usesDerivationConditions(payload)) return DERIVATION_CONDITIONS_SCHEMA_VERSION;
@@ -781,12 +801,6 @@ export function isCopyableKind(pub: PublishablePayload): boolean {
 export async function copyPayloadToClipboard(
   pub: PublishablePayload,
 ): Promise<boolean> {
-  if (typeof navigator === "undefined" || !navigator.clipboard) return false;
   if (!isCopyableKind(pub)) return false;
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(buildCopyableRow(pub), null, 2));
-    return true;
-  } catch {
-    return false;
-  }
+  return copyText(JSON.stringify(buildCopyableRow(pub), null, 2));
 }

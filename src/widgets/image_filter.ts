@@ -1,6 +1,6 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
-import { app } from "#comfyui/app";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 import { lastRequestByNode } from "../extension/image-filter";
 import {
@@ -101,10 +101,7 @@ export function create(node: ImageFilterHostNode, inputName: string) {
     const run = parseRun(out?.wp_image_filter);
     if (run) lastRun.value = run;
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
   return host;
 }

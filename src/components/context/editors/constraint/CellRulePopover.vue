@@ -10,9 +10,24 @@
  * the parent owns close via outside-click / Escape. Picking a state or
  * typing a factor keeps the popover open so the user can keep tweaking.
  */
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import Button from "@/kit/Button.vue";
 
 type RuleState = "neutral" | "exclude" | "boost" | "reduce" | "only";
+
+const STATES: { state: RuleState; glyph: string; label: string; hint?: string }[] = [
+  { state: "neutral", glyph: "·", label: "Neutral" },
+  { state: "exclude", glyph: "×", label: "Exclude" },
+  { state: "boost", glyph: "↑", label: "Boost" },
+  { state: "reduce", glyph: "↓", label: "Reduce" },
+  {
+    state: "only",
+    glyph: "✓",
+    label: "Only",
+    hint: "Guest list: when this source tag fires, the target only picks options this row has a rule for (boost and reduce keep their odds)",
+  },
+];
 
 const props = withDefaults(
   defineProps<{
@@ -32,12 +47,12 @@ const emit = defineEmits<{
   "close": [];
 }>();
 
-const factorInput = ref<HTMLInputElement | null>(null);
-const factorStr = ref<string>("");
+const factorInput = ref<InstanceType<typeof WpNumber> | null>(null);
+const factorVal = ref<number>(props.factor);
 const showFactor = computed(() => props.state === "boost" || props.state === "reduce");
 const stepValue = 0.1;
 
-/** Initialise the displayed factor string. `factorStr` is the LOCAL
+/** Initialise the displayed factor. `factorVal` is the LOCAL
  *  source of truth while the popover is open — incoming `props.factor`
  *  only feeds the initial value (and re-syncs on STATE transitions so
  *  entering boost/reduce shows the right default). We deliberately do
@@ -46,7 +61,7 @@ const stepValue = 0.1;
  *  `props.factor`; reacting to that would call `.select()` on every digit
  *  the user types, clobbering their input. */
 onMounted(() => {
-  factorStr.value = props.factor.toFixed(1);
+  factorVal.value = props.factor;
   if (showFactor.value) {
     void nextTick(() => {
       factorInput.value?.focus();
@@ -62,7 +77,7 @@ watch(
     // factor (commitMode in the parent sets boost=1.5 / reduce=0.5 when
     // entering from a non-factor state) and re-focus the input so the
     // user can immediately tweak.
-    factorStr.value = props.factor.toFixed(1);
+    factorVal.value = props.factor;
     if (showFactor.value) {
       void nextTick(() => {
         factorInput.value?.focus();
@@ -76,48 +91,12 @@ function pickState(next: RuleState): void {
   emit("update:state", next);
 }
 
-function onFactorInput(ev: Event): void {
-  const raw = (ev.target as HTMLInputElement).value;
-  factorStr.value = raw;
-  const n = Number(raw);
-  if (Number.isFinite(n) && n > 0) {
-    // Snap to 3 decimals on emit so fuzz tails (e.g. paste of
-    // `1.2999999999999998`, autofill, or a stray native step that beat
-    // our keydown intercept) don't leak into stored data, while still
-    // honouring legit 2-decimal precision a user might type.
-    const snapped = Math.round(n * 1000) / 1000;
-    emit("update:factor", snapped);
-  }
-}
-
-/** Arrow-key + scroll-wheel stepping on a `<input type="number">` is
- *  handled natively by the browser and produces classic float fuzz
- *  (e.g. `1.4 - 0.1 = 1.2999999999999998`). Intercept both and route
- *  them through `bump()` so the value snaps to one-decimal precision. */
-function onFactorKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") {
-    ev.preventDefault();
-    bump(1);
-  } else if (ev.key === "ArrowDown") {
-    ev.preventDefault();
-    bump(-1);
-  }
-}
-function onFactorWheel(ev: WheelEvent): void {
-  if (document.activeElement !== factorInput.value) return;
-  ev.preventDefault();
-  bump(ev.deltaY < 0 ? 1 : -1);
-}
-
-/** Step the value by ±0.1, clamped to > 0. Rounds to 1 decimal so
- *  `1 + 0.1` doesn't surface JS float fuzz (`1.0000000000000002`). */
-function bump(direction: 1 | -1): void {
-  const current = Number(factorStr.value) || props.factor || 1;
-  let next = current + direction * stepValue;
-  if (next <= 0) next = stepValue;
-  next = Math.round(next * 10) / 10;
-  factorStr.value = next.toFixed(1);
-  emit("update:factor", next);
+/** Typed or stepped factor. WpNumber snaps float fuzz and steps by 0.1;
+ *  anything not above zero is ignored until a real factor lands. */
+function onFactor(n: number | null): void {
+  if (n === null || !Number.isFinite(n) || n <= 0) return;
+  factorVal.value = n;
+  emit("update:factor", n);
 }
 
 function onReset(): void {
@@ -126,55 +105,21 @@ function onReset(): void {
 </script>
 
 <template>
-  <div class="pop" role="dialog" :aria-label="`Rule for ${srcLabel} to ${tgtLabel}`">
+  <div class="pop">
     <div class="pop-title">Cell rule</div>
     <div class="pop-states">
-      <button
-        type="button"
-        class="pop-btn b-neutral"
-        :class="{ active: state === 'neutral' }"
-        :aria-pressed="state === 'neutral'"
-        @click="pickState('neutral')"
+      <Button
+        v-for="b in STATES"
+        :key="b.state"
+        size="sm"
+        class="pop-btn"
+        :class="[`b-${b.state}`, { active: state === b.state }]"
+        :pressed="state === b.state"
+        :hint="b.hint"
+        @click="pickState(b.state)"
       >
-        <span class="b-glyph">·</span> Neutral
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-exclude"
-        :class="{ active: state === 'exclude' }"
-        :aria-pressed="state === 'exclude'"
-        @click="pickState('exclude')"
-      >
-        <span class="b-glyph">×</span> Exclude
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-boost"
-        :class="{ active: state === 'boost' }"
-        :aria-pressed="state === 'boost'"
-        @click="pickState('boost')"
-      >
-        <span class="b-glyph">↑</span> Boost
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-reduce"
-        :class="{ active: state === 'reduce' }"
-        :aria-pressed="state === 'reduce'"
-        @click="pickState('reduce')"
-      >
-        <span class="b-glyph">↓</span> Reduce
-      </button>
-      <button
-        type="button"
-        class="pop-btn b-only"
-        :class="{ active: state === 'only' }"
-        :aria-pressed="state === 'only'"
-        title="Link: when this source tag fires, only targets with a rule in this row can be picked"
-        @click="pickState('only')"
-      >
-        <span class="b-glyph">✓</span> Only
-      </button>
+        <span class="b-glyph" aria-hidden="true">{{ b.glyph }}</span> {{ b.label }}
+      </Button>
     </div>
     <div v-if="state === 'only'" class="pop-note">
       Every target in this row without a rule of its own is excluded when {{ srcLabel }} fires.
@@ -182,51 +127,29 @@ function onReset(): void {
 
     <div v-if="showFactor" class="pop-factor">
       <label class="pop-factor__label">Factor ×</label>
-      <span class="pop-num">
-        <input
-          ref="factorInput"
-          class="pop-num__field"
-          type="number"
-          step="0.1"
-          min="0.1"
-          :value="factorStr"
-          aria-label="Factor multiplier"
-          @input="onFactorInput"
-          @keydown="onFactorKeydown"
-          @wheel="onFactorWheel"
-        />
-        <span class="pop-num__spin">
-          <button
-            type="button"
-            class="pop-num__btn"
-            tabindex="-1"
-            aria-label="Increase factor"
-            @click="bump(1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-          </svg></button>
-          <button
-            type="button"
-            class="pop-num__btn"
-            tabindex="-1"
-            aria-label="Decrease factor"
-            @click="bump(-1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-            <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-          </svg></button>
-        </span>
-      </span>
+      <WpNumber
+        ref="factorInput"
+        class="pop-num"
+        :model-value="factorVal"
+        :min="stepValue"
+        :step="stepValue"
+        commit="input"
+        aria-label="Factor multiplier"
+        up-label="Increase factor"
+        down-label="Decrease factor"
+        @update:model-value="onFactor"
+      />
     </div>
 
     <div v-if="canReset" class="pop-foot">
-      <button
-        type="button"
+      <Button
+        size="sm"
+        variant="ghost"
+        icon="pi-replay"
         class="pop-reset"
-        aria-label="Reset cell to library default"
+        hint="Reset cell to library default"
         @click="onReset"
-      >
-        <span class="pop-reset__glyph" aria-hidden="true">↺</span> Reset to library
-      </button>
+      >Reset to library</Button>
     </div>
 
     <div class="pop-hint">Click outside or press Esc to close</div>
@@ -234,24 +157,16 @@ function onReset(): void {
 </template>
 
 <style scoped>
+/* The shared Popover draws the panel (background, border, shadow); this is
+ * only its content. */
 .pop {
-  /* Opaque background — earlier `var(--wp-bg2)` resolved to the host's
-   * variable which is sometimes transparent (e.g. canvas overlay
-   * contexts). Hard fallback chain keeps the popover legible across
-   * extension + SPA mounts. */
-  background-color: #1a1d24;
-  background-color: var(--wp-bg-1, var(--wp-bg2, #1a1d24));
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #353841));
-  border-radius: 6px;
-  padding: 10px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
-  min-width: 240px;
+  width: 236px;
   font: 11px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text, #e0e0e8);
+  color: var(--wp-text);
 }
 .pop-title {
   font: 600 9px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 6px;
@@ -263,42 +178,35 @@ function onReset(): void {
   gap: 4px;
   margin-bottom: 8px;
 }
-.pop-btn {
-  display: flex;
-  align-items: center;
+/* Button carries the size, focus ring and hover; the compound selectors
+ * beat its scoped rules on a tie. Each state wears its matrix colour once
+ * picked. */
+.wp-btn.pop-btn {
   gap: 6px;
-  justify-content: center;
-  padding: 8px 6px;
-  border: 1px solid var(--wp-border, #2a2d35);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-  cursor: pointer;
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-.pop-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong, #4a4d55); }
 .pop-btn .b-glyph { font: 13px var(--wp-font-mono, monospace); line-height: 1; }
-.pop-btn.b-neutral.active {
-  background: color-mix(in srgb, var(--wp-text) 10%, transparent);
-  color: var(--wp-text);
-  border-color: color-mix(in srgb, var(--wp-text) 40%, transparent);
+.wp-btn.pop-btn.b-only { grid-column: 1 / -1; } /* fifth button spans the grid so it stays even */
+.wp-btn.pop-btn.active { --pop-tone: var(--wp-text); }
+.wp-btn.pop-btn.b-exclude.active { --pop-tone: var(--wp-danger); }
+.wp-btn.pop-btn.b-boost.active { --pop-tone: var(--wp-success); }
+.wp-btn.pop-btn.b-reduce.active { --pop-tone: var(--wp-warn); }
+.wp-btn.pop-btn.b-only.active { --pop-tone: var(--wp-info); }
+.wp-btn.pop-btn.active {
+  background: color-mix(in srgb, var(--pop-tone) 20%, transparent);
+  border-color: color-mix(in srgb, var(--pop-tone) 50%, transparent);
+  color: var(--pop-tone);
 }
-.pop-btn.b-exclude.active { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: var(--wp-danger); border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent); }
-.pop-btn.b-boost.active   { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: var(--wp-success); border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent); }
-.pop-btn.b-only {
-  /* Fifth button spans the grid so the 2-column layout stays even. */
-  grid-column: 1 / -1;
-}
-.pop-btn.b-only.active    { background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent); color: var(--wp-info, #3b82f6); border-color: color-mix(in srgb, var(--wp-info, #3b82f6) 50%, transparent); }
+.wp-btn.pop-btn.b-neutral.active { background: color-mix(in srgb, var(--wp-text) 10%, transparent); }
 .pop-note {
   margin: -2px 0 8px;
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-text-muted);
   line-height: 1.4;
 }
-.pop-btn.b-reduce.active  { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: var(--wp-warn); border-color: color-mix(in srgb, var(--wp-warn, #f97316) 50%, transparent); }
 
 /* ── Factor input — wrap + stacked stepper, mirrors OptionRow's
  * `opt__weight-wrap + opt__spin` pattern so users see one consistent
@@ -308,106 +216,30 @@ function onReset(): void {
   align-items: center;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-text-muted);
 }
 .pop-factor__label {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
 }
-.pop-num {
-  flex: 1;
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
-  overflow: hidden;
-  height: 24px;
-}
-.pop-num:focus-within { border-color: var(--wp-accent, #c4b5fd); }
-.pop-num__field {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 0 8px;
-  font: 600 12px var(--wp-font-mono, monospace);
-  color: var(--wp-text, #fff);
-  text-align: right;
-  width: 0;
-  min-width: 0;
-  -moz-appearance: textfield;
-}
-.pop-num__field::-webkit-outer-spin-button,
-.pop-num__field::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.pop-num__field:focus { outline: none; }
-.pop-num__spin {
-  display: flex;
-  flex-direction: column;
-  width: 16px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border, #353841);
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-}
-.pop-num__btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
-  cursor: pointer;
-  line-height: 0;
-}
-.pop-num__btn + .pop-num__btn {
-  border-top: 1px solid var(--wp-border, #353841);
-}
-.pop-num__btn:hover {
-  color: var(--wp-accent-text, var(--wp-text, #fff));
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 12%, transparent);
-}
+.pop-num { flex: 1; }
 
 /* ── Reset button ───────────────────────────────────────────── */
 .pop-foot {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
   display: flex;
   justify-content: flex-end;
 }
-.pop-reset {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  background: transparent;
-  border: 1px solid var(--wp-border, #353841);
-  border-radius: 4px;
-  color: var(--wp-text-muted, #8a8d99);
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-.pop-reset:hover {
-  color: var(--wp-accent-text, var(--wp-accent, #c4b5fd));
-  border-color: var(--wp-accent, #c4b5fd);
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 10%, transparent);
-}
-.pop-reset__glyph { font: 12px var(--wp-font-mono, monospace); line-height: 1; }
 
 .pop-hint {
   margin-top: 6px;
   font: 9px var(--wp-font-mono, monospace);
-  color: var(--wp-text-dim, #595c66);
+  color: var(--wp-text-dim);
   text-align: right;
 }
 </style>

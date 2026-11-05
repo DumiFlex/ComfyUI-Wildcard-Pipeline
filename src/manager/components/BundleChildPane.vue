@@ -14,6 +14,7 @@
  * Task 3 ships wildcard support. Combine / fixed_values / derivation /
  * constraint land in Task 4a–d.
  */
+import Button from "@/kit/Button.vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import WildcardIdentitySection from "../../components/context/editors/wildcard/sections/IdentitySection.vue";
@@ -33,6 +34,7 @@ import ConstraintMatrixSection from "../../components/context/editors/constraint
 import ConstraintExceptionsSection from "../../components/context/editors/constraint/sections/ExceptionsSection.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { ModuleEntry } from "../../widgets/_shared";
+import { bundleSiblingVars } from "../utils/bundle-vars";
 
 interface Props {
   child: Record<string, unknown> | null;
@@ -59,12 +61,12 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 const KIND_COLOR: Record<string, string> = {
-  wildcard:     "var(--wp-kind-wildcard, #34d399)",
-  fixed_values: "var(--wp-kind-fixed, #22d3ee)",
-  combine:      "var(--wp-kind-combine, #fbbf24)",
-  derivation:   "var(--wp-kind-derivation, #a78bfa)",
-  constraint:   "var(--wp-kind-constraint, #f87171)",
-  bundle:       "var(--wp-bundle-default, #6366f1)",
+  wildcard:     "var(--wp-kind-wildcard)",
+  fixed_values: "var(--wp-kind-fixed)",
+  combine:      "var(--wp-kind-combine)",
+  derivation:   "var(--wp-kind-derivation)",
+  constraint:   "var(--wp-kind-constraint)",
+  bundle:       "var(--wp-bundle-default)",
 };
 
 const kind = computed<string>(() => String(props.child?.type ?? ""));
@@ -98,6 +100,11 @@ const refInnerCount = computed<number>(() => {
 });
 const headerIcon = computed<string>(() => (kind.value === "bundle" ? "pi pi-box" : kindIcon(kind.value)));
 const headerColor = computed<string>(() => KIND_COLOR[kind.value] ?? "var(--wp-accent-500)");
+
+/** What the other children set: they run together in one node, so a
+ *  child's `$vars` and negatives can read them. */
+const siblings = computed(() => bundleSiblingVars(props.siblingModules ?? [], props.child));
+const siblingProducerMap = computed(() => new Map(Object.entries(siblings.value.producers)));
 
 function onUpdate(patch: Partial<ModuleEntry>) {
   emit("update", patch);
@@ -192,16 +199,14 @@ const constraintTargetValues = computed<string[]>(() => {
         </span>
         <span class="wp-bpane__name">{{ displayName }}</span>
         <span class="wp-bpane__kind">{{ KIND_LABEL[kind] ?? kind }}</span>
-        <button
-          type="button"
+        <Button
+          variant="ghost" icon="times"
           class="wp-bpane__close"
+          size="sm"
           aria-label="Close child editor"
-          title="Close"
           data-test="bundle-pane-close"
           @click="emit('close')"
-        >
-          <i class="pi pi-times" aria-hidden="true" />
-        </button>
+        />
       </header>
 
       <div
@@ -241,10 +246,10 @@ const constraintTargetValues = computed<string[]>(() => {
         <WildcardIdentitySection
           :module="moduleEntry"
           :upstream-vars="[]"
-          :sibling-vars="[]"
+          :sibling-vars="siblings.names"
           @update="onUpdate"
         />
-        <WildcardPoolSection :module="moduleEntry" @update="onUpdate" />
+        <WildcardPoolSection :module="moduleEntry" :var-producers="siblingProducerMap" @update="onUpdate" />
         <WildcardRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
@@ -253,8 +258,14 @@ const constraintTargetValues = computed<string[]>(() => {
         data-test="bundle-pane-sections-combine"
         class="wp-bpane__sections"
       >
-        <CombineIdentitySection :module="moduleEntry" @update="onUpdate" />
-        <CombineTemplateSection :module="moduleEntry" @update="onUpdate" />
+        <CombineIdentitySection :module="moduleEntry" :sibling-vars="siblings.names" @update="onUpdate" />
+        <CombineTemplateSection
+          :module="moduleEntry"
+          :sibling-vars="siblings.names"
+          :upstream-producers="siblings.producers"
+          :upstream-resolved="siblings.resolved"
+          @update="onUpdate"
+        />
         <CombineRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
@@ -274,7 +285,12 @@ const constraintTargetValues = computed<string[]>(() => {
         class="wp-bpane__sections"
       >
         <DerivationIdentitySection :module="moduleEntry" @update="onUpdate" />
-        <DerivationRulesSection :module="moduleEntry" @update="onUpdate" />
+        <DerivationRulesSection
+          :module="moduleEntry"
+          :var-suggestions="siblings.names"
+          :var-producers="siblingProducerMap"
+          @update="onUpdate"
+        />
         <DerivationRuntimeSection :module="moduleEntry" @update="onUpdate" />
       </div>
 
@@ -330,17 +346,16 @@ const constraintTargetValues = computed<string[]>(() => {
           <i class="pi pi-external-link" aria-hidden="true" />
           Open in bundle editor
         </RouterLink>
-        <button
+        <Button
           v-else-if="child?.id"
-          type="button"
-          class="wp-bpane__ref-cta wp-bpane__ref-cta--disabled"
+          variant="secondary"
+          size="sm"
+          icon="pi-ban"
+          class="wp-bpane__ref-off"
           disabled
           data-test="bundle-pane-ref-open-disabled"
           title="Referenced bundle no longer exists"
-        >
-          <i class="pi pi-ban" aria-hidden="true" />
-          Open in bundle editor
-        </button>
+        >Open in bundle editor</Button>
       </div>
 
       <div
@@ -404,19 +419,12 @@ const constraintTargetValues = computed<string[]>(() => {
   border-radius: var(--wp-radius-sm);
   background: color-mix(in oklab, var(--pane-kind, var(--wp-accent-500)) 14%, transparent);
 }
-.wp-bpane__close {
-  margin-left: auto;
-  width: 24px; height: 24px;
-  background: transparent; border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm); color: var(--wp-text-dim); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.wp-bpane__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
+.wp-bpane__close { margin-left: auto; }
 
 .wp-bpane__banner {
   display: flex; align-items: flex-start; gap: var(--wp-space-3);
-  background: color-mix(in oklab, var(--wp-amber, #fbbf24) 12%, transparent);
-  border-left: 2px solid var(--wp-amber, #fbbf24);
+  background: color-mix(in oklab, var(--wp-amber) 12%, transparent);
+  border-left: 2px solid var(--wp-amber);
   color: var(--wp-text);
   padding: 7px var(--wp-space-5); /* audit-exempt: 7px vertical hairline, 10px horiz rounded to 12px */
   border-radius: var(--wp-radius-sm);
@@ -424,23 +432,23 @@ const constraintTargetValues = computed<string[]>(() => {
   font-size: var(--wp-text-xs);
   line-height: 1.45;
 }
-.wp-bpane__banner .pi { color: var(--wp-amber, #fbbf24); margin-top: 2px; flex-shrink: 0; }
+.wp-bpane__banner .pi { color: var(--wp-amber); margin-top: 2px; flex-shrink: 0; }
 /* Bundle-reference banner uses accent (purple) instead of amber to read
  * as "live link, all good" rather than "warning — frozen snapshot". */
 .wp-bpane__banner--ref {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 12%, transparent);
-  border-left-color: var(--wp-accent-500, #8b5cf6);
+  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
+  border-left-color: var(--wp-accent-500);
 }
-.wp-bpane__banner--ref .pi { color: var(--wp-accent-500, #8b5cf6); }
+.wp-bpane__banner--ref .pi { color: var(--wp-accent-500); }
 /* Missing-reference variant — referenced bundle deleted upstream.
  * Stronger tint than the amber default since this is an actual broken
  * link, not just an informational warning. Border-left + icon flip to
  * the danger token so the row reads as "you need to fix this". */
 .wp-bpane__banner--missing {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
-  border-left-color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+  border-left-color: var(--wp-danger);
 }
-.wp-bpane__banner--missing .pi { color: var(--wp-danger, #ef4444); }
+.wp-bpane__banner--missing .pi { color: var(--wp-danger); }
 
 .wp-bpane__ref-summary {
   display: flex;
@@ -493,7 +501,7 @@ const constraintTargetValues = computed<string[]>(() => {
   gap: var(--wp-space-3);
   align-self: flex-start;
   padding: var(--wp-space-3) var(--wp-space-5);
-  background: var(--wp-accent-500, #8b5cf6);
+  background: var(--wp-accent-500);
   color: white;
   border-radius: var(--wp-radius-sm);
   font-size: var(--wp-text-xs);
@@ -501,13 +509,7 @@ const constraintTargetValues = computed<string[]>(() => {
   transition: filter 120ms ease;
 }
 .wp-bpane__ref-cta:hover { filter: brightness(1.1); }
-.wp-bpane__ref-cta--disabled {
-  background: var(--wp-bg-3);
-  color: var(--wp-text-dim);
-  cursor: not-allowed;
-  border: 1px solid var(--wp-border);
-}
-.wp-bpane__ref-cta--disabled:hover { filter: none; }
+.wp-bpane__ref-off { align-self: flex-start; }
 
 .wp-bpane__sections {
   display: flex;

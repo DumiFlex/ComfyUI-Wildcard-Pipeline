@@ -77,15 +77,15 @@ describe("CellRulePopover", () => {
       props: { state: "boost", factor: 1.8, srcLabel: "warm", tgtLabel: "positive_qa" },
     });
     expect(wrap.find(".pop-num").exists()).toBe(true);
-    expect(wrap.find(".pop-num__field").exists()).toBe(true);
-    expect(wrap.findAll(".pop-num__btn")).toHaveLength(2);
+    expect(wrap.find(".pop-num .wp-cnum__field").exists()).toBe(true);
+    expect(wrap.findAll(".pop-num .wp-cnum__btn")).toHaveLength(2);
   });
 
   it("up button bumps the factor by +0.1", async () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "boost", factor: 1.8, srcLabel: "warm", tgtLabel: "positive_qa" },
     });
-    const [up] = wrap.findAll(".pop-num__btn");
+    const [up] = wrap.findAll(".pop-num .wp-cnum__btn");
     await up.trigger("click");
     const events = wrap.emitted("update:factor") ?? [];
     // floating-point safe: rounded to 1 decimal
@@ -96,7 +96,7 @@ describe("CellRulePopover", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "reduce", factor: 0.2, srcLabel: "warm", tgtLabel: "positive_qa" },
     });
-    const [, down] = wrap.findAll(".pop-num__btn");
+    const [, down] = wrap.findAll(".pop-num .wp-cnum__btn");
     await down.trigger("click");
     let events = wrap.emitted("update:factor") ?? [];
     expect(events[events.length - 1]).toEqual([0.1]);
@@ -111,7 +111,7 @@ describe("CellRulePopover", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "boost", factor: 1.8, srcLabel: "warm", tgtLabel: "positive_qa" },
     });
-    const inp = wrap.find(".pop-num__field");
+    const inp = wrap.find(".pop-num .wp-cnum__field");
     await inp.setValue("2.4");
     const events = wrap.emitted("update:factor") ?? [];
     expect(events[events.length - 1]).toEqual([2.4]);
@@ -121,7 +121,7 @@ describe("CellRulePopover", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "boost", factor: 1.8, srcLabel: "warm", tgtLabel: "positive_qa" },
     });
-    const inp = wrap.find(".pop-num__field");
+    const inp = wrap.find(".pop-num .wp-cnum__field");
     await inp.setValue("-1");
     await inp.setValue("abc");
     expect(wrap.emitted("update:factor")).toBeUndefined();
@@ -148,7 +148,7 @@ describe("CellRulePopover", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "boost", factor: 1.4, srcLabel: "w", tgtLabel: "p" },
     });
-    const input = wrap.find(".pop-num__field");
+    const input = wrap.find(".pop-num .wp-cnum__field");
     await input.trigger("keydown", { key: "ArrowUp" });
     const events = wrap.emitted("update:factor") ?? [];
     expect(events[events.length - 1]).toEqual([1.5]);
@@ -158,7 +158,7 @@ describe("CellRulePopover", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "boost", factor: 1.4, srcLabel: "w", tgtLabel: "p" },
     });
-    const input = wrap.find(".pop-num__field");
+    const input = wrap.find(".pop-num .wp-cnum__field");
     await input.trigger("keydown", { key: "ArrowDown" });
     const events = wrap.emitted("update:factor") ?? [];
     expect(events[events.length - 1]).toEqual([1.3]);
@@ -168,7 +168,7 @@ describe("CellRulePopover", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "boost", factor: 1.4, srcLabel: "w", tgtLabel: "p" },
     });
-    const inp = wrap.find(".pop-num__field");
+    const inp = wrap.find(".pop-num .wp-cnum__field");
     await inp.setValue("1.2999999999999998");
     const events = wrap.emitted("update:factor") ?? [];
     expect(events[events.length - 1]).toEqual([1.3]);
@@ -178,7 +178,7 @@ describe("CellRulePopover", () => {
     const wrap = mount(CellRulePopover, {
       props: { state: "boost", factor: 1.4, srcLabel: "w", tgtLabel: "p" },
     });
-    const inp = wrap.find(".pop-num__field");
+    const inp = wrap.find(".pop-num .wp-cnum__field");
     await inp.setValue("1.25");
     const events = wrap.emitted("update:factor") ?? [];
     expect(events[events.length - 1]).toEqual([1.25]);

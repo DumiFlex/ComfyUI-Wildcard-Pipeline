@@ -156,3 +156,19 @@ export function dropRedundantFrameLockNulls(module: ModuleEntry): ModuleEntry {
   if (Object.keys(next).length === 0) delete out.iteration_overrides;
   return out;
 }
+
+/** Apply an edit-modal save made while frame `frame` is open: the base
+ *  payload + base instance stay untouched and the frame's override becomes
+ *  the instance delta between `base` and `edited` over `fields` (the kind's
+ *  frame-overridable fields) — replacing, not merging into, any previous
+ *  override for that frame. An empty delta just clears the frame. */
+export function applyFrameEdit(
+  base: ModuleEntry,
+  edited: ModuleEntry,
+  frame: number,
+  fields: readonly string[],
+): ModuleEntry {
+  const delta = diffInstance(base.instance, edited.instance, fields);
+  const next = clearFrameOverride(base, frame);
+  return Object.keys(delta).length ? setFrameOverride(next, frame, delta) : next;
+}

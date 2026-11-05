@@ -48,7 +48,7 @@ describe("buildContextPools", () => {
       null, "nonsense", {}, { type: "wildcard" }, { id: "x", type: "wildcard" },
     ] as unknown[]);
     expect(pools.get("x")).toEqual({
-      uuid: "x", name: "", tagSets: [], subCategories: [], tagGroups: {}, hasNull: false,
+      uuid: "x", name: "", varBinding: "", tagSets: [], subCategories: [], tagGroups: {}, hasNull: false,
     });
   });
 });
@@ -155,12 +155,36 @@ describe("overlayContextPools", () => {
     expect(merged.uuidToOptionsCount.get("aaaa1111")).toBe(3);
   });
 
-  it("never overlays uuidToName — that holds the VARIABLE binding, not a display name", () => {
+  it("never relabels a library uuid in uuidToName — that holds the VARIABLE binding", () => {
     const merged = overlayContextPools(
       libraryData(),
       buildContextPools([nodeModule("aaaa1111")]),
     );
     expect(merged.uuidToName.get("aaaa1111")).toBe("pose_pool");
+  });
+
+  it("ADDS a node-only wildcard to uuidToName, labelled with its binding", () => {
+    // The example-workflow case: a switched-off "Shared lists" bundle holds
+    // Colors ($color), the library is empty, and Hair's options read
+    // @{Colors}. The engine resolves it from the node, so the editors must not
+    // call it "not in the library".
+    const merged = overlayContextPools(
+      libraryData(),
+      buildContextPools([
+        { ...nodeModule("bc15a82d"), enabled: false, meta: { name: "Colors" },
+          payload: { var_binding: "color", options: [] } },
+      ]),
+    );
+    expect(merged.uuidToName.get("bc15a82d")).toBe("color");
+    expect(merged.uuidToName.get("aaaa1111")).toBe("pose_pool");
+  });
+
+  it("falls back to the module name when a node-only wildcard has no binding", () => {
+    const merged = overlayContextPools(
+      libraryData(),
+      buildContextPools([{ ...nodeModule("bc15a82d"), meta: { name: "Colors" } }]),
+    );
+    expect(merged.uuidToName.get("bc15a82d")).toBe("Colors");
   });
 
   it("returns the input untouched when there are no pools (the SPA)", () => {

@@ -1,20 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import Icon, { ICON_SM } from "../components/ui/Icon.vue";
-import RelativeDate from "../components/RelativeDate.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { libraryVersion } from "../composables/useLibraryChanged";
+import { RouterLink, useRouter } from "vue-router";
+import Button from "@/kit/Button.vue";
+import Card from "@/kit/Card.vue";
+import Icon, { ICON_SM } from "@/kit/Icon.vue";
+import RelativeDate from "@/kit/RelativeDate.vue";
 import { api } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "@/kit/Chip.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useRecentStore } from "../stores/recentStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import StarPrompt from "../components/StarPrompt.vue";
 import { useBundleStore } from "../stores/bundleStore";
+import { useHealthStore } from "../stores/healthStore";
+import { registerPageNote } from "../composables/useOpenEditor";
+import Logo from "@/kit/Logo.vue";
 
 /** Stat-tile + recent-row metadata. `type` is the ModuleType for module
  *  kinds; bundles get `key: "bundle"` with no `type` since they live in
@@ -34,7 +40,7 @@ const KIND_META: KindMeta[] = [
   { key: "combine",      type: "combine",      label: "Combines",      icon: "pi-link",                    color: "var(--wp-kind-combine)",    slug: "combines" },
   { key: "derivation",   type: "derivation",   label: "Derivations",   icon: "pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)", slug: "derivations" },
   { key: "constraint",   type: "constraint",   label: "Constraints",   icon: "pi-filter",                  color: "var(--wp-kind-constraint)", slug: "constraints" },
-  { key: "bundle",                            label: "Bundles",       icon: "pi-box",                     color: "var(--wp-bundle-default, #6366f1)", slug: "bundles" },
+  { key: "bundle",                            label: "Bundles",       icon: "pi-box",                     color: "var(--wp-bundle-default)", slug: "bundles" },
 ];
 
 const KIND_BY_KEY: Record<string, KindMeta> = KIND_META.reduce((acc, k) => {
@@ -97,14 +103,14 @@ interface DashboardRow {
 const recentItems = ref<DashboardRow[]>([]);
 const favoriteItems = ref<DashboardRow[]>([]);
 const tab = ref<"recent" | "opened" | "favorites">("opened");
+const RECENT_TABS: SegmentedOption<"recent" | "opened" | "favorites">[] = [
+  { value: "opened", label: "Recently opened", icon: "pi-history" },
+  { value: "recent", label: "Recent edits", icon: "pi-clock" },
+  { value: "favorites", label: "Favorites", icon: "pi-star-fill" },
+];
 
-const logoUrl = `${import.meta.env.BASE_URL}images/favicon.svg`;
 function openDocs() {
   router.push("/docs");
-}
-
-function navigateToKind(slug: string) {
-  router.push(`/${slug}`);
 }
 
 function openTestRunner() {
@@ -129,7 +135,17 @@ function newOfKind(slug: string) {
 const totalItems = computed<number>(() =>
   Object.values(counts.value).reduce((sum, n) => sum + n, 0),
 );
-const showGettingStarted = computed<boolean>(() => totalItems.value < 3);
+/** The counts start at 0, so until they land every library looks new and
+ *  the intro card flashed for everyone. */
+const countsLoaded = ref(false);
+// The server lists land after first paint: until then the Recent edits and
+// Favorites tabs draw row skeletons instead of "No edits yet." (the
+// Recently opened tab is local, so it never waits).
+const recentLoaded = ref(false);
+const favoritesLoaded = ref(false);
+const listLoading = computed<boolean>(() =>
+  (tab.value === "recent" && !recentLoaded.value) || (tab.value === "favorites" && !favoritesLoaded.value));
+const showGettingStarted = computed<boolean>(() => countsLoaded.value && totalItems.value < 3);
 
 // "New here?" intro card dismissal. The card used to REPLACE the recents
 // list (mutually-exclusive v-if), so a user who'd made a module or two
@@ -163,61 +179,15 @@ const showOnboardingCard = computed<boolean>(
   () => showGettingStarted.value && !onboardingDismissed.value,
 );
 
-/** Health issues derived from the live catalog. Lightweight checks
- *  surfaced as a single advisory card — runtime conflicts (missing
- *  $vars, etc.) are the extension's domain; this card focuses on
- *  *editor-time* mistakes the user can fix from the library. */
-interface HealthIssue {
-  id: string;
-  label: string;
-  detail: string;
-  count: number;
-  route: string;
-}
-const healthIssues = computed<HealthIssue[]>(() => {
-  const issues: HealthIssue[] = [];
-  const blankWildcards = moduleStore.catalog.filter((m) => {
-    if (m.type !== "wildcard") return false;
-    const opts = (m.payload as { options?: { value?: string }[] } | null)?.options ?? [];
-    return opts.length === 0 || opts.every((o) => !(o.value || "").trim());
-  });
-  if (blankWildcards.length) {
-    issues.push({
-      id: "blank-wildcards",
-      label: `${blankWildcards.length} wildcard${blankWildcards.length === 1 ? '' : 's'} with no usable options`,
-      detail: "Wildcards need at least one non-empty option to resolve.",
-      count: blankWildcards.length,
-      route: "/wildcards",
-    });
-  }
-  const emptyBundles = bundleStore.catalog.filter((b) => {
-    const kids = Array.isArray(b.children) ? b.children : [];
-    return kids.length === 0;
-  });
-  if (emptyBundles.length) {
-    issues.push({
-      id: "empty-bundles",
-      label: `${emptyBundles.length} empty bundle${emptyBundles.length === 1 ? '' : 's'}`,
-      detail: "Bundles without children won't surface anything at run time.",
-      count: emptyBundles.length,
-      route: "/bundles",
-    });
-  }
-  const unnamed = [
-    ...moduleStore.catalog.filter((m) => !m.name?.trim()),
-    ...bundleStore.catalog.filter((b) => !b.name?.trim()),
-  ];
-  if (unnamed.length) {
-    issues.push({
-      id: "unnamed",
-      label: `${unnamed.length} unnamed item${unnamed.length === 1 ? '' : 's'}`,
-      detail: "Items without names are hard to find in pickers and references.",
-      count: unnamed.length,
-      route: "/all",
-    });
-  }
-  return issues;
+/** Library health summary: the same scan as the Library health page
+ *  (`stores/healthStore.ts`), shown as counts plus the first problem. */
+const health = useHealthStore();
+health.ensure();
+const healthTop = computed(() => {
+  const open = health.findings.filter((f) => !health.ignored.has(f.key));
+  return open.find((f) => f.severity === "problem") ?? open.find((f) => f.severity === "warning") ?? null;
 });
+const healthShown = computed(() => health.scan !== null && health.counts.problem + health.counts.warning > 0);
 
 /** Getting-started steps. The check column reflects actual library
  *  state so users can see their progress against the checklist as
@@ -250,8 +220,9 @@ function categoryFor(row: DashboardRow): CategoryRow | undefined {
  *  what the user actually clicked into) — distinct from "Recent edits"
  *  which is sorted by server-side `updated_at`. Joins against live
  *  module/bundle catalog to pick up category_id; falls back to the
- *  recentStore snapshot if the row is no longer in the catalog (e.g.
- *  deleted, or catalog still loading). `updated_at` is wired to the
+ *  recentStore snapshot while the catalog is still loading. Deleted rows
+ *  leave recentStore itself (on delete, and when AppLayout prunes it
+ *  against a fresh catalog). `updated_at` is wired to the
  *  recentStore's `openedAt` so RelativeDate renders "X ago" since the
  *  user last opened the row — not since it was last edited. */
 const openedItems = computed<DashboardRow[]>(() => {
@@ -349,6 +320,7 @@ async function loadCounts() {
       }
     }),
   );
+  countsLoaded.value = true;
 }
 
 async function loadRecent() {
@@ -374,6 +346,7 @@ async function loadRecent() {
   } catch {
     recentItems.value = [];
   }
+  recentLoaded.value = true;
 }
 
 async function loadFavorites() {
@@ -395,6 +368,7 @@ async function loadFavorites() {
   } catch {
     favoriteItems.value = [];
   }
+  favoritesLoaded.value = true;
 }
 
 const refreshing = ref(false);
@@ -411,6 +385,31 @@ async function refresh() {
     refreshing.value = false;
   }
 }
+// A delete, undo or chat card changed the library: counts and lists move.
+watch(libraryVersion, () => { void refresh(); });
+// Tell the AI chat what the dashboard shows: the counts, the warnings and
+// the list under the open tab.
+const TAB_LABEL = { opened: "Recently opened", recent: "Recent edits", favorites: "Favorites" } as const;
+registerPageNote(() => {
+  const tiles = KIND_META.map((k) => {
+    const n = counts.value[k.key] ?? 0;
+    return `${n} ${(n === 1 ? k.label.replace(/s$/, "") : k.label).toLowerCase()}`;
+  });
+  const bits = [`Dashboard: ${totalItems.value} items (${tiles.join(", ")})`];
+  const c = health.counts;
+  bits.push(health.scan
+    ? `Library health: ${c.problem} problem${c.problem === 1 ? "" : "s"}, `
+      + `${c.warning} warning${c.warning === 1 ? "" : "s"}, ${c.tidy} to tidy up`
+      + (healthTop.value ? ` (first: ${healthTop.value.item.name}: ${healthTop.value.detail})` : "")
+    : "Library health: not checked yet");
+  const rows = visibleItems.value;
+  bits.push(rows.length
+    ? `${TAB_LABEL[tab.value]} tab: ${rows.map((r) => `${r.name} (${r.moduleType ?? r.kind}, ${r.id})`).join(", ")}`
+    : `${TAB_LABEL[tab.value]} tab: empty`);
+  if (showOnboardingCard.value) bits.push("The \"New here?\" intro card is showing");
+  return bits.join(". ");
+});
+
 onMounted(async () => {
   await refresh();
   // Only meaningful once the catalog is loaded: an existing user is recognised
@@ -425,7 +424,7 @@ onMounted(async () => {
   <div class="wp-page">
     <!-- Hero -->
     <div class="wp-hero">
-      <div class="wp-hero__icon"><img :src="logoUrl" alt="" /></div>
+      <div class="wp-hero__icon"><Logo :size="40" decorative /></div>
       <div class="dashboard__hero-text">
         <h2 class="wp-hero__title">Welcome to Wildcard Pipeline</h2>
         <p class="wp-hero__sub">
@@ -442,7 +441,7 @@ onMounted(async () => {
           @click="refresh"
         >Refresh</Button>
         <Button variant="outline" icon="pi-book" @click="openDocs">Docs</Button>
-        <Button variant="primary" icon="pi-plus" @click="newWildcard">New module</Button>
+        <Button variant="primary" icon="pi-plus" data-ai-anchor="new-module" data-ai-label="New module button" @click="newWildcard">New module</Button>
       </div>
     </div>
 
@@ -451,16 +450,13 @@ onMounted(async () => {
     <StarPrompt />
 
     <!-- Stats -->
-    <div class="wp-stats" aria-label="Library counts">
-      <button
+    <div class="wp-stats" aria-label="Library counts" data-ai-anchor="counts" data-ai-label="Library counts">
+      <RouterLink
         v-for="kind in KIND_META"
         :key="kind.key"
-        type="button"
+        :to="`/${kind.slug}`"
         class="wp-stat dashboard__stat"
         :aria-label="`View all ${kind.label}`"
-        @click="navigateToKind(kind.slug)"
-        @keydown.enter.prevent="navigateToKind(kind.slug)"
-        @keydown.space.prevent="navigateToKind(kind.slug)"
       >
         <div
           class="wp-stat__icon"
@@ -469,23 +465,27 @@ onMounted(async () => {
           <Icon :name="kind.icon" />
         </div>
         <div class="wp-stat__label">{{ kind.label }}</div>
-        <div class="wp-stat__value">{{ counts[kind.key] }}</div>
+        <div class="wp-stat__value">
+          <template v-if="countsLoaded">{{ counts[kind.key] }}</template>
+          <Skeleton v-else width="2.5ch" class="dashboard__stat-skel" :label="kind.key === KIND_META[0]?.key ? 'Loading counts' : undefined" />
+        </div>
         <div class="wp-stat__delta dashboard__stat-foot">
           <span class="dashboard__stat-edit">
             <Icon name="pi-clock" :size="ICON_SM" />
-            <RelativeDate v-if="lastEditByKind[kind.key]" :value="lastEditByKind[kind.key]" />
+            <Skeleton v-if="!countsLoaded" width="6ch" class="dashboard__stat-skel" />
+            <RelativeDate v-else-if="lastEditByKind[kind.key]" :value="lastEditByKind[kind.key]" />
             <span v-else>—</span>
           </span>
           <span class="dashboard__stat-cta">
             <Icon name="pi-arrow-up-right" :size="ICON_SM" /> View
           </span>
         </div>
-      </button>
+      </RouterLink>
     </div>
 
     <!-- Quick-create row — one '+ New <kind>' button per module type so
          creation is one click from the dashboard for every shape. -->
-    <div class="dashboard__quick" data-test="dashboard-quick-create">
+    <div class="dashboard__quick" data-test="dashboard-quick-create" data-ai-anchor="quick-create" data-ai-label="Quick create">
       <span class="dashboard__quick-label">Quick create</span>
       <Button
         v-for="kind in KIND_META"
@@ -501,32 +501,23 @@ onMounted(async () => {
       <Button variant="ghost" size="sm" icon="pi-arrow-right-arrow-left" @click="openImportExport">Import / Export</Button>
     </div>
 
-    <!-- Health issues — advisory card, surfaced only when the catalog
-         has real editor-time problems. Each row links to the list view
-         where the user can find + fix the offending items. -->
-    <Card v-if="healthIssues.length" data-test="dashboard-health">
+    <!-- Library health — the counts from the Library health page, shown
+         only when something needs fixing (problems or warnings). -->
+    <Card v-if="healthShown" data-test="dashboard-health" data-ai-anchor="health" data-ai-label="Library health">
       <template #default>
         <div class="dashboard__health-head">
-          <Icon name="pi-exclamation-triangle" />
-          <span class="dashboard__health-title">{{ healthIssues.length }} thing{{ healthIssues.length === 1 ? '' : 's' }} to look at</span>
+          <Icon name="pi-heart" />
+          <span class="dashboard__health-title">Library health</span>
+          <Button variant="link" size="sm" class="dashboard__health-open" @click="router.push('/health')">Open</Button>
         </div>
-        <ul class="dashboard__health-list">
-          <li
-            v-for="issue in healthIssues"
-            :key="issue.id"
-            class="dashboard__health-row"
-            @click="router.push(issue.route)"
-            @keydown.enter.prevent="router.push(issue.route)"
-            @keydown.space.prevent="router.push(issue.route)"
-            tabindex="0"
-            role="button"
-            :aria-label="`${issue.label}. Open ${issue.route}`"
-          >
-            <strong>{{ issue.label }}</strong>
-            <span class="dashboard__health-detail">{{ issue.detail }}</span>
-            <Icon name="pi-arrow-right" :size="ICON_SM" />
-          </li>
-        </ul>
+        <div class="dashboard__health-counts">
+          <Chip v-if="health.counts.problem" tone="danger">{{ health.counts.problem }} problem{{ health.counts.problem === 1 ? '' : 's' }}</Chip>
+          <Chip v-if="health.counts.warning" tone="warn">{{ health.counts.warning }} warning{{ health.counts.warning === 1 ? '' : 's' }}</Chip>
+          <Chip v-if="health.counts.tidy" tone="info">{{ health.counts.tidy }} to tidy up</Chip>
+        </div>
+        <p v-if="healthTop" class="dashboard__health-detail">
+          <strong>{{ healthTop.item.name || healthTop.item.id }}</strong>: {{ healthTop.detail }}
+        </p>
       </template>
     </Card>
 
@@ -543,11 +534,9 @@ onMounted(async () => {
             <p class="dashboard__start-sub">Start with the introduction — it shows how the pieces fit together. From there, the Quick start gets you a runnable graph in a couple of minutes.</p>
           </div>
           <Button
+            variant="ghost" icon="times"
             class="dashboard__start-dismiss"
-            variant="ghost"
-            icon="pi-times"
-            aria-label="Dismiss intro"
-            title="Dismiss — the docs stay in the sidebar"
+            aria-label="Dismiss: the docs stay in the sidebar"
             data-test="dashboard-getting-started-dismiss"
             @click="dismissOnboarding"
           />
@@ -562,42 +551,19 @@ onMounted(async () => {
     <!-- Recent / Favorites — always rendered now. The intro card above
          no longer hides it; an empty library just shows the empty-state
          line under the tabs. -->
-    <Card padding>
+    <Card padding data-ai-anchor="recent" data-ai-label="Recently opened, recent edits and favorites">
       <!-- Tabs sit at the top-LEFT of the card body now, not in the
            Card's right-aligned #actions slot. The View-all link stays
            on the right via wp-spacer so the row balances. Earlier
            layout pushed both to the right which left the entire
            left half empty. -->
       <div class="wp-recent__head">
-        <div class="wp-tabs wp-recent__tabs">
-          <button
-            type="button"
-            class="wp-tabs__btn wp-tab"
-            :data-active="tab === 'opened' ? 'true' : 'false'"
-            data-test="dashboard-tab-opened"
-            @click="tab = 'opened'"
-          >
-            <Icon name="pi-history" /> Recently opened
-          </button>
-          <button
-            type="button"
-            class="wp-tabs__btn wp-tab"
-            :data-active="tab === 'recent' ? 'true' : 'false'"
-            data-test="dashboard-tab-recent"
-            @click="tab = 'recent'"
-          >
-            <Icon name="pi-clock" /> Recent edits
-          </button>
-          <button
-            type="button"
-            class="wp-tabs__btn wp-tab"
-            :data-active="tab === 'favorites' ? 'true' : 'false'"
-            data-test="dashboard-tab-favorites"
-            @click="tab = 'favorites'"
-          >
-            <Icon name="pi-star-fill" /> Favorites
-          </button>
-        </div>
+        <WpSegmented
+          v-model="tab"
+          :options="RECENT_TABS"
+          aria-label="Which items to list"
+          test-prefix="dashboard-tab"
+        />
         <span class="wp-spacer" />
         <a
           class="dashboard__view-all"
@@ -605,7 +571,14 @@ onMounted(async () => {
           @click.prevent="router.push('/all')"
         >View all <Icon name="pi-arrow-right" :size="ICON_SM" /></a>
       </div>
-      <div v-if="visibleItems.length" class="wp-list wp-recent">
+      <Skeleton
+        v-if="listLoading"
+        shape="row"
+        icon="square"
+        :lines="5"
+        :label="tab === 'favorites' ? 'Loading favorites' : 'Loading recent edits'"
+      />
+      <div v-else-if="visibleItems.length" class="wp-list wp-recent">
         <div
           v-for="row in visibleItems"
           :key="`${row.kind}:${row.id}`"
@@ -627,12 +600,12 @@ onMounted(async () => {
             <Icon :name="row.icon" />
           </span>
           <span class="dashboard__row-name">{{ row.name }}</span>
-          <CategoryChip
+          <Chip
             v-if="categoryFor(row)"
-            :name="categoryFor(row)!.name"
+           
             :color="categoryFor(row)!.color"
             :icon="categoryFor(row)!.icon"
-          />
+          >{{ categoryFor(row)!.name }}</Chip>
           <span class="wp-id">{{ row.id }}</span>
           <RelativeDate :value="row.updated_at" />
         </div>
@@ -649,6 +622,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* A stat tile's number and last-edit line while the counts load: as wide as
+   the text they stand for, not the whole tile. */
+.dashboard__stat-skel { display: inline-flex; width: auto; vertical-align: middle; }
+.wp-stat__value .dashboard__stat-skel { height: 1.1em; justify-content: center; }
 .dashboard__hero-text { flex: 1; min-width: 0; }
 .dashboard__hero-actions { gap: var(--wp-space-4); }
 
@@ -692,43 +669,17 @@ onMounted(async () => {
   border-right: 1px solid var(--wp-border);
 }
 
-/* Health card — danger-tinted advisory list. Each row is keyboard
- * focusable + clickable to jump to the relevant kind page. */
+/* Library health card: counts as chips, then the first problem. */
 .dashboard__health-head {
   display: flex;
   align-items: center;
   gap: var(--wp-space-3);
   margin-bottom: var(--wp-space-4);
-  color: var(--wp-warn, #facc15);
 }
-.dashboard__health-title { font-weight: 600; font-size: var(--wp-text-base); }
-.dashboard__health-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-3);
-}
-.dashboard__health-row {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  padding: var(--wp-space-3) var(--wp-space-4);
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 8%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-warn, #facc15) 22%, transparent);
-  border-radius: var(--wp-radius);
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-.dashboard__health-row:hover,
-.dashboard__health-row:focus-visible {
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 14%, transparent);
-  outline: none;
-}
-.dashboard__health-row strong { font-weight: 600; }
+.dashboard__health-title { font-weight: 600; font-size: var(--wp-text-base); flex: 1; }
+.dashboard__health-counts { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .dashboard__health-detail {
-  flex: 1;
+  margin: var(--wp-space-4) 0 0;
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
 }
@@ -767,8 +718,8 @@ onMounted(async () => {
   border-radius: var(--wp-radius);
 }
 .dashboard__start-row[data-done] {
-  background: color-mix(in oklab, var(--wp-success, #22c55e) 6%, transparent);
-  border-color: color-mix(in oklab, var(--wp-success, #22c55e) 26%, transparent);
+  background: color-mix(in oklab, var(--wp-success) 6%, transparent);
+  border-color: color-mix(in oklab, var(--wp-success) 26%, transparent);
 }
 .dashboard__start-cta {
   display: flex;
@@ -781,15 +732,15 @@ onMounted(async () => {
   height: 28px;
   display: grid;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg-3);
   color: var(--wp-text-muted);
   font-weight: 600;
   flex-shrink: 0;
 }
 .dashboard__start-row[data-done] .dashboard__start-step {
-  background: color-mix(in oklab, var(--wp-success, #22c55e) 20%, transparent);
-  color: var(--wp-success, #22c55e);
+  background: color-mix(in oklab, var(--wp-success) 20%, transparent);
+  color: var(--wp-success);
 }
 .dashboard__start-num { font-size: 12.5px; }
 .dashboard__start-body { flex: 1; min-width: 0; }
@@ -803,31 +754,6 @@ onMounted(async () => {
   margin-bottom: var(--wp-space-4);
 }
 .wp-recent__head .wp-spacer { flex: 1; }
-.wp-recent__tabs {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  border-bottom: none;
-}
-.wp-tabs__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-3) var(--wp-space-5);
-  background: none;
-  border: 1px solid transparent;
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: var(--wp-radius-sm);
-}
-.wp-tabs__btn:hover { color: var(--wp-text); }
-.wp-tabs__btn[data-active="true"] {
-  color: var(--wp-text);
-  background: var(--wp-bg-2);
-  border-color: var(--wp-border);
-}
 .dashboard__view-all {
   margin-left: auto;
   font-size: var(--wp-text-sm);
@@ -863,7 +789,7 @@ onMounted(async () => {
   margin: var(--wp-space-5) var(--wp-space-2) var(--wp-space-3);
 }
 
-.dashboard__stat { cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.dashboard__stat { cursor: pointer; text-align: left; font: inherit; color: inherit; text-decoration: none; }
 .dashboard__stat:hover { border-color: var(--wp-border-strong); }
 .dashboard__stat:focus-visible {
   outline: 2px solid var(--wp-border-focus);

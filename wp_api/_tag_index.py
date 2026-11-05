@@ -33,6 +33,8 @@ from bisect import bisect_left
 from dataclasses import dataclass
 from pathlib import Path
 
+from engine.log_once import log_once
+
 _log = logging.getLogger(__name__)
 
 #: Danbooru's numeric categories. Anything else is surfaced as-is.
@@ -128,6 +130,15 @@ class TagIndex:
         except OSError:
             return True
 
+    def has(self, tag: str) -> bool:
+        """Whether `tag` is a tag or an alias in the file, written with
+        spaces or underscores, any case, booru escapes ignored."""
+        q = tag.strip().lower().replace("\\(", "(").replace("\\)", ")").replace(" ", "_")
+        if not q:
+            return False
+        i = bisect_left(self._names, q)
+        return i < len(self._names) and self._names[i] == q
+
     def search(self, query: str, limit: int = 20) -> list[Tag]:
         """Tags starting with `query`, most-used first.
 
@@ -183,7 +194,8 @@ def load_index(path: Path) -> TagIndex | None:
         with path.open("r", encoding="utf-8", newline="") as fh:
             for row in csv.reader(fh):
                 if len(tags) >= _MAX_ROWS:
-                    _log.warning(
+                    log_once(
+                        _log, logging.WARNING, ("tag_rows", str(path), stat.st_mtime),
                         "wildcard-pipeline: tag file %s exceeds %d rows; truncating",
                         path, _MAX_ROWS,
                     )
@@ -204,7 +216,10 @@ def load_index(path: Path) -> TagIndex | None:
                         Tag(alias, tag.count, tag.category, aliased_to=tag.name),
                     )
     except (OSError, csv.Error, UnicodeDecodeError):
-        _log.exception("wildcard-pipeline: failed reading tag file %s", path)
+        # Autocomplete asks on every keystroke and a broken file isn't
+        # cached: one traceback per version of the file.
+        log_once(_log, logging.ERROR, ("tag_read", str(path), stat.st_mtime),
+                 "wildcard-pipeline: failed reading tag file %s", path, exc_info=True)
         return None
     if not tags:
         return None

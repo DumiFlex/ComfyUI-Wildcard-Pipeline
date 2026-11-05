@@ -1,0 +1,36 @@
+{
+  "node": "WP_PromptAssembler",
+  "image": "images/docs/wp-prompt-assembler.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "context (in)",
+      "x": 0.2643,
+      "y": 0.1473
+    },
+    {
+      "group": "ports",
+      "term": "template",
+      "x": 0.2643,
+      "y": 0.2744
+    },
+    {
+      "group": "ports",
+      "term": "negative_template",
+      "x": 0.2643,
+      "y": 0.3757
+    },
+    {
+      "group": "ports",
+      "term": "prompt (out)",
+      "x": 0.6335,
+      "y": 0.1473
+    },
+    {
+      "group": "ports",
+      "term": "negative (out)",
+      "x": 0.6335,
+      "y": 0.1775
+    }
+  ]
+}

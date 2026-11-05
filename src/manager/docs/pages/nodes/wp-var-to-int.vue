@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
-import DocImage from "../../../components/docs/DocImage.vue";
-import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
+import Banner from "@/kit/Banner.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
-const controls = [
-  { term: "context (in)", desc: "The upstream Context carrying the $variable you want to read." },
-  { term: "var_name", desc: "Pick the $variable to parse from the dropdown. The list updates automatically with every variable available in the upstream Context." },
-  { term: "index", desc: "Which number to extract when the variable contains more than one. 0 gives the first, 1 the second, and so on. Most variables only have one number, so leave this at 0." },
-  { term: "default", desc: "The value to use when the variable is missing, has no numbers in it, or the index is beyond what was found. The node never errors — it always falls back to this." },
-  { term: "value (out)", desc: "The extracted integer, ready to wire into any node that accepts INT — image width, step count, batch size, and so on." },
-];
 </script>
 
 <template>
@@ -23,49 +17,60 @@ const controls = [
     icon="pi pi-hashtag"
     tone="node"
     node-id="WP_VarToInt"
-    blurb="Pull a number out of a $variable and use it as a real INT. Great for driving image dimensions, step counts, or any numeric input from a wildcard pick."
+    blurb="Turn a number in a $variable into a whole-number input, such as a width or a step count."
   >
     <DocSection title="What it's for">
       <p>
-        Sometimes a wildcard pick contains a number — a resolution like
-        <VarToken>1920x1080</VarToken>, a step count like <VarToken>30 steps</VarToken>, or
-        just a plain value like <VarToken>512</VarToken>. <b>WP Var → Int</b> extracts the
-        number and emits it as a proper integer you can wire into any node that expects one.
-        If the variable is missing or contains no recognisable number, it quietly returns the
-        default you set — it never stops the run.
+        A pick can hold a number: a size like <VarToken>1920x1080</VarToken>, a step count like
+        <VarToken>30 steps</VarToken>, or just <VarToken>512</VarToken>. <b>WP Var → Int</b> takes
+        the number out and gives it to any node that wants a whole number. If there's no number,
+        it gives your default.
       </p>
-      <DocImage
+      <DocAnnotated
         src="images/docs/wp-var-to-int.png"
-        ratio="16 / 5"
-        caption="Two WP Var → Int nodes both reading the same $resolution variable, picker dropdown open showing the upstream Context's available chips ($subject, $mood, $style, $resolution-highlighted, $scene, $accent). The first node uses index 0 — last execute lands on 1344, 'parsed from 1344×768' — wired into Empty Latent Image's width. The second node uses index 1 — last execute lands on 768 — wired into height. Two Show Any nodes print 1344 and 768 to confirm the round-trip."
+        ratio="1720 / 644"
+        caption="WP Var → Int reads $size ('832x1216', the Render Context's pick for an sdxl model) at index 0 and sends 832 to Empty Latent Image's width."
       />
     </DocSection>
 
-    <DocSection title="Controls">
-      <DocKeyList :items="controls" />
+    <DocSection title="When to use it">
+      <DocUseWhen
+        :good="[
+          'A pick that drives a whole number: $steps, a width or height, a seed',
+        ]"
+        :better="[
+          'Text that should stay in the prompt',
+        ]"
+      />
+      <Banner tone="info" note>
+        Hide the variable it reads (the globe on its row), so the value doesn't print in the prompt. The node re-runs only when that value changes.
+      </Banner>
     </DocSection>
 
-    <DocSection title="How the extraction works">
+    <DocSection title="Controls">
+      <DocFields node="WP_VarToInt" group="controls" />
+    </DocSection>
+
+    <DocSection title="How it finds the number">
       <p>
-        The node scans the variable's text value for signed integers and collects them in
-        order. The <b>index</b> control selects which one to return:
+        The node finds every whole number in the text (a minus sign counts), in order, and
+        <b>index</b> picks one:
       </p>
       <ul>
         <li>
-          <VarToken>1920x1080</VarToken> — index 0 → 1920, index 1 → 1080
+          <VarToken>1920x1080</VarToken>: index 0 gives 1920, index 1 gives 1080
         </li>
         <li>
-          <VarToken>30 steps</VarToken> — index 0 → 30
+          <VarToken>30 steps</VarToken>: index 0 gives 30
         </li>
         <li>
-          <VarToken>hello</VarToken> — no numbers found → returns default
+          <VarToken>hello</VarToken>: no number, so the default
         </li>
       </ul>
-      <DocCallout variant="tip">
-        To extract both width and height from a single <VarToken>$resolution</VarToken>
-        variable, place two WP Var → Int nodes reading the same variable: one with index 0
-        for width and one with index 1 for height.
-      </DocCallout>
+      <Banner tone="info" note>
+        For width and height from one <VarToken>$resolution</VarToken>, use two WP Var → Int
+        nodes on the same variable: index 0 for width, index 1 for height.
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

@@ -182,3 +182,43 @@ export function isFingerprintCurrent(stored: string | undefined): boolean {
   if (!stored) return false;
   return stored.startsWith(`${FINGERPRINT_VERSION}:`);
 }
+
+/** Stamp `snapshot_fingerprint` on any BundleInstance missing one OR
+ *  carrying a stale-version baseline. Backfill-on-load: workflows
+ *  saved before MOD detection landed get a false-clean baseline
+ *  computed from current state; bundles whose stored fingerprint
+ *  predates a format bump (see `FINGERPRINT_VERSION` above) are
+ *  silently rebaselined here so they don't render with a permanent
+ *  "modified" badge after the upgrade. Subsequent edits flip the
+ *  bundle to modified correctly. Mutates in place. */
+export function ensureBundleFingerprints(
+  bundles: BundleInstance[],
+  modules: ModuleEntry[],
+): boolean {
+  let mutated = false;
+  for (const b of bundles) {
+    if (!isFingerprintCurrent(b.snapshot_fingerprint)) {
+      b.snapshot_fingerprint = computeBundleFingerprint(b, modules);
+      mutated = true;
+    }
+  }
+  return mutated;
+}
+
+/** Re-snap fingerprints for the given bundle uids using the current
+ *  modules + bundles state. Returns a new bundles array with updated
+ *  fingerprints. Call sites: post-insert (sync local state with library
+ *  snapshot), post-save (record what we just published), post-reset
+ *  (record the library state we just pulled), post-cross-node (record
+ *  the freshly-cloned snapshot). */
+export function snapBundleFingerprints(
+  bundles: BundleInstance[],
+  modules: ModuleEntry[],
+  uidsToSnap: Set<string>,
+): BundleInstance[] {
+  return bundles.map((b) =>
+    uidsToSnap.has(b._uid)
+      ? { ...b, snapshot_fingerprint: computeBundleFingerprint(b, modules) }
+      : b,
+  );
+}

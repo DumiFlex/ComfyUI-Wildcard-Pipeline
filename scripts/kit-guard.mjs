@@ -1,0 +1,162 @@
+// Kit guard: counts hand-rolled controls in .vue files, per rule and file.
+//
+// The component kit (wp-kit, shown on its site; app pieces at `/kit`) has a shared
+// control for each of these. Existing code is the baseline in
+// `kit-guard-baseline.json`; `kit-guard.test.mjs` fails when a file gets MORE
+// than its baseline (use the kit instead) and when it gets FEWER (the
+// baseline only shrinks: run `pnpm kit:baseline` and commit it).
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Under Vitest import.meta.url is a /@fs/ URL; resolve from the file path.
+export const ROOT = resolve(dirname(fileURLToPath(import.meta.url).replace(/^\/@fs/, "")), "..");
+
+/** Files that demo the kit may use what they replace. The kit itself comes
+ *  from npm (@dumiflex/wp-kit) and is checked in wp-kit. */
+const KIT_PAGE = ["src/manager/views/Kit.vue", "src/manager/kit/demos/"];
+
+export const RULES = [
+  {
+    id: "native-select",
+    pattern: /<select\b/g,
+    allow: [],
+    fix: "Use Select (manager) or WpSelect (canvas).",
+  },
+  {
+    id: "native-number",
+    pattern: /type="number"/g,
+    allow: [],
+    fix: "Use WpNumber: our arrows, keys and wheel, clamped.",
+  },
+  {
+    id: "native-checkbox",
+    pattern: /type="checkbox"/g,
+    allow: [],
+    fix: "Use Checkbox (or WpSwitch for a setting that takes effect at once).",
+  },
+  {
+    id: "native-range",
+    pattern: /type="range"/g,
+    allow: [],
+    fix: "Use Slider (or WpNumber for an exact number).",
+  },
+  {
+    id: "inline-svg",
+    pattern: /<svg\b/g,
+    allow: [],
+    fix: "Use Icon. A drawing that is not an icon belongs in its own component.",
+  },
+  {
+    id: "hand-dialog",
+    pattern: /role="dialog"/g,
+    allow: [],
+    fix: "Use Modal or ConfirmModal (ModalShell for a custom panel).",
+  },
+  {
+    // The manager and the canvas widgets alike (it was manager-only until the
+    // canvas moved onto the kit).
+    id: "raw-button",
+    pattern: /<button\b/g,
+    allow: [],
+    fix: "Use Button (or Chip / ListRow / WpIconButton for those jobs).",
+  },
+  {
+    // A text field; a file picker (type="file") stays native.
+    id: "raw-input",
+    pattern: /<input\b(?![^>]*\btype="file")/g,
+    allow: [],
+    fix: "Use Input, SearchInput, WpNumber, InlineEdit or TagInput; kit-field-el.ts reaches the element.",
+  },
+  {
+    id: "raw-textarea",
+    pattern: /<textarea\b/g,
+    allow: [],
+    fix: "Use Textarea; kit-field-el.ts reaches the element.",
+  },
+  {
+    // A floating layer places itself through the kit overlays. Only a host
+    // overlay teleports itself: the toast host (mirrors ComfyUI's toast
+    // anchor), the AI pointer (a full-screen overlay) and the chat drawer's
+    // `defer` Teleport into its own element (not floating).
+    id: "raw-teleport",
+    pattern: /<Teleport\b/g,
+    allow: [
+      "src/components/shared/Toast.vue",
+      "src/manager/components/ai/AiPointer.vue",
+      "src/manager/components/ai/AiChatDrawer.vue",
+    ],
+    fix: "Use Popover / DropdownMenu / Modal / Drawer; only a host overlay may teleport itself.",
+  },
+  {
+    id: "raw-hex",
+    // Not after `&` (an HTML entity such as `&#123;`) or a word character.
+    pattern: /(?<![&\w])#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3}(?:[0-9a-fA-F]{2})?)?\b/g,
+    // Prompt advice that quotes a hex colour as text ("a #1E90FF umbrella").
+    allow: ["src/manager/docs/pages/guides/prompt-writing.vue"],
+    fix: "Use a colour token (var(--wp-…)); see Tokens on the kit page.",
+  },
+];
+
+function walk(dir, out) {
+  for (const name of readdirSync(dir)) {
+    if (name === "node_modules" || name === "__tests__") continue;
+    const p = join(dir, name);
+    const st = statSync(p);
+    if (st.isDirectory()) walk(p, out);
+    else if (name.endsWith(".vue")) out.push(p);
+  }
+  return out;
+}
+
+/** Strip comments (HTML, block and line) so a <button> named in one doesn't
+ *  count. A line comment starts at `//` not after `:` (so URLs stay). */
+function stripComments(text) {
+  return text
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
+}
+
+/** `{ ruleId: { "src/x.vue": count } }`, only non-zero counts. */
+export function countAll(root = ROOT) {
+  const files = walk(join(root, "src"), []).map((f) => relative(root, f).split(sep).join("/")).sort();
+  const out = {};
+  for (const rule of RULES) out[rule.id] = {};
+  for (const file of files) {
+    if (KIT_PAGE.some((k) => file === k || (k.endsWith("/") && file.startsWith(k)))) continue;
+    const text = stripComments(readFileSync(join(root, file), "utf8"));
+    for (const rule of RULES) {
+      if (rule.only && !file.startsWith(rule.only)) continue;
+      if (rule.allow.includes(file)) continue;
+      const n = (text.match(rule.pattern) || []).length;
+      if (n > 0) out[rule.id][file] = n;
+    }
+  }
+  return out;
+}
+
+/** Problems against a baseline: `{ over: [...], under: [...] }`. */
+export function compare(counts, baseline) {
+  const over = [];
+  const under = [];
+  for (const rule of RULES) {
+    const now = counts[rule.id] || {};
+    const base = baseline[rule.id] || {};
+    for (const file of new Set([...Object.keys(now), ...Object.keys(base)])) {
+      const n = now[file] || 0;
+      const b = base[file] || 0;
+      if (n > b) over.push({ rule: rule.id, file, count: n, baseline: b, fix: rule.fix });
+      else if (n < b) under.push({ rule: rule.id, file, count: n, baseline: b });
+    }
+  }
+  return { over, under };
+}
+
+export function totals(counts) {
+  const out = {};
+  for (const [rule, files] of Object.entries(counts)) {
+    out[rule] = Object.values(files).reduce((a, b) => a + b, 0);
+  }
+  return out;
+}

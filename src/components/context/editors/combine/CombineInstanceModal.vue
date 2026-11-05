@@ -11,8 +11,8 @@
  * a user might need at queue time: name, variable binding, template
  * override, locked seed, hide-from-prompt.
  */
+import Kbd from "@/kit/Kbd.vue";
 import { computed } from "vue";
-import { saveChordLabel } from "../../../shared/platform-keys";
 import { type ResolvedValue } from "../../../../widgets/richTokenize";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
@@ -20,10 +20,10 @@ import TemplateSection from "./sections/TemplateSection.vue";
 import type { VarProducerLike } from "../../../../manager/components/RefChip.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
+import Button from "@/kit/Button.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
-const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -101,13 +101,7 @@ function onSpaClick(): void {
         </div>
         <div class="wp-cbm__sub">Library entry · template interpolates $vars into output binding</div>
       </div>
-      <button
-        type="button"
-        class="wp-cbm__close"
-        aria-label="Close"
-        data-test="cbm-close"
-        @click="emit('cancel')"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="cbm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection
@@ -141,28 +135,25 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <button
-        type="button"
-        class="wp-cbm__btn wp-cbm__btn--quiet"
+      <Button
+        size="sm"
+        variant="ghost"
+        icon="pi-replay"
         data-test="cbm-clear-all"
         title="Clear all instance overrides on this combine"
         @click="emit('clear-all-overrides')"
-      >
-        <i class="pi pi-replay" aria-hidden="true" />
-        Reset overrides
-      </button>
+      >Reset overrides</Button>
       <span class="wp-cbm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
+        <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
       </span>
-      <button
+      <Button
         v-if="canSaveToLibrary"
-        type="button"
-        class="wp-cbm__btn"
+        size="sm"
         data-test="cbm-save-lib"
         @click="emit('save-to-library')"
-      >Save to library</button>
-      <button type="button" class="wp-cbm__btn" data-test="cbm-cancel" @click="emit('cancel')">Cancel</button>
-      <button type="button" class="wp-cbm__btn wp-cbm__btn--primary" data-test="cbm-save" @click="emit('save')">Save</button>
+      >Save to library</Button>
+      <Button size="sm" data-test="cbm-cancel" @click="emit('cancel')">Cancel</Button>
+      <Button size="sm" variant="primary" data-test="cbm-save" @click="emit('save')">Save</Button>
     </footer>
     </div>
   </div>
@@ -214,48 +205,4 @@ function onSpaClick(): void {
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-cbm__hint kbd {
-  font: 9px var(--wp-font-mono);
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  padding: 1px 4px;
-  border-radius: 2px;
-  color: var(--wp-text-muted, var(--wp-text2));
-}
-.wp-cbm__btn {
-  padding: 5px 12px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-cbm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.wp-cbm__btn:hover {
-  border-color: var(--wp-border-strong, var(--wp-border2));
-  color: var(--wp-text);
-}
-.wp-cbm__btn--primary:hover {
-  border-color: var(--wp-accent2, var(--wp-accent));
-  background: var(--wp-accent2, var(--wp-accent));
-  color: white;
-}
-.wp-cbm__btn--quiet {
-  border-color: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-}
-.wp-cbm__btn--quiet:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-}
-.wp-cbm__btn--quiet .pi { font-size: 10px; }
 </style>

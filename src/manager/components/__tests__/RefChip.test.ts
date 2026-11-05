@@ -320,6 +320,38 @@ describe("RefChip hover card — which pool the count came from", () => {
     expect(text).toContain("Pose pool");
   });
 
+  it("offers no Open for a wildcard only the node holds — the library page would 404", async () => {
+    vi.useFakeTimers();
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "color", uuid: "beef0019", resolved: true },
+      attachTo: document.body,
+      global: { provide: { [CONTEXT_POOLS_KEY as symbol]: computed(() =>
+        buildContextPools([nodeModule("beef0019", [[], []], "Colors")])) } },
+    });
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    expect(document.querySelector('[data-test="refchip-copy-id"]')).not.toBeNull();
+    expect(document.querySelector('[data-test="refchip-open-new"]')).toBeNull();
+    w.unmount();
+  });
+
+  it("still offers Open when the node's wildcard is also in the library", async () => {
+    _setForTests("beef001a", { name: "pose", kind: "wildcard", optionTagSets: [[], []] });
+    vi.useFakeTimers();
+    const w = mount(RefChip, {
+      props: { kind: "ref", name: "pose", uuid: "beef001a", resolved: true },
+      attachTo: document.body,
+      global: { provide: { [CONTEXT_POOLS_KEY as symbol]: computed(() =>
+        buildContextPools([nodeModule("beef001a", [[], []], "Pose pool")])) } },
+    });
+    await w.find(".wp-refchip").trigger("mouseenter");
+    vi.advanceTimersByTime(300);
+    await nextTick();
+    expect(document.querySelector('[data-test="refchip-open-new"]')).not.toBeNull();
+    w.unmount();
+  });
+
   it("counts against the NODE's pool, not the library's — that split is the bug", async () => {
     // Library has the `test`-tagged option; the node's snapshot predates it.
     _setForTests("beef0012", {

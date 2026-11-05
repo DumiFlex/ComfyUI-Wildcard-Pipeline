@@ -59,7 +59,7 @@ async function expandSection(
   bucketKey: string,
 ): Promise<void> {
   const section = wrap.get(`[data-test="import-picker-section-${bucketKey}"]`);
-  const toggle = section.get(".wp-picker-section__toggle");
+  const toggle = section.get('[data-test="picker-section-toggle"]');
   await toggle.trigger("click");
   await flushPromises();
 }

@@ -216,3 +216,44 @@ async def test_preview_returns_each_variables_negatives(wp_client):
     assert body["negatives"]["hair"] == [
         {"text": "blonde", "pick": None, "source": "hair"},
     ]
+
+
+def _many_colors_chain(binding: str = "color") -> list:
+    return [[{
+        "id": "abcdef01",
+        "type": "wildcard",
+        "enabled": True,
+        "meta": {"name": binding},
+        "entries": [],
+        "payload": {
+            "var_binding": binding,
+            "options": [{"id": f"o{i}", "value": f"c{i}", "weight": 1} for i in range(40)],
+        },
+    }]]
+
+
+async def _resolve(wp_client, body):
+    resp = await wp_client.post("/wp/api/preview/resolve", json=body)
+    assert resp.status == 200
+    return (await resp.json())["resolved"]
+
+
+async def test_preview_step_seeds_follow_each_context(wp_client):
+    """`seeds[i]` rolls step i on its own seed: the same as `seed` alone with
+    that value, and different seeds give different picks."""
+    chain = _many_colors_chain()
+    picks = set()
+    for s in range(1, 9):
+        via_list = await _resolve(wp_client, {"chain": chain, "seed": 42, "seeds": [s]})
+        via_seed = await _resolve(wp_client, {"chain": chain, "seed": s})
+        assert via_list == via_seed
+        picks.add(via_list["color"])
+    assert len(picks) > 1
+
+
+async def test_preview_null_or_missing_step_seed_uses_seed(wp_client):
+    chain = _many_colors_chain()
+    base = await _resolve(wp_client, {"chain": chain, "seed": 7})
+    assert await _resolve(wp_client, {"chain": chain, "seed": 7, "seeds": [None]}) == base
+    assert await _resolve(wp_client, {"chain": chain, "seed": 7, "seeds": []}) == base
+    assert await _resolve(wp_client, {"chain": chain, "seed": 7, "seeds": ["x", True]}) == base

@@ -20,6 +20,18 @@
  */
 export const GITHUB_REPO = "https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline";
 
+/** The shared component kit's repo and its showcase site (every piece, live). */
+export const KIT_REPO = "https://github.com/DumiFlex/wp-kit";
+export const KIT_SITE = "https://dumiflex.github.io/wp-kit/";
+
+/**
+ * How the About card names the kit version: the installed
+ * @dumiflex/wp-kit version ("v0.3.0"), linked to that release's notes.
+ */
+export function kitVersion(v: { version: string }): { label: string; href: string } {
+  return { label: `v${v.version}`, href: `${KIT_REPO}/releases/tag/v${v.version}` };
+}
+
 /**
  * ComfyUI Registry node id for this pack — the `id` passed to ComfyUI
  * Manager's `/manager/queue/install` to update-in-place. Must match
@@ -61,10 +73,9 @@ export const DISCORD_INVITE = "https://discord.gg/BFYR9WQdVR";
 /**
  * Wildcard Pipeline Community API + embed host.
  *
- * Both the sister web SPA (full https URL) and the in-extension
- * embed bundle (`/embed/wpc-embed.js`) live here. The community-tab
- * integration loads the embed bundle from this origin at runtime;
- * every downstream call (auth, REST, downloads) hits the same base.
+ * Both the sister web SPA (full https URL) and the page the Community
+ * tab frames (`/embed-frame.html`) live here; every downstream call
+ * (auth, REST, downloads) hits the same base.
  *
  * Set via Vite env (`VITE_WPC_API_URL`) so dev points at
  * `http://localhost:8765` and the published build hits the canonical
@@ -75,9 +86,33 @@ export const WPC_API_URL: string =
   (import.meta.env.VITE_WPC_API_URL as string | undefined)?.replace(/\/$/, "") ??
   "https://wp.dumiflex.dev";
 
-/** Latest embed bundle (always points at the newest release). */
-export const WPC_EMBED_URL = `${WPC_API_URL}/embed/wpc-embed.js`;
+/** The Community tab's page, framed in a sandboxed iframe (Community.vue). */
+export const WPC_EMBED_FRAME_URL = `${WPC_API_URL}/embed-frame.html`;
 
-/** Embed manifest for version pinning. See
- *  https://github.com/DumiFlex/Wildcard-Pipeline-Community/blob/main/docs/extension-integration.md */
-export const WPC_EMBED_MANIFEST_URL = `${WPC_API_URL}/api/v1/embed/version.json`;
+/**
+ * Ways to support the project, shown on Settings › About. One list so the
+ * About page and any later "support" surface stay in step.
+ */
+export const SUPPORT_LINKS = [
+  {
+    id: "github",
+    label: "Sponsor on GitHub",
+    detail: "Monthly or one-time, through GitHub Sponsors.",
+    icon: "pi-heart",
+    href: "https://github.com/sponsors/DumiFlex",
+  },
+  {
+    id: "coffee",
+    label: "Buy me a coffee",
+    detail: "A one-off thank you, no account needed.",
+    icon: "pi-gift",
+    href: "https://buymeacoffee.com/dumiflex",
+  },
+  {
+    id: "paypal",
+    label: "PayPal",
+    detail: "Send any amount through PayPal.me.",
+    icon: "pi-paypal",
+    href: "https://paypal.me/DumiFlex",
+  },
+] as const;

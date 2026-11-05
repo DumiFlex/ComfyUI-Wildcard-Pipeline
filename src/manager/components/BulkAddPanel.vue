@@ -15,7 +15,8 @@
  * snapshot/dirty tracking stays in one place.
  */
 import { computed, ref, watch, onBeforeUnmount } from "vue";
-import Button from "./ui/Button.vue";
+import Button from "@/kit/Button.vue";
+import Textarea from "@/kit/Textarea.vue";
 import {
   parseBulkOptions,
   summarizeBulkOptions,
@@ -101,13 +102,13 @@ function cancel() {
       </template>
     </div>
 
-    <textarea
+    <Textarea
       v-model="text"
-      class="wp-textarea wpc-bulk-panel__input"
-      rows="6"
+      class="wpc-bulk-panel__input"
+      :rows="6"
       :placeholder="mode === 'options' ? 'serene\nradiant #warm *2\nbrooding #cool -- cheerful' : 'cfg = 4.5\nsteps = 30'"
       aria-label="Bulk paste"
-    ></textarea>
+    />
 
     <!-- live preview -->
     <div class="wpc-bulk-panel__preview" aria-live="polite">
@@ -146,7 +147,7 @@ function cancel() {
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-2);
 }
 .wpc-bulk-panel__hint {
@@ -158,7 +159,7 @@ function cancel() {
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
   padding: 1px 4px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg-3);
   color: var(--wp-text);
 }

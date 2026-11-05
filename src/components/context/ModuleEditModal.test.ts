@@ -501,6 +501,59 @@ describe("ModuleEditModal — fixed_values v2 dispatcher", () => {
     const vals = (saved.payload as { values: Array<{ name: string; value: string }> }).values;
     expect(vals[0].value).toBe("vivid");
   });
+
+  it("inline save folds values_overrides into payload.values, keeping ids and negatives", async () => {
+    const inline: ModuleEntry = {
+      id: "inline01",
+      type: "fixed_values",
+      enabled: true,
+      meta: { name: "scratch" },
+      entries: [{ variable_name: "tag", value: "noir" }, { variable_name: "mood", value: "calm" }],
+      payload: { values: [
+        { id: "x1", name: "tag", value: "noir", negative: "color" },
+        { id: "x2", name: "mood", value: "calm", negative: "angry" },
+      ] },
+    };
+    const wrapper = mount(ModuleEditModal, { ...mountOpts, props: { visible: true, module: inline } });
+    await nextTick();
+    wrapper.findComponent({ name: "FixedValuesInstanceModal" }).vm.$emit("update", {
+      instance: { values_overrides: [
+        { id: "x1", name: "tag", value: "vivid" },
+        { id: "x2", name: "mood", value: "calm", negative: "" },
+      ], enabled_options: null },
+      entries: [{ variable_name: "tag", value: "vivid" }, { variable_name: "mood", value: "calm" }],
+    });
+    await nextTick();
+    await wrapper.find('[data-test="fvm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect((saved.payload as { values: unknown[] }).values).toEqual([
+      { id: "x1", name: "tag", value: "vivid", negative: "color" },
+      { id: "x2", name: "mood", value: "calm" },
+    ]);
+    expect(saved.instance?.values_overrides).toBeUndefined();
+  });
+
+  it("library-tracked save keeps an override whose only change is a negative", async () => {
+    const tracked: ModuleEntry = {
+      id: "trk00001",
+      type: "fixed_values",
+      enabled: true,
+      payload_hash: "h",
+      meta: { name: "lib" },
+      entries: [{ variable_name: "tag", value: "noir" }],
+      payload: { values: [{ id: "x1", name: "tag", value: "noir", negative: "color" }] },
+    };
+    const wrapper = mount(ModuleEditModal, { ...mountOpts, props: { visible: true, module: tracked } });
+    await nextTick();
+    wrapper.findComponent({ name: "FixedValuesInstanceModal" }).vm.$emit("update", {
+      instance: { values_overrides: [{ id: "x1", name: "tag", value: "noir", negative: "sepia" }] },
+      entries: [{ variable_name: "tag", value: "noir" }],
+    });
+    await nextTick();
+    await wrapper.find('[data-test="fvm-save"]').trigger("click");
+    const saved = wrapper.emitted("save")?.[0][0] as ModuleEntry;
+    expect(saved.instance?.values_overrides?.[0]).toEqual({ id: "x1", name: "tag", value: "noir", negative: "sepia" });
+  });
 });
 
 // ── Combine v2 dispatcher branch ────────────────────────────────────────

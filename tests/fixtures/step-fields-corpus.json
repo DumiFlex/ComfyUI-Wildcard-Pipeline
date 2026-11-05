@@ -1,0 +1,120 @@
+{
+  "_comment": "Shared by engine/ai/step_fields.py and src/manager/utils/chat-step-fields.ts: [name, text, shown].",
+  "cases": [
+    [
+      "the screenshot: bold key",
+      "I can help.\n\nFor more detail: Docs › ai-assistant\n\n**calls**: []",
+      "I can help.\n\nFor more detail: Docs › ai-assistant"
+    ],
+    [
+      "plain key",
+      "Done.\ncalls: []",
+      "Done."
+    ],
+    [
+      "bold key and colon",
+      "Done.\n**calls:** []",
+      "Done."
+    ],
+    [
+      "quoted JSON key",
+      "Done.\n\"calls\": []",
+      "Done."
+    ],
+    [
+      "code key and value",
+      "Done.\n`calls`: `[]`",
+      "Done."
+    ],
+    [
+      "bullet",
+      "Done.\n- calls: []",
+      "Done."
+    ],
+    [
+      "equals and null",
+      "Done.\ncalls = null",
+      "Done."
+    ],
+    [
+      "tool_calls none",
+      "Done.\ntool_calls: none",
+      "Done."
+    ],
+    [
+      "several fields",
+      "Done.\nplan: \"\"\ncalls: []",
+      "Done."
+    ],
+    [
+      "JSON tail glued to the words",
+      "Done.\", \"calls\": []}",
+      "Done."
+    ],
+    [
+      "JSON tail on its own line",
+      "Done.\n, \"calls\": []}",
+      "Done."
+    ],
+    [
+      "calls list on one line",
+      "Done.\ncalls: [{\"tool\": \"read\", \"args\": \"{}\"}]",
+      "Done."
+    ],
+    [
+      "calls list over lines",
+      "Done.\n\ncalls: [\n  {\"tool\": \"read\", \"args\": \"{}\"}\n]",
+      "Done."
+    ],
+    [
+      "calls list still streaming",
+      "Done.\ncalls: [{\"tool\": \"re",
+      "Done."
+    ],
+    [
+      "empty plan line first",
+      "plan: \nHere it is.",
+      "Here it is."
+    ],
+    [
+      "case of key",
+      "Done.\nCalls: []",
+      "Done."
+    ],
+    [
+      "nothing to strip",
+      "Calls are made one at a time.",
+      "Calls are made one at a time."
+    ],
+    [
+      "prose after a calls key stays",
+      "calls: the tools I run.\nThat is all.",
+      "calls: the tools I run.\nThat is all."
+    ],
+    [
+      "a plan with words stays",
+      "Plan: write three options.",
+      "Plan: write three options."
+    ],
+    [
+      "calls in a code fence stays",
+      "Example:\n```json\n{\"message\": \"hi\",\n\"calls\": []}\n```",
+      "Example:\n```json\n{\"message\": \"hi\",\n\"calls\": []}\n```"
+    ],
+    [
+      "calls mid-text stays",
+      "First.\ncalls: []\nSecond.",
+      "First.\ncalls: []\nSecond."
+    ],
+    [
+      "a reply that is only the field",
+      "calls: []",
+      ""
+    ],
+    [
+      "empty text",
+      "",
+      ""
+    ]
+  ]
+}

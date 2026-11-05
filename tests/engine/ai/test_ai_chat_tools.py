@@ -1,0 +1,575 @@
+"""engine/ai/chat_tools.py — the chat's tools past wildcards and rules."""
+from __future__ import annotations
+
+import pytest
+
+from engine.ai import chat, guide
+
+
+def _lib():
+    modules = [
+        {"id": "aaaa0001", "type": "wildcard", "name": "Outfit", "tags": [],
+         "payload": {"var_binding": "outfit", "sub_categories": ["warm", "boots", "sneakers"],
+                     "options": [
+                         {"id": "o1", "value": "wool coat", "weight": 1,
+                          "sub_categories": ["warm", "boots"]},
+                         {"id": "o2", "value": "sundress", "weight": 1,
+                          "sub_categories": ["sneakers"]},
+                         {"id": "o3", "value": "rain jacket", "weight": 1,
+                          "sub_categories": []},
+                     ]}},
+        {"id": "aaaa0002", "type": "wildcard", "name": "Season", "tags": [],
+         "payload": {"var_binding": "season", "sub_categories": ["cold"], "options": [
+             {"id": "s1", "value": "winter", "weight": 1, "sub_categories": ["cold"]},
+             {"id": "s2", "value": "summer", "weight": 1, "sub_categories": []},
+         ]}},
+        {"id": "aaaa0003", "type": "derivation", "name": "Extras", "tags": [],
+         "payload": {"rules": [{
+             "id": "r1", "summary": "",
+             "branches": [{"condition": {"var": "season", "op": "equals",
+                                         "value": "winter"},
+                           "action": {"target_var": "extra", "mode": "replace",
+                                      "value": "scarf"}}],
+         }]}},
+        {"id": "aaaa0004", "type": "constraint", "name": "Season → Outfit", "tags": [],
+         "payload": {"source_wildcard_id": "aaaa0002", "target_wildcard_id": "aaaa0001",
+                     "matrix": {"cold": {"warm": {"mode": "boost", "factor": 3}}},
+                     "exceptions": []}},
+        {"id": "aaaa0005", "type": "fixed_values", "name": "Quality", "tags": [],
+         "payload": {"values": [{"id": "v1", "name": "quality",
+                                 "value": "masterpiece, best quality"}]}},
+        {"id": "aaaa0006", "type": "combine", "name": "Look", "tags": [],
+         "payload": {"template": "$season, $outfit", "output_var": "look",
+                     "input_vars": ["season", "outfit"]}},
+        {"id": "aaaa0007", "type": "wildcard", "name": "Colors", "tags": [],
+         "payload": {"sub_categories": ["warm"], "options": [
+             {"id": "c1", "value": "red", "weight": 1, "sub_categories": ["warm"]},
+             {"id": "c2", "value": "blue", "weight": 1, "sub_categories": []},
+         ]}},
+    ]
+    bundles = [{"id": "bbbb0001", "name": "Kit", "tags": [], "children": [
+        {"id": "aaaa0002", "type": "wildcard", "enabled": True, "meta": {"name": "Season"},
+         "payload": modules[1]["payload"], "instance": {}},
+        {"id": "aaaa0001", "type": "wildcard", "enabled": True, "meta": {"name": "Outfit"},
+         "payload": modules[0]["payload"], "instance": {"pick_min": 1, "pick_max": 2}},
+    ]}]
+    templates = [{"id": "tttt0001", "name": "Portrait", "tags": [], "description": "",
+                  "template_string": "$look, $quality", "negative_template": ""}]
+    return chat.Library(modules, bundles, [], templates)
+
+
+def test_tools_are_listed_and_guide_is_in_the_prompt():
+    for tool in ("create_fixed_values", "edit_values", "create_combine", "edit_combine",
+                 "create_template", "edit_template", "edit_rules", "edit_constraint",
+                 "create_bundle", "edit_bundle", "run_test"):
+        assert tool in chat.TOOLS and f"- {tool} " in chat.SYSTEM_PROMPT
+    assert "not_contains" in chat.SYSTEM_PROMPT  # schema v10 NOT toggle
+    assert guide.WHICH.splitlines()[0] in chat.SYSTEM_PROMPT
+    assert "pick 2-3" in chat.SYSTEM_PROMPT
+
+
+def test_read_every_kind():
+    lib = _lib()
+    assert "Used by: constraint Season → Outfit (target); bundle Kit" in lib.read(
+        {"id": "aaaa0001"})
+    assert "1. $quality = masterpiece, best quality" in lib.read({"id": "aaaa0005"})
+    assert "Sets $look = $season, $outfit" in lib.read({"id": "aaaa0006"})
+    rules = lib.read({"id": "aaaa0003"})
+    assert "Rules (1, each runs on its own" in rules and "winter" in rules
+    con = lib.read({"id": "aaaa0004"})
+    assert "Reaches every target after it." in con and "1. #cold → #warm: boost ×3" in con
+    kit = lib.read({"id": "bbbb0001"})
+    assert "2. wildcard Outfit  [use: pick 1-2]" in kit
+    tpl = lib.read({"id": "tttt0001"})
+    assert "template \"Portrait\"" in tpl and "Template: $look, $quality" in tpl
+    assert "vocabulary" in lib.read({"id": "aaaa0007"})
+    assert "3 template" not in lib.overview() and "1 template" in lib.overview()
+
+
+def test_names_work_where_ids_do():
+    lib = _lib()
+    assert "Variable: $season" in lib.run("read", {"id": "Season"})
+    p = lib.run("add_options", {"id": "season", "options": [{"text": "autumn"}]})
+    assert p["op"]["id"] == "aaaa0002"
+
+
+def test_fixed_values_create_and_edit():
+    lib = _lib()
+    p = lib.run("create_fixed_values", {"name": "Style", "values": [
+        {"name": "$style", "value": "anime, {cel|flat} shading", "negative": "3d render"},
+        {"name": "bad name", "value": "x"}]})
+    vals = p["op"]["body"]["payload"]["values"]
+    assert [v["name"] for v in vals] == ["style"] and vals[0]["negative"] == "3d render"
+    assert any("bad name" in w for w in p["warnings"])
+    with pytest.raises(ValueError, match="can't read \\$variables"):
+        lib.run("create_fixed_values", {"name": "X", "values": [{"name": "a", "value": "$b"}]})
+    e = lib.run("edit_values", {"id": "aaaa0005", "set": [
+        {"name": "quality", "value": "best quality", "negative": "lowres"}]})
+    row = e["op"]["body"]["payload"]["values"][0]
+    assert row["id"] == "v1" and row["value"] == "best quality" and row["negative"] == "lowres"
+    assert e["after"] is None
+    e2 = lib.run("edit_values", {"id": "aaaa0005", "remove": ["$quality"]})
+    assert e2["replaces"] == e["pid"] and e2["op"]["body"]["payload"]["values"] == []
+
+
+def test_combine_create_and_edit():
+    lib = _lib()
+    p = lib.run("create_combine", {"name": "Scene", "var": "scene",
+                                   "template": "$look in {spring|autumn}, $nope"})
+    pay = p["op"]["body"]["payload"]
+    assert pay["output_var"] == "scene" and pay["input_vars"] == ["look", "nope"]
+    assert any("$nope" in w for w in p["warnings"])
+    with pytest.raises(ValueError, match="@"):
+        lib.run("create_combine", {"name": "S", "var": "s", "template": "@{Colors}"})
+    # A read of its own variable is taken out, the rest kept (bench K3).
+    own = lib.run("create_combine", {"name": "S", "var": "s", "template": "$s and $look"})
+    assert own["op"]["body"]["payload"]["template"] == "$look"
+    assert any("sets it" in w for w in own["warnings"])
+    with pytest.raises(ValueError, match="sets itself"):
+        lib.run("create_combine", {"name": "S", "var": "s", "template": "$s"})
+    e = lib.run("edit_combine", {"id": "Look", "negative": "blurry"})
+    assert e["op"]["body"]["payload"]["negative"] == "blurry"
+    assert e["op"]["body"]["payload"]["template"] == "$season, $outfit"
+    with pytest.raises(ValueError, match="changes nothing"):
+        lib.run("edit_combine", {"id": "aaaa0006", "template": "$season, $outfit"})
+
+
+def test_template_create_and_edit():
+    lib = _lib()
+    p = lib.run("create_template", {"name": "Full", "template": "$look, $extra",
+                                    "negative": "$negatives, lowres"})
+    assert p["op"]["kind"] == "template" and p["op"]["op"] == "create"
+    assert p["op"]["body"]["template_string"] == "$look, $extra"
+    assert p["op"]["body"]["negative_template"] == "$negatives, lowres"
+    # A pick in a template is kept as its first branch, with a warning.
+    picked = lib.run("create_template", {"name": "Picky", "template": "a {red|blue} $look"})
+    assert picked["op"]["body"]["template_string"] == "a red $look"
+    assert any("Assembler can't pick" in w for w in picked["warnings"])
+    e = lib.run("edit_template", {"id": "Portrait", "negative": "lowres"})
+    assert e["op"] == {**e["op"], "op": "update", "kind": "template", "id": "tttt0001",
+                       "body": {"template_string": "$look, $quality",
+                                "negative_template": "lowres, $negatives"}}
+    info = lib.run("update_info", {"id": "tttt0001", "tags_add": ["portrait"]})
+    assert info["op"]["kind"] == "template"
+
+
+def test_edit_rules_replace_and_remove():
+    lib = _lib()
+    p = lib.run("edit_rules", {"id": "Extras", "replace": [{"n": 1, "rule": {
+        "summary": "", "branches": [{"match": "all", "conditions": [
+            {"var": "season", "op": "equals", "value": "winter"}],
+            "actions": [{"target_var": "extra", "mode": "replace",
+                         "value": "@{Colors:warm} scarf"}]}],
+        "else_actions": []}}]})
+    rule = p["op"]["body"]["payload"]["rules"][0]
+    assert rule["id"] == "r1"
+    assert "@{aaaa0007#Colors:warm} scarf" in str(rule)
+    assert "@{Colors:warm} scarf" in p["preview"][0]
+    r = lib.run("edit_rules", {"id": "aaaa0003", "remove": [1]})
+    assert r["op"]["body"]["payload"]["rules"] == []
+    with pytest.raises(ValueError, match="changes nothing"):
+        _lib().run("edit_rules", {"id": "aaaa0003", "remove": [7]})
+
+
+def test_edit_constraint_rules_remove_and_reach():
+    lib = _lib()
+    p = lib.run("edit_constraint", {"id": "aaaa0004", "remove": [1], "reach": "next 2",
+                                    "rules": [{"source": "winter", "target": "sundress",
+                                               "effect": "exclude"}]})
+    pay = p["op"]["body"]["payload"]
+    assert pay["matrix"] == {}
+    assert pay["target_select"] == {"mode": "next", "count": 2}
+    assert len(pay["exceptions"]) == 1 and pay["exceptions"][0]["mode"] == "exclude"
+    assert "Reaches the next 2 targets after it" in p["preview"]
+    with pytest.raises(ValueError, match="reach"):
+        lib.run("edit_constraint", {"id": "aaaa0004", "reach": "sometimes"})
+    c = lib.run("create_constraint", {"source_id": "Season", "target_id": "Outfit",
+                                      "reach": "first", "rules": [
+                                          {"source": "#cold", "target": "#warm",
+                                           "effect": "boost", "factor": 2}]})
+    assert c["op"]["body"]["payload"]["target_select"] == {"mode": "first"}
+
+
+def test_wildcard_spec_in_chat():
+    lib = _lib()
+    p = lib.run("create_wildcard", {
+        "name": "Scarf", "var": "scarf", "null_weight": 2,
+        "axes": [{"name": "SHOES", "kind": "accepts", "tags": ["boots"]}],
+        "options": [{"text": "@{Colors:warm} scarf", "tags": ["boots"], "fallback": True},
+                    {"text": "{knit|silk} scarf", "tags": ["boots"]}]})
+    pay = p["op"]["body"]["payload"]
+    assert pay["options"][0]["value"] == "@{aaaa0007#Colors:warm} scarf"
+    assert pay["options"][0]["fallback"] is True
+    assert any(o.get("is_null") and o["weight"] == 2 for o in pay["options"])
+    assert pay["tag_groups"] == {"SHOES": ["boots"]}
+    assert pay["tag_group_kinds"] == {"SHOES": "accepts"}
+    v = lib.run("create_wildcard", {"name": "Fabrics", "var": "",
+                                    "options": [{"text": "wool"}, {"text": "silk"}]})
+    assert "var_binding" not in v["op"]["body"]["payload"]
+    assert v["summary"].startswith("vocabulary")
+    with pytest.raises(ValueError, match="give it a variable"):
+        lib.run("create_wildcard", {"name": "colors", "var": "", "options": [{"text": "x"}]})
+    with pytest.raises(ValueError):
+        lib.run("create_wildcard", {"name": "Bad", "var": "bad",
+                                    "options": [{"text": "$season coat"}]})
+
+
+def test_edit_options_negatives_fallback_null_and_axes():
+    lib = _lib()
+    p = lib.run("edit_options", {"id": "Outfit",
+                                 "negatives": [{"n": 2, "negative": "{bare|naked} legs"}],
+                                 "fallback": 3, "null_weight": 1.5,
+                                 "axes": [{"name": "SHOES", "kind": "accepts",
+                                           "tags": ["boots", "sneakers", "heels"]}]})
+    pay = p["op"]["body"]["payload"]
+    opts = pay["options"]
+    assert opts[1]["negative"] == "{bare|naked} legs"
+    assert opts[2]["fallback"] is True
+    assert opts[-1]["is_null"] and opts[-1]["weight"] == 1.5
+    assert pay["tag_groups"] == {"SHOES": ["boots", "sneakers"]}
+    assert any("heels" in w for w in p["warnings"])
+    assert any("offers no SHOES" in w for w in p["warnings"])
+    q = lib.run("edit_options", {"id": "aaaa0001", "fallback": 0, "null_weight": 0})
+    assert not any(o.get("fallback") or o.get("is_null")
+                   for o in q["op"]["body"]["payload"]["options"])
+    with pytest.raises(ValueError, match="changes nothing"):
+        _lib().run("edit_options", {"id": "aaaa0001", "null_weight": 0})
+
+
+def test_create_bundle_orders_and_sets_use():
+    lib = _lib()
+    p = lib.run("create_bundle", {"name": "Set", "items": [
+        "Look", "Extras", {"item": "Outfit", "use": "pick 2-3; filter warm; hold; bogus"},
+        "Season Outfit", "Season → Outfit", "Season", "Quality", "Portrait"]})
+    kids = p["op"]["body"]["children"]
+    names = [k["meta"]["name"] for k in kids]
+    assert names.index("Season") < names.index("Season → Outfit") < names.index("Outfit")
+    assert names.index("Quality") < names.index("Look")
+    assert names.index("Extras") < names.index("Look")
+    outfit = kids[names.index("Outfit")]
+    assert outfit["instance"] == {"pick_min": 2, "pick_max": 3, "category_filter": "warm",
+                                  "seed_scope": "hold"}
+    assert outfit["payload_hash"] and "name" not in outfit
+    assert any("bogus" in w for w in p["warnings"])
+    assert any("template" in w for w in p["warnings"])
+    assert any("Season Outfit" in w for w in p["warnings"])
+
+
+def test_edit_bundle():
+    lib = _lib()
+    p = lib.run("edit_bundle", {"id": "Kit", "use": [{"n": 2, "use": "no empty"}],
+                                "add": ["Look"]})
+    kids = p["op"]["body"]["children"]
+    assert kids[1]["instance"] == {"exclude_null": True}
+    assert kids[-1]["id"] == "aaaa0006"
+    assert p["op"]["before"]["children"][1]["instance"] == {"pick_min": 1, "pick_max": 2}
+    r = lib.run("edit_bundle", {"id": "bbbb0001", "remove": [1]})
+    # Folded into the first card: one card with both changes.
+    assert r["replaces"] == p["pid"] and len(r["op"]["body"]["children"]) == 2
+    assert r["op"]["before"]["children"][1]["instance"] == {"pick_min": 1, "pick_max": 2}
+
+
+def test_run_test_reports_values_never_picked_and_prompts():
+    lib = _lib()
+    out = lib.run("run_test", {"stack": ["Season", "Season → Outfit", "Outfit", "Quality",
+                                         "Look"], "seeds": 60, "template": "Portrait"})
+    assert out.startswith("Ran 60 seeds.")
+    assert "$season: " in out and "$look: " in out
+    assert out.count("Prompt: ") == 3 and "masterpiece" in out
+    lib2 = _lib()
+    lib2.run("edit_constraint", {"id": "aaaa0004", "rules": [
+        {"source": "#cold", "target": "#warm", "effect": "exclude"},
+        {"source": "summer", "target": "wool coat", "effect": "exclude"}]})
+    cmp = lib2.run("run_test", {"stack": ["Season", "Season → Outfit", "Outfit"],
+                                "seeds": 50, "proposed": True})
+    assert "with the proposed changes (was → now)" in cmp
+    assert "Never picked in Outfit: wool coat" in cmp
+    assert "% → " in cmp
+    kit = _lib().run("run_test", {"stack": [{"item": "Kit"}], "seeds": 20})
+    assert "$outfit" in kit
+    with pytest.raises(ValueError, match="nothing to run"):
+        _lib().run("run_test", {"stack": ["nope"]})
+    assert "Ran Season, Kit on 100 seeds" == chat.args_note(
+        "run_test", {"stack": ["Season", {"item": "Kit"}]})
+
+
+def test_pins_feed_inputs():
+    lib = chat.Library([{"id": "aaaa0009", "type": "combine", "name": "Say", "tags": [],
+                         "payload": {"template": "hello $who", "output_var": "said",
+                                     "input_vars": ["who"]}}], [], [])
+    out = lib.run("run_test", {"stack": ["Say"], "pins": {"$who": "world"}, "seeds": 5})
+    assert '$said: "hello world" 100%' in out
+
+
+# ── a constraint's stack needs ──────────────────────────────────────────
+
+
+def test_with_needs_adds_a_constraints_wildcards_in_run_order():
+    lib = _lib()
+    ids, notes = lib.with_needs(["aaaa0004"])
+    assert ids == ["aaaa0002", "aaaa0004", "aaaa0001"]
+    assert "Season and Outfit" in notes[0]
+    # Target first: the constraint moves ahead of it.
+    ids, notes = lib.with_needs(["aaaa0002", "aaaa0001", "aaaa0004"])
+    assert ids == ["aaaa0002", "aaaa0004", "aaaa0001"] and "moved" in notes[0]
+    # In a bundle on the stack counts as there.
+    assert lib.with_needs(["bbbb0001", "aaaa0004"])[0] == ["bbbb0001", "aaaa0004"]
+
+
+def test_run_test_and_show_test_take_the_constraint_alone():
+    from engine.ai import client_tools
+    lib = _lib()
+    out = lib.run_test({"stack": ["Season → Outfit"], "seeds": 5})
+    assert "added Season and Outfit" in out
+    args, _ = client_tools.prepare(lib, "show_test", {"stack": ["aaaa0004"]})
+    assert args["stack"] == [{"module": "aaaa0002"}, {"module": "aaaa0004"},
+                             {"module": "aaaa0001"}]
+    assert args["notes"]
+
+
+def test_show_test_takes_an_item_as_answers_write_it_and_points_proposals_at_run_test():
+    """All-tools eval (9B): show_test got "Lighting (d97da2bb)" (run_test
+    took it, show_test didn't) and its own card's items ("no item 'Weather
+    Main' (proposed items exist only once applied)"), and kept trying."""
+    from engine.ai import client_tools
+    lib = _lib()
+    name = lib.get("aaaa0001")["name"]
+    args, _ = client_tools.prepare(lib, "show_test", {"stack": [f"{name} (aaaa0001)"],
+                                                      "seeds": 3})
+    assert {"module": "aaaa0001"} in args["stack"]
+    card = lib.run("create_wildcard", {"name": "Weather Main", "var": "wm",
+                                       "options": [{"text": "rain"}]})
+    with pytest.raises(ValueError, match="proposal of this chat.*run_test runs a stack"):
+        client_tools.prepare(lib, "show_test", {"stack": [card["op"]["body"]["id"]]})
+    with pytest.raises(ValueError, match="proposal of this chat.*run_test runs a stack"):
+        client_tools.prepare(lib, "show_test", {"stack": ["Weather Main"]})
+
+
+def test_show_test_add_and_remove_keep_the_open_seeds():
+    from engine.ai import client_tools
+    lib = _lib()
+    args, label = client_tools.prepare(lib, "show_test", {"stack": ["Quality"], "change": "add"})
+    assert args["change"] == "add" and "seeds" not in args and label.startswith("Added 1 item")
+    # Taking a constraint out never pulls its wildcards out with it.
+    args, label = client_tools.prepare(lib, "show_test", {"stack": ["aaaa0004"],
+                                                          "change": "remove", "seeds": 5})
+    assert args["stack"] == [{"module": "aaaa0004"}] and args["seeds"] == 5
+    with pytest.raises(ValueError):
+        client_tools.prepare(lib, "show_test", {"stack": ["Quality"], "change": "swap"})
+
+
+def test_ids_copied_from_chips_and_cards_still_name_the_item():
+    lib = _lib()
+    assert "Variable: $season" in lib.run("read", {"id": "[[aaaa0002#Season]]"})
+    assert "Variable: $season" in lib.run("read", {"id": "aaaa0002#Season"})
+    shoes = lib.run("create_wildcard", {"name": "Shoes", "var": "shoes",
+                                        "options": [{"text": "boots", "tags": ["warm"]}]})
+    new_id = shoes["op"]["body"]["id"]
+    for n, ref in enumerate((shoes["pid"], f"{new_id}#Shoes", f"@{{{new_id}}}")):
+        # A new factor each time: an unchanged repeat makes no card.
+        c = lib.run("create_constraint", {"source_id": "Season", "target_id": ref, "rules": [
+            {"source": "#cold", "target": "#warm", "effect": "boost", "factor": 2 + n}]})
+        assert c["op"]["body"]["payload"]["target_wildcard_id"] == new_id
+
+
+def test_a_name_proposed_again_in_this_answer_means_its_own_card():
+    from engine.ai import client_tools
+    lib = _lib()
+    # Another kind sharing the source's name doesn't make it ambiguous.
+    lib.modules["bbbb0001"] = {"id": "bbbb0001", "type": "combine", "name": "Season",
+                               "tags": [], "payload": {"template": "$season"}}
+    made = lib.run("create_wildcard", {
+        "name": "Outfit", "var": "outfit_demo",
+        "options": [{"text": "t-shirt", "tags": ["light"]},
+                    {"text": "wool coat", "tags": ["warm"]}]})
+    new_id = made["op"]["body"]["id"]
+    assert new_id != "aaaa0001"
+    con = lib.run("create_constraint", {
+        "source_id": "Season", "target_id": "Outfit",
+        "rules": [{"source": "winter", "target": "#warm", "effect": "only"}]})
+    assert con["op"]["body"]["payload"]["target_wildcard_id"] == new_id
+    assert con["op"]["body"]["payload"]["source_wildcard_id"] == "aaaa0002"
+    # Its cards show once the answer ends: opening one now is refused with why.
+    for raw in (made["pid"], new_id):
+        with pytest.raises(client_tools.Shown, match="already on screen"):
+            client_tools.prepare(lib, "open", {"proposal": raw})
+
+
+def test_template_editor_version_is_the_basis():
+    """An open template editor's unsaved text is what the chat reads and
+    edits, and its card goes into that editor."""
+    lib = _lib()
+    lib.use_editor({"id": "tttt0001", "name": "Portrait", "dirty": True,
+                    "template_string": "$look, soft light", "negative_template": "blurry"})
+    assert lib.editor_id == "tttt0001"
+    assert lib.templates["tttt0001"]["template_string"] == "$look, soft light"
+    p = lib.run("edit_template", {"id": "tttt0001", "negative": "blurry, lowres"})
+    assert p["op"]["basis"] == "editor"
+    assert p["op"]["before"]["template_string"] == "$look, soft light"
+
+
+def test_new_template_editor_registers_blank_row():
+    lib = _lib()
+    lib.use_editor({"id": "feed0003", "new": True, "type": "template", "name": "Fresh",
+                    "template_string": "$look"})
+    assert lib.editor_id == "feed0003"
+    assert lib.templates["feed0003"]["template_string"] == "$look"
+
+
+def test_edit_of_a_new_wildcard_folds_into_its_create_card():
+    """create_wildcard then edit_options on it in one answer: one create card
+    holding the edit (a new wildcard and its nested refs in one go)."""
+    lib = _lib()
+    made = lib.run("create_wildcard", {"name": "Shirt", "var": "shirt", "options": [
+        {"text": "linen shirt"}, {"text": "oxford shirt"}]})
+    new_id = made["op"]["body"]["id"]
+    second = lib.run("edit_options", {"id": new_id, "rewrite": [
+        {"n": 1, "text": "@{Season} linen shirt"}]})
+    assert second["op"]["op"] == "create"
+    assert second["replaces"] == made["pid"]
+    assert second["op"]["body"]["id"] == new_id
+    texts = [o["value"] for o in second["op"]["body"]["payload"]["options"]]
+    assert texts[0].startswith("@{aaaa0002") and texts[0].endswith("linen shirt")
+    assert texts[1] == "oxford shirt"
+    # A third change still lands on the one card.
+    third = lib.run("edit_options", {"id": new_id, "weights": [{"n": 2, "weight": 3}]})
+    assert third["op"]["op"] == "create" and third["replaces"] == second["pid"]
+    assert third["op"]["body"]["payload"]["options"][1]["weight"] == 3
+
+
+def test_different_changes_to_one_item_are_one_card_with_steps():
+    """Re-weight then describe then categorise one wildcard in one answer:
+    one card that holds every step, in order (Dumi, 2026-10-22)."""
+    lib = _lib()
+    first = lib.run("edit_options", {"id": "aaaa0001", "weights": [{"n": 1, "weight": 4}]})
+    second = lib.run("update_info", {"id": "aaaa0001", "description": "What they wear"})
+    third = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert second["replaces"] == first["pid"] and third["replaces"] == second["pid"]
+    assert third["title"] == "Change Outfit"
+    assert [p["tool"] for p in third["parts"]] == ["edit_options", "update_info"]
+    body, before = third["op"]["body"], third["op"]["before"]
+    assert body["payload"]["options"][0]["weight"] == 4
+    assert body["description"] == "What they wear"
+    assert third["op"]["new_category"] == "Clothes"
+    # What the library holds now, for Undo and the stale-card check.
+    assert before["payload"]["options"][0]["weight"] == 1
+    assert before["description"] == ""
+    assert "risk" not in third  # a re-weight isn't a low-risk change
+
+
+def test_a_new_category_card_folds_into_the_card_that_files_into_it():
+    lib = _lib()
+    cats = lib.run("edit_categories", {"create": ["Clothes"]})
+    filed = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert filed["absorbs"] == [cats["pid"]]
+    assert filed["op"]["new_category"] == "Clothes"
+    assert [p["tool"] for p in filed["parts"]] == ["edit_categories", "update_info"]
+    assert "creates the category Clothes" in chat.proposal_note("update_info", filed)
+    # A card that makes two categories stays a card of its own.
+    lib = _lib()
+    lib.run("edit_categories", {"create": ["Clothes", "Weather"]})
+    filed = lib.run("update_info", {"id": "aaaa0001", "category": "Clothes"})
+    assert "absorbs" not in filed
+
+
+def test_a_new_wildcard_keeps_the_category_a_later_step_gives_it():
+    lib = _lib()
+    made = lib.run("create_wildcard", {"name": "Shirt", "var": "shirt", "options": [
+        {"text": "linen shirt"}]})
+    filed = lib.run("update_info", {"id": made["op"]["body"]["id"], "category": "Clothes"})
+    assert filed["op"]["op"] == "create" and filed["op"]["new_category"] == "Clothes"
+
+
+def test_a_compared_test_card_gives_old_values_their_real_share():
+    """#11: a value outside the before run's top five read "0% → 22%"."""
+    opts = [{"id": f"o{i}", "value": f"look {i}", "weight": 1, "sub_categories": []}
+            for i in range(8)]
+    lib = chat.Library([{"id": "aaaa0011", "type": "wildcard", "name": "Look", "tags": [],
+                         "payload": {"var_binding": "look", "options": opts}}], [], [])
+    lib.run("edit_options", {"id": "aaaa0011", "weights": [{"n": 8, "weight": 20}]})
+    lib.run("run_test", {"stack": ["Look"], "seeds": 200, "proposed": True})
+    card = lib.last_card
+    assert card["compared"] is True
+    top = {t["v"]: t for t in card["vars"][0]["tops"]}
+    # look 7 was one of eight (about 12%), not 0%.
+    assert 5 <= top["look 7"]["was"] <= 20
+    assert top["look 7"]["pct"] > top["look 7"]["was"]
+
+
+def test_a_test_step_names_items_not_ids():
+    """#11: "Ran b0000006 on 100 seeds" said nothing to the user."""
+    lib = _lib()
+    assert chat.args_note("run_test", {"stack": ["aaaa0002", "aaaa0001#Outfit"]}, lib) \
+        == "Ran Season, Outfit on 100 seeds"
+    assert chat.args_note("run_test", {"stack": ["nope"]}, lib) == "Ran nope on 100 seeds"
+
+
+def _with_else():
+    lib = _lib()
+    lib.modules["aaaa0003"]["payload"]["rules"][0]["else"] = {
+        "action": {"target_var": "extra", "mode": "replace", "value": "gloves"}}
+    return lib
+
+
+_NEW_RULE = {"n": 1, "rule": {"summary": "", "branches": [{"match": "all", "conditions": [
+    {"var": "season", "op": "equals", "value": "summer"}],
+    "actions": [{"target_var": "extra", "mode": "replace", "value": "hat"}]}]}}
+
+
+def test_a_rule_rewrite_keeps_its_else_unless_asked():
+    # Bench R6: "rogues should be called Shadowblade" lost the ELSE "Adventurer".
+    lib = _with_else()
+    lib.user_text = "Summer should give a hat."
+    p = lib.run("edit_rules", {"id": "Extras", "replace": [_NEW_RULE]})
+    assert p["op"]["body"]["payload"]["rules"][0]["else"]["action"]["value"] == "gloves"
+    assert any("Kept rule 1's ELSE" in w for w in p["warnings"])
+    lib = _with_else()
+    lib.user_text = "Summer gives a hat, and drop the otherwise part."
+    p = lib.run("edit_rules", {"id": "Extras", "replace": [_NEW_RULE]})
+    assert "else" not in p["op"]["body"]["payload"]["rules"][0]
+
+
+def test_a_new_item_or_rename_onto_a_taken_name_warns():
+    # Bench R6 / B5 / Z13: a second "Title from class" instead of the edit.
+    lib = _lib()
+    p = lib.run("create_derivation", {"name": "Extras", "rules": [_NEW_RULE["rule"]]})
+    assert any("already a derivation named Extras" in w and "change it instead" in w
+               for w in p["warnings"])
+    # Another kind may share the name.
+    q = _lib().run("create_fixed_values", {"name": "Extras", "values": [
+        {"name": "extra_q", "value": "x"}]})
+    assert not any("already a" in w for w in q["warnings"])
+    # Bench L6: "Weather copy" renamed to "Weather".
+    r = _lib().run("update_info", {"id": "Colors", "name": "Season"})
+    assert any("already a wildcard named Season" in w for w in r["warnings"])
+
+
+def test_tidy_fixes_typos():
+    # Bench L5: "tagged charcter by mistake, fix it" removed #charcter, added nothing.
+    lib = _lib()
+    lib.modules["aaaa0001"]["tags"] = ["charcter"]
+    lib.modules["aaaa0002"]["tags"] = ["character"]
+    lib.tags = ["character", "charcter"]
+    lib.user_text = "Outfit is tagged charcter by mistake, fix it."
+    p = lib.run("update_info", {"id": "Outfit", "tags_remove": ["charcter"]})
+    assert p["op"]["body"]["tags"] == ["character"]
+    assert any("typo" in w for w in p["warnings"])
+    q = lib.run("update_many", {"ids": ["Outfit"], "tags_remove": ["charcter"]})
+    assert q["op"]["items"][0]["body"] == {"tags": ["character"]}
+
+
+def test_run_test_adds_what_a_combine_reads():
+    # Bench K4: a combine reading $weather and $mood tested alone printed ",".
+    out = _lib().run("run_test", {"stack": ["Look"], "seeds": 5})
+    assert "added Season before Look: it sets $season" in out
+    assert "added Outfit before Look: it sets $outfit" in out
+    assert "Unknown variable" not in out
+
+
+def test_run_test_after_a_change_card_runs_with_it():
+    # Bench R5: run_test right after the change card ran without it.
+    lib = _lib()
+    lib.run("add_options", {"id": "Season", "options": [{"text": "monsoon"}]})
+    lib.run("run_test", {"stack": ["Season"], "seeds": 40})
+    assert lib.last_card is not None
+    assert "monsoon" in str(lib.last_card)

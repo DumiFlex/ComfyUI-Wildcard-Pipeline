@@ -1,22 +1,25 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
-import Button from "../components/ui/Button.vue";
-import Card from "../components/ui/Card.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
-import Field from "../components/ui/Field.vue";
-import Input from "../components/ui/Input.vue";
-import ColorPicker from "../components/ColorPicker.vue";
-import IconPicker from "../components/IconPicker.vue";
+import Button from "@/kit/Button.vue";
+import Card from "@/kit/Card.vue";
+import DataTable, { type DataColumn, type DataSort } from "@/kit/DataTable.vue";
+import EmptyState from "@/kit/EmptyState.vue";
+import Field from "@/kit/Field.vue";
+import Input from "@/kit/Input.vue";
+import ColorField from "@/kit/ColorField.vue";
+import { DEFAULT_COLOUR } from "@/kit/colour-presets";
+import IconPicker from "@/kit/IconPicker.vue";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "@/kit/Chip.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { ApiError } from "../api/client";
-import { useToast } from "../composables/useToast";
+import { useToast } from "@/kit/useToast";
 import { useCascadeStore } from "../cascade/cascade-store";
 import { useCascadeApply } from "../cascade/useCascadeApply";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
+import { registerPageNote } from "../composables/useOpenEditor";
 import type { CategoryRow } from "../api/types";
 
 const store = useCategoryStore();
@@ -29,7 +32,7 @@ const cascadeApply = useCascadeApply();
 const cascadeDialogRow = ref<CategoryRow | null>(null);
 
 const newName = ref("");
-const newColor = ref("#a78bfa");
+const newColor = ref(DEFAULT_COLOUR);
 const newIcon = ref<string | null>(null);
 
 /** Single-row edit state — matches prototype's pencil → save/cancel flow. */
@@ -58,6 +61,42 @@ function moduleCount(row: CategoryRow): number {
   return countsByCategory.value.get(row.id) ?? 0;
 }
 
+const COLUMNS: DataColumn<CategoryRow>[] = [
+  { key: "icon", label: "Icon", width: "90px" },
+  { key: "color", label: "Color", width: "360px" },
+  { key: "name", label: "Name", sortable: true },
+  {
+    key: "count", label: "Modules", sortable: true, firstDir: "desc", width: "110px", sortValue: (r) => moduleCount(r),
+    headAttrs: { "data-ai-anchor": "counts", "data-ai-label": "Module counts" },
+  },
+  { key: "actions", label: "Actions", class: "wp-cat-col--actions", align: "right", width: "110px" },
+];
+/** Unsorted keeps the store order. */
+const sort = ref<DataSort | null>(null);
+
+// Tell the AI chat what the table shows, so "this category" means the one
+// on screen (the row being edited, else the list).
+const NOTE_MAX = 40;
+registerPageNote(() => {
+  const rows = store.items;
+  if (!rows.length) return "Categories page: no categories yet";
+  const listed = rows.slice(0, NOTE_MAX).map((r) => {
+    const n = moduleCount(r);
+    const look = [r.color || "no color", r.icon ? `icon ${r.icon}` : "no icon"].join(", ");
+    return `${r.name} (${r.id}): ${look}, ${n} module${n === 1 ? "" : "s"}`;
+  });
+  const bits = [
+    `Categories page, ${rows.length} categor${rows.length === 1 ? "y" : "ies"}: ${listed.join("; ")}${rows.length > NOTE_MAX ? "; …" : ""}`,
+  ];
+  const ed = editing.value;
+  if (ed) {
+    const row = rows.find((r) => r.id === ed.id);
+    bits.push(`Editing ${row?.name ?? ed.id} (${ed.id}), unsaved: name "${ed.name}", ${ed.color}${ed.icon ? `, icon ${ed.icon}` : ""}`);
+  }
+  if (newName.value.trim()) bits.push(`New category form holds "${newName.value.trim()}" (not added yet)`);
+  return bits.join(". ");
+});
+
 function reportError(e: unknown, summary: string) {
   const msg = e instanceof ApiError ? e.message : String(e);
   toast.push({ severity: "error", summary, detail: msg, life: 4000 });
@@ -69,7 +108,7 @@ async function add() {
   try {
     await store.create({ name, color: newColor.value, icon: newIcon.value });
     newName.value = "";
-    newColor.value = "#a78bfa";
+    newColor.value = DEFAULT_COLOUR;
     newIcon.value = null;
     toast.push({ severity: "success", summary: "Created", life: 2000 });
   } catch (e) { reportError(e, "Failed"); }
@@ -89,7 +128,7 @@ async function performDelete(row: CategoryRow) {
     kind: "category", id: row.id, action: "delete",
   });
   if (result.ok) {
-    store.remove(row.id);
+    store.removeLocal(row.id);
     const undoId = result.undo_entry_id;
     toast.push({
       severity: "success",
@@ -116,7 +155,7 @@ function onCatCascadeDialogConfirmed(result: { undo_entry_id: string; affected_c
   const row = cascadeDialogRow.value;
   cascadeDialogRow.value = null;
   if (!row) return;
-  store.remove(row.id);
+  store.removeLocal(row.id);
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
   toast.push({
@@ -142,7 +181,7 @@ function startEdit(row: CategoryRow) {
   editing.value = {
     id: row.id,
     name: row.name,
-    color: row.color || "#a78bfa",
+    color: row.color || DEFAULT_COLOUR,
     icon: row.icon,
   };
   nextTick(() => {
@@ -195,6 +234,8 @@ async function saveEdit() {
           variant="ghost"
           icon="pi pi-refresh"
           aria-label="Refresh categories"
+          data-ai-anchor="refresh"
+          data-ai-label="Refresh button"
           :disabled="store.loading"
           :class="{ 'wp-refresh-btn--spin': store.loading }"
           @click="refresh"
@@ -202,7 +243,7 @@ async function saveEdit() {
       </div>
     </div>
 
-    <Card title="New category">
+    <Card title="New category" data-ai-anchor="new-category" data-ai-label="New category form">
       <!-- Icon and colour lead, name follows. They compose the chip the user
            is building, and reading left-to-right now matches what the chip
            will look like — the icon sits before the label there too. -->
@@ -215,7 +256,7 @@ async function saveEdit() {
           />
         </Field>
         <Field label="Color">
-          <ColorPicker v-model="newColor" aria-label="New category color" />
+          <ColorField v-model="newColor" presets size="md" aria-label="New category color" />
         </Field>
         <Field label="Name" class="wp-cat-newrow__name">
           <Input
@@ -230,150 +271,142 @@ async function saveEdit() {
           variant="primary"
           icon="pi-plus"
           data-test="add-category-btn"
+          data-ai-anchor="add-category"
+          data-ai-label="Add category button"
           @click="add"
         >Add</Button>
       </div>
     </Card>
 
-    <div class="wp-table-wrap wp-table-wrap--scroll">
-      <table class="wp-table wp-table--sticky-head">
-        <thead>
-          <tr>
-            <th class="wp-cat-col--icon">Icon</th>
-            <th class="wp-cat-col--color">Color</th>
-            <th>Name</th>
-            <th class="wp-cat-col--count">Modules</th>
-            <th class="wp-cat-col--actions">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="store.items.length === 0">
-            <td colspan="5">
-              <EmptyState
-                icon="pi-bookmark"
-                headline="No categories yet"
-                body="Categories group modules in the library sidebar. Create one to organize your work."
-                variant="library"
-              />
-            </td>
-          </tr>
-          <tr
-            v-for="row in store.items"
-            :key="row.id"
-            class="wp-cat-row"
-            :data-test="`cat-row-${row.id}`"
-          >
-            <td>
-              <template v-if="editing && editing.id === row.id">
-                <IconPicker
-                  v-model="editing.icon"
-                  :aria-label="`Edit icon for ${row.name}`"
-                  :data-test="`cat-icon-picker-${row.id}`"
-                />
-              </template>
-              <template v-else>
-                <i
-                  v-if="row.icon"
-                  :class="`pi pi-${row.icon}`"
-                  :data-test="`cat-icon-${row.id}`"
-                  :aria-label="row.icon"
-                />
-                <span v-else class="wp-dim">—</span>
-              </template>
-            </td>
-            <td>
-              <template v-if="editing && editing.id === row.id">
-                <ColorPicker
-                  v-model="editing.color"
-                  :aria-label="`Edit color for ${row.name}`"
-                />
-              </template>
-              <template v-else>
-                <span class="wp-mono wp-dim wp-cat-hex">{{ row.color || "—" }}</span>
-              </template>
-            </td>
-            <td>
-              <template v-if="editing && editing.id === row.id">
-                <Input
-                  v-model="editing.name"
-                  :data-test="`cat-name-input-${row.id}`"
-                  aria-label="Edit category name"
-                  @keydown.enter="saveEdit"
-                  @keydown.esc="cancelEdit"
-                />
-              </template>
-              <template v-else>
-                <CategoryChip
-                  :name="row.name"
-                  :color="row.color"
-                  :icon="row.icon"
-                  :data-test="`cat-name-${row.id}`"
-                />
-              </template>
-            </td>
-            <td>
-              <span class="wp-mono" :data-test="`cat-count-${row.id}`">{{ moduleCount(row) }}</span>
-            </td>
-            <td class="wp-cat-col--actions">
-              <template v-if="editing && editing.id === row.id">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon="pi-check"
-                  :aria-label="`Save ${row.name}`"
-                  :data-test="`cat-save-${row.id}`"
-                  @click="saveEdit"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon="pi-times"
-                  :aria-label="`Cancel editing ${row.name}`"
-                  :data-test="`cat-cancel-${row.id}`"
-                  @click="cancelEdit"
-                />
-              </template>
-              <template v-else>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon="pi-pencil"
-                  :aria-label="`Edit ${row.name}`"
-                  :data-test="`cat-edit-${row.id}`"
-                  @click="startEdit(row)"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon="pi-trash"
-                  :aria-label="`Delete ${row.name}`"
-                  :data-test="`cat-delete-${row.id}`"
-                  @click="remove(row)"
-                />
-              </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      v-model:sort="sort"
+      class="wp-table-wrap--scroll"
+      :columns="COLUMNS"
+      :rows="store.items"
+      :loading="store.loading && !store.items.length"
+      :loading-rows="5"
+      row-key="id"
+      :row-attrs="(row) => ({ class: 'wp-cat-row', 'data-test': `cat-row-${row.id}` })"
+      aria-label="Categories"
+      data-ai-anchor="categories"
+      data-ai-label="Categories table"
+    >
+      <template #empty>
+        <EmptyState
+          icon="pi-bookmark"
+          headline="No categories yet"
+          body="Categories group modules in the library sidebar. Create one to organize your work."
+          variant="library"
+        />
+      </template>
+      <template #cell-icon="{ row }">
+        <template v-if="editing && editing.id === row.id">
+          <IconPicker
+            v-model="editing.icon"
+            compact
+            :aria-label="`Edit icon for ${row.name}`"
+            :data-test="`cat-icon-picker-${row.id}`"
+          />
+        </template>
+        <template v-else>
+          <i
+            v-if="row.icon"
+            :class="`pi pi-${row.icon}`"
+            :data-test="`cat-icon-${row.id}`"
+            :aria-label="row.icon"
+          />
+          <span v-else class="wp-dim">—</span>
+        </template>
+      </template>
+      <template #cell-color="{ row }">
+        <template v-if="editing && editing.id === row.id">
+          <ColorField v-model="editing.color" presets
+            size="md"
+            :aria-label="`Edit color for ${row.name}`"
+          />
+        </template>
+        <template v-else>
+          <span class="wp-mono wp-dim wp-cat-hex">{{ row.color || "—" }}</span>
+        </template>
+      </template>
+      <template #cell-name="{ row }">
+        <template v-if="editing && editing.id === row.id">
+          <Input
+            v-model="editing.name"
+            :data-test="`cat-name-input-${row.id}`"
+            aria-label="Edit category name"
+            @keydown.enter="saveEdit"
+            @keydown.esc="cancelEdit"
+          />
+        </template>
+        <template v-else>
+          <Chip
+            :color="row.color"
+            :icon="row.icon"
+            :data-test="`cat-name-${row.id}`"
+          >{{ row.name }}</Chip>
+        </template>
+      </template>
+      <template #cell-count="{ row }">
+        <span class="wp-mono" :data-test="`cat-count-${row.id}`">{{ moduleCount(row) }}</span>
+      </template>
+      <template #cell-actions="{ row }">
+        <template v-if="editing && editing.id === row.id">
+          <Button
+            variant="primary"
+            size="sm"
+            icon="pi-check"
+            :aria-label="`Save ${row.name}`"
+            :data-test="`cat-save-${row.id}`"
+            @click="saveEdit"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="pi-times"
+            :aria-label="`Cancel editing ${row.name}`"
+            :data-test="`cat-cancel-${row.id}`"
+            @click="cancelEdit"
+          />
+        </template>
+        <template v-else>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="pi-pencil"
+            :aria-label="`Edit ${row.name}`"
+            :data-test="`cat-edit-${row.id}`"
+            @click="startEdit(row)"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="pi-trash"
+            :aria-label="`Delete ${row.name}`"
+            :data-test="`cat-delete-${row.id}`"
+            @click="remove(row)"
+          />
+        </template>
+      </template>
+    </DataTable>
   </div>
 
   <!-- CascadeConfirmDialog for per-row category delete when refs > 0. -->
   <CascadeConfirmDialog
     v-if="cascadeDialogRow"
+    :id="cascadeDialogRow.id"
     :open="cascadeDialogRow !== null"
     kind="category"
-    :id="cascadeDialogRow.id"
     action="delete"
     @confirmed="onCatCascadeDialogConfirmed"
     @cancelled="cascadeDialogRow = null"
   />
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete category \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the category."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />
@@ -393,9 +426,7 @@ async function saveEdit() {
 }
 .wp-cat-newrow__name { flex: 1; min-width: 200px; }
 
-.wp-cat-col--color   { width: 360px; }
-.wp-cat-col--count   { width: 110px; }
-.wp-cat-col--actions { width: 110px; text-align: right; white-space: nowrap; }
+.wp-cat-col--actions { white-space: nowrap; }
 .wp-cat-col--actions .wp-btn + .wp-btn { margin-left: var(--wp-space-2); }
 
 .wp-cat-hex { font-size: var(--wp-text-xs); }

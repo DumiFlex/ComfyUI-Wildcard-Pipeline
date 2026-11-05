@@ -48,7 +48,8 @@ export type DisplayKey =
   | "bundleCollapsedByDefault"
   | "collapseMode"
   | "colorIntensity"
-  | "focusMode";
+  | "focusMode"
+  | "rowActions";
 
 /** A11y setting key — last segment of the dotted ID. */
 export type A11yKey = "reduceMotion" | "contrast";
@@ -67,6 +68,8 @@ export type BehaviorKey =
   | "loraAutocomplete"
   | "embeddingAutocomplete"
   | "autocompleteSeparator"
+  | "autocompleteSpaces"
+  | "autocompleteEscapeBrackets"
   | "autocompleteMaxSuggestions"
   | "autocompleteMinChars";
 
@@ -86,6 +89,8 @@ const BEHAVIOR_KEYS = new Set<string>([
   "loraAutocomplete",
   "embeddingAutocomplete",
   "autocompleteSeparator",
+  "autocompleteSpaces",
+  "autocompleteEscapeBrackets",
   "autocompleteMaxSuggestions",
   "autocompleteMinChars",
 ]);

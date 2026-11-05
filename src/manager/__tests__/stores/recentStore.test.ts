@@ -1,6 +1,8 @@
 import { setActivePinia, createPinia } from "pinia";
 import { describe, expect, it, beforeEach } from "vitest";
+import { nextTick } from "vue";
 import { useRecentStore } from "../../stores/recentStore";
+import { markDeleted } from "../../composables/useLibraryChanged";
 
 describe("useRecentStore", () => {
   beforeEach(() => {
@@ -57,5 +59,23 @@ describe("useRecentStore", () => {
     setActivePinia(createPinia());
     const r = useRecentStore();
     expect(r.items).toEqual([]);
+  });
+
+  it("drops an entry when its row is deleted", async () => {
+    const r = useRecentStore();
+    r.push({ id: "gone0001", kind: "wildcard", name: "A" });
+    r.push({ id: "kept0001", kind: "bundle", name: "B" });
+    markDeleted(["gone0001"]);
+    await nextTick();
+    expect(r.items.map((i) => i.id)).toEqual(["kept0001"]);
+    expect(JSON.parse(localStorage.getItem("wp-recent-items") ?? "[]")).toHaveLength(1);
+  });
+
+  it("prune keeps only entries still in the library", () => {
+    const r = useRecentStore();
+    r.push({ id: "a", kind: "wildcard", name: "A" });
+    r.push({ id: "b", kind: "bundle", name: "B" });
+    r.prune(new Set(["b"]));
+    expect(r.items.map((i) => i.id)).toEqual(["b"]);
   });
 });

@@ -92,10 +92,13 @@ from wp_nodes.context_node import WPContext
 from wp_nodes.debug_node import WPDebug
 from wp_nodes.image_filter_node import WPImageFilter
 from wp_nodes.injector_node import WPContextInjector
+from wp_nodes.label_grid_node import WPLabelGrid
 from wp_nodes.model_info_node import WPModelInfo
 from wp_nodes.prompt_cleaner import WPPromptCleaner
 from wp_nodes.seed_list import WPSeedList
+from wp_nodes.toggles_node import WPToggles
 from wp_nodes.var_to_bool import WPVarToBool
+from wp_nodes.var_to_choice import WPVarToChoice
 from wp_nodes.var_to_float import WPVarToFloat
 from wp_nodes.var_to_int import WPVarToInt
 
@@ -111,12 +114,15 @@ class WildcardPipelineExtension(ComfyExtension):
             WPDebug,
             WPContextInjector,
             WPModelInfo,
+            WPToggles,
             WPImageFilter,
+            WPLabelGrid,
             WPPromptCleaner,
             WPSeedList,
             WPVarToInt,
             WPVarToFloat,
             WPVarToBool,
+            WPVarToChoice,
         ]
 
 

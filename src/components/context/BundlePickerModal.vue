@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import Kbd from "@/kit/Kbd.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
-import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
+import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{
   visible: boolean;
@@ -28,7 +33,7 @@ const loading = ref(false);
 const loadError = ref<string | null>(null);
 const searchTerm = ref("");
 const focusedIdx = ref(0);
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null);
 
 const filtered = computed(() => {
   const q = searchTerm.value.trim().toLowerCase();
@@ -95,7 +100,7 @@ function kindCompositionPills(b: BundleRow): Array<{ label: string; cls: string 
 }
 
 // Pending re-insert confirmation. Set when the user clicks a row
-// that's already in this Context — opens the themed ConfirmDialog
+// that's already in this Context — opens the themed ConfirmModal
 // and parks the row here until the dialog resolves. Cleared on both
 // confirm + cancel. Replaces a synchronous window.confirm which
 // ComfyUI hosts can suppress AND looked out-of-place against the WP
@@ -159,7 +164,7 @@ function onKeydown(ev: KeyboardEvent) {
     ev.preventDefault();
     const row = list[focusedIdx.value];
     if (row) pickRow(row);
-  } else if (ev.key === "/" && document.activeElement !== searchInput.value) {
+  } else if (ev.key === "/" && document.activeElement !== searchInput.value?.el) {
     ev.preventDefault();
     searchInput.value?.focus();
   }
@@ -173,8 +178,8 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 </script>
 
 <template>
-  <ModalShell :visible="visible" @close="emit('close')" @keydown="onKeydown">
-    <div class="wp-bp" role="dialog">
+  <ModalShell :visible="visible" label="Add bundle from library" @close="emit('close')" @keydown="onKeydown">
+    <div class="wp-bp">
       <header class="wp-bp__head">
         <div class="wp-bp__head-text">
           <div class="wp-bp__eyebrow">Add bundle from library</div>
@@ -183,51 +188,37 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
             <span class="wp-bp__title-detail">· {{ filtered.length }} {{ filtered.length === 1 ? "bundle" : "bundles" }}</span>
           </div>
         </div>
-        <button
-          type="button"
-          class="wp-bp__close"
-          aria-label="Close"
-          @click="emit('close')"
-        ><i class="pi pi-times" /></button>
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" @click="emit('close')" />
       </header>
 
       <div class="wp-bp__toolbar">
-        <div class="wp-bp__search">
-          <i class="pi pi-search" aria-hidden="true"></i>
-          <input
-            ref="searchInput"
-            v-model="searchTerm"
-            type="text"
-            placeholder="Search bundles by name…"
-            aria-label="Search bundles"
-            data-testid="bundle-picker-search"
-          />
-          <span v-if="searchTerm" class="wp-bp__search-clear" @click="searchTerm = ''">
-            <i class="pi pi-times" aria-hidden="true"></i>
-          </span>
-        </div>
+        <SearchInput
+          ref="searchInput"
+          v-model="searchTerm"
+          class="wp-bp__search"
+          size="sm"
+          placeholder="Search bundles by name…"
+          aria-label="Search bundles"
+          shortcut="/"
+          data-testid="bundle-picker-search"
+        />
       </div>
 
       <div class="wp-bp__body">
-        <div
-          v-if="loading"
+        <!-- First load only: a reopen keeps the bundles it has and
+             refreshes them quietly. -->
+        <Skeleton
+          v-if="loading && !items.length"
+          shape="row"
+          icon="square"
+          :lines="6"
+          label="Loading bundles"
           class="wp-bp__skel-list"
-          aria-busy="true"
-          aria-live="polite"
-          aria-label="Loading bundles"
-        >
-          <div v-for="i in 6" :key="i" class="wp-bp__skel-row">
-            <span class="wp-skel wp-bp__skel-icon"></span>
-            <span class="wp-skel wp-skel--text wp-bp__skel-name"></span>
-            <span class="wp-skel wp-skel--text wp-bp__skel-count"></span>
-            <span class="wp-skel wp-skel--pill wp-bp__skel-pill"></span>
-            <span class="wp-skel wp-skel--pill wp-bp__skel-pill"></span>
-          </div>
-        </div>
+        />
         <div v-else-if="loadError" class="wp-bp__state wp-bp__state--err">
           <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>
           {{ loadError }}
-          <button type="button" class="wp-bp__retry" @click="reload">Retry</button>
+          <Button size="sm" @click="reload">Retry</Button>
         </div>
         <div v-else-if="filtered.length === 0" class="wp-bp__state">
           <i class="pi pi-inbox" aria-hidden="true"></i>
@@ -235,10 +226,9 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
         </div>
 
         <div v-else class="wp-bp__list">
-          <button
+          <ListRow
             v-for="(b, idx) in filtered"
             :key="b.id"
-            type="button"
             :data-bundle-id="b.id"
             :data-testid="`bundle-picker-row-${b.id}`"
             :class="[
@@ -253,49 +243,54 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
             @click="pickRow(b)"
             @mouseenter="focusedIdx = idx"
           >
-            <span class="wp-bp__row-icon">
-              <i class="pi pi-box" aria-hidden="true"></i>
-            </span>
+            <template #start>
+              <span class="wp-bp__row-icon">
+                <i class="pi pi-box" aria-hidden="true"></i>
+              </span>
+            </template>
             <span class="wp-bp__row-name">{{ b.name }}</span>
-            <span class="wp-bp__row-count">{{ b.children.length }} mods</span>
-            <span class="wp-bp__row-comp">
-              <span
-                v-for="(pill, i) in kindCompositionPills(b)"
-                :key="i"
-                :class="pill.cls"
-              >{{ pill.label }}</span>
-            </span>
-          </button>
+            <template #end>
+              <span class="wp-bp__row-count">{{ b.children.length }} mods</span>
+              <span class="wp-bp__row-comp">
+                <span
+                  v-for="(pill, i) in kindCompositionPills(b)"
+                  :key="i"
+                  :class="pill.cls"
+                >{{ pill.label }}</span>
+              </span>
+            </template>
+          </ListRow>
         </div>
       </div>
 
       <div class="wp-bp__foot">
         <div class="wp-bp__hints">
-          <span class="wp-bp__kbd">↑</span>
-          <span class="wp-bp__kbd">↓</span>
+          <Kbd keys="↑" size="sm" />
+          <Kbd keys="↓" size="sm" />
           <span class="wp-bp__hint-label">nav</span>
           <span class="wp-bp__hint-sep">·</span>
-          <span class="wp-bp__kbd">↵</span>
+          <Kbd keys="Enter" size="sm" />
           <span class="wp-bp__hint-label">insert</span>
           <span class="wp-bp__hint-sep">·</span>
-          <span class="wp-bp__kbd">/</span>
+          <Kbd keys="/" size="sm" />
           <span class="wp-bp__hint-label">search</span>
           <span class="wp-bp__hint-sep">·</span>
-          <span class="wp-bp__kbd">esc</span>
+          <Kbd keys="Esc" size="sm" />
           <span class="wp-bp__hint-label">cancel</span>
         </div>
-        <button type="button" class="wp-bp__btn" @click="emit('close')">Cancel</button>
-        <button
-          type="button"
-          class="wp-bp__btn wp-bp__btn--primary"
+        <Button size="sm" @click="emit('close')">Cancel</Button>
+        <Button
+          size="sm"
+          variant="primary"
+          icon="pi-plus"
           data-testid="bundle-picker-create"
           @click="emit('create')"
-        ><i class="pi pi-plus" aria-hidden="true" /> Create Bundle</button>
+        >Create Bundle</Button>
       </div>
     </div>
   </ModalShell>
-    <ConfirmDialog
-      :visible="pendingReinsert !== null"
+    <ConfirmModal
+      :open="pendingReinsert !== null"
       :title="confirmTitle"
       :body="confirmBody"
       confirm-label="Insert"
@@ -305,49 +300,14 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
     />
 </template>
 
-<style>
-/* `wp-skel` family is shared with ModulePickerModal — import unscoped
- * so the keyframe + base rules dedupe across consumers and aren't
- * subject to per-component scoping rewrites. */
-@import "../shared/_skeleton.css";
-</style>
-
 <style scoped>
-@import "../shared/theme.css";
-
-/* Skeleton frames — geometry mirrors `.wp-bp__row` so the placeholder
- * stack matches the loaded list layout (no jump on resolve). */
-.wp-bp__skel-list {
-  display: flex;
-  flex-direction: column;
-  padding: 6px;
-  gap: 2px;
-}
-.wp-bp__skel-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-left: 3px solid var(--wp-bundle-default);
-  border-radius: 4px;
-}
-.wp-bp__skel-icon { width: 22px; height: 22px; border-radius: 4px; flex-shrink: 0; }
-.wp-bp__skel-name { flex: 1; max-width: 200px; height: 13px; }
-.wp-bp__skel-count { width: 48px; height: 10px; flex-shrink: 0; }
-.wp-bp__skel-pill { width: 28px; height: 14px; flex-shrink: 0; }
-
-/* Vary name widths so the column doesn't read as a perfectly aligned
- * grid — real bundle names have organic length variation. */
-.wp-bp__skel-row:nth-child(3n) .wp-bp__skel-name { max-width: 130px; }
-.wp-bp__skel-row:nth-child(3n+1) .wp-bp__skel-name { max-width: 180px; }
-.wp-bp__skel-row:nth-child(4n+2) .wp-bp__skel-name { max-width: 100px; }
+/* Skeleton rows in the loaded list's padding, so nothing shifts on resolve. */
+.wp-bp__skel-list { padding: 6px 16px; }
 
 .wp-bp {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 8px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   width: 720px;
   max-width: 92vw;
   overflow: hidden;
@@ -390,17 +350,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   font-size: 13px;
   margin-left: 4px;
 }
-.wp-bp__close {
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text-dim, var(--wp-text3));
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-.wp-bp__close:hover { background: var(--wp-bg2); color: var(--wp-text); }
 
 .wp-bp__toolbar {
   padding: 10px 14px;
@@ -408,32 +357,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   display: flex;
   gap: 8px;
 }
-.wp-bp__search {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  padding: 0 8px;
-  gap: 6px;
-}
-.wp-bp__search:focus-within { border-color: var(--wp-accent); }
-.wp-bp__search input {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  color: var(--wp-text);
-  padding: 6px 0;
-  font: 500 12px var(--wp-font-sans);
-  outline: 0;
-}
-.wp-bp__search input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-bp__search-clear {
-  cursor: pointer;
-  color: var(--wp-text-dim, var(--wp-text3));
-  font-size: 11px;
-}
+.wp-bp__search { flex: 1; }
 
 .wp-bp__body {
   max-height: 460px;
@@ -452,15 +376,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   align-items: center;
 }
 .wp-bp__state--err { color: var(--wp-red); }
-.wp-bp__retry {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-  padding: 5px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font: 500 11px var(--wp-font-sans);
-}
 
 .wp-bp__list {
   display: flex;
@@ -468,15 +383,14 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   padding: 6px;
   gap: 2px;
 }
+/* A kit ListRow drawn as a bordered card with the bundle's colour on its left edge. */
 .wp-bp__row {
-  display: flex;
-  align-items: center;
   gap: 10px;
   padding: 8px 10px;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   border-left: 3px solid var(--c, var(--wp-bundle-default));
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   color: var(--wp-text);
   text-align: left;
@@ -495,7 +409,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 .wp-bp__row-icon {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--c, var(--wp-bundle-default)) 16%, transparent);
   color: var(--c, var(--wp-bundle-default));
   display: inline-flex;
@@ -505,8 +419,8 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   font-size: 11px;
 }
 .wp-bp__row-name {
-  flex: 1;
-  font: 600 13px/1 var(--wp-font-sans);
+  display: block;
+  font: 600 13px/1.2 var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -527,7 +441,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .comp-w { background: color-mix(in srgb, var(--wp-kind-wildcard) 22%, transparent); color: var(--wp-kind-wildcard); }
 .comp-c { background: color-mix(in srgb, var(--wp-kind-combine) 22%, transparent); color: var(--wp-kind-combine); }
@@ -546,7 +460,7 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 }
 
 /* Footer — keyboard hints inline with Cancel + Create. Matches the
- * module picker pattern: kbd chips are neutral, not amber. */
+ * module picker pattern: the keys are the kit's Kbd. */
 .wp-bp__foot {
   border-top: 1px solid var(--wp-border);
   padding: 10px 14px;
@@ -564,34 +478,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
   font: 500 11px/1 var(--wp-font-sans);
   flex: 1;
 }
-.wp-bp__kbd {
-  font: 600 10px/1 var(--wp-font-mono, monospace);
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-bottom-width: 2px;
-  border-radius: 3px;
-  padding: 2px 5px;
-  color: var(--wp-text);
-}
 .wp-bp__hint-sep { color: var(--wp-text3); margin: 0 1px; }
 .wp-bp__hint-label { color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-bp__btn {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-  padding: 7px 16px;
-  border-radius: 4px;
-  font: 500 12px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-bp__btn:hover { background: var(--wp-bg3); }
-.wp-bp__btn--primary {
-  background: var(--wp-accent);
-  color: white;
-  border-color: var(--wp-accent);
-  font-weight: 600;
-}
-.wp-bp__btn--primary:hover {
-  background: color-mix(in srgb, var(--wp-accent) 90%, white);
-}
 </style>

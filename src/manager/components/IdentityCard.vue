@@ -10,18 +10,21 @@
  *
  * The parent owns the values; this component is dumb and emits patches.
  */
-import { computed, ref, watch } from "vue";
-import Card from "./ui/Card.vue";
-import Field from "./ui/Field.vue";
-import Input from "./ui/Input.vue";
-import Textarea from "./ui/Textarea.vue";
-import Select, { type SelectOption } from "./ui/Select.vue";
-import Chip from "./ui/Chip.vue";
-import Button from "./ui/Button.vue";
-import Toggle from "./ui/Toggle.vue";
+import { computed, nextTick, ref, watch } from "vue";
+import Card from "@/kit/Card.vue";
+import Field from "@/kit/Field.vue";
+import Input from "@/kit/Input.vue";
+import Textarea from "@/kit/Textarea.vue";
+import Select, { type SelectOption } from "@/kit/Select.vue";
+import Chip from "@/kit/Chip.vue";
+import Button from "@/kit/Button.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
 import { useCategoryStore } from "../stores/categoryStore";
 import { categorySelectOptions } from "../utils/category-options";
 import { toIdentifier } from "../utils/slug";
+import AiDescribePanel from "./ai/AiDescribePanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
+import type { AiDescribeKind } from "../api/types";
 
 interface Props {
   name: string;
@@ -49,6 +52,13 @@ interface Props {
    * the toggle entirely.
    */
   showContentRating?: boolean;
+  /**
+   * What the item is, for the AI "Describe" button. With both set and the
+   * assistant on, the card offers a description and tags written from
+   * `aiPayload()` (read on demand, so unsaved edits count).
+   */
+  aiKind?: AiDescribeKind;
+  aiPayload?: () => unknown;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -70,6 +80,16 @@ const emit = defineEmits<{
 }>();
 
 const isNsfw = computed(() => props.contentRating === "nsfw");
+
+const ai = useAiConfig();
+const aiOpen = ref(false);
+const aiAvailable = computed(() => !!props.aiKind && !!props.aiPayload && !!ai.config.value?.enabled);
+function onAiApply(patch: { description?: string; addTags: string[] }): void {
+  if (patch.description !== undefined) emit("update:description", patch.description);
+  const next = [...props.tags, ...patch.addTags.filter((t) => !props.tags.includes(t))];
+  if (next.length !== props.tags.length) emit("update:tags", next);
+  aiOpen.value = false;
+}
 function onNsfwToggle(next: boolean) {
   emit("update:contentRating", next ? "nsfw" : "safe");
 }
@@ -119,10 +139,43 @@ function addTag() {
 function removeTag(t: string) {
   emit("update:tags", props.tags.filter((x) => x !== t));
 }
+
+const describer = ref<InstanceType<typeof AiDescribePanel> | null>(null);
+
+/** The chat's `use_panel` "describe": open Describe and ask there. */
+async function describe(text: string): Promise<string> {
+  if (!aiAvailable.value) return "couldn't: the assistant is off for this item";
+  aiOpen.value = true;
+  await nextTick();
+  return describer.value ? describer.value.run(text) : "couldn't: Describe didn't open";
+}
+
+defineExpose({ describe });
 </script>
 
 <template>
   <Card title="Identity">
+    <template v-if="aiAvailable" #actions>
+      <Button
+        size="sm"
+        :variant="aiOpen ? 'secondary' : 'ghost'"
+        icon="pi-microchip-ai"
+        data-test="identity-ai" data-ai-anchor="describe-ai" data-ai-label="AI: suggest a name, description and tags"
+        title="Write a description and tags with AI"
+        @click="aiOpen = !aiOpen"
+      >Describe</Button>
+    </template>
+    <AiDescribePanel
+      v-if="aiOpen && aiAvailable && aiKind && aiPayload"
+      ref="describer"
+      :kind="aiKind"
+      :name="name"
+      :description="description"
+      :tags="tags"
+      :payload="aiPayload"
+      @apply="onAiApply"
+      @close="aiOpen = false"
+    />
     <div class="identity-grid">
       <div v-if="$slots.nameLeading" class="identity-name-row">
         <slot name="nameLeading" />
@@ -151,7 +204,7 @@ function removeTag(t: string) {
           placeholder="None"
           clearable
           aria-label="Category"
-          data-test="identity-category"
+          data-test="identity-category" data-ai-anchor="category" data-ai-label="Category"
           @update:model-value="(v) => emit('update:categoryId', (v as string | null) ?? null)"
         />
       </Field>
@@ -164,13 +217,13 @@ function removeTag(t: string) {
         class="identity-grid__full"
       >
         <div class="wp-input-group">
-          <span class="wp-input-group__addon">$</span>
-          <input
-            class="wp-input wp-mono"
-            :value="varBinding ?? ''"
+          <span class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">$</span>
+          <Input
+            class="wp-mono"
+            :model-value="varBinding ?? ''"
             placeholder="hair_color"
             data-test="identity-var-binding"
-            @input="onVarBinding(($event.target as HTMLInputElement).value)"
+            @update:model-value="onVarBinding"
           />
         </div>
       </Field>
@@ -185,7 +238,7 @@ function removeTag(t: string) {
           :rows="3"
           placeholder="What does this module do?"
           aria-label="Description"
-          data-test="identity-description"
+          data-test="identity-description" data-ai-anchor="description" data-ai-label="Description"
           @update:model-value="(v) => emit('update:description', v)"
         />
       </Field>
@@ -195,7 +248,7 @@ function removeTag(t: string) {
           <Input
             v-model="tagDraft"
             placeholder="Type a tag and press Enter…"
-            data-test="identity-tag-input"
+            data-test="identity-tag-input" data-ai-anchor="tags" data-ai-label="Library tags"
             @keydown.enter.prevent="addTag"
           />
           <Button
@@ -222,7 +275,8 @@ function removeTag(t: string) {
         hint="Marks this entry as adult content. Community posts you install carry this automatically."
         class="identity-grid__full"
       >
-        <Toggle
+        <WpSwitch
+          size="md"
           :model-value="isNsfw"
           label="Mark as NSFW (18+)"
           aria-label="Mark as NSFW"

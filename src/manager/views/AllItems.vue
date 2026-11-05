@@ -20,7 +20,10 @@
  * items array before handing it to ModuleListView gives us the OR
  * we actually want.
  */
-import { computed, onMounted, ref } from "vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import CopyButton from "@/kit/CopyButton.vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
 import { useRoute, useRouter } from "vue-router";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
@@ -31,17 +34,18 @@ import SendToTestRunner from "../components/SendToTestRunner.vue";
 import type { TestRunnerKind } from "../components/SendToTestRunner.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { validateBundle, validateModule, type ValidationIssue } from "../utils/validateModule";
-import Button from "../components/ui/Button.vue";
-import Select from "../components/ui/Select.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
-import { useToast } from "../composables/useToast";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import EmptyState from "@/kit/EmptyState.vue";
+import { useToast } from "@/kit/useToast";
 import { api } from "../api/client";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "@/kit/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
+import Skeleton from "@/kit/Skeleton.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -75,7 +79,7 @@ const KIND_META: KindMeta[] = [
   { key: "combine",      label: "Combines",     icon: "pi pi-link",                    color: "var(--wp-kind-combine)",    slug: "combines" },
   { key: "derivation",   label: "Derivations",  icon: "pi pi-arrow-right-arrow-left",  color: "var(--wp-kind-derivation)", slug: "derivations" },
   { key: "constraint",   label: "Constraints",  icon: "pi pi-filter",                  color: "var(--wp-kind-constraint)", slug: "constraints" },
-  { key: "bundle",       label: "Bundles",      icon: "pi pi-box",                     color: "var(--wp-bundle-default, #6366f1)", slug: "bundles" },
+  { key: "bundle",       label: "Bundles",      icon: "pi pi-box",                     color: "var(--wp-bundle-default)", slug: "bundles" },
 ];
 
 const KIND_BY_KEY: Record<LibraryKind, KindMeta> = KIND_META.reduce((acc, k) => {
@@ -248,6 +252,9 @@ async function fetchAll() {
   }
 }
 
+// A chat card applied or undone changed the library behind this list.
+watch(libraryVersion, () => { void fetchAll(); void categoryStore.fetchAll(); });
+
 onMounted(async () => {
   await Promise.all([fetchAll(), categoryStore.fetchAll()]);
 });
@@ -275,15 +282,6 @@ function editRow(row: LibraryRow) {
   router.push({ path: `/${meta.slug}/${row.id}/edit`, query: { returnTo } });
 }
 
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
-}
-
 async function fav(row: LibraryRow) {
   try {
     // Server toggles the flag itself — no boolean argument needed.
@@ -305,6 +303,7 @@ async function del(row: LibraryRow) {
     } else {
       await api.modules.delete(row.id);
     }
+    markDeleted([row.id]);
     toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
     await fetchAll();
   } catch (e) {
@@ -398,6 +397,7 @@ function refresh() {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-objects-column"
         headline="Library is empty"
         body="Create a module from any kind to populate your library."
@@ -418,21 +418,16 @@ function refresh() {
             Kinds{{ selectedKinds.size ? ` (${selectedKinds.size})` : "" }}
           </label>
           <div class="wp-kind-row">
-            <button
+            <Chip
               v-for="k in KIND_META" :key="k.key"
-              type="button"
+              size="md"
               class="wp-kind-chip"
+              :icon="k.icon.replace(/^pi /, '')"
+              :color="k.color"
+              :pressed="selectedKinds.has(k.key)"
               :data-active="selectedKinds.has(k.key) ? 'true' : 'false'"
-              :style="selectedKinds.has(k.key) ? {
-                borderColor: k.color,
-                background: `color-mix(in oklab, ${k.color} 18%, transparent)`,
-                color: k.color,
-              } : undefined"
               @click="toggleKind(k.key)"
-            >
-              <i :class="k.icon" aria-hidden="true" />
-              {{ k.label }}
-            </button>
+            >{{ k.label }}</Chip>
           </div>
         </div>
         <div class="wp-field">
@@ -447,19 +442,13 @@ function refresh() {
         </div>
         <div class="wp-field">
           <label class="wp-field__label">Favorites</label>
-          <button
-            type="button"
-            class="wp-input"
-            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
-            @click="f.favorites = !f.favorites; emitFetch()"
-          >
-            <span class="wp-check" :data-checked="f.favorites ? 'true' : 'false'" aria-hidden="true">
-              <svg v-if="f.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
-                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span>Favorites only</span>
-          </button>
+          <Checkbox
+            field
+            :model-value="!!f.favorites"
+            label="Favorites only"
+            data-test="favorites-filter"
+            @update:model-value="(v) => { f.favorites = v; emitFetch(); }"
+          />
         </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
@@ -471,18 +460,15 @@ function refresh() {
                mid-animation reflow. min-height matches roughly one
                wrapped row of chips. -->
           <div class="wp-tags-slot">
-            <div v-if="!hasLoaded" class="wp-dim wp-tags-empty">Loading tags…</div>
+            <Skeleton v-if="!hasLoaded" shape="chip" :lines="6" height="24px" label="Loading tags" />
             <div v-else-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
             <div v-else class="wp-tags-row">
-              <button
+              <Chip
                 v-for="t in allTags" :key="t"
-                type="button"
-                class="wp-tag-chip"
-                :data-active="(f.tags ?? []).includes(t) ? 'true' : 'false'"
+                :pressed="(f.tags ?? []).includes(t)"
+                size="sm"
                 @click="f.tags = toggleTag(t, f.tags); emitFetch()"
-              >
-                {{ t }}
-              </button>
+              >{{ t }}</Chip>
             </div>
           </div>
         </div>
@@ -490,25 +476,27 @@ function refresh() {
     </template>
 
     <template #favorite="{ row }">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         class="wp-row-fav-btn"
+        :icon="row.is_favorite ? 'pi-star-fill' : 'pi-star'"
         :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-pressed="row.is_favorite"
         :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
         @click.stop="fav(row)"
-      >
-        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-      </button>
+      />
     </template>
 
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="editRow(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -534,12 +522,12 @@ function refresh() {
         <span v-else class="wp-dim">{{ row.kind }}</span>
       </td>
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><ValidityIcon :issues="issuesFor(row)" /></td>
@@ -547,7 +535,7 @@ function refresh() {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="editRow(row)" />
-      <SendToTestRunner :kind="(row.kind as TestRunnerKind)" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="(row.kind as TestRunnerKind)" compact />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
 
@@ -560,23 +548,11 @@ function refresh() {
 
 <style scoped>
 .wp-kind-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
-.wp-kind-chip {
-  display: inline-flex; align-items: center; gap: var(--wp-space-3);
-  padding: var(--wp-space-2) 10px; /* audit-exempt: 10px matches PrimeVue chip horizontal rhythm */
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-2);
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-  cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-}
-.wp-kind-chip:hover { border-color: var(--wp-border-strong); }
 
 .wp-kind-cell {
   display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: 5px matches icon+label optical balance */
   padding: 3px var(--wp-space-4); /* audit-exempt: 3px hairline vertical padding */
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-weight: 500;
   /* Single-line — `Fixed Values` was wrapping onto a second line in
@@ -589,9 +565,6 @@ function refresh() {
 .wp-tags-slot { min-height: 28px; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
-.wp-tag-chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
+/* The favourite star: the kit ghost button, the star in the warn colour when on. */
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 </style>

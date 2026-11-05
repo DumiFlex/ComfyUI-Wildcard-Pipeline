@@ -18,7 +18,7 @@ vi.mock("../../api/client", () => ({
   },
 }));
 
-vi.mock("../../composables/useToast", () => {
+vi.mock("@/kit/useToast", () => {
   const push = vi.fn();
   const dismiss = vi.fn();
   return {
@@ -30,7 +30,7 @@ vi.mock("../../composables/useToast", () => {
 import ExportTab from "../ExportTab.vue";
 import PickerRow from "../PickerRow.vue";
 import { api, ApiError } from "../../api/client";
-import * as toastModule from "../../composables/useToast";
+import * as toastModule from "@/kit/useToast";
 import type { ModuleRow, BundleRow, CategoryRow, TemplateRow } from "../../api/types";
 
 /**
@@ -44,7 +44,7 @@ async function expandSection(
   bucketKey: string,
 ): Promise<void> {
   const section = wrap.get(`[data-test="export-tab-section-${bucketKey}"]`);
-  const toggle = section.get(".wp-picker-section__toggle");
+  const toggle = section.get('[data-test="picker-section-toggle"]');
   await toggle.trigger("click");
   await flushPromises();
 }

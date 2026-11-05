@@ -15,13 +15,21 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import IdentityCard from "../components/IdentityCard.vue";
-import Card from "../components/ui/Card.vue";
-import Field from "../components/ui/Field.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
+import Card from "@/kit/Card.vue";
+import Field from "@/kit/Field.vue";
 import RichTextInput from "../components/RichTextInput.vue";
-import { useToast } from "../composables/useToast";
+import Button from "@/kit/Button.vue";
+import AiTextPanel from "../components/ai/AiTextPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
+import { useToast } from "@/kit/useToast";
 import { useReturnTo } from "../composables/useReturnTo";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
+import Skeleton from "@/kit/Skeleton.vue";
 
 const props = defineProps<{ id?: string }>();
 
@@ -37,18 +45,27 @@ const editingId = computed<string | null>(
 );
 const isEdit = computed(() => editingId.value !== null);
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+function useAiPrompt(p: Record<string, unknown>): void {
+  if (typeof p.template_string === "string") templateString.value = p.template_string;
+  if (typeof p.negative_template === "string") negativeTemplate.value = p.negative_template;
+}
+
 const name = ref("");
 const description = ref("");
 const categoryId = ref<string | null>(null);
 const tags = ref<string[]>([]);
 const templateString = ref("");
-const negativeTemplate = ref("");
+// A new template starts with the slot, like a new Assembler: negatives are
+// opt-in, so without `$negatives` the variables' negatives are left out.
+const negativeTemplate = ref(isEdit.value ? "" : "$negatives");
 /** The row's stored negative. `null` = saved before negatives existed; kept
  *  null on save while the field stays empty, so loading that template still
  *  leaves the Assembler's negative box alone. */
 const negativeOriginal = ref<string | null>(null);
 
-const loading = ref(false);
+const loading = ref(true);
 const saving = ref(false);
 
 /** Serialized baseline for the dirty check — set after load / save. */
@@ -63,6 +80,35 @@ function snapshot(): string {
 }
 const dirty = computed(() => snapshot() !== baseline.value);
 
+/** Load a stored template's text into the editor (saved row or chat draft). */
+function loadContent(src: { template_string?: unknown; negative_template?: unknown }): void {
+  templateString.value = typeof src.template_string === "string" ? src.template_string : "";
+  negativeOriginal.value = typeof src.negative_template === "string" ? src.negative_template : null;
+  negativeTemplate.value = negativeOriginal.value ?? "";
+}
+
+/** Templates carry no rating; the chat spec wants one, so it stays "safe". */
+const contentRating = ref<"safe" | "nsfw">("safe");
+// The chat reads and edits this item here, text included.
+// A new template fills from a draft the chat staged (see onMounted).
+const fillFromChat = registerOpenEditor({
+  id: editingId.value ?? undefined, type: "template", dirty: () => dirty.value,
+  name, description, tags, categoryId, contentRating,
+  extra: () => ({ template_string: templateString.value, negative_template: negativeTemplate.value }),
+  setExtra: (body) => {
+    if (typeof body.template_string === "string") templateString.value = body.template_string;
+    if (typeof body.negative_template === "string") negativeTemplate.value = body.negative_template;
+  },
+  rebase: () => { baseline.value = snapshot(); },
+});
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiTextPanel> | null>(null);
+usePanelAction({ id: () => editingId.value, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
+/** The chat's draft this new template was opened with (Save creates it at
+ *  the id the card reserved, if any, and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+
 onMounted(async () => {
   loading.value = true;
   try {
@@ -73,11 +119,25 @@ onMounted(async () => {
       description.value = row.description;
       categoryId.value = row.category_id;
       tags.value = [...row.tags];
-      templateString.value = row.template_string;
-      negativeOriginal.value = row.negative_template ?? null;
-      negativeTemplate.value = row.negative_template ?? "";
+      loadContent(row);
     }
     baseline.value = snapshot();
+    // "Open in editor" on a chat card: the proposed template, unsaved. Its
+    // text sits at the top level of a template create body.
+    if (!editingId.value) {
+      chatDraft = fillFromChat();
+      if (chatDraft) {
+        const body: Record<string, unknown> = { ...chatDraft.body };
+        loadContent(body);
+        toast.push({
+          severity: "info",
+          summary: "From the assistant",
+          detail: chatDraft.newCategory
+            ? `Check it and Save to keep it. It suggested a new category, "${chatDraft.newCategory}": create it from the Category picker if you want it.`
+            : "Check it and Save to keep it.",
+        });
+      }
+    }
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
   } finally {
@@ -104,7 +164,11 @@ async function save() {
           : negativeTemplate.value,
     };
     if (editingId.value) await store.update(editingId.value, body);
-    else await store.create(body);
+    else {
+      const created = await store.create({ ...draftCreateId(chatDraft), ...body });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
+    }
     negativeOriginal.value = body.negative_template;
     baseline.value = snapshot();
     toast.push({ severity: "success", summary: "Saved", detail: name.value });
@@ -123,7 +187,9 @@ function cancel() {
 
 <template>
   <EditorFrame
-    :title="isEdit ? (name || 'Loading…') : 'New template'"
+    :title="isEdit && loading ? '' : isEdit ? name : 'New template'"
+    :loading="loading"
+    loading-label="Loading template"
     back-route="/templates"
     back-label="Templates"
     :saving="saving"
@@ -131,9 +197,14 @@ function cancel() {
     @save="save"
     @cancel="cancel"
   >
-    <div v-if="loading" class="wp-dim wp-tpl-editor__loading">Loading template…</div>
-    <template v-else>
+    <template #loading>
+      <Skeleton shape="block" height="160px" />
+    </template>
+    <template v-if="!loading">
       <IdentityCard
+        ref="identityCard"
+        ai-kind="template"
+        :ai-payload="() => ({ template: templateString, negative: negativeTemplate })"
         :name="name"
         :description="description"
         :category-id="categoryId"
@@ -144,7 +215,24 @@ function cancel() {
         :show-content-rating="false"
         @update:tags="(v) => (tags = v)"
       />
-      <Card>
+      <Card title="Prompt">
+        <template v-if="ai.config.value?.enabled" #actions>
+          <Button
+            size="sm"
+            :variant="aiOpen ? 'secondary' : 'ghost'"
+            icon="pi-microchip-ai"
+            data-test="tpl-ai"
+            @click="aiOpen = !aiOpen"
+          >AI</Button>
+        </template>
+        <AiTextPanel
+          ref="aiPanelRef"
+          v-if="aiOpen && ai.config.value?.enabled"
+          kind="template"
+          :item="{ id: editingId ?? undefined, name, description, tags, template_string: templateString, negative_template: negativeTemplate }"
+          @use="useAiPrompt"
+          @close="aiOpen = false"
+        />
         <Field label="Template" hint="The PromptAssembler template string — $var tokens are resolved at render.">
           <!-- The same editor the assembler node uses, on the same surface.
                A template IS an assembler template string — saved here, loaded
@@ -183,7 +271,6 @@ function cancel() {
 </template>
 
 <style scoped>
-.wp-tpl-editor__loading { padding: var(--wp-space-6); }
 .wp-tpl-editor__neg {
   border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border));
 }

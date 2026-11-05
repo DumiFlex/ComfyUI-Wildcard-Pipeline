@@ -10,6 +10,7 @@ vi.mock("../../api/client", () => ({ api: apiMock }));
 
 import { useCascadeApply } from "../useCascadeApply";
 import { useCascadeStore } from "../cascade-store";
+import { deletedIds, libraryVersion } from "../../composables/useLibraryChanged";
 
 describe("useCascadeApply", () => {
   beforeEach(() => {
@@ -84,5 +85,26 @@ describe("useCascadeApply", () => {
     if (result.ok) {
       expect(result.broken_refs).toHaveLength(1);
     }
+  });
+
+  it("a whole-entity delete marks the row deleted and refreshes the library", async () => {
+    apiMock.cascade_apply.mockResolvedValue({ ok: true, undo_entry_id: "u1", affected_count: 0, diff: [] });
+    const before = libraryVersion.value;
+    await useCascadeApply().apply({ kind: "category", id: "cat00001", action: "delete" });
+    expect(deletedIds.value.has("cat00001")).toBe(true);
+    expect(libraryVersion.value).toBe(before + 1);
+  });
+
+  it("deleting part of a row (an option) does not mark the row deleted", async () => {
+    apiMock.cascade_apply.mockResolvedValue({ ok: true, undo_entry_id: "u1", affected_count: 0, diff: [] });
+    await useCascadeApply().apply({ kind: "option", id: "opt00001", action: "delete" });
+    expect(deletedIds.value.has("opt00001")).toBe(false);
+  });
+
+  it("a successful undo refreshes the library", async () => {
+    apiMock.cascade_undo.mockResolvedValue({ ok: true });
+    const before = libraryVersion.value;
+    await useCascadeApply().undo("u1");
+    expect(libraryVersion.value).toBe(before + 1);
   });
 });

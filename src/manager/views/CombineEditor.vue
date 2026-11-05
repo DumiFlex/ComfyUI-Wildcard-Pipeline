@@ -19,22 +19,29 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
-import Card from "../components/ui/Card.vue";
-import Button from "../components/ui/Button.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
+import Card from "@/kit/Card.vue";
+import Input from "@/kit/Input.vue";
+import Button from "@/kit/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
-import Field from "../components/ui/Field.vue";
-import Chip from "../components/ui/Chip.vue";
+import Field from "@/kit/Field.vue";
+import Chip from "@/kit/Chip.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import NegativeField from "../components/NegativeField.vue";
+import AiTextPanel from "../components/ai/AiTextPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import { isBlankNegative, libraryVarNegatives, type VarNegativeSource } from "../utils/negatives";
 import { tokenizeRich } from "../../widgets/richTokenize";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
-import { useToast } from "../composables/useToast";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
+import { useToast } from "@/kit/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -54,7 +61,6 @@ import { useCascadeApply } from "../cascade/useCascadeApply";
 import { registerCascadeUndo } from "../cascade/undo-stack-integration";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
 import type {
@@ -98,7 +104,7 @@ async function onEntityDeleteClick(): Promise<void> {
 
 function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
   cascadeDialogOpen.value = false;
-  moduleStore.remove(props.id!);
+  moduleStore.removeLocal(props.id!);
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
   toast.push({
@@ -233,6 +239,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -250,9 +259,51 @@ function snapshot(): string {
   });
 }
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+/** The AI panel holds an answer the user hasn't used yet. */
+const aiPending = ref(false);
+function useAiTemplate(p: Record<string, unknown>): void {
+  if (typeof p.template === "string") template.value = p.template;
+  negative.value = typeof p.negative === "string" ? p.negative : "";
+}
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
+
+/** Load a stored payload into the editor (saved row or chat draft). An empty
+ *  output var falls back to the item's name, as a new combine's does. */
+function loadPayload(p: Partial<CombinePayload>, itemName: string): void {
+  template.value = p.template ?? "";
+  negative.value = p.negative ?? "";
+  const o = (p.output_var ?? "").replace(/^\$+/, "");
+  if (o.trim()) {
+    outputVar.value = o;
+    outputVarTouched.value = true;
+  } else {
+    outputVar.value = toIdentifier(itemName);
+  }
+}
+
+// The chat reads and edits this item's info here; an existing item's payload
+// stays on Save. A new item takes the payload of a draft the chat staged.
+const fillFromChat = registerOpenEditor({
+  id: props.id, type: "combine", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
+  name, description, tags, categoryId, contentRating,
+  ...(props.id ? {} : {
+    setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<CombinePayload>, name.value),
+  }),
+});
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiTextPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: { draft: viaPanel(aiOpen, aiPanelRef) } });
+/** The chat's draft this new combine was opened with (Save creates it at the
+ *  id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
 
 const draft = useEditorDraft({
   kind: "combine",
@@ -400,16 +451,7 @@ onMounted(async () => {
       categoryId.value = row.category_id;
       tags.value = row.tags;
       contentRating.value = row.content_rating ?? "safe";
-      const p = row.payload as Partial<CombinePayload>;
-      template.value = p.template ?? "";
-      negative.value = p.negative ?? "";
-      const o = (p.output_var ?? "").replace(/^\$+/, "");
-      if (o.trim()) {
-        outputVar.value = o;
-        outputVarTouched.value = true;
-      } else {
-        outputVar.value = toIdentifier(row.name);
-      }
+      loadPayload(row.payload as Partial<CombinePayload>, row.name);
       savedOutputVar.value = outputVar.value;
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "combine", name: name.value });
@@ -418,8 +460,25 @@ onMounted(async () => {
       router.replace("/combines");
     }
   }
+  loaded.value = true;
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed combine, unsaved.
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    chatDraftNote(chatDraft);
+  }
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  toast.push({
+    severity: "info",
+    summary: "From the assistant",
+    detail: d.newCategory
+      ? `Check it and Save to keep it. It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`
+      : "Check it and Save to keep it.",
+  });
+}
 
 function applyRestore(entry: ModuleHistoryEntry): void {
   name.value = entry.name;
@@ -514,9 +573,9 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "combine", name: name.value });
     } else {
-      // New mode: the new row id is not surfaced here; mount-time push fires
-      // next time the user opens this item.
-      await moduleStore.create({
+      // New mode: a chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "combine",
         name: name.value,
         description: description.value,
@@ -525,6 +584,8 @@ async function save() {
         content_rating: contentRating.value,
         payload: newPayload,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -561,6 +622,8 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading combine"
     :title="isEdit ? 'Edit combine' : 'New combine'"
     back-route="/combines"
     back-label="Combines"
@@ -583,9 +646,9 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       />
     </template>
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'combine'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'combine'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
       <CommunityRowActions
         v-if="currentRow"
@@ -604,19 +667,40 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
       >Delete</Button>
     </template>
     <IdentityCard
+      ref="identityCard"
+      ai-kind="combine"
+      :ai-payload="() => ({ template, output_var: outputVar, negative })"
       :name="name"
       :description="description"
       :category-id="categoryId"
       :tags="tags"
+      :content-rating="contentRating"
       @update:name="(v) => (name = v)"
       @update:description="(v) => (description = v)"
       @update:category-id="(v) => (categoryId = v)"
-      :content-rating="contentRating"
       @update:tags="(v) => (tags = v)"
       @update:content-rating="(v) => (contentRating = v)"
     />
 
     <Card title="Template & Output">
+      <template v-if="ai.config.value?.enabled" #actions>
+        <Button
+          size="sm"
+          :variant="aiOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="cb-ai"
+          @click="aiOpen = !aiOpen"
+        >AI</Button>
+      </template>
+      <AiTextPanel
+        v-if="aiOpen && ai.config.value?.enabled"
+        ref="aiPanelRef"
+        kind="combine"
+        :item="{ id: props.id, name, description, tags, payload: { template, negative, output_var: outputVar || toIdentifier(name) } }"
+        @use="useAiTemplate"
+        @close="aiOpen = false"
+        @update:pending="(v: boolean) => (aiPending = v)"
+      />
       <!-- Output variable BEFORE the template, each full-width. It used to sit
            in a 220px column beside the template, which squeezed the template
            (the field that actually needs room to grow) and read as a footnote
@@ -628,13 +712,12 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
           :error="outputVarError"
         >
           <div class="wp-input-group cb-output-var">
-            <span class="wp-input-group__addon">$</span>
-            <input
-              class="wp-input"
-              :value="outputVar"
+            <span class="wp-input-group__affix wp-input-group__affix--prefix" aria-hidden="true">$</span>
+            <Input
+              :model-value="outputVar"
               placeholder="subject_phrase"
               data-test="cb-output-var"
-              @input="onOutputVarInput(($event.target as HTMLInputElement).value)"
+              @update:model-value="onOutputVarInput"
             />
           </div>
         </Field>
@@ -727,9 +810,9 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="combine"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
@@ -738,23 +821,23 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
          an existing combine. Cascades the rename to all downstream refs. -->
     <CascadeRenameDialog
       v-if="isEdit && props.id && savedOutputVar"
+      :id="props.id"
       :open="outputVarRenameOpen"
       kind="combine_output_var"
-      :id="props.id"
       :extra="{ old_name: savedOutputVar }"
       :initial-name="outputVar"
       @confirmed="onOutputVarRenameConfirmed"
       @cancelled="onOutputVarRenameCancelled"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
@@ -808,7 +891,7 @@ const breadcrumb = computed<BreadcrumbItem[]>(() => [
 .cb-carries__item { display: inline-flex; align-items: baseline; gap: var(--wp-space-2); }
 .cb-carries__text {
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-danger);
   background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
 }

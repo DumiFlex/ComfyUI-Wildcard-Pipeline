@@ -1,0 +1,755 @@
+{
+ "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first).",
+ "cases": [
+  {
+   "name": "plain switches",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "aaaa0000",
+      "kind": "label",
+      "name": "LoRAs",
+      "color": 1
+     },
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "a": "true",
+    "b": "false"
+   },
+   "outputs": [
+    true,
+    false
+   ]
+  },
+  {
+   "name": "child of an off parent is off",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "lora",
+      "var": "lora",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "clothes",
+      "var": "clothes",
+      "on": true,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "00000001"
+     }
+    ]
+   },
+   "values": {
+    "lora": "false",
+    "clothes": "false"
+   },
+   "outputs": [
+    false,
+    false
+   ]
+  },
+  {
+   "name": "child of an on parent keeps its own choice",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "lora",
+      "var": "lora",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "clothes",
+      "var": "clothes",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": "00000001"
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "shoes",
+      "var": "shoes",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": "00000001"
+     }
+    ]
+   },
+   "values": {
+    "lora": "true",
+    "clothes": "true",
+    "shoes": "false"
+   },
+   "outputs": []
+  },
+  {
+   "name": "chain",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": "00000001"
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "c",
+      "var": "c",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": "00000002"
+     }
+    ]
+   },
+   "values": {
+    "a": "false",
+    "b": "false",
+    "c": "false"
+   },
+   "outputs": []
+  },
+  {
+   "name": "loop is off",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": "00000002"
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": "00000001"
+     }
+    ]
+   },
+   "values": {
+    "a": "false",
+    "b": "false"
+   },
+   "outputs": []
+  },
+  {
+   "name": "missing parent is off",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": "deadbeef"
+     }
+    ]
+   },
+   "values": {
+    "a": "false"
+   },
+   "outputs": []
+  },
+  {
+   "name": "pick one takes the first on and ignores needs",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "framing",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Portrait",
+      "var": "portrait",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Full body",
+      "var": "full_body",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": "00000001"
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Landscape",
+      "var": "landscape",
+      "on": true,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "portrait": "false",
+    "full_body": "true",
+    "landscape": "false",
+    "framing": "Full body"
+   },
+   "outputs": [
+    true,
+    false
+   ]
+  },
+  {
+   "name": "pick one with nothing on",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "framing",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "portrait",
+      "var": "portrait",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "portrait": "false",
+    "framing": ""
+   },
+   "outputs": []
+  },
+  {
+   "name": "outputs follow out, not row order",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "a": "true",
+    "b": "false"
+   },
+   "outputs": [
+    false,
+    true
+   ]
+  },
+  {
+   "name": "repeated out falls back to row order",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "a": "true",
+    "b": "false"
+   },
+   "outputs": [
+    true,
+    false
+   ]
+  },
+  {
+   "name": "unpinned and bad vars",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "",
+      "var": "",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "9bad",
+      "var": "9bad",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "ok",
+      "var": "ok",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "ok": "true"
+   },
+   "outputs": [
+    true
+   ]
+  },
+  {
+   "name": "same var twice, lower wins",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "x",
+      "var": "x",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "x",
+      "var": "x",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "x": "false"
+   },
+   "outputs": []
+  },
+  {
+   "name": "upstream sets a switch only from a lone yes/no word",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": true,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "c",
+      "var": "c",
+      "on": true,
+      "pin": true,
+      "out": 3,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000004",
+      "kind": "toggle",
+      "name": "d",
+      "var": "d",
+      "on": false,
+      "pin": true,
+      "out": 4,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000005",
+      "kind": "toggle",
+      "name": "e",
+      "var": "e",
+      "on": true,
+      "pin": true,
+      "out": 5,
+      "style": "switch",
+      "needs": "00000002",
+      "upstream": true
+     }
+    ]
+   },
+   "upstream": {
+    "a": " Yes ",
+    "b": "0",
+    "c": "maybe true",
+    "d": "on",
+    "e": "on"
+   },
+   "values": {
+    "a": "true",
+    "b": "false",
+    "c": "true",
+    "d": "false",
+    "e": "false"
+   },
+   "outputs": [
+    true,
+    false,
+    true,
+    false,
+    false
+   ]
+  },
+  {
+   "name": "upstream feeds Pick one before the first-on rule",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "picked",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     }
+    ]
+   },
+   "upstream": {
+    "a": "off",
+    "b": "true"
+   },
+   "values": {
+    "a": "false",
+    "b": "true",
+    "picked": "b"
+   },
+   "outputs": [
+    false,
+    true
+   ]
+  },
+  {
+   "name": "pick one: upstream yes beats the canvas pick; a value replaces the name",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "look",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Day",
+      "var": "day",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": "",
+      "upstream": true,
+      "value": "bright daylight"
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Night",
+      "var": "night",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true,
+      "value": "moonlit night"
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": true,
+      "out": 3,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     }
+    ]
+   },
+   "upstream": {
+    "night": "yes",
+    "dusk": "1"
+   },
+   "values": {
+    "day": "false",
+    "night": "true",
+    "dusk": "false",
+    "look": "moonlit night"
+   },
+   "outputs": [
+    false,
+    true,
+    false
+   ]
+  },
+  {
+   "name": "pick one: the upstream picked variable names the pick",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "look",
+    "group_upstream": true,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Day",
+      "var": "day",
+      "on": true,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Night",
+      "var": "night",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": "",
+      "upstream": true
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": true,
+      "out": 3,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "upstream": {
+    "look": " DUSK ",
+    "night": "true"
+   },
+   "values": {
+    "day": "false",
+    "night": "false",
+    "dusk": "true",
+    "look": "Dusk"
+   },
+   "outputs": [
+    false,
+    false,
+    true
+   ]
+  }
+ ]
+}

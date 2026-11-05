@@ -1,6 +1,7 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
-import { app } from "#comfyui/app";
+import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
   defaultModelInfoConfig,
@@ -23,6 +24,9 @@ interface ModelInfoHostNode extends MountTargetNode {
   graph?: LiteGraphLike;
   inputs?: { name: string; link: number | null }[];
 }
+
+/** Text inputs that, once wired, replace the panel's pin. */
+const WIRABLE = ["family", "variant", "name"] as const;
 
 /**
  * Mount glue for WP_ModelInfo's one widget (`WP_MODEL_INFO`). The value is
@@ -54,6 +58,12 @@ export function create(node: ModelInfoHostNode, inputName: string) {
         () => node.inputs?.find((i) => i.name === "model")?.link != null,
         Object.is,
       );
+      // "family,name" — a string, so the poll compares by value.
+      const wiredKey = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => WIRABLE.filter((n) => node.inputs?.find((i) => i.name === n)?.link != null).join(","),
+        Object.is,
+      );
       function onUpdate(next: ModelInfoConfig): void {
         config.value = next;
         host.setValue(serializeWidgetJson(next));
@@ -64,6 +74,7 @@ export function create(node: ModelInfoHostNode, inputName: string) {
         modelWired: modelWired.value,
         lastRun: lastRun.value,
         nodeMode: nodeMode.value,
+        wired: wiredKey.value ? wiredKey.value.split(",") : [],
         "onUpdate:modelValue": onUpdate,
       });
     },
@@ -98,10 +109,8 @@ export function create(node: ModelInfoHostNode, inputName: string) {
     recordModelInfoRun(node, next);
     lastRun.value = next;
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
+  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, WIRABLE));
   return host;
 }

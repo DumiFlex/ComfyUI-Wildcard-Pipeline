@@ -16,9 +16,10 @@
  *    `1` while the engine rolls a real pick), so we now only show
  *    what actually came out of the engine.
  */
-import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { defineAsyncComponent, h, ref, watch, type Component, type EffectScope } from "vue";
 import { app } from "#comfyui/app";
-import { createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { listenApi } from "./_listen";
 import {
   collectUpstreamVariables,
   findRootGraph,
@@ -26,13 +27,24 @@ import {
   type LiteNodeLike,
 } from "../extension/graph";
 import { reactiveFromGraph } from "../extension/reactive";
+import { describeChoiceTargets, fallbackChoices, findChoiceTargets } from "../extension/choice-targets";
+import { pushToast } from "../components/shared/toast-store";
 
 const VarPicker = defineAsyncComponent(() => import("../components/var-picker/VarPicker.vue"));
 
 interface VarPickerNode extends MountTargetNode, LiteNodeLike {
   properties?: Record<string, unknown>;
-  widgets?: { name: string; value: unknown }[];
+  widgets?: { name: string; value: unknown; options?: { values?: unknown } }[];
   mode?: number;
+  comfyClass?: string;
+  setDirtyCanvas?: (foreground: boolean, background: boolean) => void;
+}
+
+/** `wp_choice_status` UI payload from `wp_nodes/var_to_choice.py`. */
+interface ChoiceStatus {
+  status?: string;
+  note?: string;
+  warnings?: unknown;
 }
 
 interface ExecutedDetail {
@@ -58,6 +70,18 @@ function upstreamVarsOf(node: VarPickerNode): string[] {
   return collectUpstreamVariables(root, node).map((n) => `$${n}`);
 }
 
+function choiceTargetsOf(node: VarPickerNode) {
+  const graph =
+    (node as unknown as { graph?: LiteGraphLike }).graph
+    ?? (app.graph as unknown as LiteGraphLike);
+  return findChoiceTargets(graph, node);
+}
+
+/** The "into …" line of a WP_VarToChoice widget: what its output feeds. */
+function wiredToOf(node: VarPickerNode): string {
+  return describeChoiceTargets(choiceTargetsOf(node));
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
@@ -78,7 +102,14 @@ function pickFirst(obj: Record<string, unknown>, key: string): unknown {
   return undefined;
 }
 
-export function create(node: VarPickerNode, inputName: string) {
+export function create(node: VarPickerNode, inputName: string): DomWidgetHost {
+  // Run inside a host-owned effect scope: the `reactiveFromGraph` refs and
+  // watchers below live outside any component setup(), so without it their
+  // polls would outlive the node.
+  return buildInScope((scope) => build(node, inputName, scope));
+}
+
+function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomWidgetHost {
   if (!node.properties) node.properties = {};
   if (typeof node.properties.var_name !== "string") node.properties.var_name = "";
 
@@ -91,6 +122,24 @@ export function create(node: VarPickerNode, inputName: string) {
   // so the widget visually dims to mirror node-level mute/bypass.
   // Mirrors the cleaner / context / debug widget pattern.
   const nodeMode = reactiveFromGraph(node, () => node.mode ?? 0, Object.is);
+
+  // WP_VarToChoice reuses this widget; it also names what its output feeds
+  // and how the last run matched (the other converters leave both empty).
+  const isChoice = (node.comfyClass ?? node.type) === "WP_VarToChoice";
+  const wiredTo = isChoice ? reactiveFromGraph(node, () => wiredToOf(node), Object.is) : null;
+  const choiceNote = ref<string>("");
+  // Its `fallback` dropdown lists the options of the input `choice` feeds
+  // (the node's validate_inputs lets them through). A picked value stays
+  // when the list changes or the link is cut; the run checks it.
+  if (isChoice) {
+    const choices = reactiveFromGraph(node, () => fallbackChoices(choiceTargetsOf(node)), arraysEqual);
+    watch(choices, (values) => {
+      const fallback = node.widgets?.find((w) => w.name === "fallback");
+      if (!fallback) return;
+      fallback.options = { ...(fallback.options ?? {}), values };
+      node.setDirtyCanvas?.(true, false);
+    }, { immediate: true });
+  }
 
   // Local reactive mirror of `node.properties.var_name`. Litegraph's
   // properties bag is NOT a Vue reactive root, so writing to it during
@@ -138,12 +187,15 @@ export function create(node: VarPickerNode, inputName: string) {
           previewParsed: hasExecuted.value ? previewParsed.value : null,
           previewDefault: previewDefault.value,
           nodeMode: nodeMode.value,
+          wiredTo: wiredTo?.value ?? "",
+          choiceNote: hasExecuted.value ? choiceNote.value : "",
           "onUpdate:modelValue": onUpdate,
         });
     },
   };
 
   host = createDomWidgetHost(node, inputName, wrapper, {
+    scope,
     initialValue: String(node.properties?.var_name ?? ""),
     onValueRestored: (v: string) => {
       if (!node.properties) node.properties = {};
@@ -152,7 +204,7 @@ export function create(node: VarPickerNode, inputName: string) {
       // surfaces in the trigger immediately (same reason as onUpdate).
       currentVar.value = v;
     },
-    minHeight: 92,
+    minHeight: isChoice ? 106 : 92,
     minWidth: 260,
   });
 
@@ -173,13 +225,20 @@ export function create(node: VarPickerNode, inputName: string) {
     // the null so the SFC paints the amber "default" state.
     previewParsed.value = typeof parsed === "string" ? parsed : null;
     if (typeof def === "string") previewDefault.value = def;
+    const status = pickFirst(out, "wp_choice_status") as ChoiceStatus | undefined;
+    if (status && typeof status === "object") {
+      choiceNote.value = typeof status.note === "string" ? status.note : "";
+      // A fallback or a target that lacks the value is worth a toast: the
+      // run carried on with something the user didn't pick.
+      const warnings = Array.isArray(status.warnings) ? status.warnings.filter((w): w is string => typeof w === "string") : [];
+      const lines = [...(status.status === "fallback" && choiceNote.value ? [choiceNote.value] : []), ...warnings];
+      if (lines.length > 0) {
+        pushToast(`WP Var → Choice: ${lines.join(" ")}`, { severity: "warning", singletonKey: `wp-var-choice-${node.id}` });
+      }
+    }
     hasExecuted.value = true;
   }
-  const apiObj = (app as unknown as { api?: {
-    addEventListener: (n: string, fn: (e: Event) => void) => void;
-    removeEventListener: (n: string, fn: (e: Event) => void) => void;
-  } }).api;
-  apiObj?.addEventListener("executed", onExecuted);
+  listenApi(host, "executed", onExecuted);
 
   return host;
 }

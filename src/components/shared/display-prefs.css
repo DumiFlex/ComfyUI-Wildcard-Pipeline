@@ -112,7 +112,7 @@
   .wp-fvm,
   .wp-pg
 ) {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: var(--wp-shadow-sm) !important;
   backdrop-filter: blur(2px) !important;
 }
 
@@ -235,6 +235,18 @@
 .wp-focus-mode .wp-inj-list:has(.wp-inj-row:hover) .wp-inj-row:not(:hover) {
   opacity: 0.55;
   transition: opacity var(--wp-motion-quick) ease;
+}
+
+/* ── Row buttons on hover ──────────────────────────────────────────
+ * "Row buttons: On hover" hides a row's lock / internal / remove
+ * buttons until the row header is hovered or holds focus. A pressed
+ * button (locked seed, internal) stays, since it reports state.
+ * `visibility` keeps the space, so the name never jumps on hover, and
+ * WpIconButton sets no visibility of its own, so this layered rule
+ * still applies. Bundle headers follow the same setting. */
+.wp-row-actions-hover .wp-module-header:not(:hover):not(:focus-within) .wp-mod-actions .wp-icon-btn:not([aria-pressed="true"]):not([aria-pressed="mixed"]),
+.wp-row-actions-hover .wp-bundle-header:not(:hover):not(:focus-within) .wp-mod-actions .wp-icon-btn:not([aria-pressed="true"]):not([aria-pressed="mixed"]) {
+  visibility: hidden;
 }
 
 /* ── State badge priority ───────────────────────────────────────────

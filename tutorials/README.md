@@ -1,0 +1,82 @@
+# Video tutorials
+
+The tutorial videos, recorded by [Watchwright](https://github.com/DumiFlex/watchwright). Each test in `tests/` is one tutorial and one video. A test clicks through the real ComfyUI canvas and manager like a person would: it adds nodes from the search box, drags wires, types templates and presses Run. While it does, the video shows:
+
+- a steady pointer that moves like a hand, with a ring where it clicks;
+- a caption for each narration line;
+- callout boxes around the part being talked about.
+
+After the take, `render.mjs` adds a text-to-speech voice and writes the finished MP4, with subtitles and chapters.
+
+| File | What it does |
+|---|---|
+| `pack.ts` | The Watchwright pack. It records in Chromium at 1920 × 1080 in dark mode, keeps a video of every take, and puts your library back afterwards (`../bench/lifecycle.ts`). |
+| `tutorial.ts` | The presenter (`Tutor`): `say`, `click`, `drag`, `type`, `fill`, `scrollTo`, `go`, `callout`, `addNode`, `wire`, `pickModules`, `run`, `fastForward`, plus `showcase` for rendering real images. |
+| `cursor.js` | The page script that draws the pointer, captions, callouts and the sync mark. |
+| `library.json` | The library every take starts from (the example workflows' rows). Viewers get the same file as `WP Tutorials library.json` next to the videos; T01 shows how to import it into an empty library. |
+| `voice/speak.py` | Speaks every `t.say("…")` line with Kokoro-82M into `voice/cache/` and writes `voice/lines.json`. |
+| `render.mjs` | Turns a take into `out/<id>-<title>.mp4`, `.srt` and `.chapters.txt`. |
+
+## Make a video
+
+1. **Voice.** Run `pip install kokoro-onnx soundfile` once, then `python tutorials/voice/speak.py`. The first run downloads the model (~350 MB) into `voice/models/`. It speaks only lines that are new or changed. `--voice` picks another voice (`af_heart` is the default; others are `af_bella`, `am_michael`, `bf_emma` and `bm_george`). Run it before recording, because each line's length decides how long the hands wait for the voice.
+2. **Record.** Start ComfyUI with this extension on port 8189, or a clean one (see below). Add this folder as a pack in Watchwright, then start a run with the tutorials you want. Each take's video and `files/cues.json` land in its attempt folder.
+3. **Render.** Run `node tutorials/render.mjs <attempt folder>`. It needs a full ffmpeg with libx264 and aac on `PATH` (or pass `--ffmpeg <path>`); Playwright's own ffmpeg can't do it. The finished files go to `tutorials/out/`.
+
+### Record on a clean ComfyUI
+
+Other custom nodes add their own buttons, menus, badges and node colours to the canvas, and some change how it behaves, so the videos look different for everyone. Record on a second ComfyUI that loads only this extension. It uses the same install and models, but its own user folder, so its settings, open tabs and library are separate from the ComfyUI you work in. Your own ComfyUI keeps running.
+
+```bash
+# from the ComfyUI folder; the user folder must already exist; any empty folder will do
+python main.py --port 8190 --disable-all-custom-nodes --whitelist-custom-nodes ComfyUI-Wildcard-Pipeline ComfyUI-Easy-Use --user-directory <empty folder>
+```
+
+The whitelist names are folder names in `custom_nodes`. ComfyUI-Easy-Use is only there for its Show Any node, which lists every frame of a loop (A05, A16); ComfyUI's Preview as Text shows one. Then start Watchwright with `WP_TUTORIALS_URL=http://127.0.0.1:8190/wp/` in its environment, so the pack records that ComfyUI instead of the one on 8189.
+
+The pack's `reset` setting (on by default) loads `library.json` before the first tutorial, so every take shows the same items. Your library is backed up first and put back when the run ends, the same way the bench packs do it (see `../bench/README.md` › Putting your library back).
+
+## Write a tutorial
+
+```ts
+import { tutorial } from "../tutorial.js";
+
+tutorial("T07", { title: "Your next tutorial" }, async (t) => {
+  await t.h.step("Add a Context node", async () => {
+    await t.say("Double-click the canvas and search for WP Context.");
+    const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
+    await t.callout("ctx", t.node(ctx), "Your lists live here");
+    await t.waitVoice();
+    await t.uncallout("ctx");
+  });
+});
+```
+
+- `t.say(line)` shows the caption and returns right away, so the hands work while the voice speaks. The next `say` waits until the line has been spoken. Use `t.waitVoice()` to wait on purpose, for example to keep a callout up until its line ends. Each line must be a plain string literal so `speak.py` can find it. In a line, `$hero` is read as "hero" and "WP" as "W P".
+- Every `t.h.step` becomes a chapter.
+- `t.addNode(search, {x, y})` drops the node centred on that point. Leave the bottom 140 px free for the caption.
+- Wrap a long wait in `t.fastForward(() => …)`, such as a model run. The video plays that part 6× faster.
+- `addNode` sets new seeds to fixed, so what the video shows matches what the narration says.
+
+### Pack settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `reset` | on | Loads `library.json` before the first tutorial. |
+| `showcase` | off | Ends each tutorial by rendering real images from its prompt (needs a GPU and the checkpoint below). Leave it off where no model is installed. |
+| `checkpoint` | `waiIllustriousSDXL_v170` | The checkpoint the showcase uses, without the extension. A missing one stops the take and lists the ones ComfyUI has. |
+| `steps`, `cfg` | 24, 5 | The showcase sampler's steps and CFG. |
+
+### More helpers
+
+- `t.go("/wp/wildcards")` opens a manager page, or `t.go("/")` for an empty canvas. The load plays fast and the caption stays up.
+- `t.fill(locator, text)` clicks a field, clears it and types, the way a person would.
+- `t.scrollTo(locator)` wheel-scrolls the page until the target is near the top. `t.click` scrolls by itself when its target is off screen or under the caption.
+- `t.pickModules(contextId, ["Hero", "Setting"])` opens a Context node's picker, scrolls to each row and ticks it (in that order), then adds them.
+- `if (showcasing(t)) await showcase(t, { from: assembler, preview, chain })` builds a folded checkpoint → sampler chain fed by the Assembler, adds a preview and runs it a few times, fast-forwarded. `between(i)` runs before each run after the first (change a seed, flip a toggle).
+
+## Notes
+
+- The screencast records CSS pixels, and the device scale factor doesn't change that. So the video is the size of the viewport: 1920 × 1080.
+- Playwright's own action titles and fading pointer are off (`showActions: false`), because `cursor.js` draws a pointer that stays on screen.
+- Record in Chromium. Firefox's screencast drops frames.

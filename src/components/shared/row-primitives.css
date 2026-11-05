@@ -3,7 +3,6 @@
  * in InjectorWidget, future row-like UIs in Debug / Assembler).
  *
  * Single source of truth for:
- *   - Small icon button family (.wp-btn--icon-sm + variants)
  *   - Drag handle glyph (.wp-drag-handle)
  *   - Conflict cluster (.wp-conflict-dot + .wp-conflict-badge + variants)
  *   - State badges (.wp-mod-badge + variants for mod/drift/missing)
@@ -14,106 +13,14 @@
  * consumer; no more duplicating CSS across feature widgets.
  *
  * NOT wrapped in `@layer wp-extension` — same constraint as
- * theme.css and var-binding-input.css: Vue's <style scoped> scoper
+ * theme.css: Vue's <style scoped> scoper
  * can't parse @layer atrules in CSS that gets @imported into a
  * scoped block. The `.wp-*` namespace prefix carries isolation duty
  * for this file.
  */
 
-/* ── Small icon button family ────────────────────────────────────── */
-
-/* Used everywhere a single pi-icon needs a 20×20 button: trash,
- * lock, internal-flag toggle, etc. Variants:
- *   .wp-btn--danger          → trash / destructive (red hover)
- *   .is-active               → toggled-on state (internal flag)
- *   .is-locked               → seed-lock active (warn-tinted)
- */
-/* Canonical small icon-button styling. Visible-at-rest (light bg
- * + light border) so the button reads as a discoverable affordance
- * instead of an invisible hover-target. ModuleRow historically
- * achieved this look via the cascade of `.wp-btn` + `.wp-btn--icon-sm`
- * — by baking it into the icon-sm rule directly, InjectorRow (which
- * uses only `.wp-btn--icon-sm`) renders identically without needing
- * to add a `.wp-btn` base class. */
-.wp-btn--icon-sm {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border2);
-  color: var(--wp-text);
-  font: 500 11px/1 var(--wp-font-sans);
-  padding: 3px;
-  border-radius: var(--wp-radius, 4px);
-  cursor: pointer;
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--wp-motion-quick), border-color var(--wp-motion-quick), color var(--wp-motion-quick);
-}
-.wp-btn--icon-sm:hover {
-  /* Only the BACKGROUND lifts on hover. Border + icon color are
-   * controlled by the variant classes (.wp-btn--danger/--accent/--warn)
-   * so the colored ring stays consistent rest→hover and the icon
-   * flips to the variant tone on hover. Without this split the base
-   * hover's border-color would fight the variant's at-rest border-
-   * color (same specificity → source-order coin flip). */
-  background: var(--wp-bg4, var(--wp-bg2));
-}
-.wp-btn--icon-sm .pi { font-size: 11px; }
-/* Toggled-on states. Same `color` tokens as the hover variants below
- * so a button reads with the SAME tint whether the user is hovering
- * over it or it's already toggled on. Background uses an accent-
- * tinted wash so the toggled-on row reads as "this is currently
- * active" beyond just the icon color. */
-.wp-btn--icon-sm.is-active {
-  color: var(--wp-accent);
-  background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
-}
-.wp-btn--icon-sm.is-locked {
-  color: var(--wp-warn);
-  background: color-mix(in srgb, var(--wp-warn) 14%, transparent);
-}
-/* Tonal hover variants — ONLY the icon color flips on hover. Border
- * stays whatever the base (or a consumer-scoped override) painted
- * at rest. No flashy colored ring fights the row's visual weight;
- * the icon-color flip is enough to telegraph "this does X".
- *
- *   .wp-btn--danger  →  red    (destructive: trash / disconnect / delete)
- *   .wp-btn--accent  →  indigo (toggles: internal flag, mute, etc)
- *   .wp-btn--warn    →  amber  (cautionary: seed lock, drift ack, etc)
- *
- * Consumer-scoped border-color overrides (e.g. .wp-bundle-action
- * setting border-color: var(--b)) survive hover untouched. */
-.wp-btn--icon-sm.wp-btn--danger:hover {
-  color: var(--wp-danger);
-}
-.wp-btn--icon-sm.wp-btn--accent:hover {
-  color: var(--wp-accent);
-}
-.wp-btn--icon-sm.wp-btn--warn:hover {
-  color: var(--wp-warn);
-}
-
-/* ── Collapse caret button ───────────────────────────────────────── */
-
-/* Small 14px-wide chevron toggle used at a row's leading edge to
- * show/hide a summary line below the row header. Same dim default
- * + hover-to-text-bright pattern as other row controls. */
-.wp-collapse-btn {
-  background: none;
-  border: none;
-  color: var(--wp-text3);
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  flex-shrink: 0;
-}
-.wp-collapse-btn .pi { font-size: 10px; }
-.wp-collapse-btn:hover { color: var(--wp-text); }
+/* The 20 px row icon button and the fold caret are WpIconButton
+ * (kit/WpIconButton.vue), a kit component. */
 
 /* ── Summary line ────────────────────────────────────────────────── */
 
@@ -267,7 +174,9 @@
   transition: opacity var(--wp-motion-hover), color var(--wp-motion-hover);
 }
 .wp-drag-handle:active { cursor: grabbing; }
-.wp-drag-handle__grip { display: block; }
+/* The grip glyph is the kit's DragHandle; this span keeps the row's own
+ * colour and fade, so the grip inherits instead of using its own. */
+.wp-drag-handle .wp-drag-grip[data-size] { color: inherit; cursor: inherit; }
 
 /* ── Conflict cluster (dot + text badge) ─────────────────────────── */
 
@@ -278,7 +187,7 @@
 .wp-conflict-dot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: 50%; /* round: status dot */
   flex-shrink: 0;
   cursor: help;
   border: 1px solid transparent;
@@ -307,7 +216,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
   cursor: help;
 }
@@ -338,13 +247,14 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .wp-mod-badge--mod,
 .wp-mod-badge--drift,
 .wp-mod-badge--missing,
 .wp-mod-badge--clash,
-.wp-mod-badge--on {
+.wp-mod-badge--on,
+.wp-mod-badge--example {
   flex-shrink: 0;
 }
 .wp-mod-badge--mod {
@@ -372,6 +282,15 @@
 .wp-mod-badge--clash {
   background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
+}
+
+/* `--example` variant: a bundle or row that came with an example workflow
+ * and isn't in the library yet. Neutral grey, not MISSING red: nothing is
+ * wrong, Save to library keeps it. */
+.wp-mod-badge--example {
+  background: var(--wp-bg-3);
+  color: var(--wp-text-dim);
+  cursor: help;
 }
 
 /* `--new` variant: incoming entity with no UUID collision (import side).

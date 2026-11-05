@@ -183,9 +183,83 @@ describe("RELEVANT_INSTANCE_KEYS — tier 2 cache invalidation", () => {
     expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("disabled_matrix_cells")).toBe(true);
   });
 
+  it("keeps every instance key an engine handler reads, so per-node edits reach the preview", async () => {
+    const { RELEVANT_INSTANCE_KEYS_FOR_TEST } = await import("./assembler");
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const dir = join(process.cwd(), "engine", "modules");
+    const read = new Set<string>();
+    for (const f of readdirSync(dir).filter((x) => x.endsWith(".py"))) {
+      const src = readFileSync(join(dir, f), "utf8");
+      for (const m of src.matchAll(/\binst(?:ance)?\.get\("([a-z_]+)"/g)) if (m[1]) read.add(m[1]);
+      for (const m of src.matchAll(/\binst(?:ance)?\["([a-z_]+)"\]/g)) if (m[1]) read.add(m[1]);
+    }
+    expect(read.size).toBeGreaterThan(10);
+    const missing = [...read].filter((k) => !RELEVANT_INSTANCE_KEYS_FOR_TEST.has(k));
+    expect(missing).toEqual([]);
+  });
+
   it("excludes _ui namespace from cache key", async () => {
     const { RELEVANT_INSTANCE_KEYS_FOR_TEST } = await import("./assembler");
     expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("_ui")).toBe(false);
     expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("last_locked_seed")).toBe(false);
+  });
+
+  it("keeps each instance's random-stream key (_uid, bundle_origin) so the preview rolls what Run rolls", async () => {
+    const { relevantModuleForTest } = await import("./assembler");
+    const out = relevantModuleForTest({
+      id: "808878ba", _uid: "a1b2c3", bundle_origin: "b9", type: "wildcard", enabled: true, collapsed: true,
+      payload: {}, meta: { name: "Hero", description: "x" },
+    }) as Record<string, unknown>;
+    expect(out._uid).toBe("a1b2c3");
+    expect(out.bundle_origin).toBe("b9");
+    expect(out.collapsed).toBeUndefined();
+    const bare = relevantModuleForTest({ id: "808878ba", type: "wildcard", enabled: true }) as Record<string, unknown>;
+    expect("_uid" in bare).toBe(false);
+    expect("bundle_origin" in bare).toBe(false);
+  });
+});
+
+describe("negatives opt-in on load", () => {
+  const node = (value: unknown) => ({
+    id: 1,
+    widgets: [{ name: "negative_template", value }],
+    properties: {} as Record<string, unknown>,
+  });
+  const neg = (n: ReturnType<typeof node>) => n.widgets[0]?.value;
+
+  it("a node saved before the change gets $negatives, so it prints the same", async () => {
+    const { migrateNegativeOptIn, NEG_SLOT_PROP } = await import("./assembler");
+    const empty = node("");
+    migrateNegativeOptIn(empty as never, { properties: {} });
+    expect(neg(empty)).toBe("$negatives");
+    expect(empty.properties[NEG_SLOT_PROP]).toBe(true);
+    const text = node("lowres, watermark");
+    migrateNegativeOptIn(text as never, {});
+    expect(neg(text)).toBe("lowres, watermark, $negatives");
+  });
+
+  it("a node saved after the change keeps its box, even an empty one", async () => {
+    const { migrateNegativeOptIn, NEG_SLOT_PROP } = await import("./assembler");
+    const n = node("");
+    migrateNegativeOptIn(n as never, { properties: { [NEG_SLOT_PROP]: true } });
+    expect(neg(n)).toBe("");
+  });
+
+  it("a new node is marked", async () => {
+    const { markNegativeOptIn, NEG_SLOT_PROP } = await import("./assembler");
+    const n = node("$negatives");
+    markNegativeOptIn(n as never);
+    expect(n.properties[NEG_SLOT_PROP]).toBe(true);
+  });
+
+  it("a new node's empty box starts with $negatives; a box with text is left alone", async () => {
+    const { prefillNegativeSlot } = await import("./assembler");
+    const empty = node("");
+    prefillNegativeSlot(empty as never);
+    expect(neg(empty)).toBe("$negatives");
+    const text = node("lowres");
+    prefillNegativeSlot(text as never);
+    expect(neg(text)).toBe("lowres");
   });
 });

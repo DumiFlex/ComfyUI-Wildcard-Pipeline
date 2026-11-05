@@ -9,21 +9,11 @@ import { deriveLoopSeeds } from "../shared/seed-derive";
 describe("SeedListWidget", () => {
   it("renders defaults — hash chip active, all three override switches off", () => {
     const w = mount(SeedListWidget, { props: { modelValue: emptySeedListConfig() } });
-    expect(w.find('[data-test="seedlist-strategy-hash_index"]').classes()).toContain(
-      "wp-seedlist__chip--active",
-    );
-    expect(w.find('[data-test="seedlist-strategy-sequential"]').classes()).not.toContain(
-      "wp-seedlist__chip--active",
-    );
-    expect(w.find('[data-test="seedlist-override-seed-toggle"]').classes()).not.toContain(
-      "wp-seedlist__switch--on",
-    );
-    expect(w.find('[data-test="seedlist-override-count-toggle"]').classes()).not.toContain(
-      "wp-seedlist__switch--on",
-    );
-    expect(w.find('[data-test="seedlist-override-strategy-toggle"]').classes()).not.toContain(
-      "wp-seedlist__switch--on",
-    );
+    expect(w.find('[data-test="seedlist-strategy-hash_index"]').attributes("aria-checked")).toBe("true");
+    expect(w.find('[data-test="seedlist-strategy-sequential"]').attributes("aria-checked")).toBe("false");
+    expect(w.find('[data-test="seedlist-override-seed-toggle"]').attributes("aria-checked")).toBe("false");
+    expect(w.find('[data-test="seedlist-override-count-toggle"]').attributes("aria-checked")).toBe("false");
+    expect(w.find('[data-test="seedlist-override-strategy-toggle"]').attributes("aria-checked")).toBe("false");
   });
 
   it("emits new strategy on chip click", async () => {
@@ -102,23 +92,17 @@ describe("SeedListWidget", () => {
     const w = mount(SeedListWidget, {
       props: { modelValue: { ...emptySeedListConfig(), strategy: "prime_stride" } },
     });
-    expect(w.find('[data-test="seedlist-strategy-prime_stride"]').classes()).toContain(
-      "wp-seedlist__chip--active",
-    );
-    expect(w.find('[data-test="seedlist-strategy-hash_index"]').classes()).not.toContain(
-      "wp-seedlist__chip--active",
-    );
+    expect(w.find('[data-test="seedlist-strategy-prime_stride"]').attributes("aria-checked")).toBe("true");
+    expect(w.find('[data-test="seedlist-strategy-hash_index"]').attributes("aria-checked")).toBe("false");
   });
 
   it("locks strategy chips when override_strategy is on", () => {
     const w = mount(SeedListWidget, {
       props: { modelValue: { ...emptySeedListConfig(), override_strategy: true } },
     });
-    // Wrapper gets the dim class.
-    expect(w.find(".wp-seedlist__chips").classes()).toContain("wp-seedlist__chips--locked");
-    // Every chip carries the disabled HTML attr (which is what actually
-    // blocks click events — pointer-events:none would kill the hover
-    // tooltip + cursor change).
+    // The group reads as disabled.
+    expect(w.find('[data-test="seedlist-strategy"]').attributes("aria-disabled")).toBe("true");
+    // Every option carries the disabled attribute, which blocks clicks.
     for (const id of ["hash_index", "sequential", "prime_stride"] as const) {
       const btn = w.find(`[data-test="seedlist-strategy-${id}"]`);
       expect(btn.attributes("disabled")).toBeDefined();
@@ -131,7 +115,7 @@ describe("SeedListWidget", () => {
     const w = mount(SeedListWidget, {
       props: { modelValue: { ...emptySeedListConfig(), override_count: true } },
     });
-    expect(w.find(".wp-seedlist__chips").classes()).not.toContain("wp-seedlist__chips--locked");
+    expect(w.find('[data-test="seedlist-strategy"]').attributes("aria-disabled")).toBeUndefined();
     expect(
       w.find('[data-test="seedlist-strategy-hash_index"]').attributes("disabled"),
     ).toBeUndefined();

@@ -12,6 +12,7 @@ import {
   collectUpstreamResolved,
   findRootGraph,
   internalVarNames,
+  resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
@@ -19,6 +20,8 @@ import { reactiveFromGraph } from "../extension/reactive";
 import { pushToast } from "../components/shared/toast-store";
 import { templateInsertAtCaret } from "../extension/_stashes";
 import type { NegativesTable } from "../extension/negatives";
+import { withSlot } from "../extension/assembler-vars";
+import { applySeedLocks, deriveLoopSeeds } from "../components/shared/seed-derive";
 
 const PREVIEW_SEED = 42;
 
@@ -27,7 +30,7 @@ const AssemblerHelper = defineAsyncComponent(() => import("../components/assembl
 // keeping them out of the assembler critical chunk (bundle-size gate).
 const SaveTemplateModal = defineAsyncComponent(() => import("../components/assembler/SaveTemplateModal.vue"));
 const LoadTemplateModal = defineAsyncComponent(() => import("../components/assembler/LoadTemplateModal.vue"));
-const ConfirmDialog = defineAsyncComponent(() => import("../components/shared/ConfirmDialog.vue"));
+const ConfirmModal = defineAsyncComponent(() => import("@/kit/ConfirmModal.vue"));
 
 interface AssemblerNode extends LiteNodeLike, MountTargetNode {
   widgets?: { name: string; value: unknown }[];
@@ -67,6 +70,41 @@ function negativeTemplateOf(node: AssemblerNode): string {
 function writeNegativeTemplate(node: AssemblerNode, next: string) {
   const w = negativeTemplateWidget(node);
   if (w) w.value = next;
+}
+
+/** `node.properties` key marking an Assembler whose negative box follows the
+ *  opt-in rule (no `$negatives` = only the box's own text). Every new node
+ *  gets it; a node loaded without it was saved under the old rule and gets
+ *  `$negatives` added once (`withSlot`), so it prints the same negative. */
+export const NEG_SLOT_PROP = "wp_negatives_opt_in";
+
+/** Mark a freshly created Assembler: its default box already has the slot. */
+export function markNegativeOptIn(node: AssemblerNode): void {
+  const n = node as { properties?: Record<string, unknown> };
+  if (!n.properties) n.properties = {};
+  n.properties[NEG_SLOT_PROP] = true;
+}
+
+/** Start a NEW Assembler's negative box with `$negatives`. The box is our
+ *  own DOM widget, which ComfyUI never fills from the input's default, so the
+ *  node def's `default="$negatives"` alone left it empty. Runs from
+ *  `onNodeCreated`, before a loaded workflow writes its saved value over it. */
+export function prefillNegativeSlot(node: AssemblerNode): void {
+  const w = negativeTemplateWidget(node);
+  if (w && (w.value === "" || w.value == null)) w.value = withSlot("");
+}
+
+/** After a workflow load: an Assembler saved before negatives became opt-in
+ *  (its saved properties lack the mark) gets `$negatives` added to its box. */
+export function migrateNegativeOptIn(node: AssemblerNode, info: unknown): void {
+  const saved = (info as { properties?: Record<string, unknown> } | null | undefined)?.properties;
+  if (saved?.[NEG_SLOT_PROP] !== true) {
+    const w = negativeTemplateWidget(node);
+    if (w && (typeof w.value === "string" || w.value == null)) {
+      w.value = withSlot(typeof w.value === "string" ? w.value : "");
+    }
+  }
+  markNegativeOptIn(node);
 }
 
 /** Library identity of the template currently loaded into this
@@ -113,6 +151,8 @@ interface UpstreamSnapshot {
    *  the fetch trigger and the fetch body share a single source of
    *  truth; the snapshot recomputes whenever the host graph changes. */
   chain: unknown[][];
+  /** One seed per chain step (null = the preview's own), see `previewSeeds`. */
+  seeds: (number | null)[];
   /** Sync fallback: client-side option-[0] resolution. Shown until
    *  the API resolves OR when the API is unreachable. */
   fallbackResolved: Record<string, ResolvedValue>;
@@ -157,6 +197,9 @@ function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
  * the preview cache:
  *
  *   - id, type, enabled — module identity + skip flag
+ *   - _uid, bundle_origin — the instance's random-stream key (engine
+ *                            `__wp_instance_key__`); without them the
+ *                            preview rolls other picks than Run
  *   - payload, entries  — what handlers actually read
  *   - meta.name         — surfaces in the wildcard catalog name
  *   - instance.{relevant subset} — overrides the handlers consume
@@ -194,12 +237,26 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "internal",
   // combine v2 (2026-05-08 syntax-parity cycle):
   "template_override",
+  "negative_override",
   // fixed_values:
   "values_overrides",
   // Tier 2:
   "disabled_rule_ids",
   "disabled_exception_keys",
   "disabled_matrix_cells",
+  // Per-node edits the handlers read too: without them the preview rolled
+  // the library item while Run used this node's version.
+  "target_select",
+  "seed_scope",
+  "extra_exceptions",
+  "cell_mode_overrides",
+  "cell_factor_overrides",
+  "exception_mode_overrides",
+  "exception_factor_overrides",
+  "condition_value_overrides",
+  "action_value_overrides",
+  "disabled_branch_keys",
+  "rule_order_override",
 ]);
 
 /** Test-only export. Allows whitelist invariants to be asserted without
@@ -214,6 +271,11 @@ function relevantModule(m: unknown): unknown {
     type: src.type,
     enabled: src.enabled,
   };
+  // Each instance rolls on its own stream, keyed by bundle copy + `_uid`
+  // (engine/pipeline.py `__wp_instance_key__`), so the preview needs both
+  // to print what Run prints for the same seed.
+  if (typeof src._uid === "string" && src._uid) out._uid = src._uid;
+  if (typeof src.bundle_origin === "string" && src.bundle_origin) out.bundle_origin = src.bundle_origin;
   if (src.payload !== undefined) out.payload = src.payload;
   if (src.entries !== undefined) out.entries = src.entries;
   if (src.meta && typeof src.meta === "object") {
@@ -232,6 +294,9 @@ function relevantModule(m: unknown): unknown {
   }
   return out;
 }
+
+/** Test-only export of {@link relevantModule}. */
+export const relevantModuleForTest = relevantModule;
 
 function relevantChain(chain: unknown[][]): unknown[][] {
   return chain.map((step) => step.map(relevantModule));
@@ -269,6 +334,24 @@ function hashChain(chain: unknown[][]): string {
     h = Math.imul(h, 16777619) >>> 0;
   }
   return `${s.length}-${h.toString(16)}`;
+}
+
+/** The seed each chain step rolls at run time, so the preview shows what
+ *  Run will print and changes with the Context's seed: its own `seed`
+ *  widget, or frame 0 of a Context Loop upstream that overrides seeds.
+ *  Null steps (model / toggles, or an unreadable seed) use PREVIEW_SEED. */
+function previewSeeds(
+  g: LiteGraphLike,
+  node: LiteNodeLike,
+  widgetSeeds: (number | null)[],
+): (number | null)[] {
+  const loop = resolveUpstreamLoopSeed(g, node);
+  if (!loop?.overrideSeed) return widgetSeeds;
+  const first = applySeedLocks(
+    deriveLoopSeeds(loop.baseSeed, loop.count, loop.strategy),
+    loop.seedLocks,
+  )[0];
+  return widgetSeeds.map((s) => (s === null ? null : (first ?? s)));
 }
 
 export function mountHelper(node: AssemblerNode) {
@@ -329,7 +412,9 @@ export function mountHelper(node: AssemblerNode) {
             (node as unknown as { graph?: LiteGraphLike }).graph
             ?? (app.graph as unknown as LiteGraphLike);
           const g = findRootGraph(startGraph);
-          const chain = collectUpstreamChain(g, node, { modelSteps: true });
+          const seeds: (number | null)[] = [];
+          const chain = collectUpstreamChain(g, node, { modelSteps: true, seeds });
+          const stepSeeds = previewSeeds(g, node, seeds);
           // `collectUpstreamResolved` now returns the full ctx,
           // including user-flagged internal vars (engine commit a345bd4
           // propagates them across socket boundaries; only the prompt
@@ -359,8 +444,9 @@ export function mountHelper(node: AssemblerNode) {
             }
           }
           return {
-            chainKey: hashChain(chain),
+            chainKey: `${hashChain(chain)}:${stepSeeds.join(",")}`,
             chain,
+            seeds: stepSeeds,
             fallbackResolved,
             varAxes,
             injectorKeys: collectUpstreamInjectorBindings(g, node),
@@ -406,7 +492,7 @@ export function mountHelper(node: AssemblerNode) {
         fetch("/wp/api/preview/resolve", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chain, seed: PREVIEW_SEED }),
+          body: JSON.stringify({ chain, seed: PREVIEW_SEED, seeds: snapshot.value.seeds }),
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((body: {
@@ -571,7 +657,7 @@ export function mountHelper(node: AssemblerNode) {
             onClearTemplate: () => {
               askConfirm({
                 title: "Clear the template?",
-                body: "This wipes the entire template text. This can't be undone.",
+                body: "This wipes the template and the negative template. This can't be undone.",
                 variant: "danger",
                 confirmLabel: "Clear template",
                 action: () => {
@@ -633,8 +719,9 @@ export function mountHelper(node: AssemblerNode) {
               // Confirm only when overwriting non-empty work; loading
               // onto an empty template applies immediately. The negative box
               // counts only when the loaded row would overwrite it.
+              const negNow = negativeTemplateOf(node).trim();
               const negativeAtRisk =
-                typeof row.negative_template === "string" && negativeTemplateOf(node).trim() !== "";
+                typeof row.negative_template === "string" && negNow !== "" && negNow !== withSlot("");
               if (templateOf(node).trim() || negativeAtRisk) {
                 askConfirm({
                   title: "Replace the current template?",
@@ -648,11 +735,11 @@ export function mountHelper(node: AssemblerNode) {
               }
             },
           }),
-          h(ConfirmDialog, {
-            visible: confirmState.value.open,
+          h(ConfirmModal, {
+            open: confirmState.value.open,
             title: confirmState.value.title,
             body: confirmState.value.body,
-            variant: confirmState.value.variant,
+            tone: confirmState.value.variant === "danger" ? "danger" : "accent",
             confirmLabel: confirmState.value.confirmLabel,
             onConfirm: () => {
               confirmState.value.action();
@@ -675,7 +762,7 @@ export function mountHelper(node: AssemblerNode) {
     // user-stuck tall size kept a dead band below the template input.
     autoHeight: true,
   });
-  attachThemeDetector(assemblerHost.widget.element, app);
+  assemblerHost.onCleanup(attachThemeDetector(assemblerHost.widget.element, app));
 }
 
 function insertIntoTemplate(node: AssemblerNode, token: string) {
@@ -727,7 +814,9 @@ function escapeRegex(s: string): string {
 }
 
 /** Wipe the entire template string. */
-function clearTemplate(node: AssemblerNode) {
+/** Empties the template and, with it, the negative template. */
+export function clearTemplate(node: AssemblerNode) {
   const w = templateWidget(node);
   if (w) w.value = "";
+  writeNegativeTemplate(node, "");
 }

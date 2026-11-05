@@ -104,3 +104,29 @@ export const nodeCollapseAnimating: WeakSet<object> = new WeakSet();
  *  entry ⇒ the editor hasn't mounted yet, and callers fall back to a
  *  value-level append. */
 export const templateInsertAtCaret: WeakMap<object, (token: string) => void> = new WeakMap();
+
+/** Seed capture from a WP_Context run's `executed` UI payload
+ *  (`widgets/context.ts`), read back by the seed-lock toggles. Session
+ *  state, so WeakMaps rather than string keys on the node. Replaces the
+ *  previous string properties `__wp_last_used_seed__` (chain seed),
+ *  `__wp_last_used_per_module__` (moduleId → effective seed) and
+ *  `__wp_loop_seeds__` (the Loop's per-iteration series). */
+export const nodeLastUsedSeed: WeakMap<object, number> = new WeakMap();
+export const nodeLastUsedPerModule: WeakMap<object, Record<string, number>> = new WeakMap();
+export const nodeLoopSeeds: WeakMap<object, number[]> = new WeakMap();
+
+/** Previous run's `loop_seeds` series for a Context Loop / Seed List node
+ *  (`widgets/_seed-capture.ts`), driving the seed modal's "lock previous".
+ *  Replaces the string property `__wp_prev_seeds__`. */
+export const nodePrevSeeds: WeakMap<object, number[]> = new WeakMap();
+
+/** A bookmark's live config cell and writer (`widgets/bookmark.ts`), so
+ *  the dock, the key listener and the hidden-node filter read the same
+ *  state the node's widget edits. A WP Note that is also a bookmark has a
+ *  cell of kind "note", whose `get` is null while its switch is off. */
+export const bookmarkCells: WeakMap<object, { get(): unknown; set(next: unknown): void; kind?: "note" }> = new WeakMap();
+
+/** Opens a node's edit view (`extension/node-toolbar.ts`): the pencil in
+ *  ComfyUI's selection toolbar calls it. Registered by the widget glue of
+ *  each node with an edit view (WP Toggles, WP Bookmark, WP Note). */
+export const nodeEditors: WeakMap<object, () => void> = new WeakMap();

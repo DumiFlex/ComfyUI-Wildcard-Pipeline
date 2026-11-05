@@ -1,14 +1,15 @@
 <script setup lang="ts">
 /**
- * BulkDeleteToolbar — minimal bulk-action bar for editors whose rows have
- * nothing to bulk-set (fixed-values, constraint exceptions, derivation
- * rules): just "N selected" + Delete + Clear. The richer wildcard bar
- * (apply/remove sub-category, set weight) is SelectionToolbar.
+ * BulkDeleteToolbar — the kit SelectionBar with one action, Delete, for
+ * editors whose rows have nothing to bulk-set (fixed-values, constraint
+ * exceptions, derivation rules). The richer wildcard bar (apply/remove
+ * sub-category, set weight) is SelectionToolbar.
  *
  * Presentational: emits `delete-selected` / `clear`; the host mutates rows +
  * tracks dirty.
  */
-import Button from "./ui/Button.vue";
+import Button from "@/kit/Button.vue";
+import SelectionBar from "@/kit/SelectionBar.vue";
 
 defineProps<{
   count: number;
@@ -23,9 +24,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="wpc-deltoolbar" role="toolbar" aria-label="Bulk actions">
-    <span class="wpc-deltoolbar__count">{{ count }} selected</span>
-    <div class="wpc-deltoolbar__spacer"></div>
+  <SelectionBar :count="count" @clear="emit('clear')">
     <Button
       variant="danger"
       size="sm"
@@ -34,26 +33,5 @@ const emit = defineEmits<{
       data-test="bulk-delete"
       @click="emit('delete-selected')"
     >Delete{{ noun ? ` ${count} ${noun}` : "" }}</Button>
-    <Button variant="ghost" size="sm" @click="emit('clear')">Clear</Button>
-  </div>
+  </SelectionBar>
 </template>
-
-<style scoped>
-.wpc-deltoolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in oklab, var(--wp-accent) 40%, transparent);
-  border-radius: 8px;
-  background: color-mix(in oklab, var(--wp-accent) 12%, var(--wp-bg-2));
-  flex-wrap: wrap;
-}
-.wpc-deltoolbar__count {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--wp-text);
-  white-space: nowrap;
-}
-.wpc-deltoolbar__spacer { flex: 1; }
-</style>

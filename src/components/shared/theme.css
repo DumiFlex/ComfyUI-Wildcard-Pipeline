@@ -1,16 +1,26 @@
 /* Theme tokens shared across WP widgets.
  * Brand palette pinned to public/images/favicon.svg — indigo / violet / teal.
  *
- * NOT wrapped in `@layer wp-extension` even though we wrap the
- * extension's other CSS in that layer for cascade-priority isolation.
- * The reason: Vue's <style scoped> scoper (`@vue/compiler-sfc`)
- * can't parse `@layer` at-rules in CSS that gets @imported into a
- * scoped block, and theme.css IS imported into both scoped and
- * unscoped Vue style blocks. Rules below are `:root` custom-property
- * definitions + `.wp-*` and `.var-*` prefixed classes; the namespace
- * prefix is the primary isolation here.
+ * Loaded ONCE, from `extension/settings.ts` (canvas boot chunk); the
+ * manager never loads it. Never `@import` it from an SFC style block:
+ * each import inlined the whole sheet into that component's lazy chunk
+ * (15 copies on the canvas), and inside `<style scoped>` the `:root`
+ * blocks get scoped and match nothing. `theme.test.ts` guards this.
+ *
+ * NOT wrapped in `@layer wp-extension` (unlike the extension's other
+ * CSS): the `.wp-*` / `.var-*` classes below must keep beating ComfyUI's
+ * own unlayered rules the way they did while the sheet was imported
+ * per SFC. Rules are `:root` custom-property definitions + `.wp-*` and
+ * `.var-*` prefixed classes; the namespace prefix is the isolation here.
+ *
+ * The colour blocks skip `html.wp-manager`: the manager has its own tokens
+ * with the same names, so a canvas piece mounted there (the component kit)
+ * would repaint it. A canvas piece that can show in the manager puts
+ * `wp-canvas-scope` on its own root to get these. Shared pieces
+ * (ModalShell, ContextMenu, Popover, the tooltip) use names both sides define instead,
+ * so they wear the colours of whichever side they are on.
  */
-:root {
+:root:not(.wp-manager), .wp-canvas-scope {
   /* Backgrounds — match ComfyUI's node interior */
   --wp-bg: #1e1e1e;
   --wp-bg2: #232323;
@@ -57,6 +67,9 @@
   /* Geometry */
   --wp-radius: 6px;
   --wp-radius-sm: 4px;
+  /* The roundest a corner may get. The manager's square looks lower it
+   * (kit/theme/looks.css); the canvas never does. */
+  --wp-radius-cap: 999px;
 
   /* Typography — bundled webfonts (Inter + JetBrains Mono) loaded via
    * src/extension/fonts.ts. System stacks remain as fallback so the UI
@@ -82,14 +95,16 @@
   --wp-text-muted: var(--wp-text2);
   --wp-text-dim:   var(--wp-text3);
 
-  /* SPA accent ramp (purple/indigo). Graph-side previously had only two
-   * shades — fill in the missing rungs so chips/buttons gradients work. */
-  --wp-accent-300: #c4b5fd;
-  --wp-accent-400: #a78bfa;
-  --wp-accent-500: #8b5cf6;
-  --wp-accent-600: #7c3aed;
+  /* Orbit accent ramp (indigo, same values as the manager's tokens.css).
+   * --wp-accent above is the -500 rung; filled controls use -600. */
+  --wp-accent-300: #a5b4fc;
+  --wp-accent-400: #818cf8;
+  --wp-accent-500: #6366f1;
+  --wp-accent-600: #4f46e5;
+  --wp-accent-700: #4338ca;
+  --wp-accent-800: #3730a3;
   --wp-accent-text:        var(--wp-accent-300);
-  --wp-accent-text-strong: #ddd6fe;
+  --wp-accent-text-strong: #c7d2fe;
 
   /* Kind colors — keyed by module type. Same hex values the SPA tokens.css
    * defines so `data-kind="..."` styling stays visually consistent across
@@ -158,9 +173,9 @@
    *   - lg: full overlay shadow for top-level dialogs
    * Light theme overrides below dial these down — pure black at 0.5
    * alpha reads harsh on near-white surfaces. */
-  --wp-shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --wp-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
-  --wp-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --wp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --wp-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.28);
+  --wp-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
   --wp-overlay-bg: rgba(0, 0, 0, 0.55);
   /* Row hover + scrollbar thumb tokens. Pre-Phase 4 these were
    * inline `rgba(255, 255, 255, 0.02-0.08)` literals — invisible on
@@ -193,6 +208,13 @@
    * Used by the ContextWidget modified-dot so it visually pairs 1:1 with
    * SPA `.wp-io-badge--mod` ("user diff from upstream"). */
   --wp-status-modified: #fb923c;
+  /* A constraint's axis (tag group) colour, as in the manager. */
+  --wp-axis: #fbbf24;
+  /* Text on a solid accent fill and over a picture, and the scrim that darkens
+     a picture to read on it: the same in both themes (kit shared tokens). */
+  --wp-on-accent: #fff;
+  --wp-on-media: #fff;
+  --wp-scrim: rgba(0, 0, 0, 0.55);
 
   /* Alias `--wp-font` → `--wp-font-sans` so SPA-derived components that
    * reference the shorter name resolve to the same Inter stack. */
@@ -230,6 +252,27 @@
   --wp-motion-curve-collapse: cubic-bezier(0.4, 0, 0.2, 1);    /* Material standard */
   --wp-motion-curve-flip:     cubic-bezier(0.22, 1, 0.36, 1);  /* decel-heavy */
   --wp-motion-curve-linear:   linear;                          /* opacity masks */
+
+  /* ── Shared names (2026-10-27) ──────────────────────────────────────
+   * Names the manager already has, given canvas values, so one shared
+   * component (components/shared/) reads the same names on both sides
+   * and wears each side's colours. The list both files must keep is
+   * SHARED_TOKENS in components/shared/shared-tokens.test.ts. */
+  --wp-border-focus: var(--wp-accent);
+  --wp-focus-ring: 0 0 0 2px color-mix(in srgb, var(--wp-accent) 45%, transparent);
+  --wp-danger-text: #fca5a5;
+  --wp-error-border: var(--wp-danger);
+  --wp-error-text: var(--wp-danger);
+  --wp-radius-md: var(--wp-radius);
+  --wp-radius-xl: 16px;
+  --wp-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --wp-shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --wp-text-xl: 20px;
+  /* The control height scale (docs/component-standard.md); the canvas
+   * draws at sm. */
+  --wp-control-h-sm: 24px;
+  --wp-control-h-md: 32px;
+  --wp-control-h-lg: 40px;
 }
 
 /* ── Phase 5.5.7 — light theme overrides + canvas/node namespace ───────
@@ -241,7 +284,7 @@
  * frame visually matches the surrounding ComfyUI chrome regardless of
  * theme. */
 
-:root, .wp-theme-dark {
+:root:not(.wp-manager), .wp-theme-dark:not(.wp-manager), .wp-canvas-scope {
   --wp-canvas-bg:   #161618;
   --wp-node-bg:     #353535;
   --wp-node-bg-2:   #2c2c2c;
@@ -254,7 +297,7 @@
   --wp-border-soft: #444;
 }
 
-.wp-theme-light {
+.wp-theme-light:not(.wp-manager), .wp-theme-light .wp-canvas-scope {
   --wp-bg:    #e8e8e8;
   --wp-bg-1:  #f5f5f5;
   --wp-bg-2:  #fff;
@@ -284,8 +327,8 @@
   --wp-text-dim:    #888;
 
   /* Accent text adjusted for contrast on near-white surfaces. */
-  --wp-accent-text:        #6d28d9;
-  --wp-accent-text-strong: #5b21b6;
+  --wp-accent-text:        var(--wp-accent-700);
+  --wp-accent-text-strong: var(--wp-accent-800);
 
   /* Bundle default — slate-700 for AA contrast on light bg. */
   --wp-bundle-default:     #334155;  /* slate-700 — 9.18:1 on white */
@@ -326,9 +369,12 @@
    * dark-theme alpha reads harsh on near-white. Pull alpha down +
    * shift toward a slightly cool ink so cards feel grounded without
    * looking like they're punched into the page. */
-  --wp-shadow-sm: 0 2px 8px rgba(15, 15, 30, 0.08);
-  --wp-shadow-md: 0 4px 14px rgba(15, 15, 30, 0.10);
-  --wp-shadow-lg: 0 12px 40px rgba(15, 15, 30, 0.12);
+  --wp-shadow-sm: 0 1px 2px rgba(15, 15, 30, 0.06);
+  --wp-shadow-md: 0 1px 2px rgba(15, 15, 30, 0.06), 0 4px 12px rgba(15, 15, 30, 0.10);
+  --wp-shadow-lg: 0 8px 24px rgba(15, 15, 30, 0.12);
+  --wp-shadow:    0 2px 8px rgba(15, 15, 30, 0.08);
+  --wp-shadow-xl: 0 16px 40px rgba(15, 15, 30, 0.16);
+  --wp-danger-text: var(--wp-danger);
   --wp-overlay-bg: rgba(15, 15, 30, 0.30);
   /* Row hover + scrollbar — invert the dark-theme white tint to a
    * dark tint so subtle surfaces remain visible on light bg. */
@@ -362,7 +408,7 @@
  * Hues chosen for contrast on `--wp-bg` (dark) AND `--wp-bg-2` (light)
  * surfaces. Pulled from a deliberate rainbow; light theme keeps the
  * same hues since saturation reads on both backgrounds. */
-:root, .wp-theme-dark {
+:root:not(.wp-manager), .wp-theme-dark:not(.wp-manager), .wp-canvas-scope {
   --wp-var-1: #93c5fd;  /* sky blue */
   --wp-var-2: #fcd34d;  /* amber */
   --wp-var-3: #86efac;  /* mint */
@@ -375,7 +421,7 @@
 
 /* Light theme — bump every var hue to its *-700 family for AA contrast
  * on near-white page surfaces. Same hues, deeper shades. */
-.wp-theme-light {
+.wp-theme-light:not(.wp-manager), .wp-theme-light .wp-canvas-scope {
   --wp-var-1: #0369a1;  /* sky-700      4.84:1 on white */
   --wp-var-2: #b45309;  /* amber-700    4.85:1 on white */
   --wp-var-3: #047857;  /* emerald-700  4.91:1 on white */

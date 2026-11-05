@@ -1,0 +1,26 @@
+{
+  "totals": {
+    "native-select": 0,
+    "native-number": 0,
+    "native-checkbox": 0,
+    "native-range": 0,
+    "inline-svg": 0,
+    "hand-dialog": 0,
+    "raw-button": 0,
+    "raw-input": 0,
+    "raw-textarea": 0,
+    "raw-teleport": 0,
+    "raw-hex": 0
+  },
+  "native-select": {},
+  "native-number": {},
+  "native-checkbox": {},
+  "native-range": {},
+  "inline-svg": {},
+  "hand-dialog": {},
+  "raw-button": {},
+  "raw-input": {},
+  "raw-textarea": {},
+  "raw-teleport": {},
+  "raw-hex": {}
+}

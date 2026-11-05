@@ -31,6 +31,8 @@ import type { VarProducerLike } from "../../../../../manager/components/RefChip.
 import { patchInstance } from "../../instance/patch";
 import { varColorClass } from "../../../../shared/var-color";
 import RuleValueChips from "./RuleValueChips.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
+import Disclosure from "@/kit/Disclosure.vue";
 import { tokenizeRich } from "../../../../../widgets/richTokenize";
 import PairBadge from "../../../PairBadge.vue";
 import {
@@ -41,6 +43,7 @@ import {
   isConditionGroup,
   matchWord,
 } from "../../../../../extension/derivation-conditions";
+import Button from "@/kit/Button.vue";
 
 // Async-import the rich-text editor so its chunk stays split + is only
 // pulled in when a derivation instance modal expands a rule. RichTextInput
@@ -401,7 +404,9 @@ function opSymbol(op: string | undefined): string {
     case "equals": return "=";
     case "not_equals": return "≠";
     case "contains": return "contains";
+    case "not_contains": return "lacks";
     case "matches": return "matches";
+    case "not_matches": return "doesn't match";
     case "exists": return "exists";
     case "not_exists": return "absent";
     case "is_set": return "is set";
@@ -601,99 +606,91 @@ function condRows(cond: unknown, bi: number): CondRow[] {
         @drop="(ev) => onRuleDrop(rule.id, ev)"
         @dragend="onRuleDragEnd"
       >
-        <!-- Head row -->
-        <button
-          type="button"
-          class="rule-head"
-          :data-test="`rule-head-${rule.id}`"
-          :aria-expanded="isExpanded(rule.id)"
-          @click="toggleExpand(rule.id)"
+        <Disclosure
+          class="rule-disc"
+          size="sm"
+          lazy
+          :open="isExpanded(rule.id)"
+          :trigger-attrs="{ 'data-test': `rule-head-${rule.id}` }"
+          @update:open="toggleExpand(rule.id)"
         >
-          <i
-            :class="['pi', isExpanded(rule.id) ? 'pi-chevron-down' : 'pi-chevron-right']"
-            class="rule-head__caret"
-            aria-hidden="true"
-          />
-          <span
-            class="rule-head__toggle"
-            :class="{ 'rule-head__toggle--on': isRuleEnabled(rule) }"
-            :data-test="`rule-toggle-${rule.id}`"
-            role="switch"
-            :aria-checked="isRuleEnabled(rule)"
-            :aria-label="isRuleEnabled(rule) ? `Disable rule ${rule.id}` : `Enable rule ${rule.id}`"
-            @click.stop="toggleRule(rule)"
-          >
-            <i :class="['pi', isRuleEnabled(rule) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
-          </span>
+          <template #summary>
+            <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
+            <i
+              v-if="ruleBrokenRefs(rule).length"
+              class="pi pi-exclamation-triangle rule-head__broken"
+              :title="`${ruleBrokenRefs(rule).join(', ')} not in the library`"
+              :data-test="`rule-broken-${rule.id}`"
+            />
 
-          <span class="rule-head__num" :title="`Rule id ${rule.id}`">Rule {{ ruleIdx + 1 }}</span>
-          <i
-            v-if="ruleBrokenRefs(rule).length"
-            class="pi pi-exclamation-triangle rule-head__broken"
-            :title="`${ruleBrokenRefs(rule).join(', ')} not in the library`"
-            :data-test="`rule-broken-${rule.id}`"
-          />
-
-          <span
-            class="rule-head__summary"
-            :title="ruleSummaryText(rule)"
-            :data-test="`rule-summary-${rule.id}`"
-          >
-            <template v-if="rule.branches && rule.branches.length > 0">
-              <template v-for="(part, pi) in condParts(rule.branches[0].condition)" :key="pi">
-                <span
-                  v-if="part.kind === 'var'"
-                  :class="['rule-tok-var', varColorClass(part.text)]"
-                >${{ part.text }}</span>
-                <span
-                  v-else-if="part.kind === 'val'"
-                  class="rule-tok-val"
-                ><RuleValueChips :value="clampPreviewValue(part.text)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
-                <span v-else-if="part.kind === 'join'" class="rule-tok-join">{{ part.text }}</span>
-                <span v-else class="rule-tok-op">{{ part.text }}</span>
+            <span
+              class="rule-head__summary"
+              :title="ruleSummaryText(rule)"
+              :data-test="`rule-summary-${rule.id}`"
+            >
+              <template v-if="rule.branches && rule.branches.length > 0">
+                <template v-for="(part, pi) in condParts(rule.branches[0].condition)" :key="pi">
+                  <span
+                    v-if="part.kind === 'var'"
+                    :class="['rule-tok-var', varColorClass(part.text)]"
+                  >${{ part.text }}</span>
+                  <span
+                    v-else-if="part.kind === 'val'"
+                    class="rule-tok-val"
+                  ><RuleValueChips :value="clampPreviewValue(part.text)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                  <span v-else-if="part.kind === 'join'" class="rule-tok-join">{{ part.text }}</span>
+                  <span v-else class="rule-tok-op">{{ part.text }}</span>
+                </template>
+                <span class="rule-tok-arrow">→</span>
+                <template v-for="(a, ai) in acts(rule.branches[0])" :key="ai">
+                  <span v-if="ai > 0" class="rule-tok-join">AND</span>
+                  <span
+                    v-if="a.target_var"
+                    :class="['rule-tok-var', varColorClass(a.target_var)]"
+                  >${{ a.target_var }}</span>
+                  <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': isNegativeMode(a.mode) }" :title="modeTitle(a.mode)">{{ modeLabel(a.mode) }}</span>
+                  <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
+                </template>
+                <!-- Inline ↪#N constraint-pair badge — rendered when this
+                     derivation is a constraint carrier through the IF branch's
+                     nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
+                     so the summary reads "@{tint} ↪#1". -->
+                <PairBadge
+                  v-for="p in pairBadgesFor(rule.id, 0)"
+                  :key="`${p.number}-${p.targetUuid}`"
+                  :pair="p"
+                  variant="option"
+                />
               </template>
-              <span class="rule-tok-arrow">→</span>
-              <template v-for="(a, ai) in acts(rule.branches[0])" :key="ai">
-                <span v-if="ai > 0" class="rule-tok-join">AND</span>
-                <span
-                  v-if="a.target_var"
-                  :class="['rule-tok-var', varColorClass(a.target_var)]"
-                >${{ a.target_var }}</span>
-                <span class="rule-tok-op" :class="{ 'rule-tok-op--neg': isNegativeMode(a.mode) }" :title="modeTitle(a.mode)">{{ modeLabel(a.mode) }}</span>
-                <span class="rule-tok-val"><RuleValueChips :value="clampPreviewValue(a.value)" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware /></span>
-              </template>
-              <!-- Inline ↪#N constraint-pair badge — rendered when this
-                   derivation is a constraint carrier through the IF branch's
-                   nested `@{uuid}` ref. Mirrors OptionRow's per-option badge
-                   so the summary reads "@{tint} ↪#1". -->
-              <PairBadge
-                v-for="p in pairBadgesFor(rule.id, 0)"
-                :key="`${p.number}-${p.targetUuid}`"
-                :pair="p"
-                variant="option"
-              />
-            </template>
-          </span>
+            </span>
 
-          <span
-            v-if="modCount(rule) > 0"
-            class="rule-head__chip rule-head__chip--mod"
-            :data-test="`rule-mod-count-${rule.id}`"
-          >{{ modCount(rule) }} mod{{ modCount(rule) === 1 ? "" : "s" }}</span>
-
-          <!-- Drag handle — `draggable` lives on the handle (not the
-               whole card) so users only initiate reorder from this
-               grip. Drop targets are the entire rule cards (handled
-               via @dragover/@drop on the parent div). -->
-          <span
-            class="rule-head__drag"
-            :data-test="`rule-drag-${rule.id}`"
-            draggable="true"
-            aria-label="Drag to reorder rule"
-            @dragstart="(ev) => onRuleDragStart(rule.id, ev)"
-            @click.stop
-          >⋮⋮</span>
-        </button>
+            <span
+              v-if="modCount(rule) > 0"
+              class="rule-head__chip rule-head__chip--mod"
+              :data-test="`rule-mod-count-${rule.id}`"
+            >{{ modCount(rule) }} mod{{ modCount(rule) === 1 ? "" : "s" }}</span>
+          </template>
+          <template #actions>
+            <WpSwitch
+              :data-test="`rule-toggle-${rule.id}`"
+              :aria-label="isRuleEnabled(rule) ? `Disable rule ${rule.id}` : `Enable rule ${rule.id}`"
+              :model-value="isRuleEnabled(rule)"
+              @click.stop
+              @update:model-value="toggleRule(rule)"
+            />
+            <!-- Drag handle — `draggable` lives on the handle (not the
+                 whole card) so users only initiate reorder from this
+                 grip. Drop targets are the entire rule cards (handled
+                 via @dragover/@drop on the parent div). -->
+            <span
+              class="rule-head__drag"
+              :data-test="`rule-drag-${rule.id}`"
+              draggable="true"
+              aria-label="Drag to reorder rule"
+              @dragstart="(ev) => onRuleDragStart(rule.id, ev)"
+              @click.stop
+            >⋮⋮</span>
+          </template>
 
         <!-- Expanded body — one card per clause (IF / ELIF / ELSE), each a
              WHEN block (one row per test, AND / OR between them, nested
@@ -701,7 +698,6 @@ function condRows(cond: unknown, bi: number): CondRow[] {
              value is a full-width field: empty shows the library value as a
              ghost, typing overrides it on this node only. -->
         <div
-          v-if="isExpanded(rule.id)"
           class="rule-body"
           :data-test="`rule-body-${rule.id}`"
         >
@@ -715,18 +711,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
           >
             <div class="br__head">
               <!-- IF gets no toggle: disabling it is the rule toggle. -->
-              <span
+              <WpSwitch
                 v-if="bi !== 0"
-                class="branch-toggle"
-                :class="{ 'branch-toggle--on': isBranchEnabled(rule.id, bi) }"
                 :data-test="`branch-toggle-${rule.id}-${bi}`"
-                role="switch"
-                :aria-checked="isBranchEnabled(rule.id, bi)"
                 :aria-label="`${isBranchEnabled(rule.id, bi) ? 'Disable' : 'Enable'} ${clauseTag(bi)} branch${bi === 'else' ? '' : ' ' + bi}`"
-                @click="toggleBranch(rule.id, bi)"
-              >
-                <i :class="['pi', isBranchEnabled(rule.id, bi) ? 'pi-check' : 'pi-times']" aria-hidden="true" />
-              </span>
+                :model-value="isBranchEnabled(rule.id, bi)"
+                @update:model-value="toggleBranch(rule.id, bi)"
+              />
               <span class="br__tag" :data-kind="clauseTag(bi).toLowerCase()">{{ clauseTag(bi) }}</span>
               <span v-if="bi === 0 && clausesOf(rule).length > 1" class="br__hint">first match wins</span>
               <span v-else-if="bi === 'else'" class="br__hint">when nothing above matched</span>
@@ -782,12 +773,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
                       >
                         <span class="fld__lib-label">library</span>
                         <RuleValueChips :value="row.test.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
-                        <button
-                          type="button"
-                          class="fld__reset"
+                        <Button
+                          size="sm"
+                          variant="link"
+                          icon="pi-replay"
                           :data-test="`cond-reset-${rule.id}-${row.key}`"
                           @click="onCondOverrideInput(rule.id, String(row.key), '')"
-                        >↺ Use library</button>
+                        >Use library</Button>
                       </div>
                     </div>
                   </div>
@@ -859,12 +851,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
                       <div v-if="getOverride('action_value_overrides', rule.id, key) !== ''" class="fld__lib">
                         <span class="fld__lib-label">library</span>
                         <RuleValueChips :value="action.value ?? ''" :uuid-to-name="uuidToName" :var-producers="varProducers" graph-aware />
-                        <button
-                          type="button"
-                          class="fld__reset"
+                        <Button
+                          size="sm"
+                          variant="link"
+                          icon="pi-replay"
                           :data-test="`action-reset-${rule.id}-${key}`"
                           @click="onActionOverrideInput(rule.id, key, '')"
-                        >↺ Use library</button>
+                        >Use library</Button>
                       </div>
                     </div>
                   </div>
@@ -873,6 +866,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
             </div>
           </div>
         </div>
+        </Disclosure>
       </div>
     </div>
   </section>
@@ -907,7 +901,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-text-dim, var(--wp-text3));
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px dashed var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .rules__list {
   display: flex;
@@ -933,11 +927,11 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 .rules__list::-webkit-scrollbar { width: 12px; }
 .rules__list::-webkit-scrollbar-track {
   background: var(--wp-bg-deep, var(--wp-bg));
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
 }
 .rules__list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.38);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   border: 2px solid var(--wp-bg-deep, var(--wp-bg));
 }
 .rules__list::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.55); }
@@ -946,7 +940,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 .rule-card {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   overflow: hidden;
   /* THE load-bearing fix for "rules clipped, no scrollbar": the cards are
    * flex children of the flex-column .rules__list, so by default they SHRINK
@@ -958,12 +952,12 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 }
 .rule-card--off { opacity: 0.55; }
 .rule-card--broken {
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  border-color: color-mix(in srgb, var(--wp-danger) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .rule-head__broken {
   font-size: 10px;
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 .rule-card--dragging { opacity: 0.5; }
 .rule-card--drop-target {
@@ -972,51 +966,23 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   border-top: 2px solid var(--wp-accent);
 }
 
-/* Head — single-row clickable bar */
-.rule-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
+/* Head — the shared Disclosure: its button holds the number and the
+ * summary; the switch and the drag grip sit beside it in `#actions`, so
+ * flipping a rule never folds it. */
+.wp-disclosure.rule-disc :deep(.wp-disclosure__head) {
+  padding: 0 10px 0 4px;
   background: var(--wp-bg2);
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: var(--wp-text);
 }
-.rule-card--open .rule-head { border-bottom: 1px solid var(--wp-border); }
-.rule-head:hover { background: var(--wp-bg3); }
-.rule-head__caret {
-  font-size: 10px;
-  color: var(--wp-text-dim, var(--wp-text3));
-}
-.rule-head__toggle {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: var(--wp-bg);
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.rule-head__toggle--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: white;
-}
-.rule-head__toggle .pi { font-size: 9px; }
+.wp-disclosure.rule-disc :deep(.wp-disclosure__trigger) { gap: 8px; padding: 4px 6px; }
+.wp-disclosure.rule-disc :deep(.wp-disclosure__trigger:hover) { background: var(--wp-bg3); }
+.rule-card--open .wp-disclosure.rule-disc :deep(.wp-disclosure__head) { border-bottom: 1px solid var(--wp-border); }
+.wp-disclosure.rule-disc :deep(.wp-disclosure__content) { padding: 0; }
 .rule-head__num {
   font: 600 10px var(--wp-font-sans);
   color: var(--wp-accent);
   background: color-mix(in srgb, var(--wp-accent) 12%, transparent);
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   white-space: nowrap;
 }
 /* A rule head is a PREVIEW, kept to ONE line. Wrapping let a paragraph-length
@@ -1046,15 +1012,15 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-muted, var(--wp-text2));
 }
 .rule-head__chip--mod {
-  color: var(--wp-status-modified, #f59e0b);
-  border-color: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 35%, transparent);
-  background: color-mix(in srgb, var(--wp-status-modified, #f59e0b) 10%, transparent);
+  color: var(--wp-status-modified);
+  border-color: color-mix(in srgb, var(--wp-status-modified) 35%, transparent);
+  background: color-mix(in srgb, var(--wp-status-modified) 10%, transparent);
 }
 .rule-head__drag {
   color: var(--wp-text-dim, var(--wp-text3));
@@ -1073,14 +1039,14 @@ function condRows(cond: unknown, bi: number): CondRow[] {
 }
 .br {
   border: 1px solid var(--wp-border-soft, var(--wp-border));
-  border-left: 3px solid var(--wp-kind-derivation, #fbbf24);
-  border-radius: 4px;
+  border-left: 3px solid var(--wp-kind-derivation);
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: var(--wp-bg);
   padding: 8px 10px;
 }
-.br[data-kind="elif"] { border-left-color: var(--wp-info, #60a5fa); }
+.br[data-kind="elif"] { border-left-color: var(--wp-info); }
 .br[data-kind="else"] {
-  border-left-color: var(--wp-warn, var(--wp-status-modified, #f59e0b));
+  border-left-color: var(--wp-warn, var(--wp-status-modified));
   border-style: dashed;
   border-left-style: solid;
 }
@@ -1095,19 +1061,19 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   font: 700 9px var(--wp-font-mono);
   letter-spacing: 0.06em;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .br__tag[data-kind="if"] {
-  color: var(--wp-kind-derivation, #fbbf24);
-  background: color-mix(in srgb, var(--wp-kind-derivation, #fbbf24) 18%, transparent);
+  color: var(--wp-kind-derivation);
+  background: color-mix(in srgb, var(--wp-kind-derivation) 18%, transparent);
 }
 .br__tag[data-kind="elif"] {
-  color: var(--wp-info, #60a5fa);
-  background: color-mix(in srgb, var(--wp-info, #60a5fa) 18%, transparent);
+  color: var(--wp-info);
+  background: color-mix(in srgb, var(--wp-info) 18%, transparent);
 }
 .br__tag[data-kind="else"] {
-  color: var(--wp-warn, var(--wp-status-modified, #f59e0b));
-  background: color-mix(in srgb, var(--wp-warn, var(--wp-status-modified, #f59e0b)) 18%, transparent);
+  color: var(--wp-warn, var(--wp-status-modified));
+  background: color-mix(in srgb, var(--wp-warn, var(--wp-status-modified)) 18%, transparent);
 }
 .br__hint {
   font: 400 10px var(--wp-font-sans);
@@ -1152,32 +1118,13 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   align-self: stretch;
   width: 10px;
   margin-left: 2px;
-  border-left: 2px solid color-mix(in srgb, var(--wp-info, #60a5fa) 45%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--wp-info) 45%, transparent);
 }
 .br__group {
   font: 600 9px var(--wp-font-sans);
   letter-spacing: 0.06em;
-  color: var(--wp-info, #60a5fa);
+  color: var(--wp-info);
 }
-.branch-toggle {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  background: var(--wp-bg);
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.branch-toggle--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-  color: white;
-}
-.branch-toggle .pi { font-size: 8px; }
 
 /* A value field: the RichTextInput, with the library value laid over it as a
  * ghost while the field is empty (chips and all, where a plain placeholder
@@ -1219,20 +1166,10 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.fld__reset {
-  margin-left: auto;
-  border: 0;
-  background: none;
-  padding: 0;
-  font: 10px var(--wp-font-sans);
-  color: var(--wp-accent);
-  cursor: pointer;
-}
-.fld__reset:hover { text-decoration: underline; }
 
 /* Token coloring (re-used from prior list rendering) */
 .rule-tok-var { font-weight: 600; }
-.rule-tok-op--neg { color: var(--wp-danger, #ef4444); }
+.rule-tok-op--neg { color: var(--wp-danger); }
 .rule-tok-op {
   color: var(--wp-text-dim, var(--wp-text3));
   font-weight: 600;
@@ -1242,7 +1179,7 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-text);
   background: color-mix(in srgb, var(--wp-text-dim, var(--wp-text3)) 12%, transparent);
   padding: 0 4px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .rule-tok-arrow {
   color: var(--wp-text-dim, var(--wp-text3));
@@ -1255,5 +1192,5 @@ function condRows(cond: unknown, bi: number): CondRow[] {
   color: var(--wp-accent);
   padding: 0 3px;
 }
-.rule-tok-join--or { color: var(--wp-info, #60a5fa); }
+.rule-tok-join--or { color: var(--wp-info); }
 </style>

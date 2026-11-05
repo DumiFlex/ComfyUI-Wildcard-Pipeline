@@ -102,13 +102,21 @@ def test_ppp_labels_else_conditions_and_anonymous_lists(pack):
     assert opts["t-shirt"]["sub_categories"] == ["casual", "summer"]
     assert opts["t-shirt"]["weight"] == 4
     assert opts["coat"]["sub_categories"] == ["formal", "winter"]
-    assert opts["hoodie"]["weight"] == 5  # condition dropped, choice kept
+    assert opts["hoodie"]["weight"] == 5
     assert opts["plain clothes"].get("fallback") is True
     assert "{scarf|gloves}" in opts
     assert outfit["payload"]["sub_categories"] == ["casual", "summer", "formal", "winter"]
     notes = _notes(pack)
-    assert notes["condition_dropped"] == 1
-    assert notes["default_params_dropped"] == 1
+    # `if _is_sdxl` becomes a constraint from the Model checks stack.
+    assert "condition_dropped" not in notes
+    (con,) = pack["payload"]["constraints"]
+    assert con["payload"]["target_wildcard_id"] == outfit["id"]
+    excluded = {(e["source"], e["target"]) for e in con["payload"]["exceptions"]}
+    assert ("sd15", "hoodie") in excluded and ("sdxl", "hoodie") not in excluded
+    # `r1-2'Outfit picker'$$, $$` all carries over: the description goes
+    # to the module, the rest to every reference without parameters.
+    assert "default_params_dropped" not in notes
+    assert "Outfit picker" in outfit["description"]
 
 
 def test_ppp_include_becomes_a_reference(pack):
@@ -121,7 +129,8 @@ def test_references_variants_and_variables(pack):
     rows = _by_name(pack)
     outfit, cats = rows["ppp/outfit"]["id"], rows["animals/cats"]["id"]
     look = _values(rows["ppp/look"])
-    assert f"@{{{outfit}#ppp/outfit:formal}}" in look
+    # No parameters on the reference: the outfit's own `r1-2$$, $$` apply.
+    assert f"{{1-2~$$, $$@{{{outfit}#ppp/outfit:formal}}}}" in look
     # Multi-pick over one ref draws different values, like the source.
     assert f"{{2$$ and $$@{{{outfit}#ppp/outfit}}}}" in look
     assert "{red|@blue|green}" in look           # `~` sampler mark dropped
@@ -129,14 +138,15 @@ def test_references_variants_and_variables(pack):
     assert "{1-2$$, $$x|y|z}" in look            # open lower bound
     assert "{1-2~$$ / $$p|q}" in look            # `r` → `~`, open upper bound
     assert "solo" in look                        # single-branch braces
-    assert "${color:red} hat" in look            # DP variables stay as text
+    # Lines that read or roll-once variables became stacks.
+    assert not any("color" in v or "mood" in v for v in look)
     assert "costs $5 or $$total" in look         # literal `$name` escaped
     assert "__missing/thing__" in look           # unresolved stays as text
     # Impact `3#__cats__` resolves by unique suffix.
     assert f"{{3$$, $$@{{{cats}#animals/cats}}}}" in look
     notes = _notes(pack)
     assert notes["unresolved_reference"] == 1
-    assert notes["variable_kept_as_text"] == 2
+    assert notes["line_became_stack"] == 2
 
 
 def test_globs_and_parent_keys_become_one_weighted_group(pack):
@@ -282,11 +292,11 @@ def test_plan_roles_follow_the_reference_graph(pack):
 def test_plan_fidelity_comes_from_the_notes(pack):
     plan = _plan(pack)
     assert plan["animals/cats"]["fidelity"] == "exact"
-    assert plan["ppp/outfit"]["fidelity"] == "lossy"  # if-condition dropped
-    assert plan["ppp/look"]["fidelity"] == "lossy"    # ${…} kept as text
+    assert plan["ppp/outfit"]["fidelity"] == "exact"  # if → constraint
+    assert plan["ppp/look"]["fidelity"] == "lossy"    # unresolved reference
     kinds = {n["kind"] for n in plan["ppp/look"]["notes"]}
-    assert {"variable_kept_as_text", "unresolved_reference"} <= kinds
-    close = convert_files([SourceFile("a.yaml", b"a:\n  - \"'Picker'$$\"\n  - x\n")])
+    assert {"line_became_stack", "unresolved_reference"} <= kinds
+    close = convert_files([SourceFile("a.yaml", b"a:\n  - \"@'Picker'$$\"\n  - x\n")])
     assert _plan(close)["a"]["fidelity"] == "close"
 
 
@@ -299,7 +309,7 @@ def test_bundles_hold_entry_points_only():
         SourceFile("intro.txt", b"__clothes/outfit__ __places/scene__\n"),
         SourceFile("loose.txt", b"x __clothes/top__\n"),
     ]
-    result = convert_files(files, pack_name="My pack")
+    result = convert_files(files, pack_name="My pack", bundle_mode="entries")
     bundles = {b["name"]: b for b in result["payload"]["bundles"]}
     # clothes/outfit and places/scene are used by intro, so only the two
     # loose files are entry points: no folder bundles, one pack bundle.
@@ -311,7 +321,9 @@ def test_bundles_hold_entry_points_only():
     assert leaf["type"] == "wildcard" and leaf["enabled"] is True
     assert leaf["payload"] == _by_name(result)["intro"]["payload"]
 
-    split = convert_files(files[:4] + [SourceFile("places/trip.txt", b"__places/scene__\n")])
+    split = convert_files(
+        files[:4] + [SourceFile("places/trip.txt", b"__places/scene__\n")], bundle_mode="entries",
+    )
     bundles = {b["name"]: b for b in split["payload"]["bundles"]}
     assert set(bundles) == {"Imported wildcards", "clothes", "places"}
     assert [c["type"] for c in bundles["Imported wildcards"]["children"]] == ["bundle"] * 2
@@ -319,12 +331,17 @@ def test_bundles_hold_entry_points_only():
 
 
 def test_bundles_can_be_skipped_and_flat_packs_need_none(pack):
+    # By default a bundle is a stack: modules that must run together.
+    assert [b["name"] for b in pack["payload"]["bundles"]] == [
+        "ppp/look 1", "ppp/look 2", "Model checks (family)",
+    ]
+    entries = convert_files(_pack(), bundle_mode="entries")
     # Only ppp/look is an entry point, so its folder bundle stands alone.
-    assert [b["name"] for b in pack["payload"]["bundles"]] == ["ppp"]
-    assert pack["report"]["bundles"] == 1
+    assert [b["name"] for b in entries["payload"]["bundles"]][0] == "ppp"
     flat = convert_files([SourceFile("a.txt", b"x\n"), SourceFile("sub/b.txt", b"y\n")])
     assert flat["payload"]["bundles"] == []
     assert convert_files(_pack(), make_bundles=False)["payload"]["bundles"] == []
+    assert convert_files(_pack(), bundle_mode="none")["payload"]["bundles"] == []
 
 
 def test_multi_line_yaml_values_drop_comments_into_the_description():

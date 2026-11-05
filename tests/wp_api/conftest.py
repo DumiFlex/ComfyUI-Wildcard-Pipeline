@@ -4,6 +4,7 @@ from aiohttp import web
 
 from engine.db.connection import get_connection
 from engine.db.migrations import migrate
+from tests.wp_api._ai_fakes import _isolated_ai, fake_llm  # noqa: F401 - AI fixtures
 from wp_api import register_routes
 
 
@@ -38,3 +39,12 @@ def wp_app(tmp_path, monkeypatch):
 @pytest.fixture
 async def wp_client(wp_app, aiohttp_client):
     return await aiohttp_client(wp_app)
+
+
+@pytest.fixture
+def items_planner(monkeypatch):
+    """The item-list planner (the model writes every item and payload), for
+    tests written against it; packs default to the graph planner."""
+    from engine.ai.pack import settings as pack_settings
+    monkeypatch.setitem(pack_settings.DEFAULT_SETTINGS, "planner", "items")
+

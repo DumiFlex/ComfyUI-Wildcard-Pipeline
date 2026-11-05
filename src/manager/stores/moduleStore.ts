@@ -1,3 +1,4 @@
+import { markDeleted } from "../composables/useLibraryChanged";
 import { defineStore } from "pinia";
 import { computed, reactive, ref } from "vue";
 import { api } from "../api/client";
@@ -19,8 +20,24 @@ export const useModuleStore = defineStore("modules", () => {
   const catalog = ref<ModuleRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
+  /** Set once a list view has fetched `items`, so a library refresh only
+   *  re-fetches what some page has already loaded. */
+  const listed = ref(false);
+
+  /** The kind the rows in `items` are, and the newest request: a slow
+   *  earlier response must not land last and replace the right rows. */
+  let listedType: ModuleType | undefined;
+  let ticket = 0;
 
   async function fetchAll() {
+    const mine = ++ticket;
+    // Another kind's page (Wildcards → Constraints) must not show the last
+    // kind's rows under its columns while it loads; a search or filter on
+    // the same kind keeps them up until the new ones land.
+    if (filter.type !== listedType) {
+      items.value = [];
+      listedType = filter.type;
+    }
     loading.value = true;
     try {
       const params: Record<string, string | boolean | undefined> = {};
@@ -29,9 +46,11 @@ export const useModuleStore = defineStore("modules", () => {
       if (filter.q) params.q = filter.q;
       if (filter.favorites) params.favorites = true;
       const res = await api.modules.list(params);
+      if (mine !== ticket) return;
       items.value = res.items;
+      listed.value = true;
     } finally {
-      loading.value = false;
+      if (mine === ticket) loading.value = false;
     }
   }
 
@@ -80,6 +99,7 @@ export const useModuleStore = defineStore("modules", () => {
 
   async function remove(id: string) {
     await api.modules.delete(id);
+    markDeleted([id]);
     items.value = items.value.filter((i) => i.id !== id);
     catalog.value = catalog.value.filter((i) => i.id !== id);
   }
@@ -91,6 +111,7 @@ export const useModuleStore = defineStore("modules", () => {
    * list in sync). Calling `remove(id)` here would round-trip a second
    * DELETE and 404. */
   function removeLocal(id: string) {
+    markDeleted([id]);
     items.value = items.value.filter((i) => i.id !== id);
     catalog.value = catalog.value.filter((i) => i.id !== id);
   }
@@ -115,7 +136,7 @@ export const useModuleStore = defineStore("modules", () => {
   const fixedValues = computed(() => items.value.filter((i) => i.type === "fixed_values"));
 
   return {
-    items, catalog, loading, filter,
+    items, catalog, loading, filter, listed,
     fetchAll, fetchCatalog, get, create, update, remove, removeLocal, duplicate, toggleFavorite,
     wildcards, fixedValues,
   };

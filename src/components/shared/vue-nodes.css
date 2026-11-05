@@ -95,3 +95,61 @@
 .wp-slot-merged::after {
   content: none !important;
 }
+
+/* Wire dots in front of the field they feed (`extension/field-sockets.ts`).
+ * The row leaves the flow, loses its label and sits level with its field,
+ * hidden like a built-in widget's dot until you hover the field or the dot,
+ * or the input is wired. `top` / `left` are set inline from the field's
+ * measured place. Marked by attributes, not classes: Vue rewrites the row's
+ * `class` during a link drag. Unlayered + `!important` for the same reason as above:
+ * they beat host utilities (`h-5`, `pr-2`) on the row. */
+[data-wp-field-socket] {
+  position: absolute !important;
+  z-index: 30;
+  height: 20px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+[data-wp-field-socket] > :not(:first-child) {
+  display: none !important;
+}
+
+[data-wp-field-socket]:hover,
+[data-wp-field-socket][data-wp-field-socket-hot],
+[data-wp-field-socket].lg-slot--connected {
+  opacity: 1;
+}
+
+[data-wp-field-socket-host] {
+  opacity: 1 !important;
+}
+
+/* Legacy canvas: the dot is painted 10px into the node, which is where the
+ * panel's labels start. */
+.wp-field-sockets--legacy {
+  padding-left: 10px;
+}
+
+/* Output dots at the right edge of their row (`extension/row-outputs.ts`,
+ * WP Toggles). The row leaves the flow and loses its label; `top` / `left`
+ * are set inline. Unlayered + `!important` like the field sockets above. */
+[data-wp-row-output] {
+  position: absolute !important;
+  z-index: 30;
+  height: 20px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-wp-row-output] > :not(:last-child) {
+  display: none !important;
+}
+
+/* Legacy canvas: the dot is painted 10px into the node, over the panel's
+ * right edge. */
+.wp-row-outputs--legacy {
+  padding-right: 10px;
+}

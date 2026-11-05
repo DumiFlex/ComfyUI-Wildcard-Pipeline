@@ -113,6 +113,40 @@ export function autocompleteSeparatorEnabled(): boolean {
   return canvas === null ? spaSetting(SEPARATOR_KEYS.storage) : canvas;
 }
 
+/** Canvas id and storage key per "how a picked tag is written" preference. */
+const TAG_STYLE_KEYS = {
+  spaces: {
+    canvas: "wildcardPipeline.behavior.autocompleteSpaces",
+    storage: "wp-autocomplete-spaces",
+  },
+  escape: {
+    canvas: "wildcardPipeline.behavior.autocompleteEscapeBrackets",
+    storage: "wp-autocomplete-escape-brackets",
+  },
+} as const;
+
+export type TagStyleKey = keyof typeof TAG_STYLE_KEYS;
+
+/** SPA storage key for a tag style preference — the manager's Settings page writes it. */
+export function tagStyleStorageKey(key: TagStyleKey): string {
+  return TAG_STYLE_KEYS[key].storage;
+}
+
+/**
+ * How a picked tag is written on the host this editor runs in: `spaces` turns
+ * `blue_hair` into `blue hair`, `escape` writes `fate_(series)` as
+ * `fate_\(series\)` so the brackets are not read as a weight. Both off by
+ * default, so a pick inserts the tag exactly as the list spells it.
+ */
+export function tagInsertStyle(): { spaces: boolean; escape: boolean } {
+  const read = (key: TagStyleKey): boolean => {
+    const keys = TAG_STYLE_KEYS[key];
+    const canvas = canvasSetting(keys.canvas);
+    return canvas === null ? spaSetting(keys.storage) : canvas;
+  };
+  return { spaces: read("spaces"), escape: read("escape") };
+}
+
 /** True when the host this editor runs in has `source` switched on. */
 export function completionSourceEnabled(source: CompletionSource): boolean {
   const keys = KEYS[source];

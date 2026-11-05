@@ -9,6 +9,8 @@ import {
   applyDisplayPrefs,
   watchA11ySystemPrefs,
   buildSettings,
+  buildSwitch,
+  filterByValidation,
   getCollapsedByDefault,
   installDebugHelpers,
   markBootCompleted,
@@ -581,6 +583,22 @@ describe("a11y settings", () => {
     expect(document.body.classList.contains("wp-focus-mode")).toBe(true);
   });
 
+  it("rowActions — hover sets the body class, always clears it, boot reads it", () => {
+    const fixture = makeMatchMedia({ motion: false, contrast: false });
+    window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+    applyDisplayPrefs(makeAppWithDisplay());
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(false);
+
+    const settings = buildSettings(makeApp());
+    const entry = settings.find((s) => s.id === "wildcardPipeline.display.rowActions");
+    entry?.onChange?.("hover", "always");
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(true);
+    entry?.onChange?.("always", "hover");
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(false);
+    entry?.onChange?.("nonsense", "always");
+    expect(document.body.classList.contains("wp-row-actions-hover")).toBe(false);
+  });
+
   it("focusMode onChange — flips class + emits toast", () => {
     const fixture = makeMatchMedia({ motion: false, contrast: false });
     window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
@@ -668,6 +686,18 @@ describe("a11y settings", () => {
       const settings = buildSettings(makeApp());
       settings.find((s) => s.id === SETTING_VALIDATION)?.onChange?.("permissive", "permissive");
       expect(toasts.value).toHaveLength(0);
+    });
+
+    it("filterByValidation keeps all, drops info, or drops everything", () => {
+      const fixture = makeMatchMedia({ motion: false, contrast: false });
+      window.matchMedia = fixture.factory as unknown as typeof window.matchMedia;
+      const list = [{ severity: "info" }, { severity: "warning" }, { severity: "error" }];
+      applyDisplayPrefs(makeAppWithDisplay());
+      expect(filterByValidation(list)).toHaveLength(3);
+      applyDisplayPrefs(makeAppWithDisplay({ validation: "relaxed" }));
+      expect(filterByValidation(list).map((c) => c.severity)).toEqual(["warning", "error"]);
+      applyDisplayPrefs(makeAppWithDisplay({ validation: "permissive" }));
+      expect(filterByValidation(list)).toEqual([]);
     });
 
     it("onChange fires warning-severity toast when going permissive", () => {
@@ -1005,5 +1035,62 @@ describe("settings catalog matches the registered settings", () => {
       expect(reg?.tooltip).toBe(meta.tooltip);
       expect(reg?.options).toEqual(meta.options);
     }
+  });
+});
+
+// The autocomplete rows draw their own switch (they carry a count). It has to
+// look like ComfyUI's native one: same 40x24 box, 36x20 track, 16px thumb,
+// 14px travel, and the frontend's own colour tokens.
+describe("buildSwitch — native look", () => {
+  it("reads the native Switch geometry and theme tokens", () => {
+    const { root } = buildSwitch(false);
+    const track = root.firstElementChild as HTMLElement;
+    const thumb = track.firstElementChild as HTMLElement;
+    expect(root.getAttribute("role")).toBe("switch");
+    expect([root.style.width, root.style.height]).toEqual(["40px", "24px"]);
+    expect([track.style.width, track.style.height]).toEqual(["36px", "20px"]);
+    expect([thumb.style.width, thumb.style.height]).toEqual(["16px", "16px"]);
+    expect(track.style.background).toContain("--border-default");
+    expect(thumb.style.background).toContain("--base-background");
+  });
+
+  it("slides the thumb 14px and paints the primary track when on", () => {
+    const { root } = buildSwitch(false);
+    const track = root.firstElementChild as HTMLElement;
+    const thumb = track.firstElementChild as HTMLElement;
+    const seen: boolean[] = [];
+    root.addEventListener("wp-switch", (e) => seen.push((e as CustomEvent<boolean>).detail));
+    root.click();
+    expect(root.getAttribute("aria-checked")).toBe("true");
+    expect(root.dataset.state).toBe("checked");
+    expect(track.style.background).toContain("--primary-background");
+    expect(thumb.style.transform).toBe("translateX(14px)");
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    expect(seen).toEqual([true, false]);
+  });
+
+  it("ignores clicks while disabled and dims like the native one", () => {
+    const { root, setDisabled } = buildSwitch(true);
+    setDisabled(true);
+    const seen: boolean[] = [];
+    root.addEventListener("wp-switch", (e) => seen.push((e as CustomEvent<boolean>).detail));
+    root.click();
+    expect(seen).toEqual([]);
+    expect(root.getAttribute("aria-disabled")).toBe("true");
+    expect(root.style.opacity).toBe("0.5");
+  });
+});
+
+describe("canvas settings announce their changes", () => {
+  it("wraps every setting's onChange to announce a real change, keeping the original", async () => {
+    const posted: unknown[] = [];
+    class Spy { constructor(readonly name: string) {} postMessage(d: unknown) { posted.push(d); } close() {} }
+    vi.stubGlobal("BroadcastChannel", Spy);
+    const { buildSettings } = await import("./settings");
+    const sep = buildSettings({}).find((s) => s.id === "wildcardPipeline.behavior.autocompleteSeparator");
+    sep?.onChange?.(true, false);
+    sep?.onChange?.(true, true);
+    expect(posted).toEqual([{ id: "wildcardPipeline.behavior.autocompleteSeparator", value: true, source: "canvas" }]);
+    vi.unstubAllGlobals();
   });
 });

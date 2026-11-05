@@ -14,7 +14,15 @@ const {
   injMod,
   cleanerMod,
   modelInfoMod,
+  togglesMod,
+  togglesMergeMod,
   imageFilterWidgetMod,
+  labelGridMod,
+  noteMod,
+  nodeGroupMod,
+  modeRelayMod,
+  bookmarkMod,
+  stripControlInputs,
   imageFilterMod,
   varPickerMod,
   ctxLoopMod,
@@ -29,12 +37,16 @@ const {
   playgroundStoreMod,
   installClipboardShield,
   dimWidgetsWhileSkipped,
+  answerCanvasFacts,
   createApp,
   watch,
   loadToast,
   loadPlayground,
   loadSubgraphBadge,
   loadImageFilterPicker,
+  loadBookmarkDock,
+  loadNodeHelp,
+  nodeToolbarMod,
 } = await import("./boot");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
@@ -75,6 +87,20 @@ watch(playgroundStoreMod.playgroundOpen, (open) => {
     playgroundRoot.id = "wp-playground-root";
     document.body.appendChild(playgroundRoot);
     createApp(m.default).mount(playgroundRoot);
+  });
+});
+
+// Node help dialog ("?" in the selection toolbar): one body-level app, mounted
+// the first time help opens, like the playground above.
+let helpMounted = false;
+watch(nodeToolbarMod.helpTarget, (target) => {
+  if (helpMounted || !target) return;
+  helpMounted = true;
+  void loadNodeHelp().then((m) => {
+    const root = document.createElement("div");
+    root.id = "wp-node-help-root";
+    document.body.appendChild(root);
+    createApp(m.default).mount(root);
   });
 });
 
@@ -121,7 +147,9 @@ type DebugCreateNode = Parameters<typeof dbgMod.create>[0];
 type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
 type ModelInfoCreateNode = Parameters<typeof modelInfoMod.create>[0];
+type TogglesCreateNode = Parameters<typeof togglesMod.create>[0];
 type ImageFilterCreateNode = Parameters<typeof imageFilterWidgetMod.create>[0];
+type LabelGridCreateNode = Parameters<typeof labelGridMod.create>[0];
 type VarPickerCreateNode = Parameters<typeof varPickerMod.create>[0];
 type CtxLoopCreateNode = Parameters<typeof ctxLoopMod.create>[0];
 type SeedListCreateNode = Parameters<typeof seedListMod.create>[0];
@@ -129,7 +157,12 @@ type TemplateEditorNode = Parameters<typeof tmplMod.create>[0];
 type AssemblerHelperNode = Parameters<typeof asmMod.mountHelper>[0];
 
 interface NodeData { name: string }
-interface NodeType { prototype: { onNodeCreated?: (this: AssemblerHelperNode, ...args: unknown[]) => void } }
+interface NodeType {
+  prototype: {
+    onNodeCreated?: (this: AssemblerHelperNode, ...args: unknown[]) => void;
+    onConfigure?: (this: AssemblerHelperNode, info: unknown) => void;
+  };
+}
 
 // Build the settings array eagerly — `app` is the same singleton ComfyUI
 // will hand back at runtime, so onChange callbacks captured here read the
@@ -145,6 +178,8 @@ settingsMod.applyA11yClasses(app);
 settingsMod.applyDisplayPrefs(app);
 settingsMod.watchA11ySystemPrefs();
 settingsMod.listenForManagerSettings(app);
+// The manager's AI asks which variables this canvas sets at run time.
+answerCanvasFacts(() => (app as unknown as { graph?: LiteGraphLike }).graph);
 // Wire the toast store to read its default lifeMs + suppress-info
 // filter from the settings store. Setter pattern avoids the circular
 // import that would form if toast-store imported from settings
@@ -168,6 +203,22 @@ setTimeout(() => settingsMod.markBootCompleted(), 100);
 // cheap (window var or one fetch to /system_stats) and runs once.
 const useActionBar = await topbarMod.supportsActionBar();
 
+// WP Bookmark's dock lives in its own chunk: loaded by the top-bar button or
+// once a workflow has a bookmark (unless the user closed the dock).
+function toggleBookmarkDock(): void {
+  void loadBookmarkDock().then((m) => m.toggleDock());
+}
+function maybeShowBookmarkDock(): void {
+  if (bookmarkMod.dockWantsAutoOpen()) void loadBookmarkDock().then((m) => m.showDock());
+}
+const BOOKMARK_COMMANDS = [
+  { id: "wildcardPipeline.bookmark.next", label: "WP Bookmarks: next bookmark", function: () => bookmarkMod.jumpStep(1) },
+  { id: "wildcardPipeline.bookmark.previous", label: "WP Bookmarks: previous bookmark", function: () => bookmarkMod.jumpStep(-1) },
+  { id: "wildcardPipeline.bookmark.back", label: "WP Bookmarks: back to where you were", function: () => bookmarkMod.jumpBack() },
+  { id: "wildcardPipeline.bookmark.add", label: "WP Bookmarks: bookmark this view", function: () => bookmarkMod.addBookmarkHere() },
+  { id: "wildcardPipeline.bookmark.dock", label: "WP Bookmarks: show or hide the dock", function: toggleBookmarkDock },
+];
+
 app.registerExtension({
   name: "wildcard-pipeline",
 
@@ -175,18 +226,69 @@ app.registerExtension({
   // the repo, issue tracker, and docs. Uses PrimeIcons shipped by ComfyUI.
   aboutPageBadges: aboutMod.ABOUT_BADGES,
 
+  // "Merge into WP Toggles" on a right-clicked Boolean-like node.
+  getNodeMenuItems(node: unknown) {
+    type MergeNode = Parameters<typeof togglesMergeMod.isMergeable>[0];
+    type MergeGraph = Parameters<typeof togglesMergeMod.mergeIntoToggles>[0];
+    const canvas = (app as unknown as { canvas?: { selected_nodes?: Record<string, MergeNode>; graph?: MergeGraph } }).canvas;
+    if (!togglesMergeMod.isMergeable(node as MergeNode)) return [];
+    const picked = Object.values(canvas?.selected_nodes ?? {});
+    const selected = picked.includes(node as MergeNode) ? picked : [node as MergeNode];
+    const count = Math.min(selected.filter(togglesMergeMod.isMergeable).length, 16);
+    return [null, {
+      content: `Merge into WP Toggles (${count})`,
+      callback: () => {
+        const graph = canvas?.graph;
+        if (!graph) return;
+        const lg = (globalThis as { LiteGraph?: { createNode(type: string): MergeNode | null } }).LiteGraph;
+        const res = togglesMergeMod.mergeIntoToggles(graph, selected, () => lg?.createNode("WP_Toggles") ?? null);
+        if (res.skipped.length) {
+          toastStoreMod.pushToast(`Not merged: ${res.skipped.join(", ")}. Only nodes with one on/off value, one BOOLEAN output and no wired inputs can merge (16 at most).`, { severity: "warning" });
+        }
+      },
+    }];
+  },
+
   // Topbar dropdown entry — opens the SPA at /wp/dashboard. The direct
   // toolbar button (mounted via actionBarButtons / setup() below) is
   // the primary surface; this command is the dropdown twin so the SPA
   // is reachable on builds where neither toolbar path works.
-  commands: topbarMod.TOPBAR_COMMANDS,
-  menuCommands: topbarMod.TOPBAR_MENU_COMMANDS,
+  // The bookmark commands ship without keys: bind them in ComfyUI's
+  // Settings › Keybinding, where its own dialog flags clashes.
+  commands: [
+    ...topbarMod.TOPBAR_COMMANDS,
+    ...BOOKMARK_COMMANDS,
+    ...nodeToolbarMod.toolbarCommands(() => (app as unknown as { canvas?: Parameters<typeof nodeToolbarMod.selectedItems>[0] }).canvas),
+  ],
+
+  // Our "?" (help) and pencil (edit) in ComfyUI's selection toolbar, drawn
+  // on an accent dot so they read as ours (extension/node-toolbar.ts).
+  getSelectionToolboxCommands(item: unknown) {
+    return nodeToolbarMod.toolboxCommandsFor(item);
+  },
+  menuCommands: [
+    ...topbarMod.TOPBAR_MENU_COMMANDS,
+    { path: ["Extensions", "Wildcard Pipeline", "Bookmarks"], commands: BOOKMARK_COMMANDS.map((c) => c.id) },
+  ],
+
+  // "Add WP Bookmark here" on a right-click of the empty canvas.
+  getCanvasMenuItems(canvas: unknown) {
+    const at = [...((canvas as { graph_mouse?: number[] }).graph_mouse ?? [])];
+    return [null, { content: "Add WP Bookmark here", callback: () => bookmarkMod.addBookmarkHere(at.length >= 2 ? at : undefined) }];
+  },
 
   // Modern actionbar entry — only included on ComfyUI ≥ 1.33.9.
   // Including it on older builds would either be silently ignored or
   // throw, depending on the frontend's strictness; conditional include
   // is the safe path.
-  ...(useActionBar ? { actionBarButtons: topbarMod.ACTION_BAR_BUTTONS } : {}),
+  ...(useActionBar
+    ? {
+        actionBarButtons: [
+          ...topbarMod.ACTION_BAR_BUTTONS,
+          { icon: "pi pi-bookmark", tooltip: topbarMod.BOOKMARK_TOOLTIP, onClick: toggleBookmarkDock },
+        ],
+      }
+    : {}),
 
   // ComfyUI Settings panel entries — accessibility tri-state combos. Their
   // onChange handlers re-run applyA11yClasses to flip the body markers.
@@ -206,6 +308,43 @@ app.registerExtension({
       await topbarMod.attachLegacyTopbarButton(app);
     }
     topbarMod.startIconReplaceLoop();
+    bookmarkMod.installBookmarkKeys();
+    bookmarkMod.installHiddenFilter();
+    // A bookmark joining the graph (added, pasted or loaded) brings the
+    // dock up unless the user closed it.
+    bookmarkMod.onBookmarkAdded(maybeShowBookmarkDock);
+    maybeShowBookmarkDock();
+  },
+
+  // WP Note: a frontend-only node (like ComfyUI's Note) that explains a
+  // workflow. Registered here because it has no Python node definition.
+  registerCustomNodes() {
+    noteMod.registerNoteNode();
+    nodeGroupMod.registerNodeGroupNode();
+    modeRelayMod.registerModeRelayNode();
+    bookmarkMod.registerBookmarkNode();
+  },
+
+  beforeRegisterVueAppNodeDefs(defs: unknown[]) {
+    noteMod.fixNoteDef(defs as Parameters<typeof noteMod.fixNoteDef>[0]);
+    noteMod.fixFrontendDef(
+      defs as Parameters<typeof noteMod.fixFrontendDef>[0],
+      nodeGroupMod.NODE_GROUP_TYPE,
+      "WP Node Group",
+      "Gathers nodes so one WP Toggles control can mute or bypass them all. It never runs.",
+    );
+    noteMod.fixFrontendDef(
+      defs as Parameters<typeof noteMod.fixFrontendDef>[0],
+      modeRelayMod.MODE_RELAY_TYPE,
+      "WP Mode Relay",
+      "Watches nodes' mute / bypass and passes a mode on to a WP Node Group. It never runs.",
+    );
+    noteMod.fixFrontendDef(
+      defs as Parameters<typeof noteMod.fixFrontendDef>[0],
+      bookmarkMod.BOOKMARK_NODE_TYPE,
+      "WP Bookmark",
+      "Marks a spot on the canvas to jump back to, with a shortcut or from the Bookmarks dock. It never runs.",
+    );
   },
 
   getCustomWidgets() {
@@ -234,8 +373,12 @@ app.registerExtension({
         seedListMod.create(node, inputName),
       WP_MODEL_INFO: (node: ModelInfoCreateNode, inputName: string) =>
         modelInfoMod.create(node, inputName),
+      WP_TOGGLES: (node: TogglesCreateNode, inputName: string) =>
+        togglesMod.create(node, inputName),
       WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>
         imageFilterWidgetMod.create(node, inputName),
+      WP_LABEL_GRID: (node: LabelGridCreateNode, inputName: string) =>
+        labelGridMod.create(node, inputName),
       // The assembler's `template`. Unlike every other entry here, this key
       // is NOT the input's socket type — the socket stays STRING so links
       // still work, and the node ships `widgetType` in the input spec's
@@ -269,8 +412,17 @@ app.registerExtension({
     const orig = nt.prototype.onNodeCreated;
     nt.prototype.onNodeCreated = function (this: AssemblerHelperNode, ...args: unknown[]) {
       orig?.apply(this, args);
+      asmMod.prefillNegativeSlot(this);
+      asmMod.markNegativeOptIn(this);
       asmMod.mountHelper(this);
       dimWidgetsWhileSkipped(this, ["template", "negative_template"]);
+    };
+    // Negatives became opt-in: a node saved before that gets `$negatives`
+    // added once, so the workflow prints the same negative as before.
+    const origConfigure = nt.prototype.onConfigure;
+    nt.prototype.onConfigure = function (this: AssemblerHelperNode, info: unknown) {
+      origConfigure?.apply(this, [info]);
+      asmMod.migrateNegativeOptIn(this, info);
     };
   },
 
@@ -281,6 +433,7 @@ app.registerExtension({
   // widgets to recompute immediately.
   afterConfigureGraph() {
     graphEventsMod.notifyGraphLoaded();
+    maybeShowBookmarkDock();
     // Re-attach badges in case the loaded workflow contained SubgraphNodes
     // that bypassed nodeCreated (loaded path uses different hooks).
     // Nested subgraph nodes always sit inside a top-level one, so the top
@@ -483,6 +636,18 @@ function mountFlashOverlay(node: FocusableNode, canvas: AppCanvas) {
     cancelAnimationFrame(raf);
     overlay.remove();
   }, FLASH_DURATION_MS);
+}
+
+// WP Toggles' mute / bypass dots are links on a server node: drop them from
+// the prompt, or the server would run (or miss) the nodes wired into them.
+const appG = app as unknown as { graphToPrompt?: (...args: unknown[]) => Promise<{ output?: unknown }> };
+const origGraphToPrompt = appG.graphToPrompt;
+if (typeof origGraphToPrompt === "function") {
+  appG.graphToPrompt = async function (this: unknown, ...args: unknown[]) {
+    const res = await origGraphToPrompt.apply(this, args);
+    stripControlInputs(res?.output as Parameters<typeof stripControlInputs>[0]);
+    return res;
+  };
 }
 
 const origQueuePrompt = appQ.queuePrompt;

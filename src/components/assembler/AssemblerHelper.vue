@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { copyText } from "@/kit/clipboard";
 import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import { modelSyntaxHtml } from "../../widgets/richTokenize";
 import { buildNegativePreview, type NegativesTable } from "../../extension/negatives";
-import ContextMenu, { type ContextMenuItem } from "../shared/ContextMenu.vue";
+import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
 import {
   applyVarAccessor,
@@ -12,6 +13,7 @@ import {
   type ResolvedValue,
   type RolledAxes,
 } from "../../widgets/richTokenize";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -294,7 +296,7 @@ const negPreview = computed(() =>
 
 /** Only worth a row when there is something to show. */
 const showNegative = computed(
-  () => negPreview.value.text !== "" || (props.negativeTemplate ?? "").trim() !== "",
+  () => negPreview.value.text !== "",
 );
 
 const isResolved = computed(() => {
@@ -354,7 +356,7 @@ function rippleStyle(v: string): Record<string, string> {
 // injector / debug rows. Items adapt per chip state (missing chips
 // are already in the template; upstream chips may or may not be).
 async function clipboardWrite(text: string): Promise<void> {
-  try { await navigator.clipboard.writeText(text); } catch { /* permission denied */ }
+  await copyText(text);
 }
 
 interface AsmCtxMenuState {
@@ -462,41 +464,38 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
       <div class="wp-asm-section wp-asm-section--vars">
         <span>variables</span>
         <div class="wp-asm-toolbtns">
-          <button
+          <Button
             v-if="onLoadTemplate"
-            type="button"
-            class="wp-asm-toolbtn"
+            size="sm"
+            variant="outline"
+            icon="pi-folder-open"
             data-test="asm-load-template"
-            title="Load a saved template from the library"
+            hint="Load a saved template from the library"
             aria-label="Load template"
             @click="onLoadTemplate"
-          >
-            <i class="pi pi-folder-open" aria-hidden="true" />
-          </button>
-          <button
+          />
+          <Button
             v-if="onSaveTemplate"
-            type="button"
-            class="wp-asm-toolbtn"
+            size="sm"
+            variant="outline"
+            icon="pi-save"
             :disabled="!props.template"
             data-test="asm-save-template"
-            :title="props.template ? 'Save this template to the library' : 'Template is empty'"
+            :hint="props.template ? 'Save this template to the library' : 'Template is empty'"
             aria-label="Save template"
             @click="onSaveTemplate"
-          >
-            <i class="pi pi-save" aria-hidden="true" />
-          </button>
-          <button
+          />
+          <Button
             v-if="onClearTemplate"
-            type="button"
-            class="wp-asm-toolbtn wp-asm-toolbtn--danger"
-            :disabled="!props.template"
+            size="sm"
+            variant="danger"
+            icon="pi-trash"
+            :disabled="!props.template && !props.negativeTemplate"
             data-test="asm-clear-template-icon"
-            :title="props.template ? 'Clear the entire template' : 'Template already empty'"
+            :hint="props.template || props.negativeTemplate ? 'Clear the template and the negative template' : 'Template already empty'"
             aria-label="Clear template"
             @click="onClearTemplate"
-          >
-            <i class="pi pi-trash" aria-hidden="true" />
-          </button>
+          />
         </div>
         <span class="wp-asm-section-stat">
           {{ upstreamNames.length }} upstream
@@ -618,10 +617,6 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   </div>
 </template>
 
-<style>
-@import "../shared/theme.css";
-</style>
-
 <style scoped>
 /* ======================================================
    NEW LAYOUT — .wp-asm-helper
@@ -654,7 +649,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
 .wp-asm-section-stat--neg {
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-danger);
   background: color-mix(in srgb, var(--wp-danger) 14%, transparent);
 }
@@ -699,38 +694,8 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 /* Icon-only. Each button already carried a `title` and an `aria-label`, so the
    visible word was the only thing dropped — and three words across the row
    were most of its width. Square-ish padding keeps the tap target honest. */
-.wp-asm-toolbtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 7px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 500 10px var(--wp-font-sans);
-  cursor: pointer;
-  transition: color var(--wp-motion-quick), border-color var(--wp-motion-quick), background var(--wp-motion-quick);
-  white-space: nowrap;
-}
 /* Neutral accent hover — Load / Save are non-destructive. */
-.wp-asm-toolbtn:hover:not(:disabled) {
-  color: var(--wp-text);
-  border-color: var(--wp-accent);
-  background: color-mix(in srgb, var(--wp-accent) 10%, transparent);
-}
 /* Destructive hover — Clear only. */
-.wp-asm-toolbtn--danger:hover:not(:disabled) {
-  color: var(--wp-danger);
-  border-color: color-mix(in srgb, var(--wp-danger) 45%, transparent);
-  background: color-mix(in srgb, var(--wp-danger) 10%, transparent);
-}
-.wp-asm-toolbtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.wp-asm-toolbtn .pi { font-size: 10px; }
 
 /* Empty-state ghost — mirrors injector + debug ghosts. Stacked
  * icon + line + hint, dim color, centered. */
@@ -792,7 +757,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
   gap: 4px;
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border-soft);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 3px 7px;
   font: 11px/1 var(--wp-font-mono);
   cursor: pointer;

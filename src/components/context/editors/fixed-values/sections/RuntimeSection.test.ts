@@ -50,7 +50,7 @@ describe("fixed-values RuntimeSection", () => {
       props: { module: makeModule({ instance: { internal: true } }) },
     });
     const btn = w.find('[data-test="runtime-hide"]');
-    expect(btn.classes()).toContain("toggle--on");
+    expect(btn.attributes("aria-checked")).toBe("true");
     expect(btn.attributes("aria-checked")).toBe("true");
   });
 
@@ -88,7 +88,7 @@ describe("fixed-values RuntimeSection", () => {
 
   it("seed-scope toggle is off (vary) by default", () => {
     const w = mount(RuntimeSection, { props: { module: makeModule() } });
-    expect(w.find('[data-test="runtime-hold"]').classes()).not.toContain("toggle--on");
+    expect(w.find('[data-test="runtime-hold"]').attributes("aria-checked")).toBe("false");
   });
 
   it("clicking seed-scope toggle emits patch with seed_scope = hold", async () => {

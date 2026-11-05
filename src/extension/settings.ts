@@ -12,7 +12,12 @@
 // can attach the runtime injection to a JS module. A bare CSS import
 // from main.ts emits a chunk with no JS owner and the plugin warns.
 import { reactive } from "vue";
+// Canvas theme tokens + shared `.wp-*` classes. Loaded ONCE here, in the boot
+// chunk; SFCs never `@import` it (every copy used to land in its own lazy
+// chunk, 15 copies in all). Comes first so the sheets below can override it.
+import "../components/shared/theme.css";
 import "../components/shared/a11y.css";
+import "../components/shared/node-toolbar.css";
 import "../components/shared/display-prefs.css";
 import "../components/shared/vue-nodes.css";
 // Rich-text inline-syntax colours for canvas-mounted RichTextInput/Preview
@@ -30,6 +35,7 @@ import {
   SETTING_ID_BORDER,
   SETTING_ID_COLLAPSED,
   SETTING_ID_FOCUS,
+  SETTING_ID_ROW_ACTIONS,
   SETTING_ID_KIND_STYLE,
   SETTING_ID_COLLAPSE_MODE,
   SETTING_ID_COLOR_INTENSITY,
@@ -51,10 +57,17 @@ import {
   VALIDATION_OPTIONS,
   TOAST_LIFETIME_OPTIONS,
   COLLAPSE_MODE_OPTIONS,
+  ROW_ACTIONS_OPTIONS,
   COLOR_INTENSITY_OPTIONS,
   BUNDLE_MASTER_OFF_OPTIONS,
+  SETTING_ID_AC_TAGS,
+  SETTING_ID_AC_LORA,
+  SETTING_ID_AC_EMBEDDING,
+  SETTING_ID_AC_SEPARATOR,
   SETTING_ID_AC_MAX_SUGGESTIONS,
   SETTING_ID_AC_MIN_CHARS,
+  SETTING_ID_AC_SPACES,
+  SETTING_ID_AC_ESCAPE,
   AC_MAX_SUGGESTIONS_OPTIONS,
   AC_MIN_CHARS_OPTIONS,
   CANVAS_SETTINGS_CHANNEL,
@@ -70,6 +83,7 @@ export type KindStyle = "both" | "icon" | "chip";
 export type ValidationMode = "strict" | "relaxed" | "permissive";
 export type ToastLifetime = "short" | "default" | "long" | "sticky";
 export type CollapseMode = "independent" | "accordion";
+export type RowActions = "always" | "hover";
 export type ColorIntensity = "muted" | "standard" | "vivid";
 export type BundleMasterOffBehavior = "preserve-manual" | "cascade-all";
 
@@ -126,30 +140,32 @@ export type ComfySettingCustomRenderer = (
 ) => HTMLElement;
 
 /**
- * A pill switch matching the one ComfyUI renders for a plain `type: "boolean"`.
+ * A switch drawn exactly like the one ComfyUI renders for a plain
+ * `type: "boolean"` setting.
  *
- * Only needed because this ONE setting cannot be a plain boolean: it disables
- * itself when no tag list is installed, and a native boolean has no way to say
- * "on is not available". Every other setting we own uses the real thing.
+ * Only needed because the three autocomplete rows cannot be plain booleans:
+ * they show a count beside the switch, and the tag row disables itself when no
+ * tag list is installed. Every other setting we own uses the real thing.
  *
- * EVERY dimension and colour reads PrimeVue's own `--p-toggleswitch-*` custom
- * property first. Those are injected when their component first mounts — which
- * has always happened by the time this renders, because our row sits in their
- * settings dialog among their switches — so at render time this resolves to
- * literally their pill, and follows their theme when it changes.
+ * The geometry is copied from the frontend's own `Switch.vue` (reka-ui
+ * SwitchRoot + Tailwind): a 40x24 hit box holding a 36x20 track with 2px side
+ * padding and a 16px shadowed thumb that travels 14px. The colours read the
+ * same theme tokens its Tailwind classes resolve to (`--border-default` off,
+ * `--primary-background` on, `--base-background` thumb), so the row follows a
+ * theme switch like its neighbours. Older frontends drew a PrimeVue
+ * ToggleSwitch instead, so each colour falls back to its `--p-toggleswitch-*`
+ * token, then to a literal.
  *
- * The fallbacks are Aura's defaults (40x24 pill, 16px handle), used only if a
- * token is missing. An earlier hand-picked 34x18 read as visibly smaller and
- * duller than the switches directly beneath it.
- *
- * Handle travel is a `calc()` over the same tokens rather than a fixed 16px, so
- * a differently-sized track still lands the knob flush against its end.
- *
- * Not reusing `.p-toggleswitch` itself: those classes are ComfyUI's internals,
- * and borrowing them buys a perfect match today and a control that renders as
- * nothing the day they restyle or upgrade PrimeVue.
+ * Inline styles, not the frontend's class names: those are build output, and
+ * borrowing them buys a perfect match today and a blank control the day they
+ * restyle.
  */
-function buildSwitch(initial: boolean): {
+const SWITCH_OFF = "var(--border-default, var(--p-toggleswitch-background, #3c3c3c))";
+const SWITCH_ON = "var(--primary-background, var(--p-toggleswitch-checked-background, #0b8ce9))";
+const SWITCH_THUMB = "var(--base-background, var(--p-toggleswitch-handle-background, #171718))";
+const SWITCH_EASE = "150ms cubic-bezier(0.4, 0, 0.2, 1)";
+
+export function buildSwitch(initial: boolean): {
   root: HTMLElement;
   setOn: (on: boolean) => void;
   setDisabled: (off: boolean) => void;
@@ -160,50 +176,50 @@ function buildSwitch(initial: boolean): {
   const root = document.createElement("span");
   root.setAttribute("role", "switch");
   root.tabIndex = 0;
-  const knob = document.createElement("span");
-  root.appendChild(knob);
+  const track = document.createElement("span");
+  const thumb = document.createElement("span");
+  track.appendChild(thumb);
+  root.appendChild(track);
 
-  // Static styling is written ONCE. Rewriting `cssText` on every change — the
-  // first version did — replaces the `transition` declaration mid-flight, so
-  // the browser has nothing to animate between and the knob teleports instead
-  // of sliding. Only the properties that actually change are touched below.
+  // Static styling is written ONCE. Rewriting `cssText` on every change
+  // replaces the `transition` declaration mid-flight, so the thumb would
+  // teleport instead of sliding. Only what changes is touched below.
   root.style.cssText = [
-    "display:inline-flex", "align-items:center", "flex:0 0 auto",
-    "box-sizing:border-box",
-    "width:var(--p-toggleswitch-width, 40px)",
-    "height:var(--p-toggleswitch-height, 24px)",
-    "border-radius:var(--p-toggleswitch-border-radius, 30px)",
-    "padding:var(--p-toggleswitch-gap, 4px)",
-    "border:var(--p-toggleswitch-border-width, 1px) solid "
-      + "var(--p-toggleswitch-border-color, transparent)",
-    "transition:background-color var(--p-transition-duration, .2s) ease",
-    "outline:none",
+    "display:inline-flex", "align-items:center", "justify-content:center",
+    "flex:0 0 auto", "box-sizing:border-box",
+    "width:40px", "height:24px", "padding:0", "border-radius:9999px",
+    "touch-action:manipulation", "outline:none",
+    `transition:box-shadow ${SWITCH_EASE}`,
   ].join(";");
-  knob.style.cssText = [
-    "display:block",
-    "width:var(--p-toggleswitch-handle-size, 16px)",
-    "height:var(--p-toggleswitch-handle-size, 16px)",
-    "border-radius:var(--p-toggleswitch-handle-border-radius, 50%)",
-    "background:var(--p-toggleswitch-handle-background, #fff)",
-    "transition:transform var(--p-transition-duration, .2s) ease",
+  track.style.cssText = [
+    "pointer-events:none", "display:inline-flex", "align-items:center",
+    "box-sizing:border-box", "width:36px", "height:20px", "padding:0 2px",
+    "border:1px solid transparent", "border-radius:9999px",
+    `transition:background-color ${SWITCH_EASE}`,
+  ].join(";");
+  thumb.style.cssText = [
+    "pointer-events:none", "display:block", "width:16px", "height:16px",
+    "border-radius:9999px", `background:${SWITCH_THUMB}`,
+    "box-shadow:0 1px 3px 0 #0000001a, 0 1px 2px -1px #0000001a",
+    `transition:transform ${SWITCH_EASE}`,
   ].join(";");
 
   const paint = (): void => {
     root.setAttribute("aria-checked", on ? "true" : "false");
-    root.style.background = on
-      ? "var(--p-toggleswitch-checked-background, var(--p-primary-color, #60a5fa))"
-      : "var(--p-toggleswitch-background, var(--p-surface-600, #52525b))";
-    root.style.opacity = disabled ? "var(--p-disabled-opacity, .6)" : "1";
+    root.dataset.state = on ? "checked" : "unchecked";
+    root.setAttribute("aria-disabled", disabled ? "true" : "false");
+    track.style.background = on ? SWITCH_ON : SWITCH_OFF;
+    thumb.style.transform = on ? "translateX(14px)" : "translateX(0)";
+    root.style.opacity = disabled ? "0.5" : "1";
     root.style.cursor = disabled ? "not-allowed" : "pointer";
-    // Travel is the track minus the handle minus both gaps, computed by the
-    // browser so it stays correct whatever `--p-toggleswitch-*` resolve to.
-    knob.style.transform = on
-      ? "translateX(calc(var(--p-toggleswitch-width, 40px)"
-        + " - var(--p-toggleswitch-handle-size, 16px)"
-        + " - (var(--p-toggleswitch-gap, 4px) * 2)))"
-      : "translateX(0)";
   };
   paint();
+
+  // The native switch rings only on keyboard focus (`focus-visible:ring-1`).
+  root.addEventListener("focus", () => {
+    if (root.matches(":focus-visible")) root.style.boxShadow = `0 0 0 1px ${SWITCH_OFF}`;
+  });
+  root.addEventListener("blur", () => { root.style.boxShadow = ""; });
 
   const toggle = (): void => {
     if (disabled) return;
@@ -262,6 +278,8 @@ const state = reactive<{
   borderHighlight: boolean;
   collapsedByDefault: boolean;
   focusMode: boolean;
+  /** When a module row shows its lock / internal / remove buttons. */
+  rowActions: RowActions;
   kindStyle: KindStyle;
   validation: ValidationMode;
   toastLifetime: ToastLifetime;
@@ -274,7 +292,7 @@ const state = reactive<{
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
   /** When true, destructive bundle ops (remove / reset-to-library /
-   *  save-to-library) prompt via the themed ConfirmDialog before
+   *  save-to-library) prompt via the themed ConfirmModal before
    *  committing. When false, the op runs immediately and falls back
    *  to the toast Undo for recovery. */
   confirmDestructiveBundle: boolean;
@@ -303,6 +321,7 @@ const state = reactive<{
   borderHighlight: true,
   collapsedByDefault: false,
   focusMode: false,
+  rowActions: "always",
   kindStyle: "chip",
   validation: "strict",
   toastLifetime: "default",
@@ -349,6 +368,10 @@ function asCollapseMode(v: unknown, fallback: CollapseMode): CollapseMode {
   return v === "independent" || v === "accordion" ? v : fallback;
 }
 
+function asRowActions(v: unknown, fallback: RowActions): RowActions {
+  return v === "always" || v === "hover" ? v : fallback;
+}
+
 function asColorIntensity(v: unknown, fallback: ColorIntensity): ColorIntensity {
   return v === "muted" || v === "standard" || v === "vivid" ? v : fallback;
 }
@@ -368,6 +391,7 @@ export function _resetDisplayStateForTesting(): void {
   state.borderHighlight = true;
   state.collapsedByDefault = false;
   state.focusMode = false;
+  state.rowActions = "always";
   state.kindStyle = "chip";
   state.validation = "strict";
   state.toastLifetime = "default";
@@ -407,6 +431,20 @@ export function getCollapsedByDefault(): boolean {
  */
 export function getValidationMode(): ValidationMode {
   return state.validation;
+}
+
+/** The conflicts the Validation strictness setting lets through: all of them
+ *  (strict), all but info (relaxed), none (permissive). Every place that
+ *  shows conflicts (node rows, subgraph badges) filters through this. */
+export function filterByValidation<T extends { severity: string }>(conflicts: T[]): T[] {
+  return filterForValidation(state.validation, conflicts);
+}
+
+/** `filterByValidation` for a given mode (the playground previews a mode). */
+export function filterForValidation<T extends { severity: string }>(mode: ValidationMode, conflicts: T[]): T[] {
+  if (mode === "permissive") return [];
+  if (mode === "relaxed") return conflicts.filter((c) => c.severity !== "info");
+  return conflicts;
 }
 
 /**
@@ -619,6 +657,9 @@ function syncMarkers(): void {
   // Display — focus mode (hovering one module dims siblings)
   document.body.classList.toggle("wp-focus-mode", state.focusMode === true);
 
+  // Display — row buttons only on hover (pressed ones stay; display-prefs.css)
+  document.body.classList.toggle("wp-row-actions-hover", state.rowActions === "hover");
+
   // Display — kind style (module type icon vs chip vs both)
   document.body.classList.toggle("wp-kind-style-icon", state.kindStyle === "icon");
   document.body.classList.toggle("wp-kind-style-chip", state.kindStyle === "chip");
@@ -658,6 +699,7 @@ export function applyDisplayPrefs(app: AppLike): void {
   // No body class for this setting; ContextWidget reads via getCollapsedByDefault().
   state.collapsedByDefault = app.extensionManager?.setting?.get(SETTING_ID_COLLAPSED) === true;
   state.focusMode = app.extensionManager?.setting?.get(SETTING_ID_FOCUS) === true;
+  state.rowActions = asRowActions(app.extensionManager?.setting?.get(SETTING_ID_ROW_ACTIONS), "always");
   state.kindStyle = asKindStyle(app.extensionManager?.setting?.get(SETTING_ID_KIND_STYLE), "chip");
   // Phase 2 — behavior axes. None of these flip body classes (they
   // gate consumer logic in conflicts.ts / toast-store / ContextWidget
@@ -709,6 +751,7 @@ export function listenForManagerSettings(app: SettingWriter): () => void {
   channel.onmessage = (event: MessageEvent<CanvasSettingMessage>) => {
     const msg = event.data;
     if (!msg || typeof msg.id !== "string" || !msg.id.startsWith("wildcardPipeline.")) return;
+    if (msg.source === "canvas") return;
     const set = app.extensionManager?.setting?.set;
     if (typeof set !== "function") return;
     try {
@@ -718,6 +761,19 @@ export function listenForManagerSettings(app: SettingWriter): () => void {
     }
   };
   return () => channel.close();
+}
+
+/**
+ * Tell an open manager page that a canvas setting changed here (the other
+ * half of `listenForManagerSettings`). Fire and forget: no manager open means
+ * nobody listens, and the value is already saved by ComfyUI.
+ */
+export function announceCanvasSetting(id: string, value: unknown): void {
+  if (typeof BroadcastChannel === "undefined") return;
+  const channel = new BroadcastChannel(CANVAS_SETTINGS_CHANNEL);
+  const msg: CanvasSettingMessage = { id, value, source: "canvas" };
+  channel.postMessage(msg);
+  channel.close();
 }
 
 export function watchA11ySystemPrefs(): () => void {
@@ -775,6 +831,7 @@ export function installDebugHelpers(): void {
     // no body class. ContextWidget reads via getCollapsedByDefault().
     collapsedByDefault: (on: boolean) => { state.collapsedByDefault = on; },
     focusMode: (on: boolean) => { state.focusMode = on; syncMarkers(); },
+    rowActions: (mode: RowActions) => { state.rowActions = mode; syncMarkers(); },
     kindStyle: (mode: KindStyle) => { state.kindStyle = mode; syncMarkers(); },
     // collapseMode is pure Vue state — no syncMarkers since it has
     // no body class. ContextWidget reads via getCollapseMode().
@@ -787,6 +844,7 @@ export function installDebugHelpers(): void {
       borderHighlight: state.borderHighlight,
       collapsedByDefault: state.collapsedByDefault,
       focusMode: state.focusMode,
+      rowActions: state.rowActions,
       kindStyle: state.kindStyle,
       collapseMode: state.collapseMode,
       colorIntensity: state.colorIntensity,
@@ -877,7 +935,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     // failure this whole feature keeps having to design around: a control that
     // implies a capability it does not have.
     {
-      id: "wildcardPipeline.behavior.tagAutocomplete",
+      id: SETTING_ID_AC_TAGS,
       name: "Booru tag autocomplete",
       type: (_name, setter, value, _attrs) => {
         const wrap = document.createElement("label");
@@ -889,7 +947,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         // floated mid-row while every neighbouring toggle sat flush right, and
         // a row that does not line up reads as broken before it reads as ours.
         note.style.cssText =
-          "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
+          "font-size: 12px; line-height: 1.3; color: var(--muted-foreground, var(--descrip-text, #999))";
         wrap.append(note, box);
 
         // Ask the server whether a list exists. Until it answers, leave the
@@ -928,6 +986,9 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "editors. Requires a tag list, installed from the manager's Settings. "
         + "Only affects this extension's own inputs.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Tag autocomplete"],
+      // The switch's own handler nudges editors too; this covers a change
+      // that arrives from the manager or the playground instead.
+      onChange: () => notifyCompletionSettingsChanged(),
     },
     // The other two completion sources. Same hand-built control as the tag
     // setting above, for the same reason it exists: a count beside the switch.
@@ -936,13 +997,13 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
     // manager to check.
     ...(
       [
-        { id: "wildcardPipeline.behavior.loraAutocomplete", name: "LoRA autocomplete",
+        { id: SETTING_ID_AC_LORA, name: "LoRA autocomplete",
           kind: "lora", noun: "LoRAs",
           tooltip:
             "Suggest installed LoRA names while typing in Wildcard Pipeline node "
             + "editors, inserting the full <lora:name:1.0> syntax. Reads the models "
             + "ComfyUI already knows about. Only affects this extension's own inputs." },
-        { id: "wildcardPipeline.behavior.embeddingAutocomplete", name: "Embedding autocomplete",
+        { id: SETTING_ID_AC_EMBEDDING, name: "Embedding autocomplete",
           kind: "embedding", noun: "embeddings",
           tooltip:
             "Suggest installed embedding names while typing in Wildcard Pipeline "
@@ -960,7 +1021,7 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         const { root: box } = buildSwitch(value === true);
         const note = document.createElement("span");
         note.style.cssText =
-          "font: 12px/1.3 var(--wp-font-sans, sans-serif); color: var(--descrip-text, #999)";
+          "font-size: 12px; line-height: 1.3; color: var(--muted-foreground, var(--descrip-text, #999))";
         // Note first so the switch lands flush right, level with every
         // neighbouring row's control.
         wrap.append(note, box);
@@ -984,9 +1045,10 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       defaultValue: false,
       tooltip: src.tooltip,
       category: ["Wildcard Pipeline", "7. Runtime behavior", src.name],
+      onChange: () => notifyCompletionSettingsChanged(),
     })),
     {
-      id: "wildcardPipeline.behavior.autocompleteSeparator",
+      id: SETTING_ID_AC_SEPARATOR,
       name: "Append \", \" after a completion",
       type: "boolean",
       defaultValue: false,
@@ -995,6 +1057,28 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         + "can be typed straight away. Never applied inside a <lora:…> or "
         + "embedding:… reference, where a comma would end the reference.",
       category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete separator"],
+      onChange: () => notifyCompletionSettingsChanged(),
+    },
+    {
+      id: SETTING_ID_AC_SPACES,
+      name: "Autocomplete: write tags with spaces",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "Write a picked tag with spaces instead of underscores (blue_hair → "
+        + "blue hair). Short emoticon tags like ^_^ keep theirs.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete spaces"],
+      onChange: () => notifyCompletionSettingsChanged(),
+    },
+    {
+      id: SETTING_ID_AC_ESCAPE,
+      name: "Autocomplete: escape brackets in tags",
+      type: "boolean",
+      defaultValue: false,
+      tooltip:
+        "Write the brackets in a picked tag as \\( and \\) (fate_(series) → "
+        + "fate_\\(series\\)), so they are not read as a weight.",
+      category: ["Wildcard Pipeline", "7. Runtime behavior", "Autocomplete escape brackets"],
       onChange: () => notifyCompletionSettingsChanged(),
     },
     {
@@ -1231,6 +1315,21 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
         }
       },
     },
+    {
+      id: SETTING_ID_ROW_ACTIONS,
+      name: "Row buttons",
+      type: "combo",
+      options: ROW_ACTIONS_OPTIONS,
+      defaultValue: "always",
+      tooltip:
+        "When a module row shows its lock, internal and remove buttons. On hover "
+        + "keeps rows calmer; a pressed lock or internal button always shows.",
+      category: ["Wildcard Pipeline", "5. Collapse & focus", "Row buttons"],
+      onChange: (newVal) => {
+        state.rowActions = asRowActions(newVal, "always");
+        syncMarkers();
+      },
+    },
     // Accessibility — motion + contrast. Lives under Display section
     // (instead of a dedicated Accessibility section as before) so the
     // playground launcher can stay first in the WP tab. The settings
@@ -1464,6 +1563,16 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
       },
     },
   ];
+  // Every change, from the panel, the playground or the manager, is
+  // announced so an open manager page shows it without a refocus.
+  for (const entry of entries) {
+    if (entry.id === "wildcardPipeline.display._playground") continue;
+    const inner = entry.onChange;
+    entry.onChange = (newVal, oldVal) => {
+      inner?.(newVal, oldVal);
+      if (newVal !== oldVal) announceCanvasSetting(entry.id, newVal);
+    };
+  }
   // ComfyUI's settings panel renders entries in reverse array order
   // within a section. Reverse so what we wrote in logical top-to-bottom
   // order matches what the user sees in the panel.

@@ -1,13 +1,18 @@
 <script setup lang="ts">
+import Input from "@/kit/Input.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import { computed } from "vue";
 import RichTextInput from "../../../../../manager/components/RichTextInput.vue";
+import NegativeField from "../../../../../manager/components/NegativeField.vue";
 import {
+  negativeOverridden,
   rowOverrideKind,
   type DraftRow,
   type LibraryRow,
 } from "../defaults";
 import { tokenize, type PreviewToken } from "../../_shared/preview-tokens";
 import { stripNonIdentifierChars } from "../../../../../manager/utils/slug";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{
   row: DraftRow;
@@ -22,8 +27,8 @@ const props = defineProps<{
 const valueTokens = computed<PreviewToken[]>(() =>
   tokenize(props.row.value, "fixed_values"),
 );
-/** The library row's negative ("" = none), shown as a read-only hint. */
-const negativeText = computed(() => (props.library?.negative ?? "").trim());
+/** This instance changed the library row's negative. */
+const negOverridden = computed(() => negativeOverridden(props.library, props.row));
 
 const hasNonTextToken = computed(() =>
   valueTokens.value.some((t) => t.kind !== "text"),
@@ -31,7 +36,7 @@ const hasNonTextToken = computed(() =>
 
 const emit = defineEmits<{
   "toggle": [rowId: string];
-  "update": [rowId: string, patch: { name?: string; value?: string }];
+  "update": [rowId: string, patch: { name?: string; value?: string; negative?: string }];
   "reset": [rowId: string];
   "delete": [rowId: string];
 }>();
@@ -51,7 +56,7 @@ const valueOverridden = computed(
 );
 const isAdded = computed(() => overrideKind.value === "added");
 const showReset = computed(
-  () => !isAdded.value && (nameOverridden.value || valueOverridden.value),
+  () => !isAdded.value && (nameOverridden.value || valueOverridden.value || negOverridden.value),
 );
 
 function onToggle(): void {
@@ -116,45 +121,27 @@ function onDelete(): void {
       'row--added': isAdded,
     }"
   >
-    <span
+    <Checkbox
       class="row__check"
-      :class="{ 'row__check--on': row.enabled }"
+      size="sm"
+      :model-value="row.enabled"
+      aria-label="Enabled"
       data-test="row-check"
-      role="checkbox"
-      :aria-checked="row.enabled"
-      tabindex="0"
-      @click="onToggle"
-      @keydown.space.prevent="onToggle"
-    >
-      <svg
-        v-if="row.enabled"
-        width="8"
-        height="8"
-        viewBox="0 0 12 12"
-        aria-hidden="true"
-      >
-        <path d="M2.5 6.5 L5 9 L9.5 3.5"
-              fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </span>
+      @update:model-value="onToggle"
+    />
 
-    <span
-      class="row__name-wrap"
-      :class="{ 'row__name-wrap--mod': nameOverridden }"
-      data-test="row-name-wrap"
-    >
-      <span class="row__name-prefix" data-test="row-name-prefix">$</span>
-      <input
-        class="row__name"
-        data-test="row-name"
-        type="text"
-        :value="row.name"
-        :disabled="!row.enabled"
-        :aria-label="`Variable name for row ${row.id}`"
-        @input="onNameInput"
-      />
-    </span>
+    <Input
+      size="sm"
+      mono
+      prefix="$"
+      class="row__name"
+      :tone="nameOverridden ? 'accent' : undefined"
+      data-test="row-name"
+      :model-value="row.name"
+      :disabled="!row.enabled"
+      :aria-label="`Variable name for row ${row.id}`"
+      @input="onNameInput"
+    />
 
     <span
       class="row__value-cell"
@@ -187,11 +174,20 @@ function onDelete(): void {
         />
       </span>
       <span
-        v-if="negativeText"
         class="row__neg"
+        :class="{ 'row__neg--mod': negOverridden }"
         data-test="row-neg"
-        :title="`Negative from the library — edit it there`"
-      ><span class="row__neg-tag">NEG</span> {{ negativeText }}</span>
+        :title="negOverridden ? 'Changed on this instance; the reset button brings back the library negative' : undefined"
+      >
+        <NegativeField
+          :model-value="row.negative"
+          surface="fixed_values"
+          label="value"
+          test-id="row-negative"
+          :disabled="!row.enabled"
+          @update:model-value="(v: string | undefined) => emit('update', props.row.id, { negative: v ?? '' })"
+        />
+      </span>
       <span
         v-if="hasNonTextToken"
         class="row__value-preview"
@@ -225,26 +221,28 @@ function onDelete(): void {
       </span>
     </span>
 
-    <button
+    <Button
       v-if="showReset"
-      type="button"
-      class="row__reset"
+      size="sm"
+      variant="outline"
+      icon="pi-replay"
       data-test="row-reset"
       :aria-label="`Reset row $${library?.name ?? row.id} to library default`"
-      title="Restore this row to library default"
+      hint="Restore this row to library default"
       @click="onReset"
-    ><i class="pi pi-replay" aria-hidden="true" /></button>
+    />
     <span v-else></span>
 
-    <button
+    <Button
       v-if="isAdded"
-      type="button"
-      class="row__delete"
+      size="sm"
+      variant="outline"
+      icon="pi-times"
       data-test="row-delete"
       :aria-label="`Remove instance-only row $${row.name}`"
-      title="Remove this instance-only row"
+      hint="Remove this instance-only row"
       @click="onDelete"
-    ><i class="pi pi-times" aria-hidden="true" /></button>
+    />
     <span v-else></span>
   </div>
 </template>
@@ -262,45 +260,23 @@ function onDelete(): void {
 }
 .row:last-child { border-bottom: none; }
 .row:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
-.row__check {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  background: var(--wp-bg);
-  cursor: pointer;
-}
-.row__check--on { background: var(--wp-accent); border-color: var(--wp-accent); }
-.row__check svg { display: block; }
+.row__check { flex-shrink: 0; }
 
-.row__name-wrap, .row__value-wrap {
+.row__name { min-width: 0; }
+
+.row__value-wrap {
   display: flex;
   align-items: stretch;
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   overflow: hidden;
 }
-.row__name-wrap:focus-within, .row__value-wrap:focus-within { border-color: var(--wp-accent); }
-.row__name-wrap--mod, .row__value-wrap--mod { border-color: var(--wp-accent); }
-.row__name-wrap--mod .row__name,
-.row__name-wrap--mod .row__name-prefix,
+.row__value-wrap:focus-within { border-color: var(--wp-accent); }
+.row__value-wrap--mod { border-color: var(--wp-accent); }
 .row__value-wrap--mod .row__value { color: var(--wp-accent-text, var(--wp-text)); }
 
-.row__name-prefix {
-  background: var(--wp-bg2);
-  color: var(--wp-text-dim, var(--wp-text3));
-  padding: 3px 6px;
-  border-right: 1px solid var(--wp-border);
-  font: 11px var(--wp-font-mono);
-  display: flex;
-  align-items: center;
-}
-.row__name, .row__value {
+.row__value {
   flex: 1;
   background: transparent;
   border: 0;
@@ -309,7 +285,7 @@ function onDelete(): void {
   color: var(--wp-text);
   min-width: 0;
 }
-.row__name:focus, .row__value:focus { outline: none; }
+.row__value:focus { outline: none; }
 
 /* This class sits on the RichTextInput ROOT, and everything it used to declare
  * about scrolling and sizing belonged to the <textarea> that used to be here.
@@ -337,38 +313,17 @@ function onDelete(): void {
 
 
 .row--off { color: var(--wp-text-dim, var(--wp-text3)); }
-.row--off .row__name-wrap, .row--off .row__value-wrap { opacity: 0.5; }
-.row--off .row__name, .row--off .row__value { text-decoration: line-through; }
+/* The name field dims itself while disabled (the kit's disabled state). */
+.row--off .row__value-wrap { opacity: 0.5; }
+.row--off .row__value,
+.row--off .row__name :deep(.wp-input) { text-decoration: line-through; }
 
-.row--added .row__name-wrap, .row--added .row__value-wrap { border-color: var(--wp-green); }
-.row--added .row__name,
+/* A row this instance added: green, on the name field's group too. */
+.row--added .row__name, .row--added .row__value-wrap { border-color: var(--wp-green); }
 .row--added .row__value,
-.row--added .row__name-prefix { color: var(--wp-green); }
+.row--added .row__name :deep(.wp-input),
+.row--added .row__name :deep(.wp-input-group__affix) { color: var(--wp-green); }
 
-.row__reset, .row__delete {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 2px;
-}
-.row__reset:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.10);
-}
-.row__delete:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-status-modified, var(--wp-text));
-  background: rgba(251, 146, 60, 0.10);
-}
-.row__reset .pi, .row__delete .pi { font-size: 10px; }
 
 /* Per-row preview tokens — appears below the input only when the
  * value contains non-text tokens (alt/repeat/var/ref/escape). Mirrors
@@ -381,21 +336,10 @@ function onDelete(): void {
 }
 .row__neg {
   margin-top: 3px;
-  font: 10px/1.4 var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
 }
-.row__neg-tag {
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--wp-danger, #ef4444);
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
-}
+.row__neg--mod :deep(.wp-rich-input),
+.row__neg--mod :deep([contenteditable]) { border-color: var(--wp-accent); }
 .row__value-cell--mod .row__value-wrap { border-color: var(--wp-accent); }
 .row__value-preview {
   margin-top: 3px;
@@ -404,14 +348,14 @@ function onDelete(): void {
   color: var(--wp-text-muted, var(--wp-text2));
   border-left: 2px solid var(--wp-border-soft, var(--wp-border));
   background: var(--wp-bg-deep, var(--wp-bg));
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 min(2px, var(--wp-radius-cap, 999px)) min(2px, var(--wp-radius-cap, 999px)) 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 .tpl-tok--text { color: var(--wp-text); }
 .tpl-tok--var { font-weight: 600; }
 .tpl-tok--var-error {
-  color: var(--wp-danger, #e05252);
+  color: var(--wp-danger);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
 }
@@ -420,16 +364,16 @@ function onDelete(): void {
   font-weight: 600;
 }
 .tpl-tok--ref-error {
-  color: var(--wp-danger, #e05252);
+  color: var(--wp-danger);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
 }
 .tpl-tok--alt {
-  color: var(--wp-amber, #d4a04a);
+  color: var(--wp-amber);
   font-weight: 600;
 }
 .tpl-tok--repeat {
-  color: var(--wp-teal, #4ad4c4);
+  color: var(--wp-teal);
   font-weight: 600;
 }
 .tpl-tok--escape {

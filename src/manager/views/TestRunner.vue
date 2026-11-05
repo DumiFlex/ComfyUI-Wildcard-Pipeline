@@ -12,8 +12,9 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import Icon, { ICON_SM } from "../components/ui/Icon.vue";
+import Button from "@/kit/Button.vue";
+import InlineEdit from "@/kit/InlineEdit.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import ScenarioRail from "../components/test-runner/ScenarioRail.vue";
 import StackBuilder from "../components/test-runner/StackBuilder.vue";
 import SeedControl from "../components/test-runner/SeedControl.vue";
@@ -22,11 +23,16 @@ import OutputsPanel from "../components/test-runner/OutputsPanel.vue";
 import SamplesPanel from "../components/test-runner/SamplesPanel.vue";
 import WarningsPanel from "../components/test-runner/WarningsPanel.vue";
 import ComparePanel from "../components/test-runner/ComparePanel.vue";
+import AiRunBar from "../components/test-runner/AiRunBar.vue";
+import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
+import { useAiConfig } from "../composables/useAiConfig";
 import TraceDrawer from "../components/test-runner/TraceDrawer.vue";
 import InspectorDrawer from "../components/test-runner/InspectorDrawer.vue";
 import { useScenarioWorkbench } from "../composables/useScenarioWorkbench";
+import { currentPageNote, registerPageNote } from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { buildUuidToName } from "../utils/wildcardSyntax";
 import { seedLabel } from "../utils/scenario";
 import { inspectItem } from "../utils/inspect";
@@ -35,12 +41,41 @@ import type { ScenarioRow, ScenarioStackItem } from "../api/types";
 const route = useRoute();
 const router = useRouter();
 const wb = useScenarioWorkbench();
+const ai = useAiConfig();
 const { draft, result } = wb;
+
+// Tell the AI chat what this run holds, so it can explain a warning or a
+// result the user is looking at.
+registerPageNote(() => {
+  const stack = wb.stackViews.value
+    .map((v) => `${v.name} (${v.kind}${v.id ? ` ${v.id}` : ""}${v.enabled ? "" : ", off"})`)
+    .join(", ");
+  const bits = [`Test Runner scenario "${draft.value.name || "Quick run"}" with ${stack || "nothing"}`];
+  // The same stack in run_test's words, so the chat can re-run it as is.
+  const runStack = draft.value.stack
+    .filter((item) => item.enabled !== false)
+    .map((item) => "bundle" in item ? { item: item.bundle }
+      : item.instance && Object.keys(item.instance).length
+        ? { item: item.module, instance: item.instance } : { item: item.module });
+  const pins = Object.fromEntries(Object.entries(draft.value.pins ?? {}).filter(([, v]) => v !== ""));
+  bits.push(`run_test args: ${JSON.stringify({ stack: runStack, ...(Object.keys(pins).length ? { pins } : {}) })}`);
+  const r = result.value;
+  if (r) {
+    bits.push(`Last run: ${r.runs} seeds, ${r.failed} failed`);
+    const vars = Object.entries(r.variables).slice(0, 8).map(([name, v]) => {
+      const top = Object.entries(v.counts).slice(0, 3).map(([val, n]) => `${val} ${n}`).join(", ");
+      return `$${name}: ${v.distinct} values (${top})`;
+    });
+    if (vars.length) bits.push(vars.join("; "));
+    const warns = r.warnings.slice(0, 6).map((w) => `${w.type}: ${w.message} (${w.count} runs)`);
+    bits.push(warns.length ? `Warnings: ${warns.join("; ")}` : "No warnings");
+  }
+  return bits.join(". ");
+});
 
 type Tab = "variables" | "outputs" | "samples" | "warnings" | "compare";
 const tab = ref<Tab>("variables");
 const traceSeed = ref<number | null>(null);
-const editingName = ref(false);
 
 const uuidToName = computed(() => buildUuidToName(wb.modules.value));
 
@@ -54,19 +89,17 @@ const uniqueOutputs = computed(() => {
   return out ? result.value?.variables[out]?.distinct ?? null : null;
 });
 
-const TABS = computed<{ id: Tab; label: string; count?: number }[]>(() => [
+const TABS = computed<TabItem<Tab>[]>(() => [
   { id: "variables", label: "Variables", count: result.value ? Object.keys(result.value.variables).length : undefined },
   { id: "outputs", label: "Outputs" },
   { id: "samples", label: "Samples", count: result.value?.samples.length },
   { id: "warnings", label: "Warnings", count: result.value ? warningCount.value + result.value.failed : undefined },
-  { id: "compare", label: "Compare", count: wb.diff.value ? wb.diff.value.changed.length : undefined },
+  // The Compare count is a change count, not a total, so it is coloured.
+  {
+    id: "compare", label: "Compare", count: wb.diff.value ? wb.diff.value.changed.length : undefined,
+    tone: wb.diff.value ? (wb.diff.value.same ? "success" : "warn") : undefined,
+  },
 ]);
-
-/** Tab badge tone: the Compare count is a change count, not a total. */
-function countTone(id: Tab): string | undefined {
-  if (id !== "compare" || !wb.diff.value) return undefined;
-  return wb.diff.value.same ? "ok" : "warn";
-}
 
 function openTrace(seed: number): void {
   inspectIndex.value = null;
@@ -134,7 +167,23 @@ const uses = computed(() => {
   return { id, name };
 });
 
+/** The quick run as it was opened (Send to Test Runner, or the chat's last
+ *  `show_test`): replacing it loses nothing the user did. */
+let untouched = "";
+
+let markReady: () => void = () => {};
+/** Resolves once the page has loaded the library and opened its scenario. */
+const ready = new Promise<void>((resolve) => { markReady = resolve; });
+
 onMounted(async () => {
+  try {
+    await openFirst();
+  } finally {
+    markReady();
+  }
+});
+
+async function openFirst(): Promise<void> {
   await wb.loadLibrary();
   const item = deepLinkItem();
   const using = usesId.value
@@ -144,10 +193,73 @@ onMounted(async () => {
     wb.openScenario(using);
   } else if (item) {
     wb.newQuickRun(item);
+    untouched = JSON.stringify(draft.value);
     void wb.run();
   } else if (wb.scenarios.value.length) {
     wb.openScenario(wb.scenarios.value[0]);
   }
+}
+
+// The chat's `show_test`: set the stack (seeds, pins, output) up as a quick
+// run where the user can see it, run it unless told not to, save it when
+// named, and tell the chat what came out (the same text as the page note).
+registerAiAction("show_test", async (args) => {
+  await ready;
+  const stack = (Array.isArray(args.stack) ? args.stack : []) as ScenarioStackItem[];
+  if (!stack.length) return "couldn't: the stack is empty";
+  const count = Math.min(500, Math.max(1, Number(args.seeds) || 20));
+  /** Add / remove keep the open run's seeds and pins unless given. */
+  const editing = args.change === "add" || args.change === "remove";
+  const idOf = (i: ScenarioStackItem): string => ("module" in i ? i.module : i.bundle);
+  if (editing) {
+    // Edit the open stack in place (saved scenario or quick run alike):
+    // the user asked for this change, so nothing of theirs is lost.
+    const ids = new Set(stack.map(idOf));
+    if (args.change === "add") {
+      const have = new Set(draft.value.stack.map(idOf));
+      const fresh = stack.filter((i) => !have.has(idOf(i))).map((i) => ({ ...i }));
+      if (!fresh.length) return "couldn't: those are already on the stack";
+      draft.value.stack = [...draft.value.stack, ...fresh];
+    } else {
+      const kept = draft.value.stack.filter((i) => !ids.has(idOf(i)));
+      if (kept.length === draft.value.stack.length) return "couldn't: none of those are on the stack";
+      if (!kept.length) return "couldn't: that would empty the stack; replace it instead";
+      draft.value.stack = kept;
+    }
+  } else {
+    const userEdited = draft.value.id ? wb.dirty.value : JSON.stringify(draft.value) !== untouched;
+    if (wb.dirty.value && draft.value.stack.length && userEdited) {
+      return "couldn't: the open scenario has unsaved changes; ask the user to save or discard them first";
+    }
+    wb.newQuickRun(stack[0]);
+    draft.value.stack = stack.map((item) => ({ ...item }));
+  }
+  const from = typeof args.from === "number" ? Math.max(0, Math.floor(args.from)) : null;
+  if (!editing || from !== null || typeof args.seeds === "number") {
+    draft.value.seeds = from !== null ? { from, count } : { random: true, count };
+  }
+  const pins = args.pins && typeof args.pins === "object" ? args.pins as Record<string, unknown> : null;
+  if (!editing || pins) {
+    draft.value.pins = Object.fromEntries(Object.entries(pins ?? {}).map(([k, v]) => [k, String(v)]));
+  }
+  if (typeof args.output === "string" && args.output) draft.value.output_var = args.output;
+  if (typeof args.save === "string" && args.save) draft.value.name = args.save;
+  // What the server added to the stack (a constraint's wildcards), said back.
+  const notes: string[] = Array.isArray(args.notes) ? args.notes.filter((n): n is string => typeof n === "string") : [];
+  if (args.run !== false) {
+    await wb.run();
+    if (wb.runError.value) return `couldn't run it: ${wb.runError.value}`;
+  }
+  if (typeof args.save === "string" && args.save) {
+    notes.push((await wb.save()) ? `saved it as the scenario "${args.save}"` : "couldn't save it");
+  }
+  untouched = JSON.stringify(draft.value);
+  if (args.run === false) {
+    return `set it up in the Test Runner without running${notes.length ? `; ${notes.join("; ")}` : ""}. `
+      + "The user presses Run when ready.";
+  }
+  return `ran it in the Test Runner, where the user sees the results${notes.length ? `; ${notes.join("; ")}` : ""}. `
+    + currentPageNote();
 });
 
 /* ---------------------------- actions ----------------------------- */
@@ -206,6 +318,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       :quick-run-name="draft.id ? null : draft.name"
       :rerun="wb.rerun.value"
       :uses="uses"
+      :loading="wb.loading.value"
       @clear-uses="usesId = null"
       @select="onSelect"
       @rerun-pinned="wb.rerunPinned"
@@ -217,20 +330,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     <main class="wp-tr__main">
       <div class="wp-tr__bar">
         <div class="wp-tr__title">
-          <input
-            v-if="editingName"
-            id="wp-tr-name"
-            v-model="draft.name"
-            class="wp-tr__name-input"
-            aria-label="Scenario name"
-            data-test="scenario-name-input"
-            @blur="editingName = false"
-            @keydown.enter="editingName = false"
-          >
-          <h1 v-else>
-            <button type="button" class="wp-tr__name" title="Rename" data-test="scenario-name" @click="editingName = true">
-              {{ draft.name || "Untitled scenario" }}<Icon class="wp-tr__pen" name="pi-pencil" :size="ICON_SM" />
-            </button>
+          <!-- The heading's text is the scenario name InlineEdit draws (its read view), which the rule can't see through the component. -->
+          <!-- eslint-disable-next-line vuejs-accessibility/heading-has-content -->
+          <h1>
+            <InlineEdit
+              v-model="draft.name"
+              class="wp-tr__name"
+              label="Scenario name"
+              placeholder="Untitled scenario"
+              :required="false"
+              data-test="scenario-name"
+            />
           </h1>
           <p class="wp-tr__sub">
             {{ draft.stack.length }} item{{ draft.stack.length === 1 ? "" : "s" }}
@@ -254,7 +364,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           :disabled="!draft.stack.length"
           :loading="wb.running.value"
           title="Ctrl + Enter"
-          data-test="run-btn"
+          data-test="run-btn" data-ai-anchor="run" data-ai-label="Run button"
           @click="wb.run()"
         >{{ wb.running.value ? "Running…" : "Run" }}</Button>
       </div>
@@ -263,6 +373,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <StackBuilder
           v-model:stack="draft.stack"
           v-model:pins="draft.pins"
+          data-ai-anchor="stack"
+          data-ai-label="Stack: the modules and bundles to run"
           :views="wb.stackViews.value"
           :unset="wb.unset.value"
           :modules="wb.modules.value"
@@ -271,7 +383,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           @inspect="openInspector"
         />
 
-        <div v-if="!draft.stack.length" class="wp-tr__start" data-test="start-hint">
+        <Skeleton
+          v-if="wb.loading.value && !draft.stack.length"
+          shape="row"
+          icon="square"
+          :lines="3"
+          label="Loading the library"
+          data-test="stack-skeleton"
+        />
+        <div v-else-if="!draft.stack.length" class="wp-tr__start" data-test="start-hint">
           <strong>Add a module or bundle to start.</strong>
           <span>Stack upstream modules in front of the one you're testing, the way they sit on the canvas, and pin any value a node further up would provide. Then Run: every seed goes through the real engine.</span>
         </div>
@@ -280,50 +400,52 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <p v-if="result.missing.length" class="wp-tr__missing" data-test="missing">
             Skipped {{ result.missing.length }} item{{ result.missing.length === 1 ? "" : "s" }} no longer in the library.
           </p>
-          <div class="wp-tr__stats" data-test="run-stats">
+          <div class="wp-tr__stats" data-test="run-stats" data-ai-anchor="run-stats" data-ai-label="Run summary: runs, seeds, failures">
             <div><span>Runs</span><strong>{{ result.runs }}</strong><em>{{ seedLabel(wb.ranSeeds.value ?? draft.seeds) }}</em></div>
             <div><span>Unique outputs</span><strong>{{ uniqueOutputs ?? "none" }}</strong><em>{{ wb.outputVar.value ? `of $${wb.outputVar.value}` : "no output variable" }}</em></div>
             <div><span>Warnings</span><strong :data-warn="warningCount + result.failed ? 'true' : 'false'">{{ warningCount + result.failed }}</strong><em>{{ result.failed ? `${result.failed} runs failed` : result.warnings.length ? `${result.warnings.length} kinds` : "none reported" }}</em></div>
             <div><span>Engine time</span><strong>{{ result.elapsed_ms < 1000 ? `${Math.round(result.elapsed_ms)} ms` : `${(result.elapsed_ms / 1000).toFixed(2)} s` }}</strong><em>real engine, seeded</em></div>
           </div>
 
+          <AiRunBar v-if="ai.ready.value" :result="result" />
           <section class="wp-tr__results" aria-label="Results">
-            <div class="wp-tr__tabs" role="tablist">
-              <button
-                v-for="t in TABS"
-                :key="t.id"
-                type="button"
-                role="tab"
-                :aria-selected="tab === t.id"
-                :data-test="`tab-${t.id}`"
-                @click="tab = t.id"
-              >{{ t.label }}<span v-if="t.count !== undefined" class="wp-tr__count" :data-tone="countTone(t.id)">{{ t.count }}</span></button>
-            </div>
-            <div class="wp-tr__pane" role="tabpanel">
-              <VariablesPanel v-if="tab === 'variables'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" />
-              <OutputsPanel
-                v-else-if="tab === 'outputs'"
-                :result="result"
-                :views="wb.stackViews.value"
-                :output-var="wb.outputVar.value"
-                @open="openTrace"
-                @update:output-var="(v) => (draft.output_var = v)"
-              />
-              <SamplesPanel v-else-if="tab === 'samples'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" :selected-seed="traceSeed" @open="openTrace" />
-              <WarningsPanel v-else-if="tab === 'warnings'" :result="result" :uuid-to-name="uuidToName" @open="openTrace" />
-              <ComparePanel
-                v-else
-                :result="result"
-                :baseline="wb.baseline.value"
-                :diff="wb.diff.value"
-                :saved="!!draft.id && !wb.dirty.value"
-                :running="wb.running.value"
-                @set-baseline="wb.setBaseline"
-                @clear-baseline="wb.clearBaseline"
-                @run-baseline-seeds="wb.runBaselineSeeds"
-                @open="openTrace"
-              />
-            </div>
+            <WpTabs
+              v-model="tab"
+              class="wp-tr__tabs"
+              :tabs="TABS"
+              aria-label="Results"
+              test-prefix="tab"
+              data-ai-anchor="result-tabs"
+              data-ai-label="Result tabs: variables, outputs, samples, warnings, compare"
+            >
+              <template #panel>
+                <div class="wp-tr__pane">
+                  <VariablesPanel v-if="tab === 'variables'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" />
+                  <OutputsPanel
+                    v-else-if="tab === 'outputs'"
+                    :result="result"
+                    :views="wb.stackViews.value"
+                    :output-var="wb.outputVar.value"
+                    @open="openTrace"
+                    @update:output-var="(v) => (draft.output_var = v)"
+                  />
+                  <SamplesPanel v-else-if="tab === 'samples'" :result="result" :views="wb.stackViews.value" :output-var="wb.outputVar.value" :selected-seed="traceSeed" @open="openTrace" />
+                  <WarningsPanel v-else-if="tab === 'warnings'" :result="result" :uuid-to-name="uuidToName" @open="openTrace" />
+                  <ComparePanel
+                    v-else
+                    :result="result"
+                    :baseline="wb.baseline.value"
+                    :diff="wb.diff.value"
+                    :saved="!!draft.id && !wb.dirty.value"
+                    :running="wb.running.value"
+                    @set-baseline="wb.setBaseline"
+                    @clear-baseline="wb.clearBaseline"
+                    @run-baseline-seeds="wb.runBaselineSeeds"
+                    @open="openTrace"
+                  />
+                </div>
+              </template>
+            </WpTabs>
           </section>
         </template>
 
@@ -344,21 +466,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       @edit="editInspected"
     />
 
-    <ConfirmDialog
-      :visible="delConfirm.visible.value"
+    <ConfirmModal
+      :open="delConfirm.visible.value"
       :title="deleteTitle"
       body="The scenario and its saved run are removed. The modules it uses stay in your library."
       confirm-label="Delete"
-      variant="danger"
+      tone="danger"
       @confirm="delConfirm.confirm(performDelete)"
       @cancel="delConfirm.cancel"
     />
-    <ConfirmDialog
-      :visible="pendingLeave !== null"
+    <ConfirmModal
+      :open="pendingLeave !== null"
       title="Discard unsaved changes?"
       body="This scenario has changes that are not saved. Leaving it drops them."
       confirm-label="Discard"
-      variant="danger"
+      tone="danger"
       @confirm="confirmLeave"
       @cancel="pendingLeave = null"
     />
@@ -380,18 +502,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 }
 .wp-tr__title { min-width: 0; }
 .wp-tr__title h1 { margin: 0; font-size: var(--wp-text-lg); font-weight: var(--wp-weight-semibold); }
-.wp-tr__name {
-  background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: text;
-  display: inline-flex; align-items: center; gap: var(--wp-space-3);
-}
-.wp-tr__pen { color: var(--wp-text-dim); opacity: 0; transition: opacity .12s; }
-.wp-tr__name:hover .wp-tr__pen, .wp-tr__name:focus-visible .wp-tr__pen { opacity: 1; }
-.wp-tr__name:focus-visible { outline: 2px solid var(--wp-border-focus); }
-.wp-tr__name-input {
-  font-size: var(--wp-text-lg); font-weight: var(--wp-weight-semibold); color: var(--wp-text);
-  background: var(--wp-bg-2); border: 1px solid var(--wp-border-focus); border-radius: var(--wp-radius-sm);
-  padding: 0 var(--wp-space-3);
-}
 .wp-tr__sub { margin: var(--wp-space-1) 0 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-tr__sub code { color: var(--wp-accent-text); }
 .wp-tr__dirty { color: var(--wp-warn); }
@@ -418,23 +528,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .wp-tr__stats strong[data-warn="true"] { color: var(--wp-warn); }
 .wp-tr__stats em { font-style: normal; font-size: var(--wp-text-xs); color: var(--wp-text-muted); }
 .wp-tr__results { background: var(--wp-bg-2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); }
-.wp-tr__tabs { display: flex; gap: var(--wp-space-1); padding: 0 var(--wp-space-5); border-bottom: 1px solid var(--wp-border); overflow-x: auto; }
-.wp-tr__tabs button {
-  background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
-  padding: var(--wp-space-5) var(--wp-space-5); color: var(--wp-text-muted); font-size: var(--wp-text-base);
-  display: inline-flex; gap: var(--wp-space-3); align-items: center; white-space: nowrap;
-}
-.wp-tr__tabs button[aria-selected="true"] { color: var(--wp-text); border-bottom-color: var(--wp-accent-500); }
-.wp-tr__tabs button:focus-visible { outline: 2px solid var(--wp-border-focus); outline-offset: -2px; }
-.wp-tr__count {
-  font: var(--wp-text-xs) var(--wp-font-mono); background: var(--wp-bg-4); color: var(--wp-text-muted);
-  border-radius: 999px; padding: 0 var(--wp-space-3); /* audit-exempt: pill */
-}
-.wp-tr__count[data-tone="ok"] { background: color-mix(in oklab, var(--wp-success) 16%, transparent); color: var(--wp-success); }
-.wp-tr__count[data-tone="warn"] { background: color-mix(in oklab, var(--wp-warn) 16%, transparent); color: var(--wp-warn); }
+/* The tab row lines up with the pane's padding. */
+.wp-tr__tabs :deep(.wp-tabset__list) { padding: 0 var(--wp-space-5); }
 .wp-tr__pane { padding: var(--wp-space-6); }
-@media (max-width: 900px) {
-  .wp-tr { grid-template-columns: 1fr; height: auto; }
-  .wp-tr__main { overflow: visible; }
-}
+/* Page area narrower than 700px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="700"] .wp-tr { grid-template-columns: 1fr; height: auto; }
+.wp-content[data-lt~="700"] .wp-tr__main { overflow: visible; }
 </style>

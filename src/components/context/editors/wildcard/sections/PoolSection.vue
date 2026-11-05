@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import Input from "@/kit/Input.vue";
+import { inputEl } from "@/manager/utils/kit-field-el";
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
 import type { VarProducerLike } from "@/manager/components/RefChip.vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
@@ -13,8 +16,12 @@ import {
   type Ast,
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
-import WpCheck from "../../../../shared/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
+import { vToggleRow } from "@/kit/toggle-row";
 
 interface OptionFull extends WildcardOption {
   value: string;
@@ -287,12 +294,6 @@ function setPickMax(next: number): void {
   const hi = Math.max(0, Math.floor(next || 0));
   setPickRange(Math.min(pickMin.value, hi), hi);
 }
-function bumpPickMin(dir: 1 | -1): void {
-  setPickMin(pickMin.value + dir);
-}
-function bumpPickMax(dir: 1 | -1): void {
-  setPickMax(pickMax.value + dir);
-}
 function setPickSeparator(next: string): void {
   emit("update", patchInstance(props.module, "pick_separator", next));
 }
@@ -357,27 +358,26 @@ const skewedTowards = computed(() => {
 <template>
   <section class="pool">
     <div class="pool__head">
-      <button
-        type="button"
-        class="pool__collapse"
+      <WpIconButton
+        :icon="poolOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
         :class="{ 'pool__collapse--nudge': !poolOpen }"
         :aria-expanded="poolOpen"
         data-test="pool-collapse"
-        :aria-label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
+        :label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
         @click="poolOpen = !poolOpen"
-      >{{ poolOpen ? "▾" : "▸" }}</button>
+      />
       <div class="pool__label">Pool · what RNG can pick from</div>
       <span v-if="!poolOpen && tickedCount > 0" class="pool__collapsed-count" data-test="pool-collapsed-count">
         {{ tickedCount }} selected
       </span>
-      <button
-        type="button"
+      <Button
+        size="sm"
+        variant="outline"
         class="pool__adv-toggle"
-        :class="{ 'pool__adv-toggle--on': advanced }"
         data-test="pool-advanced"
-        :aria-pressed="advanced"
+        :pressed="advanced"
         @click="toggleAdvanced"
-      >ƒ(x) Advanced</button>
+      >ƒ(x) Advanced</Button>
     </div>
 
     <!-- Quick mode — grouped pills. OR within an axis, AND across axes. -->
@@ -390,10 +390,10 @@ const skewedTowards = computed(() => {
       >
         <span class="pool__group-name" :style="{ color: axisHue(group.axis) }">{{ group.axis }}</span>
         <div class="pool__chips">
-          <button
+          <Chip
             v-for="cat in group.tags"
             :key="cat"
-            type="button"
+            as="button"
             class="cat-chip"
             :class="{ 'cat-chip--on': isTagTicked(cat) }"
             :style="{ '--chip-hue': axisHue(group.axis) }"
@@ -405,7 +405,7 @@ const skewedTowards = computed(() => {
             <span v-if="isTagTicked(cat)" class="cat-chip__check" aria-hidden="true">✓</span>
             {{ cat }}
             <span class="cat-chip__count">{{ categoryOptionCount(cat) }}</span>
-          </button>
+          </Chip>
         </div>
       </div>
       <div v-if="filterExpr" class="pool__effective" data-test="pool-effective">
@@ -416,10 +416,10 @@ const skewedTowards = computed(() => {
 
     <!-- Advanced mode — boolean expression editor (§4.1 grammar). -->
     <div v-else-if="advanced" class="pool__advanced">
-      <input
-        ref="exprInput"
+      <Input
+        :ref="(c) => (exprInput = inputEl(c))"
         v-model="draft"
-        type="text"
+        size="sm"
         aria-label="Sub-category filter expression"
         class="pool__expr-input"
         :class="{ 'pool__expr-input--invalid': draftError }"
@@ -451,24 +451,24 @@ const skewedTowards = computed(() => {
           class="pool__palette-group"
         >
           <span class="pool__palette-axis" :style="{ color: axisHue(group.axis) }">{{ group.axis }}</span>
-          <button
+          <Chip
             v-for="cat in group.tags"
             :key="cat"
-            type="button"
+            as="button"
             class="pool__ins-chip"
             :style="{ '--chip-hue': axisHue(group.axis) }"
             :data-test="`pool-ins-${cat}`"
             @click="insertToken(cat)"
-          >{{ cat }}</button>
+          >{{ cat }}</Chip>
         </div>
         <div class="pool__palette-ops">
-          <button
+          <Chip
             v-for="op in OPERATORS"
             :key="op"
-            type="button"
+            as="button"
             class="pool__ins-chip pool__ins-chip--op"
             @click="insertToken(op)"
-          >{{ op }}</button>
+          >{{ op }}</Chip>
         </div>
       </div>
     </div>
@@ -478,58 +478,34 @@ const skewedTowards = computed(() => {
          the separator joins them for a bare `$var`. -->
     <div class="pool__pick" data-test="pool-pick">
       <span class="pool__pick-label">Pick</span>
-      <span class="pool__pick-wrap">
-        <input
-          class="pool__pick-num"
-          type="number"
-          min="0"
-          :value="pickMin"
-          data-test="pool-pick-min"
-          aria-label="Minimum picks"
-          @input="setPickMin(Number(($event.target as HTMLInputElement).value))"
-        />
-        <span class="pool__pick-spin">
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-min-up" aria-label="Increase minimum picks"
-            @click="bumpPickMin(1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-min-down" aria-label="Decrease minimum picks"
-            @click="bumpPickMin(-1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
-        </span>
-      </span>
+      <WpNumber
+        class="pool__pick-wrap"
+        :model-value="pickMin"
+        :min="0"
+        commit="input"
+        aria-label="Minimum picks"
+        up-label="Increase minimum picks"
+        down-label="Decrease minimum picks"
+        data-test="pool-pick-min"
+        @update:model-value="(n) => n !== null && setPickMin(n)"
+      />
       <span class="pool__pick-dash" aria-hidden="true">–</span>
-      <span class="pool__pick-wrap">
-        <input
-          class="pool__pick-num"
-          type="number"
-          min="0"
-          :value="pickMax"
-          data-test="pool-pick-max"
-          aria-label="Maximum picks"
-          @input="setPickMax(Number(($event.target as HTMLInputElement).value))"
-        />
-        <span class="pool__pick-spin">
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-max-up" aria-label="Increase maximum picks"
-            @click="bumpPickMax(1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 5 L4 0 L8 5 Z" fill="currentColor" /></svg></button>
-          <button
-            type="button" class="pool__pick-spin-btn" tabindex="-1"
-            data-test="pool-pick-max-down" aria-label="Decrease maximum picks"
-            @click="bumpPickMax(-1)"
-          ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true"><path d="M0 0 L4 5 L8 0 Z" fill="currentColor" /></svg></button>
-        </span>
-      </span>
-      <input
+      <WpNumber
+        class="pool__pick-wrap"
+        :model-value="pickMax"
+        :min="0"
+        commit="input"
+        aria-label="Maximum picks"
+        up-label="Increase maximum picks"
+        down-label="Decrease maximum picks"
+        data-test="pool-pick-max"
+        @update:model-value="(n) => n !== null && setPickMax(n)"
+      />
+      <Input
         v-if="pickMax > 1"
+        size="sm"
         class="pool__pick-sep"
-        type="text"
-        :value="pickSeparator"
+        :model-value="pickSeparator"
         placeholder="separator"
         data-test="pool-pick-sep"
         aria-label="Join separator"
@@ -541,10 +517,10 @@ const skewedTowards = computed(() => {
          Only meaningful while multi-pick is active; off = unique picks. -->
     <span
       v-if="multiActive"
-      class="pool__allow-repeats"
+      v-toggle-row class="pool__allow-repeats"
       data-test="pool-allow-repeats"
     >
-      <WpCheck
+      <Checkbox
         :model-value="pickIndependent"
         aria-label="Allow repeats"
         @update:model-value="setPickIndependent"
@@ -555,16 +531,15 @@ const skewedTowards = computed(() => {
 
     <!-- Only shown when the wildcard actually has a null option to exclude
          (#5). In multi-pick mode the null option leaves the pool entirely, so
-         this control goes inert (use Min 0). The wp-check box is the toggle
-         (box-click); the row label text is non-interactive, matching the
-         per-option checkboxes. -->
+         this control goes inert (use Min 0). A click on the words ticks the box
+         too (v-toggle-row); the box is the keyboard stop. -->
     <span
       v-if="hasNullOption"
-      class="pool__exclude-null"
+      v-toggle-row class="pool__exclude-null"
       :class="{ 'pool__exclude-null--off': multiActive }"
       data-test="pool-exclude-null"
     >
-      <WpCheck
+      <Checkbox
         :model-value="excludeNull"
         :disabled="multiActive"
         aria-label="Exclude null option"
@@ -585,9 +560,9 @@ const skewedTowards = computed(() => {
         <span class="pool__opt-head-cell pool__opt-head-cell--right">Category</span>
       </div>
       <OptionRow
-        :var-producers="varProducers"
         v-for="option in allOptions"
         :key="option.id"
+        :var-producers="varProducers"
         :option="option"
         :all-options="allOptions"
         :instance="instance"
@@ -630,41 +605,18 @@ const skewedTowards = computed(() => {
 /* Pushes the Advanced toggle to the right now that the head has a leading
  * chevron + an optional collapsed-count. */
 .pool__adv-toggle { margin-left: auto; }
-/* Deliberately larger than a bare glyph: at 9px with no hit area this read as
- * decoration and nobody knew it was pressable. */
-.pool__collapse {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  padding: 0;
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  cursor: pointer;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font-size: 12px;
-  line-height: 1;
-}
-.pool__collapse:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border);
-  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
-}
 /* Accented while collapsed so a first-time user reads it as "there is more
    here" rather than as dim decoration. Static tint, not an animation — this
    sits on screen for the whole editing session. */
-.pool__collapse--nudge {
-  color: var(--wp-accent-text, var(--wp-accent, #c4b5fd));
-  border-color: color-mix(in srgb, var(--wp-accent, #6366f1) 55%, transparent);
-  background: color-mix(in srgb, var(--wp-accent, #6366f1) 16%, transparent);
+.wp-icon-btn.pool__collapse--nudge {
+  color: var(--wp-accent-text, var(--wp-accent));
+  border-color: color-mix(in srgb, var(--wp-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--wp-accent) 16%, transparent);
 }
 .pool__collapsed-count {
   font: 600 9px var(--wp-font-sans);
   letter-spacing: 0.06em;
-  color: var(--wp-accent, #c4b5fd);
+  color: var(--wp-accent);
 }
 .pool__label {
   font: 600 9px var(--wp-font-sans);
@@ -689,57 +641,7 @@ const skewedTowards = computed(() => {
  * (.opt__weight-wrap + .opt__spin): bordered wrap + borderless input with the
  * native arrows suppressed + a custom up/down SVG spin column. So the two
  * controls read as one family AND keep visible arrows. */
-.pool__pick-wrap {
-  display: inline-flex;
-  align-items: stretch;
-  width: 56px;
-  height: 22px;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.pool__pick-wrap:focus-within { border-color: var(--wp-accent); }
-.pool__pick-num {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-  text-align: right;
-  -moz-appearance: textfield;
-}
-.pool__pick-num::-webkit-outer-spin-button,
-.pool__pick-num::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.pool__pick-num:focus { outline: none; }
-.pool__pick-spin {
-  display: flex;
-  flex-direction: column;
-  width: 14px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.pool__pick-spin-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  line-height: 0;
-}
-.pool__pick-spin-btn + .pool__pick-spin-btn { border-top: 1px solid var(--wp-border); }
-.pool__pick-spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,0.10); }
+.pool__pick-wrap { width: 56px; }
 .pool__pick-dash { color: var(--wp-text-dim, var(--wp-text3)); }
 .pool__pick-sep {
   flex: 1;
@@ -748,28 +650,10 @@ const skewedTowards = computed(() => {
   font: 11px var(--wp-font-mono);
   background: var(--wp-bg-soft, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
 }
 .pool__exclude-null--off { opacity: 0.55; }
-.pool__adv-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--wp-border);
-  border-radius: 4px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 10px var(--wp-font-mono);
-  cursor: pointer;
-}
-.pool__adv-toggle:hover { border-color: var(--wp-border2, var(--wp-border)); }
-.pool__adv-toggle--on {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
-  background: var(--wp-accent-glow, rgba(99, 102, 241, 0.15));
-}
 .pool__groups {
   display: flex;
   flex-direction: column;
@@ -795,7 +679,9 @@ const skewedTowards = computed(() => {
   flex-wrap: wrap;
   gap: 6px;
 }
-.cat-chip {
+/* Kit Chips (as buttons) wearing the axis hue: a faint hue border, filled when on. */
+.wp-chip.cat-chip {
+  height: auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -803,17 +689,17 @@ const skewedTowards = computed(() => {
   /* Faint axis-hue border so a group's chips read as a coloured cluster
    * even when unselected (#9). */
   border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 30%, var(--wp-border));
-  border-radius: 999px;
+  border-radius: min(10px, var(--wp-radius-cap, 999px));
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
   cursor: pointer;
   background: var(--wp-bg-deep, var(--wp-bg));
 }
-.cat-chip:hover { border-color: var(--chip-hue, var(--wp-border-soft, var(--wp-border))); }
+.wp-chip.cat-chip:hover { border-color: var(--chip-hue, var(--wp-border-soft, var(--wp-border))); }
 /* Selected: a solid hue border + 30% fill + bold + leading ✓ so "on" reads
  * at a glance for ANY hue — the old 14% tint vanished against the grey
  * ungrouped hue, which read as a dim, not a selection (#6). */
-.cat-chip--on {
+.wp-chip.cat-chip--on {
   border-color: var(--chip-hue, var(--wp-accent));
   color: var(--wp-text);
   background: color-mix(in srgb, var(--chip-hue, var(--wp-accent)) 30%, transparent);
@@ -853,7 +739,7 @@ const skewedTowards = computed(() => {
   padding: 6px 9px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
   font: 11px var(--wp-font-mono);
 }
@@ -862,11 +748,11 @@ const skewedTowards = computed(() => {
   border-color: var(--wp-accent);
 }
 .pool__expr-input--invalid {
-  border-color: var(--wp-danger, #ef4444);
+  border-color: var(--wp-danger);
 }
 .pool__expr-error {
   font: 10px var(--wp-font-mono);
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 .pool__expr-meta {
   display: flex;
@@ -926,20 +812,21 @@ const skewedTowards = computed(() => {
   padding-top: 4px;
   border-top: 1px dashed var(--wp-border-soft, var(--wp-border));
 }
-.pool__ins-chip {
+.wp-chip.pool__ins-chip {
+  height: auto;
   padding: 2px 8px;
   border: 1px solid color-mix(in srgb, var(--chip-hue, var(--wp-border)) 35%, var(--wp-border));
-  border-radius: 999px;
+  border-radius: min(8px, var(--wp-radius-cap, 999px));
   background: transparent;
   color: var(--wp-text-muted, var(--wp-text2));
   font: 10px var(--wp-font-sans);
   cursor: pointer;
 }
-.pool__ins-chip:hover {
+.wp-chip.pool__ins-chip:hover {
   border-color: var(--chip-hue, var(--wp-accent));
   color: var(--wp-text);
 }
-.pool__ins-chip--op {
+.wp-chip.pool__ins-chip--op {
   font-family: var(--wp-font-mono);
   color: var(--wp-text-dim, var(--wp-text3));
 }
@@ -963,7 +850,7 @@ const skewedTowards = computed(() => {
   flex-direction: column;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   /* Long option lists scroll in place so the axes / pick / footer stay
    * visible; the column-header row below stays pinned via sticky. */
   max-height: 40vh;

@@ -6,8 +6,10 @@
  * variable-binding row to override. Library-defining edits (matrix,
  * source/target wildcards, exceptions list shape) live in SPA.
  */
+import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -37,25 +39,27 @@ function onResetName(): void {
     <div class="id__row">
       <span class="id__key">Display name</span>
       <div class="id__input-row">
-        <input
+        <Input
+          size="sm"
+          mono
           class="id__input"
-          :class="{ 'id__input--mod': nameOverridden }"
+          :tone="nameOverridden ? 'accent' : undefined"
           data-test="id-name"
-          type="text"
-          :value="nameValue"
+          :model-value="nameValue"
           :placeholder="module.meta?.library_name ?? 'module name'"
           aria-label="Display name"
           @input="onNameInput"
         />
-        <button
+        <Button
           v-if="nameOverridden"
-          type="button"
-          class="id__reset"
+          size="sm"
+          variant="outline"
+          icon="pi-replay"
           data-test="id-name-reset"
-          :title="`Restore name to library default: ${libraryName}`"
+          :hint="`Restore name to library default: ${libraryName}`"
           aria-label="Reset display name to library default"
           @click="onResetName"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
   </section>
@@ -83,20 +87,6 @@ function onResetName(): void {
 .id__key {
   font: 11px var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
-}
-.id__input {
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  padding: 5px 8px;
-  font: 11px var(--wp-font-mono);
-  color: var(--wp-text);
-}
-.id__input:focus { border-color: var(--wp-accent); outline: none; }
-.id__input::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
-.id__input--mod {
-  border-color: var(--wp-accent);
-  color: var(--wp-accent-text, var(--wp-text));
 }
 .id__input-row {
   display: flex;

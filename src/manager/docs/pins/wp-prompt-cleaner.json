@@ -1,0 +1,42 @@
+{
+  "node": "WP_PromptCleaner",
+  "image": "images/docs/wp-prompt-cleaner.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "prompt (in)",
+      "x": 0.332,
+      "y": 0.2011
+    },
+    {
+      "group": "ports",
+      "term": "cleaner widget",
+      "x": 0.3429,
+      "y": 0.2748
+    },
+    {
+      "group": "ports",
+      "term": "negative (in)",
+      "x": 0.332,
+      "y": 0.2339
+    },
+    {
+      "group": "ports",
+      "term": "prompt (out)",
+      "x": 0.668,
+      "y": 0.141
+    },
+    {
+      "group": "ports",
+      "term": "blocklist (in)",
+      "x": 0.332,
+      "y": 0.7962
+    },
+    {
+      "group": "ports",
+      "term": "negative (out)",
+      "x": 0.668,
+      "y": 0.1683
+    }
+  ]
+}

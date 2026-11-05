@@ -234,6 +234,86 @@ class ModelInfoWidgetInput:
             )
 
 
+
+@comfytype(io_type="WP_TOGGLES")
+class TogglesWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_TOGGLES"]``.
+
+    JSON ``{version, mode, group_var, rows: [toggle | label]}``. Parsed by
+    ``engine/toggles.py::parse_config``.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,  # widget_type
+                None,  # force_input
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
+@comfytype(io_type="WP_LABEL_GRID")
+class LabelGridWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_LABEL_GRID"]``.
+
+    JSON label + grid settings (``engine/label_grid.py::DEFAULT_CONFIG``),
+    parsed per key by ``engine/label_grid.py::parse_config``.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,  # widget_type
+                None,  # force_input
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
 def deserialize_modules(payload: str) -> list[Module]:
     """Parse the widget JSON payload into a list of engine module dataclasses.
 
@@ -445,7 +525,28 @@ _CROSS_NODE_INTERNAL_KEYS = (
     # pins its own swept wildcards and holds the rest.
     "__wp_pin_overrides__",
     "__wp_sweep_hold__",
+    # Hold across a loop: frame 0's payload ({"context", "internals"}) as the
+    # previous node emitted it, so a held module on any frame resolves
+    # against frame 0's inputs (see `frame0_payload`).
+    "__wp_frame0__",
 )
+
+#: Cross-node internal carrying frame 0's payload through a loop.
+FRAME0_KEY = "__wp_frame0__"
+
+
+def frame0_payload(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Frame 0's output of a node, from its frame-0 ctx (the hold base pass
+    or the Context Loop's frame 0), in the shape `__wp_frame0__` carries:
+    the socket context plus the cross-node internals (minus itself)."""
+    return {
+        "context": strip_engine_internals(ctx),
+        "internals": {
+            key: ctx[key]
+            for key in _CROSS_NODE_INTERNAL_KEYS
+            if key in ctx and key != FRAME0_KEY
+        },
+    }
 
 
 def build_payload(

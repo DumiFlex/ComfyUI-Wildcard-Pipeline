@@ -26,12 +26,12 @@
  * variant). Replaces the per-surface `title` attribute tooltips so the
  * affordance is consistent + uses the colored palette.
  *
- * Popover positioning: viewport-anchored via `position: fixed` + a
- * Teleport to `body`, so the chip's clipping parent (ModuleRow's
- * `overflow:hidden` cards, the wildcard modal's scrollable pool table)
- * doesn't cut it off.
+ * The card is a kit Popover against the chip, so the chip's clipping parent
+ * (ModuleRow's `overflow:hidden` cards, the wildcard modal's scrollable pool
+ * table) doesn't cut it off. It stays open while the pointer is over it.
  */
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
+import Popover from "@/kit/Popover.vue";
 import type { PairingBadge } from "../../extension/constraint-pairs";
 import { cacheVersion, ensure, lookup } from "../../extension/preview-resolver";
 
@@ -85,7 +85,6 @@ ensure(pairList.value.map((p) => p.targetUuid));
 
 const open = ref<boolean>(false);
 const chipRef = ref<HTMLElement | null>(null);
-const popoverStyle = ref<Record<string, string>>({});
 
 /** Lookup target's display name from the preview-resolver cache, reading
  *  `cacheVersion.value` to subscribe to lazy-fetch completions. Returns
@@ -98,29 +97,6 @@ function nameForUuid(uuid: string): string | null {
   return hit.varBinding?.trim() || hit.name?.trim() || null;
 }
 
-/** Place the popover above the chip when there's room, below otherwise.
- *  Right-edge clamped to viewport so a chip near the right edge of the
- *  card doesn't push the popover off-screen. */
-function positionPopover(): void {
-  const el = chipRef.value;
-  if (!el) return;
-  const rect = el.getBoundingClientRect();
-  const POP_W = 280;
-  const PAD = 6;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const fitsAbove = rect.top > 180;
-  const top = fitsAbove ? rect.top - PAD : rect.bottom + PAD;
-  let left = rect.left + rect.width / 2 - POP_W / 2;
-  if (left < 8) left = 8;
-  if (left + POP_W > vw - 8) left = vw - POP_W - 8;
-  popoverStyle.value = {
-    top: `${Math.max(8, Math.min(vh - 8, top))}px`,
-    left: `${left}px`,
-    transform: fitsAbove ? "translateY(-100%)" : "none",
-  };
-}
-
 let hoverCloseTimer: number | null = null;
 
 function onEnter(): void {
@@ -129,7 +105,6 @@ function onEnter(): void {
     hoverCloseTimer = null;
   }
   open.value = true;
-  void nextTick(positionPopover);
 }
 
 function onLeave(): void {
@@ -141,7 +116,22 @@ function onLeave(): void {
 
 function onClickChip(): void {
   open.value = !open.value;
-  if (open.value) void nextTick(positionPopover);
+}
+
+/** Set for a moment after Escape closed the card: the Popover hands focus
+ *  back to the chip, and that focus must not open it again. */
+let closedByKey = false;
+function onFocus(): void {
+  if (closedByKey) return;
+  onEnter();
+}
+function onOpenChange(v: boolean): void {
+  if (v) return;
+  if (hoverCloseTimer !== null) window.clearTimeout(hoverCloseTimer);
+  hoverCloseTimer = null;
+  open.value = false;
+  closedByKey = true;
+  void nextTick(() => { closedByKey = false; });
 }
 
 onBeforeUnmount(() => {
@@ -325,7 +315,7 @@ const multiEntryTitle = computed<string>(() =>
     :aria-expanded="open"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
-    @focus="onEnter"
+    @focus="onFocus"
     @blur="onLeave"
     @click.stop="onClickChip"
     @keydown.enter.prevent="onClickChip"
@@ -347,81 +337,84 @@ const multiEntryTitle = computed<string>(() =>
     </template>
   </span>
 
-  <Teleport to="body">
+  <!-- The kit Popover's own prop, turning its focus move OFF. -->
+  <!-- eslint-disable-next-line vuejs-accessibility/no-autofocus -->
+  <Popover :autofocus="false"
+    :open="open && pairList.length > 0"
+    :anchor="chipRef"
+    placement="top"
+    role="group"
+    :label="popoverAriaLabel"
+    class="wp-pair-pop"
+    :class="!isMultiColor && primaryPair ? `wp-pair-pop--c${primaryPair.colorIndex}` : null"
+    @update:open="onOpenChange"
+    @mouseenter="onEnter"
+    @mouseleave="onLeave"
+  >
+    <div class="wp-pair-pop__head">
+      <span v-if="isMultiEntry" class="wp-pair-pop__num">×{{ pairList.length }}</span>
+      <span v-else-if="primaryPair" class="wp-pair-pop__num">#{{ primaryPair.number }}</span>
+      <span class="wp-pair-pop__title">
+        {{ isMultiEntry ? multiEntryTitle : "Constraint pair" }}
+      </span>
+    </div>
     <div
-      v-if="open && pairList.length > 0"
-      class="wp-pair-pop"
-      :class="!isMultiColor && primaryPair ? `wp-pair-pop--c${primaryPair.colorIndex}` : null"
-      :style="popoverStyle"
-      role="tooltip"
-      @mouseenter="onEnter"
-      @mouseleave="onLeave"
+      v-for="(p, i) in pairList"
+      :key="`${p.number}-${p.targetUuid}-${i}`"
+      class="wp-pair-pop__entry"
+      :class="`wp-pair-pop__entry--c${p.colorIndex}`"
     >
-      <div class="wp-pair-pop__head">
-        <span v-if="isMultiEntry" class="wp-pair-pop__num">×{{ pairList.length }}</span>
-        <span v-else-if="primaryPair" class="wp-pair-pop__num">#{{ primaryPair.number }}</span>
-        <span class="wp-pair-pop__title">
-          {{ isMultiEntry ? multiEntryTitle : "Constraint pair" }}
+      <div v-if="isMultiEntry" class="wp-pair-pop__entry-head">
+        <span class="wp-pair-pop__entry-num">#{{ p.number }}</span>
+      </div>
+      <div class="wp-pair-pop__row">
+        <span class="wp-pair-pop__lbl">Route</span>
+        <span class="wp-pair-pop__val">{{ routeLabel(p) }}</span>
+      </div>
+      <div v-if="reachLabel(p)" class="wp-pair-pop__row wp-pair-pop__row--reach">
+        <span class="wp-pair-pop__lbl">Reach</span>
+        <span class="wp-pair-pop__val wp-pair-pop__reach">{{ reachLabel(p) }}</span>
+      </div>
+      <div v-if="pathHops(p).length > 0" class="wp-pair-pop__row wp-pair-pop__row--path">
+        <span class="wp-pair-pop__lbl">Path</span>
+        <span class="wp-pair-pop__val wp-pair-pop__path">
+          <template v-for="(hop, hi) in pathHops(p)" :key="`${hi}-${hop}`"><span
+            class="wp-pair-pop__hop">{{ hop }}</span><span
+            v-if="hi < pathHops(p).length - 1" class="wp-pair-pop__hop-arrow"> → </span></template>
         </span>
       </div>
-      <div
-        v-for="(p, i) in pairList"
-        :key="`${p.number}-${p.targetUuid}-${i}`"
-        class="wp-pair-pop__entry"
-        :class="`wp-pair-pop__entry--c${p.colorIndex}`"
-      >
-        <div v-if="isMultiEntry" class="wp-pair-pop__entry-head">
-          <span class="wp-pair-pop__entry-num">#{{ p.number }}</span>
-        </div>
-        <div class="wp-pair-pop__row">
-          <span class="wp-pair-pop__lbl">Route</span>
-          <span class="wp-pair-pop__val">{{ routeLabel(p) }}</span>
-        </div>
-        <div v-if="reachLabel(p)" class="wp-pair-pop__row wp-pair-pop__row--reach">
-          <span class="wp-pair-pop__lbl">Reach</span>
-          <span class="wp-pair-pop__val wp-pair-pop__reach">{{ reachLabel(p) }}</span>
-        </div>
-        <div v-if="pathHops(p).length > 0" class="wp-pair-pop__row wp-pair-pop__row--path">
-          <span class="wp-pair-pop__lbl">Path</span>
-          <span class="wp-pair-pop__val wp-pair-pop__path">
-            <template v-for="(hop, hi) in pathHops(p)" :key="`${hi}-${hop}`"><span
-              class="wp-pair-pop__hop">{{ hop }}</span><span
-              v-if="hi < pathHops(p).length - 1" class="wp-pair-pop__hop-arrow"> → </span></template>
-          </span>
-        </div>
-        <div class="wp-pair-pop__row">
-          <span class="wp-pair-pop__lbl">Target</span>
-          <span class="wp-pair-pop__val">
-            <span v-if="nameForUuid(p.targetUuid)">@{{ nameForUuid(p.targetUuid) }}</span>
-            <span class="wp-pair-pop__uuid">{{ p.targetUuid }}</span>
-          </span>
-        </div>
-        <div v-if="p.via && (p.via.optionIds?.length ?? 0) > 0" class="wp-pair-pop__row">
-          <span class="wp-pair-pop__lbl">Option{{ (p.via.optionIds?.length ?? 0) > 1 ? "s" : "" }}</span>
-          <span class="wp-pair-pop__val wp-pair-pop__optids">
-            <span v-for="id in (p.via.optionIds ?? [])" :key="id" class="wp-pair-pop__pill">{{ id }}</span>
-          </span>
-        </div>
+      <div class="wp-pair-pop__row">
+        <span class="wp-pair-pop__lbl">Target</span>
+        <span class="wp-pair-pop__val">
+          <span v-if="nameForUuid(p.targetUuid)">@{{ nameForUuid(p.targetUuid) }}</span>
+          <span class="wp-pair-pop__uuid">{{ p.targetUuid }}</span>
+        </span>
       </div>
-      <div v-if="pairList.length === 1" class="wp-pair-pop__hint">
-        <template v-if="primaryPair?.isOrphan">
-          No matching downstream wildcard exists. Add an instance to satisfy this constraint.
-        </template>
-        <template v-else-if="primaryPair?.via">
-          The constraint fires when this wildcard rolls an option whose value contains the nested ref.
-        </template>
-        <template v-else>
-          The constraint claims the next downstream wildcard instance with this uuid.
-        </template>
-      </div>
-      <div v-else-if="variant === 'collapse'" class="wp-pair-pop__hint">
-        Every constraint above covers this target instance. Each applies its own reach + weighting when it fires.
-      </div>
-      <div v-else class="wp-pair-pop__hint">
-        Each constraint fires when this wildcard rolls an option carrying its target ref.
+      <div v-if="p.via && (p.via.optionIds?.length ?? 0) > 0" class="wp-pair-pop__row">
+        <span class="wp-pair-pop__lbl">Option{{ (p.via.optionIds?.length ?? 0) > 1 ? "s" : "" }}</span>
+        <span class="wp-pair-pop__val wp-pair-pop__optids">
+          <span v-for="id in (p.via.optionIds ?? [])" :key="id" class="wp-pair-pop__pill">{{ id }}</span>
+        </span>
       </div>
     </div>
-  </Teleport>
+    <div v-if="pairList.length === 1" class="wp-pair-pop__hint">
+      <template v-if="primaryPair?.isOrphan">
+        No matching downstream wildcard exists. Add an instance to satisfy this constraint.
+      </template>
+      <template v-else-if="primaryPair?.via">
+        The constraint fires when this wildcard rolls an option whose value contains the nested ref.
+      </template>
+      <template v-else>
+        The constraint claims the next downstream wildcard instance with this uuid.
+      </template>
+    </div>
+    <div v-else-if="variant === 'collapse'" class="wp-pair-pop__hint">
+      Every constraint above covers this target instance. Each applies its own reach + weighting when it fires.
+    </div>
+    <div v-else class="wp-pair-pop__hint">
+      Each constraint fires when this wildcard rolls an option carrying its target ref.
+    </div>
+  </Popover>
 </template>
 
 <style scoped>
@@ -431,34 +424,18 @@ const multiEntryTitle = computed<string>(() =>
 .wp-pair-badge { cursor: pointer; }
 .wp-pair-badge:focus { outline: 2px solid currentColor; outline-offset: 1px; }
 
-.wp-pair-pop {
-  position: fixed;
-  /* Hover-card tier — above the popover tier (10020), since a pair badge can
-     be rendered inside a popover and its card must clear it. Matches
-     RefChip's hover card. */
-  z-index: 10030;
-  width: 280px;
-  padding: 8px 10px;
-  background: var(--wp-bg-1, var(--wp-bg2, #1a1d24));
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #353841));
-  border-radius: 5px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
-  font: 11px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text, #e0e0e8);
-  pointer-events: auto;
-}
 .wp-pair-pop__head {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
   padding-bottom: 6px;
-  border-bottom: 1px solid var(--wp-border, #2a2d35);
+  border-bottom: 1px solid var(--wp-border);
 }
 .wp-pair-pop__num {
   font: 600 11px var(--wp-font-mono, monospace);
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, currentColor 14%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
 }
@@ -466,12 +443,12 @@ const multiEntryTitle = computed<string>(() =>
   font: 600 9px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 .wp-pair-pop__entry + .wp-pair-pop__entry {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
 }
 .wp-pair-pop__entry-head {
   margin-bottom: 4px;
@@ -479,7 +456,7 @@ const multiEntryTitle = computed<string>(() =>
 .wp-pair-pop__entry-num {
   font: 600 10px var(--wp-font-mono, monospace);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, currentColor 14%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
   color: currentColor;
@@ -503,18 +480,18 @@ const multiEntryTitle = computed<string>(() =>
   font: 600 9px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 .wp-pair-pop__val {
   flex: 1;
   font: 11px var(--wp-font-mono, monospace);
-  color: var(--wp-text, #e0e0e8);
+  color: var(--wp-text);
   word-break: break-word;
 }
 .wp-pair-pop__uuid {
   display: block;
   font: 9px var(--wp-font-mono, monospace);
-  color: var(--wp-text-dim, #7a7d88);
+  color: var(--wp-text-dim);
   margin-top: 1px;
 }
 .wp-pair-pop__optids { display: flex; flex-wrap: wrap; gap: 3px; }
@@ -523,22 +500,22 @@ const multiEntryTitle = computed<string>(() =>
   padding: 1px 5px;
   background: color-mix(in srgb, currentColor 10%, transparent);
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 3px;
-  color: var(--wp-text-muted, #aeb1bb);
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
+  color: var(--wp-text-muted);
 }
 .wp-pair-pop__hint {
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--wp-border, #2a2d35);
+  border-top: 1px solid var(--wp-border);
   font: 10px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
   line-height: 1.4;
 }
 /* Reach row — green so the constraint's coverage selector reads as a
  * distinct, positive fact in the card (mirrors the green reach accent
  * the reach-selector UI uses elsewhere). */
 .wp-pair-pop__reach {
-  color: var(--wp-green, #6bc96f);
+  color: var(--wp-green);
   font-weight: 600;
 }
 /* Path row — the transitive hop chain a constraint travels to reach a
@@ -548,7 +525,7 @@ const multiEntryTitle = computed<string>(() =>
   word-break: break-word;
 }
 .wp-pair-pop__hop-arrow {
-  color: var(--wp-text-dim, #7a7d88);
+  color: var(--wp-text-dim);
   white-space: pre;
 }
 
@@ -561,4 +538,22 @@ const multiEntryTitle = computed<string>(() =>
 .wp-pair-pop--c6 .wp-pair-pop__num { color: var(--wp-var-6); }
 .wp-pair-pop--c7 .wp-pair-pop__num { color: var(--wp-var-7); }
 .wp-pair-pop--c8 .wp-pair-pop__num { color: var(--wp-var-8); }
+</style>
+
+<style>
+@layer wp-extension {
+  /* The card is the Popover panel (under <body>, so not scoped; layered like
+     the Popover's own rules, and two classes so it wins over them). Its
+     outline is the Popover's inset ring, hence 1px more padding. Hover-card
+     tier, above the popover tier (10020): a pair badge can sit inside a
+     popover and its card must clear it. Matches RefChip's hover card. */
+  .wp-popover.wp-pair-pop {
+    z-index: 10030;
+    width: 280px;
+    padding: 9px 11px;
+    background: var(--wp-bg-1, var(--wp-bg-2));
+    border-radius: min(5px, var(--wp-radius-cap, 999px));
+    font: 11px var(--wp-font-sans, sans-serif);
+  }
+}
 </style>

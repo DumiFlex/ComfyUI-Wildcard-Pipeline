@@ -1,0 +1,30 @@
+{
+  "node": "WP_Toggles",
+  "image": "images/docs/wp-toggles.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "upstream (in)",
+      "x": 0.2428,
+      "y": 0.2429
+    },
+    {
+      "group": "controls",
+      "term": "control dots (in)",
+      "x": 0.2428,
+      "y": 0.4508
+    },
+    {
+      "group": "controls",
+      "term": "context (out)",
+      "x": 0.552,
+      "y": 0.2429
+    },
+    {
+      "group": "controls",
+      "term": "toggle outputs",
+      "x": 0.552,
+      "y": 0.3468
+    }
+  ]
+}

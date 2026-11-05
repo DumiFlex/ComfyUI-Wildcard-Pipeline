@@ -40,6 +40,15 @@ const STORAGE_KEY_START_PAGE = "wp-start-page";
 export const STORAGE_KEY_LAST_ROUTE = "wp-last-route";
 const STORAGE_KEY_MOTION = "wp-motion";
 const STORAGE_KEY_WHATS_NEW = "wp-whats-new-after-update";
+/** The "Explain" chip over selected text (AI assistant). */
+const STORAGE_KEY_EXPLAIN_CHIP = "wp-explain-chip";
+/** What the chat shows besides its replies (Settings › AI assistant ›
+ *  Chat): the model's thinking, its working notes, the steps it took. */
+const STORAGE_KEY_CHAT_THINKING = "wp-ai-chat-show-thinking";
+const STORAGE_KEY_CHAT_NOTES = "wp-ai-chat-show-notes";
+const STORAGE_KEY_CHAT_STEPS = "wp-ai-chat-show-steps";
+/** Replies type out as the model writes them, instead of arriving whole. */
+const STORAGE_KEY_CHAT_TYPING = "wp-ai-chat-type-out";
 /** Anonymous usage pings from the Community tab (passed to the embed). */
 const STORAGE_KEY_USAGE_STATS = "wp-usage-stats";
 export const STORAGE_KEY_LAST_SEEN_VERSION = "wp-last-seen-version";
@@ -57,6 +66,8 @@ const STORAGE_KEY_TAG_AUTOCOMPLETE = "wp-tag-autocomplete";
 const STORAGE_KEY_LORA_AUTOCOMPLETE = "wp-lora-autocomplete";
 const STORAGE_KEY_EMBEDDING_AUTOCOMPLETE = "wp-embedding-autocomplete";
 const STORAGE_KEY_AUTOCOMPLETE_SEPARATOR = "wp-autocomplete-separator";
+const STORAGE_KEY_AUTOCOMPLETE_SPACES = "wp-autocomplete-spaces";
+const STORAGE_KEY_AUTOCOMPLETE_ESCAPE = "wp-autocomplete-escape-brackets";
 
 function readStoredFlag(key: string): boolean {
   try {
@@ -154,13 +165,6 @@ export function readTestRunnerDefaults(): TestRunnerDefaults {
   }
 }
 
-/** Control heights per density (the values the Tweaks panel always set). */
-const DENSITY_CONTROL_H: Record<DensityMode, string> = {
-  compact: "32px",
-  comfortable: "38px",
-  cozy: "44px",
-};
-
 /**
  * Whether an axis with no tags in it survives a save.
  *
@@ -245,6 +249,11 @@ export const useUiStore = defineStore("ui", () => {
   const startPage = ref<StartPage>(readStoredEnum(STORAGE_KEY_START_PAGE, START_PAGES, "dashboard"));
   const motion = ref<MotionMode>(readStoredEnum(STORAGE_KEY_MOTION, MOTION_MODES, "auto"));
   const whatsNewAfterUpdate = ref<boolean>(readStoredEnum(STORAGE_KEY_WHATS_NEW, ["1", "0"] as const, "1") === "1");
+  const explainChip = ref<boolean>(readStoredEnum(STORAGE_KEY_EXPLAIN_CHIP, ["1", "0"] as const, "1") === "1");
+  const chatThinking = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_THINKING, ["1", "0"] as const, "1") === "1");
+  const chatNotes = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_NOTES, ["1", "0"] as const, "1") === "1");
+  const chatSteps = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_STEPS, ["1", "0"] as const, "1") === "1");
+  const chatTyping = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_TYPING, ["1", "0"] as const, "0") === "1");
   const usageStats = ref<boolean>(readStoredEnum(STORAGE_KEY_USAGE_STATS, ["1", "0"] as const, "1") === "1");
   const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
@@ -255,6 +264,8 @@ export const useUiStore = defineStore("ui", () => {
   const loraAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_LORA_AUTOCOMPLETE));
   const embeddingAutocomplete = ref<boolean>(readStoredFlag(STORAGE_KEY_EMBEDDING_AUTOCOMPLETE));
   const autocompleteSeparator = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_SEPARATOR));
+  const autocompleteSpaces = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_SPACES));
+  const autocompleteEscapeBrackets = ref<boolean>(readStoredFlag(STORAGE_KEY_AUTOCOMPLETE_ESCAPE));
 
   /** One writer for the three flags that share a shape. */
   function writeFlag(target: { value: boolean }, key: string, v: boolean): void {
@@ -277,6 +288,12 @@ export const useUiStore = defineStore("ui", () => {
   }
   function setAutocompleteSeparator(v: boolean): void {
     writeFlag(autocompleteSeparator, STORAGE_KEY_AUTOCOMPLETE_SEPARATOR, v);
+  }
+  function setAutocompleteSpaces(v: boolean): void {
+    writeFlag(autocompleteSpaces, STORAGE_KEY_AUTOCOMPLETE_SPACES, v);
+  }
+  function setAutocompleteEscapeBrackets(v: boolean): void {
+    writeFlag(autocompleteEscapeBrackets, STORAGE_KEY_AUTOCOMPLETE_ESCAPE, v);
   }
 
   function setTagAutocomplete(v: boolean): void {
@@ -331,9 +348,11 @@ export const useUiStore = defineStore("ui", () => {
     const html = document.documentElement;
     html.classList.toggle("wp-density-compact", mode === "compact");
     html.classList.toggle("wp-density-cozy", mode === "cozy");
-    const h = DENSITY_CONTROL_H[mode];
-    html.style.setProperty("--wp-input-h", h);
-    html.style.setProperty("--wp-btn-h", h);
+    // Control heights follow the 24/32/40 scale times --wp-density (set by
+    // the classes above), so nothing is written inline any more. Clear what
+    // an older build left behind.
+    html.style.removeProperty("--wp-input-h");
+    html.style.removeProperty("--wp-btn-h");
   }
 
   function applyMotionToDocument(mode: MotionMode): void {
@@ -355,6 +374,18 @@ export const useUiStore = defineStore("ui", () => {
   function setWhatsNewAfterUpdate(v: boolean): void {
     whatsNewAfterUpdate.value = v;
     try { localStorage.setItem(STORAGE_KEY_WHATS_NEW, v ? "1" : "0"); } catch { /* ignore */ }
+  }
+  function setExplainChip(v: boolean): void {
+    explainChip.value = v;
+    try { localStorage.setItem(STORAGE_KEY_EXPLAIN_CHIP, v ? "1" : "0"); } catch { /* ignore */ }
+  }
+
+  function setChatShow(what: "thinking" | "notes" | "steps" | "typing", v: boolean): void {
+    const [r, key] = what === "thinking" ? [chatThinking, STORAGE_KEY_CHAT_THINKING]
+      : what === "notes" ? [chatNotes, STORAGE_KEY_CHAT_NOTES]
+        : what === "typing" ? [chatTyping, STORAGE_KEY_CHAT_TYPING] : [chatSteps, STORAGE_KEY_CHAT_STEPS];
+    r.value = v;
+    try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* ignore */ }
   }
 
   function setUsageStats(v: boolean): void {
@@ -436,6 +467,13 @@ export const useUiStore = defineStore("ui", () => {
     setMotion,
     whatsNewAfterUpdate,
     setWhatsNewAfterUpdate,
+    explainChip,
+    setExplainChip,
+    chatThinking,
+    chatNotes,
+    chatSteps,
+    chatTyping,
+    setChatShow,
     usageStats,
     setUsageStats,
     testRunnerDefaults,
@@ -454,6 +492,10 @@ export const useUiStore = defineStore("ui", () => {
     setEmbeddingAutocomplete,
     autocompleteSeparator,
     setAutocompleteSeparator,
+    autocompleteSpaces,
+    setAutocompleteSpaces,
+    autocompleteEscapeBrackets,
+    setAutocompleteEscapeBrackets,
     cycleTheme,
     setThemeMode,
     setDensity,

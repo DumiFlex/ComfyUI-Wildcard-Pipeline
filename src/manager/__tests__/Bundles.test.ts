@@ -168,10 +168,7 @@ describe("Bundles.vue", () => {
     // Routes through `--wp-bundle-default` (slate per tokens.css) instead
     // of a hardcoded indigo literal so the list swatch, the canvas frame,
     // the Dashboard swatch, and the editor picker all stay in sync via
-    // the token. The fallback hex `#334155` is the dark-theme value so
-    // jsdom (no theme applied) reads the literal.
-    expect(swatch.attributes("style") ?? "").toMatch(
-      /var\(--wp-bundle-default,\s*#334155\)|rgb\(51,\s*65,\s*85\)/i,
-    );
+    // the token (both themes define it, so it needs no hex fallback).
+    expect(swatch.attributes("style") ?? "").toMatch(/var\(--wp-bundle-default\)/);
   });
 });

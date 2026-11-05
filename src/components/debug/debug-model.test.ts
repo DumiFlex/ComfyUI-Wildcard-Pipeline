@@ -92,6 +92,18 @@ describe("buildModel", () => {
     expect(m.steps[2].constraint).toMatchObject({ hits: 4, reach: "next 2 targets", cells: 1, only: false });
   });
 
+  it("leaves a constraint whose ref-only target wasn't drawn ok", () => {
+    const m = buildModel({
+      __wp_trace__: [{
+        id: "con1", _uid: "con1", type: "constraint", status: "ok",
+        detail: { uid: "con1", reach: { mode: "all" }, cells: 1, exceptions: 0, only: false },
+      }],
+      __wp_constraint_hits__: { con1: 0 },
+      __wp_warnings__: [{ type: "constraint_never_applied", module_id: "con1", detail: { ref_only: true } }],
+    });
+    expect(m.steps[0].status).toBe("ok");
+  });
+
   it("groups consecutive steps by Context node with that node's seed", () => {
     const m = buildModel({
       __wp_trace__: [

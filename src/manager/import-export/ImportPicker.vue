@@ -36,10 +36,10 @@
  * larger imports responsive.
  */
 import { computed, ref, watchEffect } from "vue";
-import Button from "../components/ui/Button.vue";
+import Button from "@/kit/Button.vue";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
-import PickerSearch from "./PickerSearch.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 import { entitySubtitle } from "./picker-subtitle";
 import type { StatusBadge, DepRef } from "./PickerRow.vue";
@@ -643,27 +643,29 @@ function emitContinue(): void {
       aria-label="Quick selection presets"
     >
       <span class="wp-import-presets__label">Quick select</span>
-      <button
-        class="wp-preset-btn"
+      <Button
+        size="sm"
+        icon="pi-database"
         data-test="import-preset-all"
-        type="button"
         :disabled="totalEntityCount === 0"
         @click="presetSelectAll"
-      ><i class="pi pi-database" /> All</button>
+      >All</Button>
       <span class="wp-import-presets__sep" aria-hidden="true"></span>
-      <button
+      <Button
         v-for="b in BUCKETS"
         :key="b.key"
-        class="wp-preset-btn"
+        size="sm"
+        :icon="kindIcon(b.kindFallback).replace(/^pi /, '')"
         :data-test="`import-preset-kind-${b.key}`"
-        type="button"
         :disabled="entitiesForBucket(b.key).length === 0"
         @click="presetKindOnly(b.key)"
-      ><i :class="kindIcon(b.kindFallback)" aria-hidden="true" /> {{ b.title }}</button>
+      >{{ b.title }}</Button>
     </div>
 
-    <PickerSearch
+    <SearchInput
       v-model="rowQuery"
+      class="wp-import-picker__search"
+      placeholder="Search by name, $variable or id…"
       aria-label="Search payload entities"
       data-test="import-picker-search"
     />
@@ -770,7 +772,7 @@ function emitContinue(): void {
 }
 
 /* Quick-select presets bar (mirror of ExportTab's). The button atom
- * (`.wp-preset-btn`) is global in tokens.css; only the bar layout is here. */
+ * is the kit Button; only the bar layout is here. */
 .wp-import-presets {
   display: flex;
   align-items: center;
@@ -840,4 +842,5 @@ function emitContinue(): void {
   color: var(--wp-text);
   font-weight: 600;
 }
+.wp-import-picker__search { margin-bottom: 6px; }
 </style>

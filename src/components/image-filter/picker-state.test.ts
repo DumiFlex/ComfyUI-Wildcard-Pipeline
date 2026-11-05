@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  draftEdits, dropDraftEdits, editsFor, fitTileSize, readZoomPref, saveDraftEdits, withMask, withText, writeZoomPref,
+  draftEdits, dropDraftEdits, editsFor, fitTileSize, readModePref, readTilePref, saveDraftEdits, withMask, withText, writeModePref, writeTilePref,
 } from "./picker-state";
 
 describe("picker edits", () => {
@@ -38,14 +38,27 @@ describe("picker edits", () => {
   });
 });
 
-describe("zoom preference", () => {
+describe("mode and tile size preferences", () => {
   beforeEach(() => localStorage.clear());
-  it("round-trips", () => {
-    expect(readZoomPref()).toBe(false);
-    writeZoomPref(true);
-    expect(readZoomPref()).toBe(true);
-    writeZoomPref(false);
-    expect(readZoomPref()).toBe(false);
+  it("round-trip", () => {
+    expect(readModePref()).toBe("grid");
+    writeModePref("zoom");
+    expect(readModePref()).toBe("zoom");
+    expect(readTilePref()).toBe("m");
+    writeTilePref("l");
+    expect(readTilePref()).toBe("l");
+  });
+  it("read the old zoom and fit flags as Detail and Fit, once", () => {
+    localStorage.setItem("wp-image-filter-zoom", "1");
+    localStorage.setItem("wp-image-filter-fit", "1");
+    expect(readModePref()).toBe("detail");
+    expect(readTilePref()).toBe("fit");
+    writeModePref("grid");
+    writeTilePref("s");
+    expect(localStorage.getItem("wp-image-filter-zoom")).toBeNull();
+    expect(localStorage.getItem("wp-image-filter-fit")).toBeNull();
+    localStorage.setItem("wp-image-filter-mode", "bogus");
+    expect(readModePref()).toBe("grid");
   });
 });
 

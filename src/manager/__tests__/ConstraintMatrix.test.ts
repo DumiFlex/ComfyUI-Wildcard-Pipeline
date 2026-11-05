@@ -126,7 +126,7 @@ describe("ConstraintMatrix.vue", () => {
       ["warm"],
     );
     await wrap.find('[data-test="cell-red-warm"]').trigger("click");
-    await popover(wrap).find(".pop-num__field").setValue("3.4");
+    await popover(wrap).find(".pop-num .wp-cnum__field").setValue("3.4");
     const last = lastEmitted(wrap);
     expect(last?.red?.warm).toEqual({ mode: "boost", factor: 3.4 });
     wrap.unmount();
@@ -184,7 +184,7 @@ describe("ConstraintMatrix.vue", () => {
       ["warm"],
     );
     await wrap.find('[data-test="cell-red-warm"]').trigger("click");
-    const input = popover(wrap).find<HTMLInputElement>(".pop-num__field");
+    const input = popover(wrap).find<HTMLInputElement>(".pop-num .wp-cnum__field");
     await input.setValue("2");
     await input.setValue("2.4");
     await input.setValue("2.45");

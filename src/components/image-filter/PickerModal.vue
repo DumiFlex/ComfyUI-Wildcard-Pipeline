@@ -2,17 +2,27 @@
 /**
  * PickerModal — the pause-and-pick screen of WP Image Filter.
  *
- * Shows every image of one waiting request, grouped by frame when a Context
- * Loop (or any list) produced several, or laid out as a grid when the loop
- * swept two or more wildcards. Click picks, Space zooms (and the picker
- * remembers whether you left it zoomed), Enter keeps the picks. In zoom the
- * Refine panel edits the frame's prompts and paints a mask for the upscaler.
- * Closing (Escape / clicking outside) only minimises it: the run keeps
- * waiting until one of the three answers is sent.
+ * Three modes behind one switch (G / D / Z), in a window that keeps its size:
+ * - Grid picks fast: every image, grouped by frame when a Context Loop (or
+ *   any list) produced several, or laid out as a table when the loop swept
+ *   two or more wildcards. Click or Space picks; S / M / L / Fit sizes tiles.
+ * - Detail shows one image next to its values and edits (prompt, negative,
+ *   mask, compare), with a strip of the others. Only what is wired shows.
+ * - Zoom shows only the picture, at real zoom levels (WpImageZoom). The level
+ *   and spot carry over when ←/→ step, so a series is checked in one place.
+ * The pick count and the Keep buttons stay in the footer in every mode.
+ * Closing (Escape / clicking outside) steps back a mode, then only minimises
+ * it: the run keeps waiting until one of the three answers is sent.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import ModalShell from "../shared/ModalShell.vue";
-import MaskPainter from "./MaskPainter.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
+import WpImageZoom from "@/kit/WpImageZoom.vue";
+import CopyButton from "@/kit/CopyButton.vue";
+import InlineEdit from "@/kit/InlineEdit.vue";
+import MaskPainter, { type MaskTool } from "./MaskPainter.vue";
+import Slider from "@/kit/Slider.vue";
 import PickerTile from "./PickerTile.vue";
 import SweepGrid from "./SweepGrid.vue";
 import { pickKey, viewUrl, type Pick, type PickAnswer, type PickEdits, type ImageRef } from "./types";
@@ -23,11 +33,14 @@ import { editLoopConfig } from "../../widgets/context_loop";
 import { pushToast } from "../shared/toast-store";
 import { defaultGridLayout, findLoop, frameParts, loopEdit, sweepGrid, type GridLayout } from "./picker-loop";
 import {
-  draftEdits, dropDraftEdits, editsFor, fitTileSize, hasEdit, readDetailsPref, readFitPref, readZoomPref,
-  saveDraftEdits, withMask, withText, writeDetailsPref, writeFitPref, writeZoomPref,
+  draftEdits, dropDraftEdits, editsFor, fitTileSize, isRefined, readModePref, readTilePref, saveDraftEdits,
+  MAX_LABEL, TILE_PX, withLabel, withMask, withText, writeModePref, writeTilePref, type PickerMode, type TileSize,
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
+import Button from "@/kit/Button.vue";
+import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
+import { vTooltip } from "@/kit/tooltip";
 
 const props = withDefaults(
   defineProps<{ request: WaitingRequest; moreWaiting?: number; graph?: LiteGraphLike }>(),
@@ -52,7 +65,8 @@ watch(() => props.request.token, (token) => {
   edits.value = draftEdits(token);
   comparePin.value = null;
   painting.value = false;
-  if (zoomIndex.value !== null) zoomIndex.value = total.value ? 0 : null;
+  current.value = 0;
+  if (!total.value) mode.value = "grid";
 });
 watch(picked, (keys) => saveDraftPicks(props.request.token, keys));
 watch(edits, (next) => saveDraftEdits(props.request.token, next));
@@ -65,16 +79,6 @@ function toggle(key: string): void {
 }
 function frameKeys(frame: number): string[] {
   return (frames.value[frame] ?? []).map((_, i) => pickKey(frame, i));
-}
-function toggleFrame(frame: number): void {
-  const keys = frameKeys(frame);
-  const allOn = keys.every((k) => picked.value.has(k));
-  const next = new Set(picked.value);
-  for (const k of keys) {
-    if (allOn) next.delete(k);
-    else next.add(k);
-  }
-  picked.value = next;
 }
 /** Pick every image of these frames, or clear them when all are picked. */
 function toggleFrames(list: readonly number[]): void {
@@ -98,15 +102,19 @@ const pickedList = computed<Pick[]>(() =>
 const pickedFrameSet = computed(() => new Set(pickedList.value.map(([f]) => f)));
 const pickedFrames = computed(() => pickedFrameSet.value.size);
 
-/* ── loop labels, sweep grid, send back ───────────────────────────────── */
+/* ── loop labels, sweep table, send back ──────────────────────────────── */
 
 const loop = computed(() => findLoop(labels.value, props.graph));
 const axes = computed(() => loop.value?.axes ?? []);
 const layout = ref<GridLayout>(defaultGridLayout());
 watch(() => axes.value.map((a) => a.uid).join(" "), () => { layout.value = defaultGridLayout(); });
 const grid = computed(() => sweepGrid(labels.value, axes.value, layout.value));
-const view = ref<"grid" | "frames">("grid");
-const showGrid = computed(() => view.value === "grid" && !!grid.value);
+const arrange = ref<"table" | "frames">("table");
+const ARRANGE_OPTIONS: SegmentedOption<"table" | "frames">[] = [
+  { value: "table", label: "Table", hint: "One swept wildcard down, one across" },
+  { value: "frames", label: "Frames", hint: "Every frame in run order" },
+];
+const showTable = computed(() => arrange.value === "table" && !!grid.value);
 
 function frameTitle(frame: number): string {
   return frameParts(labels.value[frame], frame, axes.value).join(" · ");
@@ -148,105 +156,224 @@ function sendToLoop(): void {
   );
 }
 
-/* ── zoom, compare, refine ────────────────────────────────────────────── */
+/* ── modes ────────────────────────────────────────────────────────────── */
 
-const zoomIndex = ref<number | null>(readZoomPref() && total.value ? 0 : null);
+const mode = ref<PickerMode>(total.value ? readModePref() : "grid");
+watch(mode, (m) => writeModePref(m));
+const MODE_OPTIONS: SegmentedOption<PickerMode>[] = [
+  { value: "grid", label: "Grid", icon: "pi-th-large", hint: "Every image: click or Space to pick", kbd: "G" },
+  { value: "detail", label: "Detail", icon: "pi-image", hint: "One image with its values, prompt and mask", kbd: "D" },
+  { value: "zoom", label: "Zoom", icon: "pi-search-plus", hint: "Only the picture, at real zoom levels", kbd: "Z" },
+];
+
+/** The image Detail and Zoom show. */
+const current = ref(Math.max(0, cells.value.findIndex((c) => picked.value.has(c.key))));
 const hovered = ref<number | null>(null);
-const zoomCell = computed(() => (zoomIndex.value === null ? null : cells.value[zoomIndex.value] ?? null));
-watch(() => zoomIndex.value !== null, (on) => writeZoomPref(on));
+const cell = computed(() => cells.value[current.value] ?? null);
 
-function setZoom(index: number | null): void {
-  zoomIndex.value = index;
-  if (index === null) {
-    comparePin.value = null;
-    painting.value = false;
-  }
+/** The first picked image, else the current one. */
+function firstPicked(): number {
+  const i = cells.value.findIndex((c) => picked.value.has(c.key));
+  return i >= 0 ? i : current.value;
 }
-/** Space / the header Zoom button: leave the zoom, or open it on `at` (else the first picked image). */
-function toggleZoom(at: number | null = null): void {
-  if (zoomIndex.value !== null) setZoom(null);
-  else if (at !== null) setZoom(at);
-  else if (total.value) setZoom(Math.max(0, cells.value.findIndex((c) => picked.value.has(c.key))));
+/** Switch mode. Leaving Grid, Detail and Zoom open on `at`, else the image
+ *  under the mouse, else the first picked one. */
+function setMode(next: PickerMode, at: number | null = null): void {
+  if (next !== "grid" && !total.value) return;
+  if (next !== "grid") {
+    if (at !== null) current.value = at;
+    else if (mode.value === "grid") current.value = hovered.value ?? firstPicked();
+    // The tiles go away without a mouseleave.
+    hovered.value = null;
+  }
+  // Detail and Zoom share the compare pin; Grid drops it.
+  if (next === "grid") comparePin.value = null;
+  if (next !== "detail") painting.value = false;
+  mode.value = next;
 }
 function step(delta: number): void {
-  if (zoomIndex.value === null || total.value === 0) return;
-  zoomIndex.value = (zoomIndex.value + delta + total.value) % total.value;
+  if (total.value === 0) return;
+  current.value = (current.value + delta + total.value) % total.value;
 }
+
+/* ── grid: tile size ──────────────────────────────────────────────────── */
+
+const tile = ref<TileSize>(readTilePref());
+watch(tile, (t) => writeTilePref(t));
+const TILE_OPTIONS = computed<SegmentedOption<TileSize>[]>(() => [
+  { value: "s", label: "S", hint: "Small tiles" },
+  { value: "m", label: "M", hint: "Medium tiles" },
+  { value: "l", label: "L", hint: "Large tiles" },
+  ...(showTable.value ? [] : [{ value: "fit" as const, label: "Fit", hint: "As big as the picker allows", kbd: "F" }]),
+]);
+/** The sweep table has no Fit; it shows M there. */
+const tableTile = computed(() => (tile.value === "s" || tile.value === "l" ? TILE_PX[tile.value].table : undefined));
+
+const body = ref<HTMLElement | null>(null);
+const bodySize = ref({ width: 0, height: 0 });
+const aspect = ref(1);
+let observer: ResizeObserver | null = null;
+watch(body, (el) => {
+  observer?.disconnect();
+  if (!el || typeof ResizeObserver === "undefined") return;
+  observer = new ResizeObserver(() => {
+    bodySize.value = { width: el.clientWidth - 28, height: el.clientHeight - 24 };
+  });
+  observer.observe(el);
+});
+onBeforeUnmount(() => observer?.disconnect());
+watch(() => frames.value[0]?.[0], (first) => {
+  if (!first || typeof Image === "undefined") return;
+  const img = new Image();
+  img.onload = () => { if (img.naturalWidth) aspect.value = img.naturalHeight / img.naturalWidth; };
+  img.src = viewUrl(first);
+}, { immediate: true });
+const tileStyle = computed(() => {
+  const card = multiFrame.value;
+  if (tile.value !== "fit") return { "--wp-ifp-tile": `${TILE_PX[tile.value][card ? "frame" : "flat"]}px` };
+  const size = fitTileSize(total.value, aspect.value, {
+    // A card adds padding, border and its label; tiles add a 2px border.
+    // Leave a few px of slack so rounding never wraps a row.
+    ...bodySize.value, gap: 10, extraW: card ? 26 : 8, extraH: card ? 42 : 8,
+  });
+  return { "--wp-ifp-tile": `${size}px` };
+});
+const isFit = computed(() => mode.value === "grid" && tile.value === "fit" && !showTable.value);
+
+/* ── detail: compare, values, refine ──────────────────────────────────── */
 
 const comparePin = ref<number | null>(null);
 const comparePos = ref(50);
 const compareCell = computed(() => {
   const pin = comparePin.value;
-  if (pin === null || pin === zoomIndex.value) return null;
+  if (pin === null || pin === current.value) return null;
   return cells.value[pin] ?? null;
 });
 function togglePin(): void {
-  if (zoomIndex.value === null) return;
-  comparePin.value = comparePin.value === null ? zoomIndex.value : null;
+  comparePin.value = comparePin.value === null ? current.value : null;
   if (comparePin.value !== null) painting.value = false;
 }
 
 const painting = ref(false);
-const tool = ref<"brush" | "eraser">("brush");
+const tool = ref<MaskTool>("brush");
+const TOOL_OPTIONS: SegmentedOption<MaskTool>[] = [
+  { value: "brush", label: "Brush", hint: "Paint with a round brush" },
+  { value: "lasso", label: "Lasso", hint: "Drag around an area to fill it" },
+  { value: "fill", label: "Fill", hint: "Click to fill the area under the pointer, up to the lines you painted" },
+];
+/** Paint or erase, for every tool (X swaps). */
+const paintMode = ref<"paint" | "erase">("paint");
+const PAINT_MODE_OPTIONS: SegmentedOption<"paint" | "erase">[] = [
+  { value: "paint", label: "Paint", hint: "Add to the mask" },
+  { value: "erase", label: "Erase", hint: "Take mask away (X swaps)" },
+];
 const brush = ref(40);
+/** Where the soft edge starts (100 = hard) and how much a stroke masks, in %. */
+const hardness = ref(100);
+const strength = ref(100);
+const pct = (v: number): string => `${v}%`;
+const px = (v: number): string => `${v} px`;
 const painter = ref<InstanceType<typeof MaskPainter> | null>(null);
 function togglePaint(): void {
   painting.value = !painting.value;
   if (painting.value) comparePin.value = null;
 }
 
-/* Details (I): the frame's values, its other images, and the prompt with
- * each value marked. Adds to the zoom; everything else stays. */
-const details = ref(readDetailsPref());
-watch(details, (on) => writeDetailsPref(on));
-const editingPositive = ref(false);
-watch(zoomIndex, () => { editingPositive.value = false; });
-const zoomValues = computed(() => frameValues(zoomLabel.value, axes.value));
-const positiveRuns = computed(() => promptRuns(textValue("positive"), zoomValues.value));
-const frameCells = computed(() => (zoomCell.value ? cells.value.filter((c) => c.frame === zoomCell.value?.frame) : []));
-function valueHue(axis: number): Record<string, string> {
-  return axis >= 0 ? { "--wp-ifp-hue": axisHueAt(axis) } : {};
-}
-function editPositive(ev: Event): void {
-  const aside = (ev.currentTarget as HTMLElement).parentElement;
-  editingPositive.value = true;
-  void nextTick(() => aside?.querySelector<HTMLTextAreaElement>('[data-test="image-filter-positive"]')?.focus());
-}
-function copyValues(): void {
-  const text = valuesText(zoomValues.value, zoomLabel.value?.seed);
-  void navigator.clipboard?.writeText(text).then(
-    () => pushToast("Values copied.", { severity: "success" }),
-    () => pushToast("Couldn't copy to the clipboard.", { severity: "warning" }),
-  );
+/** Natural sizes of the images shown so far, for the "1024 × 1024" line. */
+const sizes = ref<Record<string, string>>({});
+function onDetailLoad(key: string, ev: Event): void {
+  const img = ev.target as HTMLImageElement;
+  if (img.naturalWidth) sizes.value = { ...sizes.value, [key]: `${img.naturalWidth} × ${img.naturalHeight}` };
 }
 
-/** Images an edit of the zoomed one's prompt applies to: the whole frame
+const label = computed(() => (cell.value ? labels.value[cell.value.frame] : undefined));
+const values = computed(() => frameValues(label.value, axes.value));
+const valuesCopy = computed(() => valuesText(values.value, label.value?.seed));
+const editingPositive = ref(false);
+watch(current, () => { editingPositive.value = false; });
+const positiveRuns = computed(() => promptRuns(textValue("positive"), values.value));
+const frameSize = computed(() => (cell.value ? frames.value[cell.value.frame]?.length ?? 0 : 0));
+/** A value's colour: its sweep axis hue, else one of the eight variable
+ *  colours, handed out in the order the values show up in the prompt so
+ *  neighbours differ; a mark and its Values row share it. Values the prompt
+ *  doesn't show get none. */
+const HUE_ORDER = [1, 5, 3, 6, 7, 4, 2, 8];
+const hueSlots = computed(() => {
+  const slots = new Map<string, number>();
+  for (const run of positiveRuns.value) {
+    if (run.name && (run.axis ?? -1) < 0 && !slots.has(run.name)) slots.set(run.name, HUE_ORDER[slots.size % HUE_ORDER.length]);
+  }
+  return slots;
+});
+function valueHue(axis: number, name?: string): Record<string, string> {
+  if (axis >= 0) return { "--wp-ifp-hue": axisHueAt(axis) };
+  const slot = name ? hueSlots.value.get(name) : undefined;
+  return slot ? { "--wp-ifp-hue": `var(--wp-var-${slot})` } : {};
+}
+
+type SideTab = "values" | "prompt" | "mask";
+const sideTabs = computed<TabItem<SideTab>[]>(() => [
+  ...(values.value.length ? [{ id: "values" as const, label: "Values", count: values.value.length }] : []),
+  { id: "prompt", label: "Prompt", count: isEdited("positive") || isEdited("negative") ? "edited" : undefined },
+  { id: "mask", label: "Mask", count: maskValue.value ? "painted" : undefined },
+]);
+const sideTab = ref<SideTab>("prompt");
+watch(painting, (on) => { if (on) sideTab.value = "mask"; });
+
+/** The strip's images by frame, so one frame's images sit together. */
+const stripGroups = computed(() => {
+  const groups: { frame: number; items: { c: Cell; ci: number }[] }[] = [];
+  cells.value.forEach((c, ci) => {
+    const last = groups[groups.length - 1];
+    if (last && last.frame === c.frame) last.items.push({ c, ci });
+    else groups.push({ frame: c.frame, items: [{ c, ci }] });
+  });
+  return groups;
+});
+const pickedIn = (frame: number): number => cells.value.filter((c) => c.frame === frame && picked.value.has(c.key)).length;
+function editPositive(ev: Event): void {
+  const side = (ev.currentTarget as HTMLElement).parentElement;
+  editingPositive.value = true;
+  void nextTick(() => side?.querySelector<HTMLTextAreaElement>('[data-test="image-filter-positive"]')?.focus());
+}
+
+/** Images an edit of this one's prompt applies to: the whole frame
  *  with Same shape (its picks go on as one item), else just this one. */
 const textKeys = computed(() => {
-  const c = zoomCell.value;
+  const c = cell.value;
   if (!c) return [];
   return props.request.send_as === "same_shape" ? frameKeys(c.frame) : [c.key];
 });
-const zoomLabel = computed(() => (zoomCell.value ? labels.value[zoomCell.value.frame] : undefined));
-const zoomEdit = computed(() => (zoomCell.value ? edits.value[zoomCell.value.key] : undefined));
+const cellEdit = computed(() => (cell.value ? edits.value[cell.value.key] : undefined));
 function canEdit(field: "positive" | "negative"): boolean {
-  return props.request.has_clip || zoomLabel.value?.[field] !== undefined;
+  return props.request.has_clip || label.value?.[field] !== undefined;
 }
+const editFields = computed(() => (["positive", "negative"] as const).filter((f) => canEdit(f)));
 function textValue(field: "positive" | "negative"): string {
-  return zoomEdit.value?.[field] ?? zoomLabel.value?.[field] ?? "";
+  return cellEdit.value?.[field] ?? label.value?.[field] ?? "";
 }
 function isEdited(field: "positive" | "negative"): boolean {
-  return zoomEdit.value?.[field] !== undefined;
+  return cellEdit.value?.[field] !== undefined;
 }
 function setText(field: "positive" | "negative", text: string): void {
-  edits.value = withText(edits.value, textKeys.value, field, text, zoomLabel.value?.[field]);
+  edits.value = withText(edits.value, textKeys.value, field, text, label.value?.[field]);
 }
 function resetText(field: "positive" | "negative"): void {
-  setText(field, zoomLabel.value?.[field] ?? "");
+  setText(field, label.value?.[field] ?? "");
 }
-const maskValue = computed(() => zoomEdit.value?.mask ?? "");
+const maskValue = computed(() => cellEdit.value?.mask ?? "");
+/** The Mask tab's preview: the mask over the picture, or the mask alone. */
+const maskLayerStyle = computed((): Record<string, string> => {
+  const url = `url(${maskValue.value})`;
+  return { maskImage: url, "-webkit-mask-image": url };
+});
+const maskView = ref<"over" | "only">("over");
+const MASK_VIEW_OPTIONS: SegmentedOption<"over" | "only">[] = [
+  { value: "over", label: "Over image" },
+  { value: "only", label: "Mask only" },
+];
 function setMask(url: string): void {
-  if (zoomCell.value) edits.value = withMask(edits.value, zoomCell.value.key, url);
+  if (cell.value) edits.value = withMask(edits.value, cell.value.key, url);
 }
 
 function isEditedCell(key: string): boolean {
@@ -256,7 +383,49 @@ function isEditedCell(key: string): boolean {
 function isMaskedCell(key: string): boolean {
   return !!edits.value[key]?.mask;
 }
-const editCount = computed(() => Object.values(edits.value).filter(hasEdit).length);
+const editCount = computed(() => Object.values(edits.value).filter(isRefined).length);
+
+/* ── labels (the node's `labels` output) ──────────────────────────────── */
+
+/** "#N", the sweep option names, then the image number when the frame has several. */
+function defaultLabel(frame: number, image: number): string {
+  const parts = frameParts(labels.value[frame], frame, axes.value);
+  if ((props.request.frames[frame]?.length ?? 0) > 1) parts.push(String(image + 1));
+  return parts.join(" · ");
+}
+function labelOf(frame: number, image: number): string {
+  return edits.value[pickKey(frame, image)]?.label ?? defaultLabel(frame, image);
+}
+function setLabel(frame: number, image: number, text: string): void {
+  edits.value = withLabel(edits.value, pickKey(frame, image), text, defaultLabel(frame, image));
+}
+/** Every kept image's label: the server can't name sweep options itself. */
+function labelsFor(keys: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const [f, i] = key.split(":").map(Number);
+    if (f !== undefined && i !== undefined) out[key] = labelOf(f, i);
+  }
+  return out;
+}
+
+function cellName(c: Cell): string {
+  return multiFrame.value ? `Frame ${frameTitle(c.frame)} · image ${c.image + 1}` : `Image ${c.image + 1}`;
+}
+const isPicked = computed(() => !!cell.value && picked.value.has(cell.value.key));
+function pickCurrent(): void {
+  if (cell.value) toggle(cell.value.key);
+}
+
+/* ── zoom ─────────────────────────────────────────────────────────────── */
+
+const zoom = ref<number | null>(null);
+const viewer = ref<InstanceType<typeof WpImageZoom> | null>(null);
+/** The images of the shown frame, for the fullscreen strip. */
+const frameCells = computed(() => (cell.value ? cells.value.filter((c) => c.frame === cell.value?.frame) : []));
+function cellIndex(c: Cell): number {
+  return indexOf(c.frame, c.image);
+}
 
 /* ── countdown ────────────────────────────────────────────────────────── */
 
@@ -284,107 +453,91 @@ function finish(answer: PickAnswer): void {
 }
 function keepPicked(): void {
   if (pickedList.value.length === 0) return;
-  const e = editsFor(edits.value, [...picked.value]);
-  finish(e ? { action: "picks", picks: pickedList.value, edits: e } : { action: "picks", picks: pickedList.value });
+  const keys = [...picked.value];
+  const e = editsFor(edits.value, keys);
+  const answer: PickAnswer = { action: "picks", picks: pickedList.value, labels: labelsFor(keys) };
+  finish(e ? { ...answer, edits: e } : answer);
 }
 function keepAll(): void {
-  const e = editsFor(edits.value, cells.value.map((c) => c.key));
-  finish(e ? { action: "keep_all", edits: e } : { action: "keep_all" });
+  const keys = cells.value.map((c) => c.key);
+  const e = editsFor(edits.value, keys);
+  const answer: PickAnswer = { action: "keep_all", labels: labelsFor(keys) };
+  finish(e ? { ...answer, edits: e } : answer);
 }
 function stop(): void {
   finish({ action: "stop" });
 }
 
 function onClose(): void {
-  // Escape / outside click: leave the zoom first, then tuck the picker away.
-  if (zoomIndex.value !== null) {
-    setZoom(null);
-    return;
-  }
-  emit("minimize");
+  // Escape / outside click: Zoom steps back to Detail, Detail to Grid, then the picker tucks away.
+  if (mode.value === "zoom") setMode("detail");
+  else if (mode.value === "detail") setMode("grid");
+  else emit("minimize");
 }
 
 function onKey(ev: KeyboardEvent): void {
-  const tag = (ev.target as HTMLElement | null)?.tagName;
+  const target = ev.target as HTMLElement | null;
+  const tag = target?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA") return;
-  const zoomed = zoomIndex.value !== null;
-  if (ev.key === " ") {
-    ev.preventDefault();
-    toggleZoom(hovered.value);
-  } else if (ev.key === "Enter") {
-    ev.preventDefault();
-    keepPicked();
-  } else if ((ev.key === "a" || ev.key === "A") && (ev.ctrlKey || ev.metaKey)) {
-    ev.preventDefault();
-    toggleAll();
-  } else if (zoomed && ev.key === "ArrowLeft") {
-    ev.preventDefault();
-    step(-1);
-  } else if (zoomed && ev.key === "ArrowRight") {
-    ev.preventDefault();
-    step(1);
-  } else if (zoomed && ev.key === "ArrowUp" && zoomCell.value) {
-    ev.preventDefault();
-    toggle(zoomCell.value.key);
-  } else if (zoomed && (ev.key === "c" || ev.key === "C") && !ev.ctrlKey && !ev.metaKey) {
-    ev.preventDefault();
-    togglePin();
-  } else if (!zoomed && !showGrid.value && (ev.key === "f" || ev.key === "F") && !ev.ctrlKey && !ev.metaKey) {
-    ev.preventDefault();
-    fit.value = !fit.value;
-  } else if (zoomed && (ev.key === "i" || ev.key === "I") && !ev.ctrlKey && !ev.metaKey) {
-    ev.preventDefault();
-    details.value = !details.value;
-  } else if (zoomed && (ev.key === "m" || ev.key === "M") && !ev.ctrlKey && !ev.metaKey) {
-    ev.preventDefault();
-    togglePaint();
-  }
+  // A label's rename button keeps Enter (it opens the box).
+  if (target?.closest?.(".wp-inline-edit")) return;
+  const plain = !ev.ctrlKey && !ev.metaKey && !ev.altKey;
+  const key = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
+  // A focused button keeps Space, and a focused switch (mode, tile size) or slider (brush) its arrow keys.
+  if (key === " " && tag === "BUTTON") return;
+  if (key.startsWith("Arrow") && target?.closest?.('[role="radiogroup"], [role="slider"]')) return;
+  const one = mode.value !== "grid";
+  const act = ((): (() => void) | null => {
+    if (key === "Enter") return keepPicked;
+    if (key === "a" && (ev.ctrlKey || ev.metaKey)) return toggleAll;
+    if (painting.value && (ev.ctrlKey || ev.metaKey) && (key === "z" || key === "y")) {
+      return (key === "y" || ev.shiftKey) ? () => painter.value?.redo() : () => painter.value?.undo();
+    }
+    if (!plain) return null;
+    if (key === "g") return () => setMode("grid");
+    if (key === "d") return () => setMode("detail");
+    if (key === "z") return () => setMode("zoom");
+    if (key === " " || key === "p" || (one && key === "ArrowUp")) {
+      if (one) return pickCurrent;
+      const h = hovered.value;
+      return h === null ? null : () => toggle(cells.value[h]?.key ?? "");
+    }
+    if (one && key === "ArrowLeft") return () => step(-1);
+    if (one && key === "ArrowRight") return () => step(1);
+    if (mode.value === "grid" && key === "f" && !showTable.value) return () => { tile.value = tile.value === "fit" ? "m" : "fit"; };
+    if (one && key === "c") return togglePin;
+    if (mode.value === "detail" && key === "m") return togglePaint;
+    if (painting.value && key === "x") return () => { paintMode.value = paintMode.value === "erase" ? "paint" : "erase"; };
+    if (painting.value && key === "[") return () => { brush.value = Math.max(4, Math.round(brush.value / 1.2)); };
+    if (painting.value && key === "]") return () => { brush.value = Math.min(240, Math.round(brush.value * 1.2)); };
+    if (mode.value === "zoom" && (key === "+" || key === "=")) return () => viewer.value?.zoomIn();
+    if (mode.value === "zoom" && (key === "-" || key === "_")) return () => viewer.value?.zoomOut();
+    if (mode.value === "zoom" && key === "f") return () => viewer.value?.toggleFullscreen();
+    if (mode.value === "zoom" && key === "0") return () => viewer.value?.setZoom(null);
+    if (mode.value === "zoom" && (key === "1" || key === "2")) return () => viewer.value?.setZoom(Number(key));
+    return null;
+  })();
+  if (!act) return;
+  ev.preventDefault();
+  act();
 }
 
 function indexOf(frame: number, image: number): number {
   return cells.value.findIndex((c) => c.frame === frame && c.image === image);
 }
 
-/* ── fit: scale the overview so the images fill the picker ────────────── */
-
-const fit = ref(readFitPref());
-watch(fit, (on) => writeFitPref(on));
-const body = ref<HTMLElement | null>(null);
-const bodySize = ref({ width: 0, height: 0 });
-const aspect = ref(1);
-let observer: ResizeObserver | null = null;
-watch(body, (el) => {
-  observer?.disconnect();
-  if (!el || typeof ResizeObserver === "undefined") return;
-  observer = new ResizeObserver(() => {
-    bodySize.value = { width: el.clientWidth - 28, height: el.clientHeight - 24 };
-  });
-  observer.observe(el);
-});
-onBeforeUnmount(() => observer?.disconnect());
-watch(() => frames.value[0]?.[0], (first) => {
-  if (!first || typeof Image === "undefined") return;
-  const img = new Image();
-  img.onload = () => { if (img.naturalWidth) aspect.value = img.naturalHeight / img.naturalWidth; };
-  img.src = viewUrl(first);
-}, { immediate: true });
-const fitStyle = computed(() => {
-  if (!fit.value) return undefined;
-  const card = multiFrame.value;
-  const size = fitTileSize(total.value, aspect.value, {
-    // A card adds padding, border and its label; tiles add a 2px border.
-    // Leave a few px of slack so rounding never wraps a row.
-    ...bodySize.value, gap: 10, extraW: card ? 26 : 8, extraH: card ? 42 : 8,
-  });
-  return { "--wp-ifp-tile": `${size}px` };
+const subLine = computed(() => {
+  if (mode.value === "grid") return "Click or Space picks · double-click or a frame's border opens Detail · Enter keeps the picks";
+  if (mode.value === "detail") return "←/→ next image · P picks · C compares · M paints a mask · Esc back to Grid";
+  return "Drag to move · scroll to zoom · ←/→ keeps the spot on the next image · Esc back";
 });
 </script>
 
 <template>
   <ModalShell :visible="true" @close="onClose" @keydown="onKey">
-    <div class="wp-ifp" :class="{ 'is-fit': fit && !zoomCell && !showGrid }" data-test="image-filter-picker" tabindex="-1">
+    <div class="wp-ifp" :class="[`is-${mode}`, { 'is-fit': isFit }]" data-test="image-filter-picker" :data-mode="mode" tabindex="-1">
       <div class="wp-ifp__head">
-        <span class="wp-ifp__head-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z" /></svg></span>
+        <i class="pi pi-filter wp-ifp__head-icon" aria-hidden="true" />
         <div class="wp-ifp__title-block">
           <div class="wp-ifp__title-row">
             <span class="wp-ifp__name">WP Image Filter</span>
@@ -394,416 +547,584 @@ const fitStyle = computed(() => {
           <div class="wp-ifp__sub">
             <template v-if="multiFrame">{{ frames.length }} frames, {{ total }} images.</template>
             <template v-else>{{ total }} {{ total === 1 ? "image" : "images" }}.</template>
-            Click an image to pick it. <template v-if="multiFrame">Click its frame or </template><template v-else>Use </template><b>Zoom &amp; refine</b> (<kbd>Space</kbd>) to compare, edit its prompt or paint a mask. <kbd>Enter</kbd> keeps the picks.
+            {{ subLine }}
           </div>
         </div>
-        <button
-          type="button"
-          class="wp-ifp__zoom-btn"
-          :class="{ 'is-on': zoomCell }"
-          :aria-pressed="!!zoomCell"
-          title="Zoom in to compare, edit the prompt or paint a mask (Space)"
-          data-test="image-filter-zoom-toggle"
-          @click="toggleZoom()"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5" /><path v-if="zoomCell" d="M20 20l-4.5-4.5M7.5 10.5h6" /><path v-else d="M20 20l-4.5-4.5M10.5 7.5v6M7.5 10.5h6" /></svg>
-          {{ zoomCell ? "Back to all" : "Zoom & refine" }}
-        </button>
-        <button
-          v-if="!zoomCell && !showGrid"
-          type="button"
-          class="wp-ifp__zoom-btn"
-          :class="{ 'is-on': fit }"
-          :aria-pressed="fit"
-          title="Make the images as big as the picker allows (F)"
-          data-test="image-filter-fit"
-          @click="fit = !fit"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
-          Fit
-        </button>
-        <div v-if="grid && !zoomCell" class="wp-ifp__seg" role="group" aria-label="Layout">
-          <button type="button" :class="{ 'is-on': view === 'grid' }" data-test="image-filter-view-grid" @click="view = 'grid'">Grid</button>
-          <button type="button" :class="{ 'is-on': view === 'frames' }" data-test="image-filter-view-frames" @click="view = 'frames'">Frames</button>
-        </div>
-        <button type="button" class="wp-ifp__icon-btn" title="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')">
-          <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14" /></svg>
-        </button>
+        <WpSegmented
+          :model-value="mode"
+          :options="MODE_OPTIONS"
+          size="sm"
+          aria-label="Mode"
+          test-prefix="image-filter-mode"
+          :disabled="!total"
+          @update:model-value="(m) => setMode(m)"
+        />
+        <Button size="sm" variant="ghost" icon="pi-minus" aria-label="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')" />
       </div>
 
-      <div v-if="zoomCell" class="wp-ifp__zoom" data-test="image-filter-zoom">
-        <div class="wp-ifp__stage">
-          <button type="button" class="wp-ifp__nav" aria-label="Previous image" @click="step(-1)">‹</button>
-          <figure class="wp-ifp__zoom-fig">
-            <MaskPainter
-              v-if="painting"
-              ref="painter"
-              :key="zoomCell.key"
-              :src="viewUrl(zoomCell.ref)"
-              :model-value="maskValue"
-              :tool="tool"
-              :size="brush"
-              @update:model-value="setMask"
-            />
-            <div v-else-if="compareCell" class="wp-ifp__compare" data-test="image-filter-compare">
-              <img :src="viewUrl(zoomCell.ref)" class="wp-ifp__zoom-img" alt="">
-              <img
-                :src="viewUrl(compareCell.ref)"
-                class="wp-ifp__zoom-img wp-ifp__compare-top"
-                :style="{ clipPath: `inset(0 ${100 - comparePos}% 0 0)` }"
-                alt=""
-              >
-              <span class="wp-ifp__compare-line" :style="{ left: `${comparePos}%` }" aria-hidden="true" />
-              <span class="wp-ifp__compare-tag is-left">{{ multiFrame ? frameTitle(compareCell.frame) : `image ${compareCell.image + 1}` }}</span>
-              <span class="wp-ifp__compare-tag is-right">{{ multiFrame ? frameTitle(zoomCell.frame) : `image ${zoomCell.image + 1}` }}</span>
-              <input v-model.number="comparePos" type="range" min="0" max="100" class="wp-ifp__compare-range" aria-label="Compare slider">
-            </div>
-            <img
-              v-else
-              :src="viewUrl(zoomCell.ref)"
-              class="wp-ifp__zoom-img"
-              :class="{ 'is-picked': picked.has(zoomCell.key) }"
-              alt=""
-              @click="toggle(zoomCell.key)"
-            >
-            <figcaption class="wp-ifp__zoom-cap">
-              <span v-if="multiFrame">Frame {{ frameTitle(zoomCell.frame) }} · </span>image {{ zoomCell.image + 1 }}
-              <span class="wp-ifp__zoom-pos">{{ (zoomIndex ?? 0) + 1 }} / {{ total }}</span>
-              <button
-                type="button"
-                class="wp-ifp__zoom-state"
-                :class="{ 'is-picked': picked.has(zoomCell.key) }"
-                data-test="image-filter-zoom-pick"
-                @click="toggle(zoomCell.key)"
-              >{{ picked.has(zoomCell.key) ? "Picked" : "Not picked" }}</button>
-              <button
-                type="button"
-                class="wp-ifp__mini"
-                :class="{ 'is-on': comparePin !== null }"
-                title="Pin this image, then step to another to compare them (C)"
-                data-test="image-filter-compare-pin"
-                @click="togglePin"
-              >{{ comparePin === null ? "Compare" : compareCell ? "Stop comparing" : "Pinned, pick another" }}</button>
-              <button
-                type="button"
-                class="wp-ifp__mini"
-                :class="{ 'is-on': details }"
-                title="Show the frame's values, its other images and where each value lands in the prompt (I)"
-                data-test="image-filter-details-toggle"
-                @click="details = !details"
-              >Details</button>
-            </figcaption>
-          </figure>
-          <button type="button" class="wp-ifp__nav" aria-label="Next image" @click="step(1)">›</button>
+      <!-- Grid -->
+      <template v-if="mode === 'grid'">
+        <div v-if="!showTable" class="wp-ifp__tools">
+          <span class="wp-ifp__tool-label">Tile size</span>
+          <WpSegmented v-model="tile" :options="TILE_OPTIONS" size="sm" aria-label="Tile size" test-prefix="image-filter-tile-size" />
+          <template v-if="grid">
+            <span class="wp-ifp__tool-label">Layout</span>
+            <WpSegmented v-model="arrange" :options="ARRANGE_OPTIONS" size="sm" aria-label="Layout" test-prefix="image-filter-view" />
+          </template>
         </div>
 
-        <aside class="wp-ifp__refine" :class="{ 'is-wide': details }" data-test="image-filter-refine">
-          <section v-if="details" class="wp-ifp__details" data-test="image-filter-details">
-            <div class="wp-ifp__field-head">
-              <span>Values</span>
-              <span class="wp-ifp__spacer" />
-              <button v-if="zoomValues.length" type="button" class="wp-ifp__link" @click="copyValues">Copy</button>
+        <div v-if="showTable && grid" class="wp-ifp__body is-grid" data-test="image-filter-grid">
+          <SweepGrid
+            v-model:layout="layout"
+            :grid="grid"
+            :axes="axes"
+            :frames="frames"
+            :picked="picked"
+            :edits="edits"
+            :tooltip="frameTooltip"
+            :tile="tableTile"
+            @toggle="toggle"
+            @toggle-frames="toggleFrames"
+            @zoom="(f, i) => setMode('detail', indexOf(f, i))"
+            @hover="(f, i, on) => (hovered = on ? indexOf(f, i) : null)"
+          >
+            <template #tools>
+              <span class="wp-ifp__tool-label">Tile size</span>
+              <WpSegmented v-model="tile" :options="TILE_OPTIONS" size="sm" aria-label="Tile size" test-prefix="image-filter-tile-size" />
+              <span class="wp-ifp__tool-label">Layout</span>
+              <WpSegmented v-model="arrange" :options="ARRANGE_OPTIONS" size="sm" aria-label="Layout" test-prefix="image-filter-view" />
+            </template>
+          </SweepGrid>
+        </div>
+
+        <div v-else ref="body" class="wp-ifp__body" :class="{ 'is-flat': !multiFrame, 'is-fit': isFit }" data-test="image-filter-frames">
+          <section
+            v-for="(imgs, f) in frames"
+            :key="f"
+            class="wp-ifp__frame"
+            :class="{ 'is-flat': !multiFrame }"
+            :style="tileStyle"
+            :data-test="`image-filter-frame-${f}`"
+            :title="multiFrame ? `${frameTooltip(f)}\nClick the image to pick it, the frame around it for Detail.` : undefined"
+            @click="multiFrame && setMode('detail', indexOf(f, 0))"
+          >
+            <div v-if="multiFrame" class="wp-ifp__frame-head">
+              <span class="wp-ifp__frame-label">
+                <template v-for="(part, pi) in frameParts(labels[f], f, axes)" :key="pi">
+                  <span v-if="pi > 0" class="wp-ifp__sep">·</span><span :class="{ 'wp-ifp__opt': pi > 0 }">{{ part }}</span>
+                </template>
+              </span>
+              <template v-if="imgs.length > 1">
+                <span v-if="pickedIn(f)" class="wp-ifp__frame-count">{{ pickedIn(f) }} of {{ imgs.length }}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  :hint="pickedIn(f) === imgs.length ? 'Leave out every image of this frame' : 'Pick every image of this frame'"
+                  :data-test="`image-filter-pick-frame-${f}`"
+                  @click.stop="toggleFrames([f])"
+                >{{ pickedIn(f) === imgs.length ? "Clear frame" : "Pick frame" }}</Button>
+              </template>
             </div>
-            <div class="wp-ifp__values" data-test="image-filter-values">
-              <div v-for="r in zoomValues" :key="r.name" class="wp-ifp__value">
-                <span class="wp-ifp__value-name" :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis)" :title="`$${r.name}`">${{ r.name }}</span>
-                <span class="wp-ifp__value-text" :title="r.value">{{ r.value }}</span>
-              </div>
-              <div v-if="typeof zoomLabel?.seed === 'number'" class="wp-ifp__value">
-                <span class="wp-ifp__value-name">seed</span><span class="wp-ifp__value-text">{{ zoomLabel.seed }}</span>
-              </div>
-            </div>
-            <p v-if="!zoomValues.length" class="wp-ifp__hint">Wire a context into the filter to see this frame's values.</p>
-            <template v-if="frameCells.length > 1">
-              <div class="wp-ifp__field-head">
-                <span>Images in this frame</span>
-                <span class="wp-ifp__spacer" />
-                <button type="button" class="wp-ifp__link" data-test="image-filter-details-frame" @click="toggleFrame(zoomCell.frame)">Pick whole frame</button>
-              </div>
-              <div class="wp-ifp__thumbs">
+            <div class="wp-ifp__tiles">
+              <div v-for="(img, i) in imgs" :key="i" class="wp-ifp__tile-cell">
                 <PickerTile
-                  v-for="c in frameCells"
-                  :key="c.key"
-                  :src="viewUrl(c.ref)"
-                  :picked="picked.has(c.key)"
-                  :index="c.image + 1"
-                  :class="{ 'is-current': c.key === zoomCell.key }"
-                  @toggle="setZoom(indexOf(c.frame, c.image))"
+                  :src="viewUrl(img)"
+                  :picked="picked.has(pickKey(f, i))"
+                  :index="imgs.length > 1 || !multiFrame ? i + 1 : 0"
+                  :edited="isEditedCell(pickKey(f, i))"
+                  :masked="isMaskedCell(pickKey(f, i))"
+                  :test-id="`image-filter-tile-${f}-${i}`"
+                  @toggle="toggle(pickKey(f, i))"
+                  @zoom="setMode('detail', indexOf(f, i))"
+                  @hover="(on) => (hovered = on ? indexOf(f, i) : null)"
+                />
+                <div class="wp-ifp__tile-label" :data-test="`image-filter-tile-label-${f}-${i}`" @click.stop>
+                  <InlineEdit
+                    :model-value="labelOf(f, i)"
+                    label="Label"
+                    size="sm"
+                    :required="false"
+                    :placeholder="defaultLabel(f, i)"
+                    :maxlength="MAX_LABEL"
+                    @update:model-value="(v) => setLabel(f, i, v)"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </template>
+
+      <!-- Detail -->
+      <div v-else-if="mode === 'detail' && cell" class="wp-ifp__detail" data-test="image-filter-detail">
+        <div class="wp-ifp__stage">
+          <div class="wp-ifp__view">
+            <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
+            <figure class="wp-ifp__fig">
+              <MaskPainter
+                v-if="painting"
+                ref="painter"
+                :key="cell.key"
+                :src="viewUrl(cell.ref)"
+                :model-value="maskValue"
+                :tool="tool"
+                :erase="paintMode === 'erase'"
+                :size="brush"
+                :hardness="hardness"
+                :strength="strength"
+                @update:model-value="setMask"
+              />
+              <div v-else-if="compareCell" class="wp-ifp__compare" data-test="image-filter-compare">
+                <img :src="viewUrl(cell.ref)" class="wp-ifp__img" alt="" @load="onDetailLoad(cell.key, $event)">
+                <img
+                  :src="viewUrl(compareCell.ref)"
+                  class="wp-ifp__img wp-ifp__compare-top"
+                  :style="{ clipPath: `inset(0 ${100 - comparePos}% 0 0)` }"
+                  alt=""
+                >
+                <span class="wp-ifp__compare-line" :style="{ left: `${comparePos}%` }" aria-hidden="true" />
+                <span class="wp-ifp__compare-tag is-left">{{ cellName(compareCell) }}</span>
+                <span class="wp-ifp__compare-tag is-right">{{ cellName(cell) }}</span>
+                <Slider v-model="comparePos" :min="0" :max="100" class="wp-ifp__compare-range" aria-label="Compare slider" data-test="image-filter-compare-slider" />
+              </div>
+              <img
+                v-else
+                :src="viewUrl(cell.ref)"
+                class="wp-ifp__img"
+                :class="{ 'is-picked': isPicked }"
+                :alt="cellName(cell)"
+                data-test="image-filter-detail-img"
+                @load="onDetailLoad(cell.key, $event)"
+                @click="pickCurrent"
+                @dblclick="setMode('zoom')"
+              >
+            </figure>
+            <Button size="sm" variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
+          </div>
+          <div v-if="total > 1" class="wp-ifp__strip" :class="{ 'is-grouped': multiFrame }" role="list" aria-label="All images" data-test="image-filter-strip">
+            <div
+              v-for="g in stripGroups"
+              :key="g.frame"
+              class="wp-ifp__strip-frame"
+              :class="{ 'is-current': cell && g.frame === cell.frame }"
+              role="group"
+              :aria-label="`Frame #${g.frame + 1}`"
+            >
+            <span v-if="multiFrame" class="wp-ifp__strip-label">#{{ g.frame + 1 }}<template v-if="pickedIn(g.frame)"> · {{ pickedIn(g.frame) }} picked</template></span>
+            <div class="wp-ifp__strip-row">
+            <PickerTile
+              v-for="{ c, ci } in g.items"
+              :key="c.key"
+              role="listitem"
+              :src="viewUrl(c.ref)"
+              :picked="picked.has(c.key)"
+              :index="0"
+              :edited="isEditedCell(c.key)"
+              :masked="isMaskedCell(c.key)"
+              :class="{ 'is-current': ci === current }"
+              :aria-current="ci === current || undefined"
+              :test-id="`image-filter-strip-${c.frame}-${c.image}`"
+              @toggle="current = ci"
+              @zoom="setMode('zoom', ci)"
+            />
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="wp-ifp__side" data-test="image-filter-refine">
+          <div class="wp-ifp__side-head">
+            <div class="wp-ifp__side-title">{{ cellName(cell) }}</div>
+            <div class="wp-ifp__side-label" data-test="image-filter-label" :title="'The labels output carries this name. Clear it for the default.'">
+              <i class="pi pi-tag" aria-hidden="true" />
+              <InlineEdit
+                :key="cell.key"
+                :model-value="labelOf(cell.frame, cell.image)"
+                label="Label"
+                size="sm"
+                :required="false"
+                :placeholder="defaultLabel(cell.frame, cell.image)"
+                :maxlength="MAX_LABEL"
+                @update:model-value="(v) => cell && setLabel(cell.frame, cell.image, v)"
+              />
+            </div>
+            <div class="wp-ifp__side-meta" data-test="image-filter-meta">
+              <span v-if="sizes[cell.key]">{{ sizes[cell.key] }}</span>
+              <span v-if="typeof label?.seed === 'number'">seed {{ label.seed }}</span>
+              <span class="wp-ifp__pos">{{ current + 1 }} / {{ total }}</span>
+            </div>
+          </div>
+          <div class="wp-ifp__side-actions">
+            <Button
+              size="sm"
+              :variant="isPicked ? 'primary' : 'secondary'"
+              :icon="isPicked ? 'pi-check' : 'pi-circle'"
+              kbd="P"
+              :hint="isPicked ? 'Picked: it goes on. Press to leave it out.' : 'Not picked yet. Press to send it on.'"
+              :aria-pressed="isPicked"
+              data-test="image-filter-pick"
+              @click="pickCurrent"
+            >{{ isPicked ? "Picked" : "Pick" }}</Button>
+            <Button
+              v-if="total > 1"
+              size="sm"
+              :variant="comparePin !== null ? 'secondary' : 'ghost'"
+              icon="pi-clone"
+              kbd="C"
+              hint="Pin this image, then step to another to compare them"
+              :aria-pressed="comparePin !== null"
+              data-test="image-filter-compare-pin"
+              @click="togglePin"
+            >{{ comparePin === null ? "Compare" : compareCell ? "Stop comparing" : "Pinned, pick another" }}</Button>
+            <Button v-if="multiFrame && frameSize > 1" size="sm" variant="ghost" icon="pi-th-large" hint="Pick or leave out every image of this frame" data-test="image-filter-details-frame" @click="toggleFrames([cell.frame])">Pick frame ({{ frameSize }})</Button>
+          </div>
+          <WpTabs v-model="sideTab" :tabs="sideTabs" size="sm" aria-label="Image details" test-prefix="image-filter-tab" />
+
+          <section v-if="sideTab === 'values' && values.length" class="wp-ifp__section" data-test="image-filter-details">
+            <div v-if="values.length" class="wp-ifp__field-head">
+              <span class="wp-ifp__hint">Each colour is the one its words have in the prompt.</span>
+              <span class="wp-ifp__spacer" />
+              <CopyButton :text="valuesCopy" label="Copy values" size="sm" />
+            </div>
+            <div v-if="values.length" class="wp-ifp__values" data-test="image-filter-values">
+              <div v-for="r in values" :key="r.name" class="wp-ifp__value">
+                <span v-tooltip="`$${r.name}`" class="wp-ifp__value-name" :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis, r.name)"><i class="wp-ifp__swatch" aria-hidden="true" />${{ r.name }}</span>
+                <span v-tooltip="r.value" class="wp-ifp__value-text">{{ r.value }}</span>
+              </div>
+              <div v-if="typeof label?.seed === 'number'" class="wp-ifp__value">
+                <span class="wp-ifp__value-name">seed</span><span class="wp-ifp__value-text">{{ label.seed }}</span>
+              </div>
+            </div>
+          </section>
+
+          <template v-if="sideTab === 'prompt'">
+          <section v-if="editFields.length" class="wp-ifp__section is-fill">
+            <p v-if="request.send_as === 'same_shape' && frameSize > 1" class="wp-ifp__hint">
+              Same shape: a prompt edit covers every image of this frame.
+            </p>
+            <template v-for="field in editFields" :key="field">
+              <div class="wp-ifp__field-head">
+                <span>{{ field === "positive" ? "Prompt" : "Negative" }}</span>
+                <span v-if="isEdited(field)" class="wp-ifp__badge">edited</span>
+                <span class="wp-ifp__spacer" />
+                <span
+                  v-if="field === 'positive' && !request.has_clip"
+                  v-tooltip="'No CLIP wired: an edit changes the text outputs only, the conditioning stays as it was.'"
+                  class="wp-ifp__tag"
+                  tabindex="0"
+                  data-test="image-filter-no-clip"
+                >text only</span>
+                <Button v-if="isEdited(field)" size="sm" variant="link" @click="resetText(field)">Reset</Button>
+                <CopyButton
+                  :text="textValue(field)"
+                  :label="field === 'positive' ? 'Copy prompt' : 'Copy negative'"
+                  size="sm"
+                  :data-test="`image-filter-copy-${field}`"
                 />
               </div>
+              <div
+                v-if="values.length && field === 'positive' && !editingPositive && textValue(field)"
+                v-tooltip="'Click to edit'"
+                class="wp-ifp__text wp-ifp__marked"
+                tabindex="0"
+                data-test="image-filter-positive-marked"
+                @click="editPositive"
+                @keydown.enter.prevent.stop="editPositive"
+              ><template v-for="(run, ri) in positiveRuns" :key="ri"><mark
+                v-if="run.name"
+                v-tooltip="`Set by $${run.name}`"
+                :style="valueHue(run.axis ?? -1, run.name)"
+              >{{ run.text }}</mark><template v-else>{{ run.text }}</template></template></div>
+              <Textarea
+                v-else
+                class="wp-ifp__text"
+                :model-value="textValue(field)"
+                :rows="4"
+                spellcheck="false"
+                :aria-label="`${field} prompt`"
+                :data-test="`image-filter-${field}`"
+                @blur="editingPositive = false"
+                @input="setText(field, ($event.target as HTMLTextAreaElement).value)"
+              />
             </template>
           </section>
-          <div class="wp-ifp__refine-title">Refine before it goes on</div>
-          <p v-if="request.send_as === 'same_shape' && (frames[zoomCell.frame]?.length ?? 0) > 1" class="wp-ifp__hint">
-            Same shape: a prompt edit covers every image of this frame.
-          </p>
-          <template v-for="field in (['positive', 'negative'] as const)" :key="field">
-            <div class="wp-ifp__field-head">
-              <span>{{ field === "positive" ? "Positive" : "Negative" }}</span>
-              <span v-if="isEdited(field)" class="wp-ifp__badge">edited</span>
-              <span class="wp-ifp__spacer" />
-              <button v-if="isEdited(field)" type="button" class="wp-ifp__link" @click="resetText(field)">Reset</button>
-            </div>
-            <div
-              v-if="details && field === 'positive' && !editingPositive && canEdit(field) && textValue(field)"
-              class="wp-ifp__text wp-ifp__marked"
-              tabindex="0"
-              title="Click to edit"
-              data-test="image-filter-positive-marked"
-              @click="editPositive"
-              @keydown.enter.prevent.stop="editPositive"
-            ><template v-for="(run, ri) in positiveRuns" :key="ri"><mark
-              v-if="run.name"
-              :class="{ 'is-swept': (run.axis ?? -1) >= 0 }"
-              :style="valueHue(run.axis ?? -1)"
-              :title="`$${run.name}`"
-            >{{ run.text }}</mark><template v-else>{{ run.text }}</template></template></div>
-            <textarea
-              v-else-if="canEdit(field)"
-              class="wp-ifp__text"
-              :value="textValue(field)"
-              rows="5"
-              spellcheck="false"
-              :aria-label="`${field} prompt`"
-              :data-test="`image-filter-${field}`"
-              @blur="editingPositive = false"
-              @input="setText(field, ($event.target as HTMLTextAreaElement).value)"
-            />
-            <p v-else class="wp-ifp__hint">Wire {{ field }}_text or a CLIP into the filter to edit it here.</p>
+          <p v-else class="wp-ifp__hint" data-test="image-filter-no-prompt">Wire positive_text, negative_text or a CLIP to edit the prompt here.</p>
           </template>
-          <p v-if="!request.has_clip && (canEdit('positive') || canEdit('negative'))" class="wp-ifp__warn" data-test="image-filter-no-clip">
-            No CLIP wired: an edit changes the text outputs only, the conditioning stays as it was.
-          </p>
 
-          <div class="wp-ifp__field-head wp-ifp__mask-head">
-            <span>Mask</span>
-            <span v-if="maskValue" class="wp-ifp__badge">painted</span>
-            <span class="wp-ifp__spacer" />
-            <button
-              type="button"
-              class="wp-ifp__mini"
-              :class="{ 'is-on': painting }"
-              title="Paint a mask for this image (M)"
-              data-test="image-filter-paint"
-              @click="togglePaint"
-            >{{ painting ? "Done" : "Paint" }}</button>
-          </div>
-          <template v-if="painting">
-            <div class="wp-ifp__seg wp-ifp__seg--full" role="group" aria-label="Tool">
-              <button type="button" :class="{ 'is-on': tool === 'brush' }" @click="tool = 'brush'">Brush</button>
-              <button type="button" :class="{ 'is-on': tool === 'eraser' }" @click="tool = 'eraser'">Eraser</button>
+          <section v-if="sideTab === 'mask'" class="wp-ifp__section">
+            <div class="wp-ifp__field-head">
+              <span>Mask</span>
+              <span v-if="maskValue" class="wp-ifp__badge">painted</span>
+              <span class="wp-ifp__spacer" />
+              <Button
+                size="sm"
+                :variant="painting ? 'secondary' : 'ghost'"
+                icon="pi-pencil"
+                kbd="M"
+                hint="Paint a mask for this image; it goes to the masks output"
+                :aria-pressed="painting"
+                data-test="image-filter-paint"
+                @click="togglePaint"
+              >{{ painting ? "Done" : "Paint" }}</Button>
             </div>
-            <label class="wp-ifp__size">Size <input v-model.number="brush" type="range" min="4" max="160"> <span>{{ brush }}</span></label>
-            <div class="wp-ifp__row">
-              <button type="button" class="wp-ifp__mini" @click="painter?.invert()">Invert</button>
-              <button type="button" class="wp-ifp__mini" data-test="image-filter-mask-clear" @click="painter?.clear()">Clear</button>
-            </div>
-          </template>
-          <p class="wp-ifp__hint">Goes to the masks output for this image. Images you don't paint keep the incoming mask.</p>
+            <template v-if="painting">
+              <WpSegmented v-model="tool" :options="TOOL_OPTIONS" size="sm" block aria-label="Tool" test-prefix="image-filter-tool" />
+              <WpSegmented v-model="paintMode" :options="PAINT_MODE_OPTIONS" size="sm" block aria-label="Paint or erase" test-prefix="image-filter-paint-mode" />
+              <div class="wp-ifp__brush" data-test="image-filter-brush">
+                <span class="wp-ifp__brush-name">Size</span>
+                <Slider v-model="brush" :min="4" :max="240" size="sm" aria-label="Brush size" :format="px" show-value data-test="image-filter-brush-size" />
+                <span class="wp-ifp__brush-name">Hardness</span>
+                <Slider v-model="hardness" :min="0" :max="100" :step="5" size="sm" aria-label="Hardness" :format="pct" show-value data-test="image-filter-brush-hardness" />
+                <span class="wp-ifp__brush-name">Strength</span>
+                <Slider v-model="strength" :min="5" :max="100" :step="5" size="sm" aria-label="Strength" :format="pct" show-value data-test="image-filter-brush-strength" />
+              </div>
+              <div class="wp-ifp__row">
+                <Button size="sm" variant="ghost" icon="pi-undo" kbd="Ctrl Z" hint="Undo" aria-label="Undo" :disabled="!painter?.canUndo" data-test="image-filter-mask-undo" @click="painter?.undo()" />
+                <Button size="sm" variant="ghost" icon="pi-refresh" kbd="Ctrl Shift Z" hint="Redo" aria-label="Redo" :disabled="!painter?.canRedo" data-test="image-filter-mask-redo" @click="painter?.redo()" />
+                <Button size="sm" variant="ghost" @click="painter?.invert()">Invert</Button>
+                <Button size="sm" variant="ghost" data-test="image-filter-mask-clear" @click="painter?.clear()">Clear</Button>
+              </div>
+              <p class="wp-ifp__hint">Hardness softens the edge of the brush, lasso and fill; Strength masks part-way (inpainting changes those parts less). [ ] change the size. Images you don't paint keep the incoming mask.</p>
+            </template>
+            <template v-else-if="maskValue">
+              <WpSegmented v-model="maskView" :options="MASK_VIEW_OPTIONS" size="sm" aria-label="Mask preview" test-prefix="image-filter-mask-view" />
+              <!-- The painted PNG's alpha is the mask: a CSS mask paints it as a tint or as white on black. -->
+              <div class="wp-ifp__mask-preview" :class="`is-${maskView}`" data-test="image-filter-mask-preview">
+                <!-- Mask only: the picture drawn black keeps its size and shape under the white mask. -->
+                <img :src="viewUrl(cell.ref)" alt="" class="wp-ifp__mask-base" draggable="false">
+                <span class="wp-ifp__mask-layer" :style="maskLayerStyle" />
+              </div>
+              <p class="wp-ifp__hint">{{ maskView === "over" ? "The tinted part is what the masks output masks." : "White is masked, black is not, as the masks output sends it." }}</p>
+            </template>
+            <p v-else class="wp-ifp__hint" data-test="image-filter-mask-empty">No mask painted for this image yet. Paint (M) draws one; images you don't paint keep the incoming mask.</p>
+          </section>
         </aside>
       </div>
 
-      <div v-else-if="showGrid && grid" class="wp-ifp__body is-grid" data-test="image-filter-grid">
-        <SweepGrid
-          v-model:layout="layout"
-          :grid="grid"
-          :axes="axes"
-          :frames="frames"
-          :picked="picked"
-          :edits="edits"
-          :tooltip="frameTooltip"
-          @toggle="toggle"
-          @toggle-frames="toggleFrames"
-          @zoom="(f, i) => setZoom(indexOf(f, i))"
-          @hover="(f, i, on) => (hovered = on ? indexOf(f, i) : null)"
-        />
-      </div>
-
-      <div v-else ref="body" class="wp-ifp__body" :class="{ 'is-flat': !multiFrame, 'is-fit': fit }">
-        <section
-          v-for="(imgs, f) in frames"
-          :key="f"
-          class="wp-ifp__frame"
-          :class="{ 'is-flat': !multiFrame }"
-          :style="fitStyle"
-          :data-test="`image-filter-frame-${f}`"
-          :title="multiFrame ? `${frameTooltip(f)}\nClick the image to pick it, the frame around it to zoom in.` : undefined"
-          @click="multiFrame && setZoom(indexOf(f, 0))"
+      <!-- Zoom -->
+      <div v-else-if="mode === 'zoom' && cell" class="wp-ifp__zoom" data-test="image-filter-zoom">
+        <!-- Comparing: the pinned image stays on the left (and keeps the view), ←/→ change the right one. -->
+        <WpImageZoom
+          ref="viewer"
+          v-model:zoom="zoom"
+          :src="viewUrl((compareCell ?? cell).ref)"
+          :alt="cellName(compareCell ?? cell)"
+          :second="compareCell ? viewUrl(cell.ref) : null"
+          :second-alt="cellName(cell)"
+          :hint="compareCell ? 'Both sides move together · ←/→ changes the right one · C stops comparing' : 'Drag to move · scroll to zoom · C compares · F fullscreen · Esc back'"
+          fullscreen
+          minimap
+          autohide
         >
-          <div v-if="multiFrame" class="wp-ifp__frame-head">
-            <span class="wp-ifp__frame-label">
-              <template v-for="(part, pi) in frameParts(labels[f], f, axes)" :key="pi">
-                <span v-if="pi > 0" class="wp-ifp__sep">·</span><span :class="{ 'wp-ifp__opt': pi > 0 }">{{ part }}</span>
-              </template>
+          <template #bar-start>
+            <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
+          </template>
+          <template #bar-end>
+            <Button
+              size="sm"
+              :variant="comparePin !== null ? 'secondary' : 'ghost'"
+              icon="pi-clone"
+              kbd="C"
+              :hint="comparePin === null ? 'Pin this image, then step to another to see both side by side' : 'Stop comparing'"
+              :aria-pressed="comparePin !== null"
+              data-test="image-filter-zoom-compare"
+              @click="togglePin"
+            >{{ comparePin === null ? "Compare" : compareCell ? "Comparing" : "Pinned" }}</Button>
+            <Button
+              size="sm"
+              :variant="isPicked ? 'primary' : 'secondary'"
+              :icon="isPicked ? 'pi-check' : 'pi-circle'"
+              kbd="P"
+              :aria-pressed="isPicked"
+              data-test="image-filter-pick"
+              @click="pickCurrent"
+            >{{ isPicked ? "Picked" : "Pick" }}</Button>
+            <Button size="sm" variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
+          </template>
+          <template #first>
+            <span class="wp-ifp__zoom-cap" data-test="image-filter-zoom-cap">
+              <template v-if="compareCell">{{ cellName(compareCell) }} · pinned</template>
+              <template v-else>{{ cellName(cell) }} · {{ current + 1 }} / {{ total }}</template>
+              <span v-if="picked.has((compareCell ?? cell).key)" class="wp-ifp__zoom-picked" data-test="image-filter-zoom-picked"><i class="pi pi-check" aria-hidden="true" /> Picked</span>
             </span>
-            <button
-              v-if="imgs.length > 1"
-              type="button"
-              class="wp-ifp__frame-all"
-              title="Pick or clear every image of this frame"
-              @click.stop="toggleFrame(f)"
-            >all</button>
-          </div>
-          <div class="wp-ifp__tiles">
-            <PickerTile
-              v-for="(img, i) in imgs"
-              :key="i"
-              :src="viewUrl(img)"
-              :picked="picked.has(pickKey(f, i))"
-              :index="imgs.length > 1 || !multiFrame ? i + 1 : 0"
-              :edited="isEditedCell(pickKey(f, i))"
-              :masked="isMaskedCell(pickKey(f, i))"
-              :test-id="`image-filter-tile-${f}-${i}`"
-              @toggle="toggle(pickKey(f, i))"
-              @zoom="setZoom(indexOf(f, i))"
-              @hover="(on) => (hovered = on ? indexOf(f, i) : null)"
-            />
-          </div>
-        </section>
+          </template>
+          <template #second>
+            <span class="wp-ifp__zoom-cap is-right" data-test="image-filter-zoom-cap-second">
+              {{ cellName(cell) }} · {{ current + 1 }} / {{ total }}
+              <span v-if="isPicked" class="wp-ifp__zoom-picked"><i class="pi pi-check" aria-hidden="true" /> Picked</span>
+            </span>
+          </template>
+          <template #fullscreen>
+            <span v-if="multiFrame" class="wp-ifp__full-label">Frame {{ frameTitle(cell.frame) }}</span>
+            <template v-if="frameCells.length > 1">
+              <div class="wp-ifp__full-strip" role="list" aria-label="This frame's images">
+                <PickerTile
+                  v-for="c in frameCells"
+                  :key="c.key"
+                  role="listitem"
+                  :src="viewUrl(c.ref)"
+                  :picked="picked.has(c.key)"
+                  :index="0"
+                  :edited="isEditedCell(c.key)"
+                  :masked="isMaskedCell(c.key)"
+                  :class="{ 'is-current': c.key === cell.key }"
+                  :aria-current="c.key === cell.key || undefined"
+                  :test-id="`image-filter-full-thumb-${c.image}`"
+                  @toggle="current = cellIndex(c)"
+                />
+              </div>
+              <span class="wp-ifp__full-sep" aria-hidden="true" />
+            </template>
+            <span class="wp-ifp__full-count"><strong>{{ pickedList.length }}</strong> of {{ total }} picked</span>
+            <Button size="sm" variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-full-keep" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</Button>
+          </template>
+        </WpImageZoom>
       </div>
 
       <div class="wp-ifp__foot">
         <div class="wp-ifp__status" data-test="image-filter-status">
-          <span><strong>{{ pickedList.length }}</strong> picked<template v-if="multiFrame"> from {{ pickedFrames }} {{ pickedFrames === 1 ? "frame" : "frames" }}</template></span>
+          <span><strong>{{ pickedList.length }}</strong> of {{ total }} picked<template v-if="multiFrame"> from {{ pickedFrames }} {{ pickedFrames === 1 ? "frame" : "frames" }}</template></span>
           <span v-if="editCount" class="wp-ifp__edits">{{ editCount }} refined</span>
           <span v-if="leftLabel" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }">{{ leftLabel }}</span>
         </div>
         <span class="wp-ifp__spacer" />
-        <button
-          v-if="canSendToLoop"
-          type="button"
-          class="wp-ifp__btn"
-          :disabled="pickedFrames === 0"
-          title="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks"
-          data-test="image-filter-send-loop"
-          @click="sendToLoop"
-        >Send to Loop</button>
-        <button type="button" class="wp-ifp__btn wp-ifp__btn--danger" title="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</button>
-        <button type="button" class="wp-ifp__btn" data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</button>
-        <button
-          type="button"
-          class="wp-ifp__btn wp-ifp__btn--primary"
-          :disabled="pickedList.length === 0"
-          data-test="image-filter-keep-picked"
-          @click="keepPicked"
-        >{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</button>
+        <Button v-if="canSendToLoop" size="sm" :disabled="pickedFrames === 0" hint="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks" data-test="image-filter-send-loop" @click="sendToLoop">Send to Loop</Button>
+        <Button size="sm" variant="danger" hint="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</Button>
+        <Button size="sm" data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</Button>
+        <Button size="sm" variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-keep-picked" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</Button>
       </div>
     </div>
   </ModalShell>
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
-.wp-ifp { width: min(1280px, 95vw); max-height: 90vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: 6px; overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.55); outline: none; }
-.wp-ifp__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: linear-gradient(180deg, color-mix(in srgb, var(--wp-accent) 18%, var(--wp-bg2)) 0%, var(--wp-bg2) 100%); }
-.wp-ifp__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
+/* One size in every mode, so switching never moves the window under the mouse. */
+.wp-ifp { width: min(1280px, 95vw); height: 90vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); outline: none; }
+.wp-ifp__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
+.wp-ifp__head-icon { color: var(--wp-accent); width: 24px; font-size: 15px; text-align: center; }
 .wp-ifp__title-block { flex: 1; min-width: 0; }
 .wp-ifp__title-row { display: flex; align-items: center; gap: 8px; }
 .wp-ifp__name { font: 600 13px var(--wp-font-sans); }
-.wp-ifp__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: 2px; background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent); }
-.wp-ifp__more { font: 10px var(--wp-font-sans); color: var(--wp-amber, #fbbf24); }
-.wp-ifp__sub { font: 10.5px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 3px; }
-.wp-ifp__sub kbd { font: 9.5px var(--wp-font-mono, monospace); padding: 0 4px; border: 1px solid var(--wp-border); border-radius: 3px; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-ifp__icon-btn { background: transparent; border: 0; color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; padding: 4px; display: flex; }
-.wp-ifp__icon-btn:hover { color: var(--wp-text); }
+.wp-ifp__chip { font: 600 10px var(--wp-font-sans); letter-spacing: .02em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-ifp__more { font: 11px var(--wp-font-sans); color: var(--wp-amber); }
+.wp-ifp__sub { font: 11px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.wp-ifp__zoom-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg3); color: var(--wp-text); font: 11px var(--wp-font-sans); cursor: pointer; white-space: nowrap; }
-.wp-ifp__zoom-btn:hover { border-color: var(--wp-accent); }
-.wp-ifp__zoom-btn.is-on { background: color-mix(in srgb, var(--wp-accent) 25%, var(--wp-bg3)); border-color: var(--wp-accent); }
-.wp-ifp__sub b { font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-ifp__seg { display: inline-flex; border: 1px solid var(--wp-border); border-radius: 4px; overflow: hidden; }
-.wp-ifp__seg button { padding: 3px 9px; border: 0; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font: 11px var(--wp-font-sans); cursor: pointer; }
-.wp-ifp__seg button + button { border-left: 1px solid var(--wp-border); }
-.wp-ifp__seg button.is-on { background: color-mix(in srgb, var(--wp-accent) 25%, var(--wp-bg3)); color: var(--wp-text); }
-.wp-ifp__seg--full { display: flex; }
-.wp-ifp__seg--full button { flex: 1; }
+.wp-ifp__tools { display: flex; align-items: center; gap: 8px; padding: 8px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); }
+.wp-ifp__tool-label { font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__tool-label:not(:first-child) { margin-left: 10px; }
 
 .wp-ifp__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
-.wp-ifp.is-fit { height: 90vh; }
 .wp-ifp__body.is-fit { align-content: safe center; justify-content: safe center; }
 .wp-ifp__body.is-fit .wp-ifp__frame.is-flat .wp-ifp__tiles { justify-content: center; }
 .wp-ifp__body.is-grid { display: flex; flex-direction: column; flex-wrap: nowrap; padding: 0; overflow: hidden; }
-.wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 5px; background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); --wp-ifp-tile: 150px; }
-.wp-ifp__frame.is-flat { padding: 0; background: transparent; border: 0; width: 100%; --wp-ifp-tile: 200px; }
+.wp-ifp__frame { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: min(5px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }
+.wp-ifp__frame.is-flat { padding: 0; background: transparent; border: 0; width: 100%; }
 .wp-ifp__frame:not(.is-flat) { cursor: zoom-in; }
-.wp-ifp__frame:not(.is-flat):hover { border-color: var(--wp-accent, #4a8cff); }
+.wp-ifp__frame:not(.is-flat):hover { border-color: var(--wp-accent); }
 .wp-ifp__frame:not(.is-flat):hover .wp-ifp__frame-label { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifp__frame-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.wp-ifp__frame-label { flex: 1; min-width: 0; padding: 0 2px; font: 10px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wp-ifp__frame-all { background: transparent; border: 0; padding: 0 2px; font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); cursor: pointer; }
-.wp-ifp__frame-all:hover { color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-ifp__frame-label { flex: 1; min-width: 0; padding: 0 2px; font: 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-ifp__frame-count { font: 11px var(--wp-font-sans); color: var(--wp-resolved, var(--wp-text-dim)); white-space: nowrap; }
 .wp-ifp__opt { color: var(--wp-text-muted, var(--wp-text2)); font-family: var(--wp-font-sans); }
 .wp-ifp__sep { margin: 0 4px; opacity: .6; }
 .wp-ifp__tiles { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-ifp__tile-cell { display: flex; flex-direction: column; min-width: 0; }
+.wp-ifp__tile-label { display: flex; width: 0; min-width: 100%; padding-left: 6px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__side-label { display: flex; align-items: center; gap: 2px; min-width: 0; font: 12px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__side-label > .pi { flex: none; font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
+/* The icon stands where the rename box's hover padding would. */
+.wp-ifp__side-label :deep(.wp-inline-edit) { margin-left: 0; }
 
-
-.wp-ifp__zoom { flex: 1; min-height: 0; display: flex; }
-.wp-ifp__stage { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; }
-.wp-ifp__zoom-fig { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; min-height: 0; }
-.wp-ifp__zoom-img { display: block; max-width: 100%; max-height: calc(90vh - 200px); border: 3px solid transparent; border-radius: 6px; cursor: pointer; }
-.wp-ifp__zoom-img.is-picked { border-color: var(--wp-green, #34c47c); }
-.wp-ifp__zoom-cap { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-ifp__zoom-pos { color: var(--wp-text-dim, var(--wp-text3)); font-family: var(--wp-font-mono, monospace); }
-.wp-ifp__zoom-state { padding: 1px 6px; border-radius: 3px; border: 1px solid var(--wp-border); background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.wp-ifp__zoom-state.is-picked { border-color: var(--wp-green, #34c47c); color: var(--wp-green, #34c47c); }
-.wp-ifp__nav { flex-shrink: 0; width: 34px; height: 60px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font-size: 22px; cursor: pointer; }
-.wp-ifp__nav:hover { color: var(--wp-text); border-color: var(--wp-accent); }
+/* Detail */
+.wp-ifp__detail { flex: 1; min-height: 0; display: flex; }
+.wp-ifp__stage { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.wp-ifp__view { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.wp-ifp__fig { margin: 0; min-width: 0; min-height: 0; max-height: 100%; display: flex; }
+.wp-ifp__detail { --wp-ifp-stage-h: calc(90vh - 240px); }
+.wp-ifp__img { display: block; max-width: 100%; max-height: var(--wp-ifp-stage-h); border: 3px solid transparent; border-radius: min(6px, var(--wp-radius-cap, 999px)); cursor: pointer; }
+.wp-ifp__img.is-picked { border-color: var(--wp-green); }
+.wp-ifp__strip { flex-shrink: 0; display: flex; gap: 4px; overflow-x: auto; padding: 2px 2px 4px; --wp-ifp-tile: 56px; }
+.wp-ifp__strip > * { flex-shrink: 0; }
+.wp-ifp__strip .is-current { border-color: var(--wp-accent); }
+.wp-ifp__strip-frame, .wp-ifp__strip-row { display: flex; gap: 4px; }
+.wp-ifp__strip.is-grouped { gap: 12px; align-items: flex-end; }
+.wp-ifp__strip.is-grouped .wp-ifp__strip-frame { flex-direction: column; gap: 3px; }
+.wp-ifp__strip.is-grouped .wp-ifp__strip-row { padding: 3px; border: 1px solid var(--wp-border); border-radius: var(--wp-radius-md, 8px); }
+.wp-ifp__strip.is-grouped .wp-ifp__strip-frame.is-current .wp-ifp__strip-row { border-color: var(--wp-accent); background: color-mix(in srgb, var(--wp-accent) 8%, transparent); }
+.wp-ifp__strip-label { font: 11px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
+.wp-ifp__strip-frame.is-current .wp-ifp__strip-label { color: var(--wp-accent-text, var(--wp-accent)); font-weight: 600; }
+.wp-ifp__swatch { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: var(--wp-ifp-hue, var(--wp-text-dim)); vertical-align: baseline; }
+.wp-ifp__tag { padding: 0 6px; border: 1px solid color-mix(in srgb, var(--wp-warn) 45%, transparent); border-radius: var(--wp-radius-cap, 999px); font: 11px/16px var(--wp-font-sans); color: var(--wp-warn); cursor: help; }
 
 .wp-ifp__compare { position: relative; line-height: 0; }
-.wp-ifp__compare .wp-ifp__zoom-img { cursor: ew-resize; }
+.wp-ifp__compare .wp-ifp__img { cursor: ew-resize; }
 .wp-ifp__compare-top { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.wp-ifp__compare-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 4px rgba(0,0,0,.6); pointer-events: none; }
-.wp-ifp__compare-tag { position: absolute; top: 8px; padding: 2px 6px; border-radius: 3px; background: rgba(0,0,0,.6); color: #fff; font: 10.5px/1.4 var(--wp-font-sans); pointer-events: none; }
+/* Labels over a picture wear a dark scrim in both themes. */
+.wp-ifp__compare-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: white; box-shadow: var(--wp-shadow-sm); pointer-events: none; }
+.wp-ifp__compare-tag { position: absolute; top: 8px; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: rgb(0 0 0 / 0.6); color: white; font: 11px/1.4 var(--wp-font-sans); pointer-events: none; }
 .wp-ifp__compare-tag.is-left { left: 8px; }
 .wp-ifp__compare-tag.is-right { right: 8px; }
-.wp-ifp__compare-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+/* The kit Slider, invisible over the pair so a drag anywhere on the picture
+ * moves the split. Its track sits half a thumb (8px at md) in from each side,
+ * so the slider reaches that far past the picture and the track spans it
+ * exactly; `--wp-control-h-md` stretches the track to the picture's height. */
+.wp-ifp__compare > .wp-ifp__compare-range { position: absolute; top: 0; bottom: 0; left: -8px; width: calc(100% + 16px); --wp-control-h-md: 100%; opacity: 0; }
+.wp-ifp__compare-range :deep(.wp-slider__track) { cursor: ew-resize; }
 
-.wp-ifp__refine.is-wide { width: 360px; }
-.wp-ifp__refine > * { flex-shrink: 0; }
-.wp-ifp__details { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--wp-border); }
-/* Many variables scroll inside the list so Refine stays in view; long names
+.wp-ifp__side { width: 300px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-left: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); }
+.wp-ifp__side > * { flex-shrink: 0; }
+.wp-ifp__side-title { font: 600 13px var(--wp-font-sans); overflow-wrap: anywhere; }
+.wp-ifp__side-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; font: 11px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-ifp__pos { margin-left: auto; }
+.wp-ifp__side-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-ifp__section { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--wp-border); }
+.wp-ifp__section > .wp-btn--link { align-self: flex-start; }
+.wp-ifp__field-head { display: flex; align-items: center; gap: 6px; font: 600 11px var(--wp-font-sans); }
+/* Many variables scroll inside the list so the prompt stays in view; long names
  * and values are cut (full text on hover). Plain block rows, not a grid: a
  * grid row with overflow:hidden items may shrink to nothing in a capped box. */
-.wp-ifp__values { flex-shrink: 0; max-height: 210px; overflow-y: auto; font: 11px/1.45 var(--wp-font-mono, monospace); }
+.wp-ifp__values { flex-shrink: 0; overflow-y: auto; font: 11px/1.45 var(--wp-font-mono, monospace); }
 .wp-ifp__value { display: flex; gap: 12px; padding: 1px 0; }
 .wp-ifp__value-name { flex: 0 0 38%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-ifp__value-name.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, #fff); font-weight: 600; }
+.wp-ifp__value-name[style] { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, var(--wp-text)); }
+.wp-ifp__value-name.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, var(--wp-text)); font-weight: 600; }
 .wp-ifp__value-text { flex: 1; min-width: 0; color: var(--wp-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.wp-ifp__thumbs { display: flex; flex-wrap: wrap; gap: 4px; --wp-ifp-tile: 64px; }
-.wp-ifp__thumbs .is-current { border-color: var(--wp-accent); }
 .wp-ifp__marked { white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; min-height: 60px; }
-.wp-ifp__marked mark { padding: 0 2px; border-radius: 3px; color: var(--wp-text); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); }
-.wp-ifp__marked mark.is-swept { background: color-mix(in srgb, var(--wp-ifp-hue) 28%, transparent); }
-.wp-ifp__refine { width: 300px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-left: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); }
-.wp-ifp__refine-title { font: 600 11px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-ifp__field-head { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 600 11px var(--wp-font-sans); }
-.wp-ifp__mask-head { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--wp-border); }
-.wp-ifp__badge { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 1px 5px; border-radius: 2px; background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-ifp__text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 70px; padding: 6px; border: 1px solid var(--wp-border); border-radius: 4px; background: var(--wp-bg2); color: var(--wp-text); font: 11px/1.45 var(--wp-font-mono, monospace); }
-.wp-ifp__text:focus { outline: none; border-color: var(--wp-accent); }
-.wp-ifp__hint { margin: 0; font: 10.5px/1.4 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-ifp__warn { margin: 0; font: 10.5px/1.4 var(--wp-font-sans); color: var(--wp-amber, #fbbf24); }
-.wp-ifp__link { background: none; border: 0; padding: 0; color: var(--wp-accent-text, var(--wp-accent)); font: 10.5px var(--wp-font-sans); cursor: pointer; }
-.wp-ifp__mini { padding: 2px 8px; border: 1px solid var(--wp-border); border-radius: 3px; background: var(--wp-bg3); color: var(--wp-text-muted, var(--wp-text2)); font: 10.5px var(--wp-font-sans); cursor: pointer; }
-.wp-ifp__mini:hover { color: var(--wp-text); border-color: var(--wp-text-dim, #666); }
-.wp-ifp__mini.is-on { border-color: var(--wp-accent); color: var(--wp-text); background: color-mix(in srgb, var(--wp-accent) 22%, var(--wp-bg3)); }
-.wp-ifp__size { display: flex; align-items: center; gap: 6px; font: 10.5px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-ifp__size input { flex: 1; accent-color: var(--wp-accent); }
-.wp-ifp__size span { width: 26px; text-align: right; font-family: var(--wp-font-mono, monospace); }
+.wp-ifp__marked mark { padding: 0 2px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-text); background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 20%, transparent); box-shadow: inset 0 -1.5px 0 var(--wp-ifp-hue, var(--wp-accent)); }
+.wp-ifp__marked mark:hover { background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 38%, transparent); }
+.wp-ifp__badge { font: 600 10px var(--wp-font-sans); padding: 1px 5px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
+/* The kit Textarea draws the box; prompts read in small monospace. */
+.wp-ifp__text { min-height: 64px; font: 11px/1.45 var(--wp-font-mono, monospace); }
+.wp-ifp__hint { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-ifp__warn { margin: 0; font: 11px/1.4 var(--wp-font-sans); color: var(--wp-amber); }
+.wp-ifp__brush { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; }
+.wp-ifp__brush-name { font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__row { display: flex; gap: 6px; }
+
+/* Zoom */
+.wp-ifp__zoom { flex: 1; min-height: 0; padding: 8px; }
+.wp-ifp__zoom-cap { position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: rgb(0 0 0 / 0.6); color: white; font: 11px/1.5 var(--wp-font-sans); pointer-events: none; }
+.wp-ifp__zoom-cap.is-right { left: auto; right: 10px; }
+.wp-ifp__zoom-picked { display: inline-flex; align-items: center; gap: 3px; margin: 0 -6px 0 2px; padding: 0 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-green); color: white; font-weight: 600; }
+.wp-ifp__zoom-picked .pi { font-size: 9px; }
+.wp-ifp__full-label { color: var(--wp-text-muted); font: var(--wp-text-xs) var(--wp-font-sans); }
+.wp-ifp__full-count { color: var(--wp-text-muted); font: var(--wp-text-xs) var(--wp-font-sans); white-space: nowrap; }
+.wp-ifp__full-count strong { color: var(--wp-text); }
+.wp-ifp__mask-preview { position: relative; align-self: center; max-width: 100%; line-height: 0; border-radius: var(--wp-radius); overflow: hidden; box-shadow: 0 0 0 1px var(--wp-border); }
+.wp-ifp__mask-base { display: block; max-width: 100%; max-height: 360px; }
+.wp-ifp__mask-preview.is-only .wp-ifp__mask-base { filter: brightness(0); }
+.wp-ifp__mask-layer { position: absolute; inset: 0; mask-size: 100% 100%; -webkit-mask-size: 100% 100%; mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; pointer-events: none; }
+.wp-ifp__mask-preview.is-over .wp-ifp__mask-layer { background: color-mix(in srgb, var(--wp-accent) 55%, transparent); }
+.wp-ifp__mask-preview.is-only .wp-ifp__mask-layer { background: white; }
+.wp-ifp__full-strip { display: flex; gap: 4px; --wp-ifp-tile: 36px; }
+.wp-ifp__full-strip .is-current { border-color: var(--wp-accent); }
+.wp-ifp__full-sep { width: 1px; height: 32px; background: var(--wp-border); }
 
 .wp-ifp__foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-ifp__status { display: flex; gap: 12px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__status strong { color: var(--wp-text); }
 .wp-ifp__edits { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifp__left { color: var(--wp-text-dim, var(--wp-text3)); font-family: var(--wp-font-mono, monospace); }
-.wp-ifp__left.is-low { color: var(--wp-amber, #fbbf24); }
+.wp-ifp__left.is-low { color: var(--wp-amber); }
 .wp-ifp__spacer { flex: 1; }
-.wp-ifp__btn { padding: 6px 12px; border: 1px solid var(--wp-border); border-radius: 3px; background: var(--wp-bg2); color: var(--wp-text); font: 11px var(--wp-font-sans); cursor: pointer; }
-.wp-ifp__btn:hover { border-color: var(--wp-text-dim, #666); }
-.wp-ifp__btn:disabled { opacity: .45; cursor: default; }
-.wp-ifp__btn--danger { color: var(--wp-red, #f08a8a); }
-.wp-ifp__btn--danger:hover { border-color: var(--wp-red, #f08a8a); }
-.wp-ifp__btn--primary { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; font-weight: 600; }
 </style>

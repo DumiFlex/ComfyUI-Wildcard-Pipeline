@@ -3,6 +3,8 @@ import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import { newModuleId } from "../../../../../widgets/_shared";
 import {
+  effectiveNegative,
+  negativeOverridden,
   rowOverrideKind,
   rowEnabled,
   shapeValuesPatch,
@@ -11,6 +13,7 @@ import {
   type LibraryRow,
 } from "../defaults";
 import ValueRow from "./ValueRow.vue";
+import Button from "@/kit/Button.vue";
 
 const props = defineProps<{ module: ModuleEntry }>();
 const emit = defineEmits<{ "update": [patch: Partial<ModuleEntry>] }>();
@@ -38,13 +41,18 @@ const libraryById = computed(() => new Map(libraryRows.value.map((r) => [r.id, r
 const draftRows = computed<DraftRow[]>(() => {
   const source = overrides.value ?? libraryRows.value;
   const libIds = new Set(libraryRows.value.map((r) => r.id));
-  return source.map((r) => ({
-    id: r.id,
-    name: r.name,
-    value: r.value,
-    enabled: rowEnabled(r.id, enabledOptions.value),
-    libraryId: libIds.has(r.id) ? r.id : null,
-  }));
+  return source.map((r) => {
+    const libraryId = libIds.has(r.id) ? r.id : null;
+    const lib = libraryId ? libraryById.value.get(libraryId) : undefined;
+    return {
+      id: r.id,
+      name: r.name,
+      value: r.value,
+      enabled: rowEnabled(r.id, enabledOptions.value),
+      libraryId,
+      negative: effectiveNegative(lib, overrides.value ? r : undefined),
+    };
+  });
 });
 
 function emitDraft(next: DraftRow[]): void {
@@ -80,7 +88,7 @@ function onToggle(rowId: string): void {
   emitDraft(next);
 }
 
-function onUpdate(rowId: string, patch: { name?: string; value?: string }): void {
+function onUpdate(rowId: string, patch: { name?: string; value?: string; negative?: string }): void {
   const next = draftRows.value.map((r) =>
     r.id === rowId ? { ...r, ...patch } : r,
   );
@@ -91,7 +99,7 @@ function onReset(rowId: string): void {
   const lib = libraryById.value.get(rowId);
   if (!lib) return;
   const next = draftRows.value.map((r) =>
-    r.id === rowId ? { ...r, name: lib.name, value: lib.value } : r,
+    r.id === rowId ? { ...r, name: lib.name, value: lib.value, negative: lib.negative ?? "" } : r,
   );
   emitDraft(next);
 }
@@ -104,7 +112,7 @@ function onDelete(rowId: string): void {
 function onAddRow(): void {
   const next: DraftRow[] = [
     ...draftRows.value,
-    { id: newModuleId(), name: "", value: "", enabled: true, libraryId: null },
+    { id: newModuleId(), name: "", value: "", enabled: true, libraryId: null, negative: "" },
   ];
   emitDraft(next);
 }
@@ -114,8 +122,8 @@ const totalCount = computed(() => draftRows.value.length);
 const overrideCount = computed(() =>
   draftRows.value.filter((r) => {
     if (r.libraryId === null) return false;
-    const kind = rowOverrideKind(libraryById.value.get(r.libraryId), r);
-    return kind !== "none";
+    const lib = libraryById.value.get(r.libraryId);
+    return rowOverrideKind(lib, r) !== "none" || negativeOverridden(lib, r);
   }).length,
 );
 const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === null).length);
@@ -143,15 +151,14 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
         @reset="onReset"
         @delete="onDelete"
       />
-      <button
-        type="button"
-        class="vals__add"
+      <Button
+        size="sm"
+        variant="add"
+        icon="pi-plus"
+        block
         data-test="vals-add"
         @click="onAddRow"
-      >
-        <i class="pi pi-plus" aria-hidden="true" />
-        Add new $var for this instance
-      </button>
+      >Add new $var for this instance</Button>
     </div>
 
     <div class="vals__summary" data-test="vals-summary">
@@ -184,7 +191,7 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
 .vals {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   /* Long value lists scroll in place; the header row stays pinned. */
   max-height: 42vh;
   overflow-y: auto;
@@ -206,25 +213,6 @@ const addedCount = computed(() => draftRows.value.filter((r) => r.libraryId === 
   letter-spacing: 0.1em;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.vals__add {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 10px;
-  background: transparent;
-  border: 0;
-  border-top: 1px dashed var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-  cursor: pointer;
-  font: 10px var(--wp-font-sans);
-  text-align: left;
-}
-.vals__add:hover {
-  color: var(--wp-accent-text, var(--wp-text));
-  background: rgba(99, 102, 241, 0.05);
-}
-.vals__add .pi { font-size: 9px; }
 .vals__summary {
   margin-top: 10px;
   font: 10px var(--wp-font-sans);

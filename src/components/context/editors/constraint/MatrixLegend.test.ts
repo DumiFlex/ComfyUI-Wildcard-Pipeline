@@ -10,14 +10,14 @@ describe("MatrixLegend", () => {
 
   it("clicking the toggle expands the body with five state rows", async () => {
     const wrap = mount(MatrixLegend);
-    await wrap.find(".legend-toggle").trigger("click");
+    await wrap.find('[data-test="legend-toggle"]').trigger("click");
     expect(wrap.find(".legend-body").exists()).toBe(true);
     expect(wrap.findAll(".legend-row")).toHaveLength(5);
   });
 
   it("each row labels one state in plain language", async () => {
     const wrap = mount(MatrixLegend);
-    await wrap.find(".legend-toggle").trigger("click");
+    await wrap.find('[data-test="legend-toggle"]').trigger("click");
     const names = wrap.findAll(".legend-name").map((n) => n.text().toLowerCase());
     expect(names).toEqual(
       expect.arrayContaining(["neutral", "exclude", "boost", "reduce", "only"]),

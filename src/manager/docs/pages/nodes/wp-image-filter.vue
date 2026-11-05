@@ -1,40 +1,29 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocFigureText from "../../../components/docs/DocFigureText.vue";
+import DocImage from "../../../components/docs/DocImage.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
+import Kbd from "@/kit/Kbd.vue";
 import picksDiagram from "../../images/how-picks-carry-over.webp";
 
-const ports = [
-  { term: "images", desc: "The images to pick from. Required: this is what the picker shows." },
-  { term: "latent, masks", desc: "Sliced to the picked images. A mask you paint in the picker replaces that image's mask." },
-  { term: "positive, negative", desc: "CONDITIONING. A batched conditioning is sliced with the images; a single one is kept for every frame that keeps an image." },
-  { term: "positive_text, negative_text", desc: "The prompt strings, kept or dropped with their frame." },
-  { term: "context", desc: "Each frame's WP Context, kept or dropped with it." },
-  { term: "clip (in)", desc: "Optional. Re-encodes a prompt you edit in the picker, so the positive/negative conditioning follows the edit. Without it, an edit changes only the text outputs." },
-  { term: "extra_1, extra_2", desc: "Any type. The output takes the type of what you connect. Batched values are sliced, anything else follows its frame." },
-  { term: "picks (out)", desc: "What was kept, as frame:image (1-based), for example 1:2, 3:1." },
+const modes = [
+  { term: "Grid", kbd: "G", desc: "Pick fast. Click an image or press Space over it; Ctrl+A picks everything; a frame says how many of its images are picked, and its Pick frame button picks them all. Tile size S, M, L or Fit (F, as big as the picker allows). Double-click an image or click its frame to open it in Detail. Each image's label sits under it; click it to rename." },
+  { term: "Detail", kbd: "D", desc: "One image next to its size, seed and label (click to rename), with Pick / Picked (P), Compare (C) and Pick frame at the top of the side panel and three tabs under them: Values, Prompt and Mask. Each value is marked in the prompt in its own colour (the same colour in Values); hover a mark to see which variable set it. Prompt and negative have copy buttons. Only what is wired shows. ←/→ step; the strip under the picture groups a loop's images by frame and jumps to any image. C compares two images with a slider, M paints a mask." },
+  { term: "Zoom", kbd: "Z", desc: "Only the picture, at Fit, 100%, 200% or any level between (− / +, keys 0 1 2). Scroll zooms toward the mouse, drag moves, double-click goes to 100% at that spot. Zoomed in, a mini-map shows where you are (click or drag it to move); the bar fades while the mouse is still. F (or the fullscreen button) fills the screen, with the frame's images and Keep picked along the bottom. ←/→ keep the zoom and the spot on the next image. The label says Picked once picked. C pins the image and the next one shows beside it, locked to the same zoom and spot." },
 ];
 
 const keys = [
-  { term: "Click", desc: "Pick or unpick an image. A frame's all button picks the whole frame; Ctrl+A picks everything." },
-  { term: "Frame", desc: "Click the frame around an image (its border or label) to zoom in, where you can compare, edit the prompt and paint a mask. The Zoom & refine button in the header does the same." },
-  { term: "Space", desc: "Zoom the image under the mouse, or leave the zoom (same as Zoom & refine). In the zoom, ←/→ move and ↑ picks. The picker remembers: leave it zoomed and the next one opens zoomed." },
-  { term: "F", desc: "Fit: make the images as big as the picker allows, so a few images fill the screen. Same as the Fit button; remembered for next time." },
-  { term: "I", desc: "In the zoom: Details. Lists the frame's variable values (Copy copies them) and seed, shows the frame's other images with Pick whole frame, and marks each value in the positive prompt (click it to edit). Remembered for next time." },
-  { term: "C", desc: "In the zoom: pin this image, then step to another to compare the two with a slider. C again stops." },
-  { term: "M", desc: "In the zoom: paint a mask on this image (brush, eraser, size, invert, clear)." },
-  { term: "Enter", desc: "Keep the picks and let the run go on." },
-  { term: "Escape", desc: "Tuck the picker away. A waiting pill at the bottom of the screen opens it again, picks intact." },
+  { term: "Keep", kbd: "Enter", desc: "Keep the picks and let the run go on." },
+  { term: "Step back", kbd: "Esc", desc: "Step back a mode: Zoom to Detail, Detail to Grid. From Grid it tucks the picker away; a waiting pill at the bottom of the screen opens it again, picks intact." },
 ];
 
-const settings = [
-  { term: "Mode", desc: "Pause & pick asks every run. Reuse last picks keeps the same picks without asking, and asks again when they no longer fit. Pass all lets everything through." },
-  { term: "Send picks as", desc: "Same shape keeps each frame's picks together as one batch. One per image sends every pick as its own item, with its own copy of its frame's prompt, conditioning and Context." },
-  { term: "Timeout", desc: "Seconds to wait; 0 waits until you answer. After a timeout it keeps all, keeps the first image, or stops the branch." },
-];
 </script>
 
 <template>
@@ -54,10 +43,20 @@ const settings = [
         to an image travels with it, so the upscaler gets each picked image's own latent,
         conditioning and prompt.
       </p>
+      <DocUseWhen
+        :good="[
+          'A human pick before an expensive second pass (hires, upscale, detailer, video)',
+          'Curating a sweep grid',
+          'Inpainting a picked image in the same run',
+        ]"
+        :better="[
+          'Unattended runs: the queue waits while the picker is open. Set it to pass all, or give it a timeout',
+        ]"
+      />
     </DocSection>
 
     <DocSection title="Where it goes">
-      <DocFlow
+      <DocFlow figure="wp-image-filter-flow"
         :stages="[
           { icon: 'pi pi-images', name: 'KSampler + VAE Decode', sub: 'images, latent', tone: 'neutral' },
           { icon: 'pi pi-filter', name: 'WP Image Filter', sub: 'you pick', tone: 'node' },
@@ -66,40 +65,62 @@ const settings = [
         :arrows="['images + prompts', 'picks']"
         caption="Wire the same conditioning and prompt text through the filter that the upscaler would otherwise take from the start."
       />
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         With a <b>Context Loop</b>, every iteration is a frame. The picker groups images by frame,
         and the prompt, conditioning and Context of a frame are kept only when one of its images is.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Inputs &amp; outputs">
       <p>Every input has a matching output. Connect only what you need.</p>
-      <DocKeyList :items="ports" />
+      <DocFields node="WP_ImageFilter" group="ports" />
     </DocSection>
 
     <DocSection title="The picker">
+      <p>
+        The picker has three modes, switched at the top or with <Kbd keys="G" size="sm" />, <Kbd keys="D" size="sm" /> and
+        <Kbd keys="Z" size="sm" />.
+        The window keeps its size in every mode, the pick count and the Keep buttons stay in the
+        footer, and the picker opens in the mode you left it in.
+      </p>
+      <DocImage
+        src="images/docs/wp-image-filter-picker.png"
+        ratio="1720 / 860"
+        caption="Grid: six loop frames of two images each, at tile size M. Three images are picked."
+      />
+      <DocKeyList :items="modes" />
+      <DocImage
+        src="images/docs/wp-image-filter-zoom.png"
+        ratio="1720 / 860"
+        caption="Zoom on the hand in frame #5 at 200%. The mini-map shows where you are and the label says the image is picked. Step with the arrow keys and the next image opens on the same spot."
+      />
       <DocKeyList :items="keys" />
       <p>
         <b>Keep all</b> sends everything on. <b>Stop branch</b> stops the nodes after this one;
         the rest of the run finishes normally. Cancelling the run closes the picker.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         A short chime plays when the picker opens, and the tab title starts with
         <b>● Pick images</b> while something waits, so you notice from another tab. Turn the chime
         off with <b>Image Filter sound</b> in Settings; turn on <b>Image Filter desktop
         notification</b> to also get a system notification while the tab is in the background.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Labels, sweep grid and Send to Loop">
       <p>
         With a <b>Context Loop</b>, each frame is labelled with its number and the options its
         sweep pinned (for example <code>#3 · red · pencil</code>). Hover a label to see the
-        frame's seed and prompt. A sweep of two or more wildcards opens as a <b>grid</b>. The bar above it picks
+        frame's seed and prompt. A sweep of two or more wildcards opens in Grid as a <b>table</b>. The bar above it picks
         which wildcard goes on <b>Rows</b> and which on <b>Columns</b> (⇄ swaps them); any others
         <b>Split by</b>, one small grid per value. Click a row, column or group name to pick all of
-        it. <b>Frames</b> in the header switches back to the list.
+        it. <b>Layout › Frames</b> switches back to the list.
       </p>
+      <DocImage
+        src="images/docs/wp-image-filter-grid.png"
+        ratio="1720 / 644"
+        caption="A sweep of $time × $medium × $mood as a table: rows and columns, split by $mood."
+      />
       <p>
         <b>Send to Loop</b> writes your picks back to the loop: the picked frames' seeds are
         locked (when the loop overrides seeds) and every other frame is bypassed, so the next run
@@ -107,9 +128,31 @@ const settings = [
       </p>
     </DocSection>
 
+    <DocSection title="Label each image">
+      <p>
+        Every image has a label, and the <code>labels</code> output sends them in step with
+        <code>images</code>, one per item. By default a label is the frame number (the loop's
+        number with a Context Loop), the options its sweep pinned, then the image number when the
+        frame has several: <code>#3 · red · pencil · 2</code>.
+      </p>
+      <ul>
+        <li>Rename an image under its tile in <b>Grid</b>, or under its title in <b>Detail</b>.
+          Clear the name to get the default back.</li>
+        <li>With <b>Same shape</b> an item holds a frame's picks together, so its label has one
+          line per image.</li>
+        <li><b>Pass all</b> labels images <code>#3 · 2</code> (no picker, so no option names), and
+          <b>Reuse last picks</b> keeps the names from the last pause.</li>
+      </ul>
+      <DocImage
+        src="images/docs/wp-image-filter-labels.png"
+        ratio="1720 / 860"
+        caption="Grid with a label under every image: the frame number, the swept option and the image number, and one image renamed."
+      />
+    </DocSection>
+
     <DocSection title="Refine before it goes on">
       <p>
-        In the zoom, the <b>Refine</b> panel edits the frame's positive and negative prompt and
+        In <b>Detail</b>, the side panel edits the frame's positive and negative prompt and
         paints a mask for the upscaler. Edits travel with the picks; tiles show ✎ for an edited
         prompt and ◐ for a painted mask.
       </p>
@@ -120,15 +163,56 @@ const settings = [
         <li>With <b>Same shape</b> a frame's picks go on together, so a prompt edit covers the
           whole frame. With <b>One per image</b> it covers just that image.</li>
         <li>A painted mask goes to the <code>masks</code> output, resized to the image. Images you
-          don't paint keep the incoming mask, or an empty one when nothing is wired in.</li>
+          don't paint keep the incoming mask, or an empty one when nothing is wired in. Once
+          painted, the Mask tab previews it: <b>Over image</b> tints the masked part, <b>Mask only</b>
+          shows it white on black, as the output sends it.</li>
       </ul>
+      <DocImage
+        src="images/docs/wp-image-filter-refine.png"
+        ratio="1720 / 860"
+        caption="Detail on frame 3: Pick, Compare and Pick frame at the top, then the Prompt tab with each value marked in its own colour (hovering one says which variable set it) and the negative. The strip below groups the images by frame."
+      />
       <figure class="wp-doc-figure">
         <img :src="picksDiagram" alt="How the picks carry over: images, latents, masks, conditioning and prompt text of picked frames go on; an edited prompt is re-encoded and a painted mask goes to the masks output." loading="lazy">
       </figure>
+      <DocFigureText figure="images/how-picks-carry-over.webp" caption="How the picks carry over" />
+    </DocSection>
+
+    <DocSection title="Paint a mask">
+      <p>
+        <b>M</b> or <b>Paint</b> on the Mask tab opens the painter over the image. A mask is not just
+        on or off: each pixel can be part-way masked, and inpainting changes those parts less, so
+        soft edges blend in without a seam.
+      </p>
+      <ul>
+        <li><b>Brush</b> paints where you drag. <b>Lasso</b>: drag around an area and let go to fill
+          it. <b>Fill</b>: click to fill the area under the pointer, up to the lines you painted
+          (paint an outline, then fill its inside), or click a painted area to take all of it.</li>
+        <li><b>Paint</b> adds to the mask and <b>Erase</b> takes it away, with any tool (<b>X</b>
+          swaps).</li>
+        <li><b>Size</b> is the brush (<b>[</b> and <b>]</b> change it). <b>Hardness</b> softens the
+          edge of the brush, lasso and fill; at 0% the edge fades over half the brush size.
+          <b>Strength</b> masks part-way: one stroke at 50% stays 50% where it crosses itself, and a
+          second stroke adds on top.</li>
+        <li>A ring under the mouse is the brush at its real size (dashed when erasing, with a
+          dotted inner ring where a soft edge starts).</li>
+        <li><b>Undo</b> and <b>Redo</b> (Ctrl+Z, Ctrl+Shift+Z) step through strokes, Invert and
+          Clear while the painter is open.</li>
+      </ul>
+      <DocImage
+        src="images/docs/wp-image-filter-mask.png"
+        ratio="1720 / 860"
+        caption="The painter: a soft brush stroke at the top, an outline filled with Fill, and a soft-edged Lasso on the right. The side panel has the tools, Paint / Erase, Size, Hardness and Strength, then Undo, Redo, Invert and Clear."
+      />
     </DocSection>
 
     <DocSection title="Settings on the node">
-      <DocKeyList :items="settings" />
+      <DocAnnotated
+        src="images/docs/wp-image-filter.png"
+        ratio="1720 / 860"
+        caption="WP Image Filter after a run of four frames with two images each: three were picked, and only those reach the Preview Image."
+      />
+      <DocFields node="WP_ImageFilter" group="settings" />
       <p>The <b>Last run</b> strip under the settings shows what the last run kept.</p>
     </DocSection>
 
@@ -146,5 +230,5 @@ const settings = [
 
 <style scoped>
 .wp-doc-figure { margin: 12px 0 0; }
-.wp-doc-figure img { display: block; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--wp-border, #34343a); }
+.wp-doc-figure img { display: block; max-width: 100%; height: auto; border-radius: min(8px, var(--wp-radius-cap, 999px)); border: 1px solid var(--wp-border); }
 </style>

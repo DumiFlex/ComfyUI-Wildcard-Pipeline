@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import Card from "./ui/Card.vue";
-import Button from "./ui/Button.vue";
-import Select from "./ui/Select.vue";
-import Chip from "./ui/Chip.vue";
+import Card from "@/kit/Card.vue";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import Chip from "@/kit/Chip.vue";
+import ListRow from "@/kit/ListRow.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 import RichTextInput from "./RichTextInput.vue";
 import type { VarProducerLike } from "./RefChip.vue";
 import VarAutocompleteInput from "./VarAutocompleteInput.vue";
@@ -269,26 +271,28 @@ const branchCount = computed(() => rule.value.branches.length);
 
 <template>
   <Card class="derivation-rule-card" :data-test="`rule-card-${index}`">
-    <button
-      type="button"
-      class="rule-head"
-      :aria-expanded="!collapsed"
-      :data-test="`toggle-rule-${index}`"
-      @click="toggleCollapsed"
-    >
-      <i :class="collapsed ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" class="rule-head__chev" aria-hidden="true" />
-      <Chip tone="info" data-test="rule-label">Rule {{ ruleNumber }}</Chip>
-      <span class="rule-meta">
-        {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
-        <span v-if="rule.else"> + ELSE</span>
-      </span>
-      <i
-        v-if="ruleHasBrokenRef"
-        class="pi pi-exclamation-triangle dvr-broken-mark"
-        title="A branch in this rule references a module that is not in the library"
-        :data-test="`rule-broken-${index}`"
-      />
-      <span class="spacer" />
+    <!-- The head: one ListRow toggles the rule (it was a button holding the
+         other buttons, which HTML doesn't allow); the actions sit beside it. -->
+    <div class="rule-head" :data-open="!collapsed || undefined">
+      <ListRow
+        class="rule-head__toggle"
+        :icon="collapsed ? 'pi-chevron-right' : 'pi-chevron-down'"
+        :aria-expanded="!collapsed"
+        :data-test="`toggle-rule-${index}`"
+        @click="toggleCollapsed"
+      >
+        <Chip tone="info" data-test="rule-label">Rule {{ ruleNumber }}</Chip>
+        <span class="rule-meta">
+          {{ branchCount }} branch{{ branchCount === 1 ? "" : "es" }}
+          <span v-if="rule.else"> + ELSE</span>
+        </span>
+        <i
+          v-if="ruleHasBrokenRef"
+          class="pi pi-exclamation-triangle dvr-broken-mark"
+          title="A branch in this rule references a module that is not in the library"
+          :data-test="`rule-broken-${index}`"
+        />
+      </ListRow>
       <!-- Inline per-rule collapse/expand of THIS rule's conditions. Only
            useful when the rule card itself is open. -->
       <span v-if="!collapsed" class="rule-head__branch-ctrls">
@@ -317,7 +321,7 @@ const branchCount = computed(() => rule.value.branches.length);
         :data-test="`remove-rule-${index}`"
         @click.stop="emit('remove')"
       />
-    </button>
+    </div>
 
     <div v-show="!collapsed" class="branches">
       <div
@@ -334,16 +338,15 @@ const branchCount = computed(() => rule.value.branches.length);
              chevron button, the enable checkbox, the delete action) so those
              keep their own behaviour and don't double-toggle. -->
         <div class="branch-head" @click="onBranchHeadClick($event, bi)">
-          <button
-            type="button"
+          <WpIconButton
             class="branch-collapse"
+            variant="bare"
+            :icon="isBranchCollapsed(bi) ? 'pi-chevron-right' : 'pi-chevron-down'"
             :aria-expanded="!isBranchCollapsed(bi)"
-            :aria-label="`${isBranchCollapsed(bi) ? 'Expand' : 'Collapse'} branch ${bi + 1} of rule ${ruleNumber}`"
+            :label="`${isBranchCollapsed(bi) ? 'Expand' : 'Collapse'} branch ${bi + 1} of rule ${ruleNumber}`"
             :data-test="`toggle-branch-${index}-${bi}`"
             @click="toggleBranch(bi)"
-          >
-            <i :class="isBranchCollapsed(bi) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" aria-hidden="true" />
-          </button>
+          />
           <span class="branch-tag" :data-kind="bi === 0 ? 'if' : 'elif'">
             {{ bi === 0 ? "IF" : "ELIF" }}
           </span>
@@ -404,7 +407,7 @@ const branchCount = computed(() => rule.value.branches.length);
               :model-value="act.target_var"
               :suggestions="varSuggestions"
               placeholder="target_var"
-              input-color="var(--wp-success, #34d399)"
+              input-color="var(--wp-success)"
               :aria-label="`Action target variable for rule ${ruleNumber} branch ${bi + 1}${ai ? ` (action ${ai + 1})` : ''}`"
               :data-test="actTid(`act-target-${index}-${bi}`, ai)"
               @update:model-value="(v) => patchAction(bi, ai, { target_var: v })"
@@ -463,12 +466,14 @@ const branchCount = computed(() => rule.value.branches.length);
           >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="add"
+          size="sm"
+          icon="pi-plus"
           class="dvr-add-action"
           :data-test="`act-add-${index}-${bi}`"
           @click="addAction(bi)"
-        ><i class="pi pi-plus" aria-hidden="true" /> And</button>
+        >And</Button>
         </div>
       </div>
 
@@ -481,16 +486,15 @@ const branchCount = computed(() => rule.value.branches.length);
         :data-test="`branch-else-${index}`"
       >
         <div class="branch-head" @click="onBranchHeadClick($event, -1)">
-          <button
-            type="button"
+          <WpIconButton
             class="branch-collapse"
+            variant="bare"
+            :icon="isBranchCollapsed(-1) ? 'pi-chevron-right' : 'pi-chevron-down'"
             :aria-expanded="!isBranchCollapsed(-1)"
-            :aria-label="`${isBranchCollapsed(-1) ? 'Expand' : 'Collapse'} ELSE branch of rule ${ruleNumber}`"
+            :label="`${isBranchCollapsed(-1) ? 'Expand' : 'Collapse'} ELSE branch of rule ${ruleNumber}`"
             :data-test="`toggle-branch-else-${index}`"
             @click="toggleBranch(-1)"
-          >
-            <i :class="isBranchCollapsed(-1) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'" aria-hidden="true" />
-          </button>
+          />
           <span class="branch-tag" data-kind="else">ELSE</span>
           <span
             v-if="isBranchCollapsed(-1)"
@@ -531,7 +535,7 @@ const branchCount = computed(() => rule.value.branches.length);
               :model-value="act.target_var"
               :suggestions="varSuggestions"
               placeholder="target_var"
-              input-color="var(--wp-success, #34d399)"
+              input-color="var(--wp-success)"
               :aria-label="`ELSE action target variable for rule ${ruleNumber}${ai ? ` (action ${ai + 1})` : ''}`"
               :data-test="actTid(`else-target-${index}`, ai)"
               @update:model-value="(v) => patchAction(-1, ai, { target_var: v })"
@@ -590,12 +594,14 @@ const branchCount = computed(() => rule.value.branches.length);
           >{{ act.mode === 'negative_replace' ? 'Replaces' : 'Adds to' }} {{ act.target_var ? "$" + act.target_var : "the variable" }}'s negative — its value is not changed. </span>{{ SUPPORTED_SYNTAX_HINT }}
         </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="add"
+          size="sm"
+          icon="pi-plus"
           class="dvr-add-action"
           :data-test="`else-add-action-${index}`"
           @click="addAction(-1)"
-        ><i class="pi pi-plus" aria-hidden="true" /> And</button>
+        >And</Button>
         </div>
       </div>
     </div>
@@ -625,8 +631,8 @@ const branchCount = computed(() => rule.value.branches.length);
 
 <style scoped>
 .derivation-rule-card {
-  border-left: var(--wp-kind-stripe-w) solid var(--wp-kind-derivation, #fbbf24);
-  background: var(--wp-bg, #1e1e22);
+  border-left: var(--wp-kind-stripe-w) solid var(--wp-kind-derivation);
+  background: var(--wp-bg);
 }
 
 .rule-head {
@@ -634,28 +640,14 @@ const branchCount = computed(() => rule.value.branches.length);
   align-items: center;
   gap: var(--wp-space-4);
   margin-bottom: 0;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  color: var(--wp-text);
 }
-.rule-head[aria-expanded="true"] { margin-bottom: var(--wp-space-5); }
-.rule-head__chev {
-  font-size: var(--wp-text-xs);
-  color: var(--wp-text-muted);
-  width: 12px;
-  text-align: center;
-  transition: transform 0.15s ease;
-}
+.rule-head[data-open] { margin-bottom: var(--wp-space-5); }
+.rule-head__toggle { flex: 1; min-width: 0; min-height: 0; padding-top: 2px; padding-bottom: 2px; margin-left: calc(-1 * var(--wp-space-4)); }
+.rule-head__toggle :deep(.wp-list-row__label) { display: inline-flex; align-items: center; gap: var(--wp-space-4); }
 .rule-meta {
   font-size: var(--wp-text-xs);
-  color: var(--wp-text-muted, #9ca3af);
+  color: var(--wp-text-muted);
 }
-.spacer { flex: 1; }
 .rule-head__branch-ctrls { display: inline-flex; gap: 2px; }
 
 .branches {
@@ -663,12 +655,12 @@ const branchCount = computed(() => rule.value.branches.length);
   flex-direction: column;
   gap: var(--wp-space-5);
   padding-left: var(--wp-space-5);
-  border-left: 2px solid color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 30%, transparent);
+  border-left: 2px solid color-mix(in oklab, var(--wp-kind-derivation) 30%, transparent);
 }
 
 .branch {
-  background: var(--wp-bg-2, #18181b);
-  border: 1px solid var(--wp-border, #2c2c34);
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
   padding: var(--wp-space-5) var(--wp-space-5);
   display: flex;
@@ -680,14 +672,14 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 /* A branch holding a ref that points at nothing. */
 .branch--broken {
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 55%, transparent);
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  border-color: color-mix(in srgb, var(--wp-danger) 55%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .dvr-value-input--neg.wp-rt:not(.wp-rt--focused) {
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 45%, transparent);
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 7%, var(--wp-bg-2));
+  border-color: color-mix(in oklab, var(--wp-danger) 45%, transparent);
+  background: color-mix(in oklab, var(--wp-danger) 7%, var(--wp-bg-2));
 }
-.dvr-hint--neg { color: var(--wp-danger, #ef4444); }
+.dvr-hint--neg { color: var(--wp-danger); }
 /* THEN ... AND ...: each action is a block; later ones sit under an AND. */
 .dvr-action {
   display: flex;
@@ -696,33 +688,19 @@ const branchCount = computed(() => rule.value.branches.length);
 }
 .dvr-action--and {
   padding-top: var(--wp-space-4);
-  border-top: 1px dashed var(--wp-border, #2c2c34);
+  border-top: 1px dashed var(--wp-border);
 }
-.dvr-label--and { color: var(--wp-kind-derivation, #fbbf24); font-weight: 600; }
+.dvr-label--and { color: var(--wp-kind-derivation); font-weight: 600; }
 .dvr-mode-cell { display: flex; align-items: center; gap: var(--wp-space-2); min-width: 0; }
 .dvr-mode-cell .dvr-op { flex: 1; min-width: 0; }
-.dvr-add-action {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: 2px var(--wp-space-4); /* audit-exempt: compact inline add chip */
-  border: 1px dashed var(--wp-border, #2c2c34);
-  border-radius: var(--wp-radius-sm);
-  background: transparent;
-  color: var(--wp-text-muted);
-  font: inherit;
-  font-size: var(--wp-text-xs);
-  cursor: pointer;
-}
-.dvr-add-action:hover { color: var(--wp-text); border-color: var(--wp-kind-derivation, #fbbf24); }
-.dvr-add-action:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
+.dvr-add-action { align-self: flex-start; }
+.spacer { flex: 1; }
 .dvr-broken-mark {
   display: inline-flex;
   align-items: center;
   gap: var(--wp-space-2);
   font-size: var(--wp-text-xs);
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
 }
 
 .branch-head {
@@ -737,22 +715,6 @@ const branchCount = computed(() => rule.value.branches.length);
 .branch-head input,
 .branch-head label { cursor: revert; }
 /* Per-branch collapse chevron — mirrors the rule-card head toggle. */
-.branch-collapse {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  border-radius: 4px;
-}
-.branch-collapse:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.branch-collapse:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
-.branch-collapse i { font-size: var(--wp-text-xs); }
 /* One-line peek shown in a collapsed branch head. */
 .branch-peek {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
@@ -779,16 +741,16 @@ const branchCount = computed(() => rule.value.branches.length);
   text-transform: uppercase;
 }
 .branch-tag[data-kind="if"] {
-  background: color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 22%, transparent);
-  color: var(--wp-kind-derivation, #fbbf24);
+  background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent);
+  color: var(--wp-kind-derivation);
 }
 .branch-tag[data-kind="elif"] {
-  background: color-mix(in oklab, var(--wp-info, #60a5fa) 22%, transparent);
-  color: var(--wp-info, #60a5fa);
+  background: color-mix(in oklab, var(--wp-info) 22%, transparent);
+  color: var(--wp-info);
 }
 .branch-tag[data-kind="else"] {
-  background: color-mix(in oklab, var(--wp-warn, #f59e0b) 22%, transparent);
-  color: var(--wp-warn, #f59e0b);
+  background: color-mix(in oklab, var(--wp-warn) 22%, transparent);
+  color: var(--wp-warn);
 }
 
 .addbar {

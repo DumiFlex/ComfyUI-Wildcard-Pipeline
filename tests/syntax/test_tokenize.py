@@ -99,3 +99,22 @@ def test_multi_prefix_fixed_count_backcompat():
     ][0].meta
     assert m["min"] == 3 and m["max"] == 3 and m["independent"] is False
     assert m.get("count", 3) == 3
+
+
+@pytest.mark.parametrize(("text", "expr", "no_null"), [
+    ("@{aabbccdd:!warm}", "!warm", False),
+    ("@{aabbccdd:cool and !warm!null}", "cool and !warm", True),
+    ("@{aabbccdd!null}", None, True),
+])
+def test_ref_filter_may_use_bang_for_not(text, expr, no_null):
+    (tok,) = tokenize_text(text)
+    assert tok.kind == TokenKind.REF
+    assert tok.meta.get("filter_expr") == expr
+    assert bool(tok.meta.get("exclude_null")) is no_null
+
+
+def test_multi_pick_shorthand_joins_with_a_comma():
+    (tok,) = tokenize_text("{2$$red|blue|green}")
+    assert tok.kind == TokenKind.DP_MULTI
+    assert tok.meta["sep"] == ", "
+    assert tok.meta["branches"] == ["red", "blue", "green"]

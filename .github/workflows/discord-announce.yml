@@ -2,7 +2,7 @@ name: Discord announce
 
 # Two channels, deliberately asymmetric.
 #
-#   staff   — posts AUTOMATICALLY when semantic-release publishes a release.
+#   staff   — posts AUTOMATICALLY when release.yml publishes a release.
 #             The post carries a link back to this workflow, so the review and
 #             the publish button are the same artefact.
 #   public  — only ever from a manual run. A release can never announce itself

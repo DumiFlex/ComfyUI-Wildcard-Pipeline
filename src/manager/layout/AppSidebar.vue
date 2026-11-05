@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import SearchInput from "@/kit/SearchInput.vue";
+import ListRow from "@/kit/ListRow.vue";
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import Icon, { ICON_SM } from "../components/ui/Icon.vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
+import Icon, { ICON_SM } from "@/kit/Icon.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useBundleStore } from "../stores/bundleStore";
@@ -9,6 +11,8 @@ import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { GITHUB_REPO } from "../config/links";
 import { libraryTagCounts } from "../utils/library-tags";
+import { useAiConfig } from "../composables/useAiConfig";
+import { useHealthStore } from "../stores/healthStore";
 
 interface NavItem {
   id: string;
@@ -23,6 +27,8 @@ interface NavItem {
   /** Nested children — when present, the item renders as a
    *  collapsible parent (chevron + click toggles). Sakai-vue style. */
   children?: NavItem[];
+  /** Shown only while the AI assistant is on and has a model. */
+  ai?: boolean;
 }
 interface NavSection {
   label: string;
@@ -38,6 +44,10 @@ const moduleStore = useModuleStore();
 const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
+// Library health scans once on load and again after library edits, so the
+// badge shows problems + warnings without the page being open.
+const health = useHealthStore();
+health.ensure();
 
 const SECTIONS: NavSection[] = [
   {
@@ -65,8 +75,10 @@ const SECTIONS: NavSection[] = [
       { id: "categories", label: "Categories",      icon: "pi-bookmark",                 to: "/categories"     },
       // A single entry, not a list of tags: a library can hold hundreds.
       { id: "tags",       label: "Tags",            icon: "pi-hashtag",                  to: "/tags"           },
+      { id: "health",     label: "Library health",  icon: "pi-heart",                    to: "/health"         },
       { id: "io",         label: "Import / Export", icon: "pi-arrow-right-arrow-left",   to: "/import-export"  },
       { id: "test",       label: "Test Runner",     icon: "pi-bolt",                     to: "/test"           },
+      { id: "pack",       label: "Pack builder",    icon: "pi-microchip-ai",             to: "/pack-builder", ai: true },
     ],
   },
   {
@@ -104,8 +116,10 @@ const activeId = computed<string>(() => {
     ["templates", "templates"],
     ["categories", "categories"],
     ["tags", "tags"],
+    ["health", "health"],
     ["import-export", "io"],
     ["test", "test"],
+    ["pack-builder", "pack"],
     ["documentation", "documentation"],
     ["dashboard", "dashboard"],
     ["all", "all"],
@@ -172,18 +186,15 @@ function onItemClick(item: NavItem) {
 // ── Task 9: Search-within ─────────────────────────────────────────────────
 const searchQuery = ref("");
 
+const { ready: aiReady } = useAiConfig();
+
 const filteredSections = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return SECTIONS;
   return SECTIONS.map((s) => ({
     ...s,
-    items: s.items.filter((i) => i.label.toLowerCase().includes(q)),
+    items: s.items.filter((i) => (!i.ai || aiReady.value) && (!q || i.label.toLowerCase().includes(q))),
   })).filter((s) => s.items.length > 0);
 });
-
-function onSearchKey(e: KeyboardEvent): void {
-  if (e.key === "Escape") searchQuery.value = "";
-}
 
 // ── Task 10: Per-kind count badges ────────────────────────────────────────
 const countByKey = computed<Record<string, number>>(() => {
@@ -207,17 +218,15 @@ const countByKey = computed<Record<string, number>>(() => {
 <template>
   <nav class="wp-sidebar" :data-collapsed="ui.sidebarCollapsed || undefined">
     <!-- Task 9: Search input — hidden in collapsed mode -->
-    <div v-if="!ui.sidebarCollapsed" class="wp-sidebar__search">
-      <Icon name="pi-search" :size="12" />
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="Filter nav…"
-        class="wp-sidebar__search-input"
-        aria-label="Filter sidebar nav"
-        @keydown="onSearchKey"
-      />
-    </div>
+    <SearchInput
+      v-if="!ui.sidebarCollapsed"
+      v-model="searchQuery"
+      class="wp-sidebar__search"
+      size="sm"
+      placeholder="Filter nav…"
+      aria-label="Filter sidebar nav"
+      clear-label="Clear filter"
+    />
 
     <template v-for="section in filteredSections" :key="section.label">
       <div v-if="!ui.sidebarCollapsed" class="wp-sidebar__section">
@@ -246,8 +255,7 @@ const countByKey = computed<Record<string, number>>(() => {
              parent route still navigates on click so users get the
              dashboard view AND see the submenu reveal. -->
         <template v-else-if="item.children?.length">
-          <button
-            type="button"
+          <ListRow
             class="wp-nav wp-nav--parent"
             :data-active="activeId === item.id || undefined"
             :data-nav-id="item.id"
@@ -269,7 +277,7 @@ const countByKey = computed<Record<string, number>>(() => {
               class="wp-nav__caret"
               :size="ICON_SM"
             />
-          </button>
+          </ListRow>
           <!-- Children rendered only when sidebar is expanded AND
                the parent is open. Collapsed-sidebar mode hides the
                submenu entirely (icon-only sidebar has no room for
@@ -279,30 +287,28 @@ const countByKey = computed<Record<string, number>>(() => {
             v-if="!ui.sidebarCollapsed && isParentExpanded(item)"
             class="wp-nav__children"
           >
-            <button
+            <RouterLink
               v-for="child in item.children" :key="child.id"
-              type="button"
+              :to="child.to ?? ''"
               class="wp-nav wp-nav--child"
               :data-active="activeId === child.id || undefined"
               :data-nav-id="child.id"
-              @click="onItemClick(child)"
             >
               <span class="wp-nav__icon"><Icon :name="child.icon" /></span>
               <span class="wp-nav__label">{{ child.label }}</span>
-            </button>
+            </RouterLink>
           </div>
         </template>
 
-        <!-- Leaf item — single navigation button, no nesting. -->
-        <button
-          v-else
-          type="button"
+        <!-- Leaf item: a link to its page (middle-click opens a new tab). -->
+        <RouterLink
+          v-else-if="item.to"
+          :to="item.to"
           class="wp-nav"
           :data-active="activeId === item.id || undefined"
           :data-nav-id="item.id"
           :title="ui.sidebarCollapsed ? item.label : undefined"
           :style="ui.sidebarCollapsed ? { justifyContent: 'center' } : undefined"
-          @click="onItemClick(item)"
         >
           <span class="wp-nav__icon"><Icon :name="item.icon" /></span>
           <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
@@ -311,7 +317,26 @@ const countByKey = computed<Record<string, number>>(() => {
             v-if="!ui.sidebarCollapsed && countByKey[item.id] !== undefined"
             class="wp-nav__count"
           >{{ countByKey[item.id] }}</span>
-        </button>
+          <span
+            v-if="!ui.sidebarCollapsed && item.id === 'health' && health.badge > 0"
+            class="wp-nav__count wp-nav__count--health"
+            :data-tone="health.counts.problem > 0 ? 'danger' : 'warn'"
+            :title="`${health.counts.problem} problems, ${health.counts.warning} warnings`"
+            data-test="health-badge"
+          >{{ health.badge }}</span>
+        </RouterLink>
+        <!-- An in-app action (Feedback & support): a kit row. -->
+        <ListRow
+          v-else
+          class="wp-nav wp-nav--action"
+          :data-nav-id="item.id"
+          :title="ui.sidebarCollapsed ? item.label : undefined"
+          :style="ui.sidebarCollapsed ? { justifyContent: 'center' } : undefined"
+          @click="onItemClick(item)"
+        >
+          <template #start><span class="wp-nav__icon"><Icon :name="item.icon" /></span></template>
+          <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
+        </ListRow>
       </template>
     </template>
 
@@ -357,7 +382,7 @@ const countByKey = computed<Record<string, number>>(() => {
 /* Active-nav indicator — brand identity anchor #2.
  * The ::before strip overrides the global tokens.css accent-colored strip
  * (which also uses the wrong [data-active="true"] selector and never matches).
- * 3 px gradient bar on the left edge; top/bottom inset keeps it from touching
+ * 3 px accent bar on the left edge; top/bottom inset keeps it from touching
  * the row corners. Works in both collapsed (icon-only) and expanded modes. */
 .wp-nav[data-active]::before {
   content: "";
@@ -366,30 +391,12 @@ const countByKey = computed<Record<string, number>>(() => {
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: var(--wp-brand-gradient);
+  background: var(--wp-accent-500);
   border-radius: var(--wp-radius-sm, 2px);
 }
 
 /* ── Task 9: Search input ──────────────────────────────────────────────── */
-.wp-sidebar__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: var(--wp-space-3) var(--wp-space-4);
-  margin: var(--wp-space-3) 0;
-  background: var(--wp-bg-2);
-  border-radius: var(--wp-radius-sm);
-  border: 1px solid var(--wp-border);
-}
-.wp-sidebar__search-input {
-  border: none;
-  outline: none;
-  background: transparent;
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-  width: 100%;
-  font-family: var(--wp-font);
-}
+.wp-sidebar__search { margin: var(--wp-space-3) 0; }
 
 /* ── Task 10: Count badge ──────────────────────────────────────────────── */
 .wp-nav__count {
@@ -403,5 +410,18 @@ const countByKey = computed<Record<string, number>>(() => {
   text-align: center;
 }
 
+.wp-nav__count--health { font-weight: 600; }
+.wp-nav__count--health[data-tone="danger"] {
+  color: var(--wp-danger);
+  background: color-mix(in oklab, var(--wp-danger) 16%, transparent);
+}
+.wp-nav__count--health[data-tone="warn"] {
+  color: var(--wp-warn);
+  background: color-mix(in oklab, var(--wp-warn) 16%, transparent);
+}
+
 /* Recents section CSS removed — Dashboard owns the recent surface now. */
+/* The action row is the kit ListRow; it keeps the nav rows' spacing and type. */
+.wp-nav--action { width: 100%; min-height: 0; gap: 10px; padding: 7px 10px; font-size: 13px; color: var(--wp-text-muted); border: 1px solid transparent; }
+.wp-nav--action:hover { background: var(--wp-bg-3); color: var(--wp-text); }
 </style>

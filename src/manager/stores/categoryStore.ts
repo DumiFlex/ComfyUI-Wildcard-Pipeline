@@ -6,12 +6,16 @@ import type { CategoryCreateInput, CategoryRow } from "../api/types";
 export const useCategoryStore = defineStore("categories", () => {
   const items = ref<CategoryRow[]>([]);
   const loading = ref(false);
+  /** Set once the list has been fetched, so a library refresh only
+   *  re-fetches what some page has already loaded. */
+  const listed = ref(false);
 
   async function fetchAll() {
     loading.value = true;
     try {
       const res = await api.categories.list();
       items.value = res.items;
+      listed.value = true;
     } finally {
       loading.value = false;
     }
@@ -32,8 +36,15 @@ export const useCategoryStore = defineStore("categories", () => {
 
   async function remove(id: string) {
     await api.categories.delete(id);
+    removeLocal(id);
+  }
+
+  /** Drop a row the cascade flow already deleted on the server. Calling
+   *  `remove(id)` there sends a second DELETE, which 404s and throws
+   *  before the row leaves the list. */
+  function removeLocal(id: string) {
     items.value = items.value.filter((c) => c.id !== id);
   }
 
-  return { items, loading, fetchAll, create, update, remove };
+  return { items, loading, listed, fetchAll, create, update, remove, removeLocal };
 });

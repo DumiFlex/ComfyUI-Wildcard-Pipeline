@@ -14,7 +14,10 @@
  * `buildLibraryChildrenWithIntegrity` so the modal stays free of
  * bundle-walk logic.
  */
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import Input from "@/kit/Input.vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import Textarea from "@/kit/Textarea.vue";
+import { computed, ref, watch } from "vue";
 import { bundleHashes } from "./drift-store";
 import { api } from "../../manager/api/client";
 import {
@@ -24,7 +27,10 @@ import {
 } from "../../manager/import-export/relink-match";
 import { bundleContentKey } from "./bundles/bundle-fingerprint";
 import type { BundleInstance } from "../../widgets/_shared";
-import WpCheck from "@/components/shared/WpCheck.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 interface ChildPreview {
   name: string;
@@ -412,297 +418,233 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
   return `${base} (copy ${Date.now()})`;
 }
 
-function onKey(ev: KeyboardEvent): void {
-  if (!props.open) return;
-  if (ev.key === "Escape") {
-    ev.preventDefault();
-    close();
-  }
-}
-watch(
-  () => props.open,
-  (v) => {
-    if (v) window.addEventListener("keydown", onKey);
-    else window.removeEventListener("keydown", onKey);
-  },
-  { immediate: true },
-);
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="wp-modal" appear>
-      <div
-        v-if="open && bundle"
-        class="wp-ptl-overlay"
-        data-test="pbtl-overlay"
-        @click="close"
-      >
+  <ModalShell :visible="!!(open && bundle)" labelledby="wp-pbtl-title" @close="close">
+    <div
+      class="wp-ptl"
+      data-test="pbtl"
+    >
+      <header class="wp-ptl__head">
+        <h3 id="wp-pbtl-title" class="wp-ptl__title">Push bundle to library</h3>
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="pbtl-close" @click="close" />
+      </header>
+
+      <div class="wp-ptl__body">
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label" for="wp-pbtl-name">Name</label>
+          <Input
+            id="wp-pbtl-name"
+            v-model="name"
+            size="sm"
+            class="wp-ptl-input"
+            data-test="pbtl-name"
+            placeholder="(unnamed)"
+          />
+        </div>
+
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label" for="wp-pbtl-description">Description</label>
+          <Textarea
+            id="wp-pbtl-description"
+            v-model="description"
+            class="wp-ptl-input wp-ptl-input--multi"
+            data-test="pbtl-description"
+            :rows="2"/>
+        </div>
+
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label" for="wp-pbtl-tags">Tags (comma-separated)</label>
+          <Input
+            id="wp-pbtl-tags"
+            v-model="tagsText"
+            size="sm"
+            class="wp-ptl-input"
+            data-test="pbtl-tags"
+            placeholder="e.g. style, qa"
+          />
+        </div>
+
+        <div class="wp-ptl-field">
+          <label class="wp-ptl-field__label">
+            Children ({{ childrenPreview.length }})
+          </label>
+          <ul class="wp-ptl-children" data-test="pbtl-children">
+            <li
+              v-for="(c, i) in childrenPreview"
+              :key="`${c.kind}-${i}`"
+              class="wp-ptl-children__item"
+            >
+              <span class="wp-ptl-children__kind">{{ c.kind }}</span>
+              <span class="wp-ptl-children__name">{{ c.name }}</span>
+            </li>
+            <li v-if="childrenPreview.length === 0" class="wp-ptl-children__empty">
+              (empty bundle)
+            </li>
+          </ul>
+        </div>
+
+        <!-- Cascade restore — surfaces when the scan detected any
+             missing children. The default is ON because saving
+             without cascade preserves broken refs / dead-uuid
+             module snapshots in the library. -->
         <div
-          class="wp-ptl"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="wp-pbtl-title"
-          data-test="pbtl"
-          @click.stop
+          v-if="cascadeAvailable"
+          class="wp-ptl-cascade"
+          data-test="pbtl-cascade"
         >
-          <header class="wp-ptl__head">
-            <h3 id="wp-pbtl-title" class="wp-ptl__title">Push bundle to library</h3>
-            <button
-              type="button"
-              class="wp-ptl__close"
-              aria-label="Close"
-              data-test="pbtl-close"
-              @click="close"
-            >×</button>
-          </header>
-
-          <div class="wp-ptl__body">
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label" for="wp-pbtl-name">Name</label>
-              <input
-                id="wp-pbtl-name"
-                v-model="name"
-                type="text"
-                class="wp-ptl-input"
-                data-test="pbtl-name"
-                placeholder="(unnamed)"
-              />
-            </div>
-
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label" for="wp-pbtl-description">Description</label>
-              <textarea
-                id="wp-pbtl-description"
-                v-model="description"
-                class="wp-ptl-input wp-ptl-input--multi"
-                data-test="pbtl-description"
-                rows="2"
-              />
-            </div>
-
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label" for="wp-pbtl-tags">Tags (comma-separated)</label>
-              <input
-                id="wp-pbtl-tags"
-                v-model="tagsText"
-                type="text"
-                class="wp-ptl-input"
-                data-test="pbtl-tags"
-                placeholder="e.g. style, qa"
-              />
-            </div>
-
-            <div class="wp-ptl-field">
-              <label class="wp-ptl-field__label">
-                Children ({{ childrenPreview.length }})
-              </label>
-              <ul class="wp-ptl-children" data-test="pbtl-children">
-                <li
-                  v-for="(c, i) in childrenPreview"
-                  :key="`${c.kind}-${i}`"
-                  class="wp-ptl-children__item"
-                >
-                  <span class="wp-ptl-children__kind">{{ c.kind }}</span>
-                  <span class="wp-ptl-children__name">{{ c.name }}</span>
-                </li>
-                <li v-if="childrenPreview.length === 0" class="wp-ptl-children__empty">
-                  (empty bundle)
-                </li>
-              </ul>
-            </div>
-
-            <!-- Cascade restore — surfaces when the scan detected any
-                 missing children. The default is ON because saving
-                 without cascade preserves broken refs / dead-uuid
-                 module snapshots in the library. -->
-            <div
-              v-if="cascadeAvailable"
-              class="wp-ptl-cascade"
-              data-test="pbtl-cascade"
-            >
-              <span class="wp-ptl-cascade__toggle">
-                <WpCheck
-                  v-model="cascadeEnabled"
-                  data-test="pbtl-cascade-toggle"
-                  aria-label="Restore missing references first"
-                />
-                <span>
-                  Restore
-                  <strong>{{ (cascadeScan?.missingModuleCount ?? 0) + (cascadeScan?.missingBundleCount ?? 0) }}</strong>
-                  missing reference{{
-                    ((cascadeScan?.missingModuleCount ?? 0) + (cascadeScan?.missingBundleCount ?? 0)) === 1
-                      ? ""
-                      : "s"
-                  }} first
-                </span>
-              </span>
-              <div class="wp-ptl-cascade__hint">
-                Cascade-creates fresh library entries for every missing
-                child (bottom-up — modules first, then inner bundles)
-                before saving this bundle. Without this, broken refs
-                ship into the library.
-              </div>
-              <ul class="wp-ptl-cascade__list">
-                <li
-                  v-for="n in (cascadeScan?.missingBundleNames ?? [])"
-                  :key="`mb-${n}`"
-                  class="wp-ptl-cascade__item"
-                  data-test="pbtl-cascade-bundle"
-                >
-                  <span class="wp-ptl-cascade__kind">BUNDLE</span>
-                  <span class="wp-ptl-cascade__name">{{ n }}</span>
-                </li>
-                <li
-                  v-for="n in (cascadeScan?.missingModuleNames ?? [])"
-                  :key="`mm-${n}`"
-                  class="wp-ptl-cascade__item"
-                  data-test="pbtl-cascade-module"
-                >
-                  <span class="wp-ptl-cascade__kind">MODULE</span>
-                  <span class="wp-ptl-cascade__name">{{ n }}</span>
-                </li>
-              </ul>
-            </div>
-
-            <div
-              v-if="needsRelink && relinkCandidates.length"
-              class="wp-ptl-relink"
-              data-test="pbtl-relink"
-            >
-              <div class="wp-ptl-relink__title">Re-link to an existing library bundle</div>
-              <p class="wp-ptl-relink__hint">
-                This bundle's content matches a library entry under a different id (a re-import
-                minted a new one). Re-link to reconnect drift + reset instead of adding a duplicate.
-              </p>
-              <input
-                v-if="relinkCandidates.length > 1"
-                v-model="relinkQuery"
-                type="text"
-                class="wp-ptl-input"
-                data-test="pbtl-relink-search"
-                placeholder="Search by name or id…"
-                aria-label="Search library bundles to re-link"
-                spellcheck="false"
-                autocomplete="off"
-              />
-              <ul class="wp-ptl-relink__list">
-                <li
-                  v-for="c in relinkFiltered"
-                  :key="c.uuid"
-                  class="wp-ptl-relink__cand"
-                  :class="{ 'is-picked': relinkTarget != null && relinkTarget.uuid === c.uuid }"
-                  data-test="pbtl-relink-candidate"
-                  @click="relinkPick = c"
-                >
-                  <span class="wp-ptl-relink__name">{{ c.name || "(unnamed)" }}</span>
-                  <code class="wp-ptl-relink__uuid">{{ c.uuid }}</code>
-                  <span
-                    class="wp-ptl-relink__tag"
-                    :class="c.contentIdentical ? 'is-identical' : 'is-diff'"
-                  >{{ c.contentIdentical ? "identical" : "content differs" }}</span>
-                </li>
-              </ul>
-              <button
-                type="button"
-                class="wp-ptl-btn wp-ptl-btn--primary"
-                data-test="pbtl-relink-confirm"
-                :disabled="!relinkTarget || undefined"
-                @click="doRelink"
-              >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></button>
-            </div>
-
-            <!-- States the observable fact, not a guessed cause — see the
-                 matching note in PushToLibraryModal. Danger tone only when
-                 there is genuinely nothing to reconnect to. -->
-            <div v-if="needsRelink" class="wp-ptl-note" :class="relinkNoteClass" data-test="pbtl-missing">
-              <template v-if="relinkCandidates.length > 0">
-                This bundle isn’t linked to any library entry under its recorded id.
-                {{ relinkTarget?.contentIdentical
-                  ? "A library bundle with identical children is selected above — re-linking reconnects them."
-                  : "Pick a match above to re-link, or save it as a new entry." }}
-              </template>
-              <template v-else>
-                This bundle isn’t linked to any library entry under its recorded id, and
-                nothing in the library matches its children or name. “Update existing” is
-                unavailable — “Save as new entry” adds it to the library.
-              </template>
-            </div>
-
-            <div v-if="errorMsg" class="wp-ptl-error" data-test="pbtl-error">
-              {{ errorMsg }}
-            </div>
+          <span v-toggle-row class="wp-ptl-cascade__toggle">
+            <Checkbox
+              v-model="cascadeEnabled"
+              data-test="pbtl-cascade-toggle"
+              aria-label="Restore missing references first"
+            />
+            <span>
+              Restore
+              <strong>{{ (cascadeScan?.missingModuleCount ?? 0) + (cascadeScan?.missingBundleCount ?? 0) }}</strong>
+              missing reference{{
+                ((cascadeScan?.missingModuleCount ?? 0) + (cascadeScan?.missingBundleCount ?? 0)) === 1
+                  ? ""
+                  : "s"
+              }} first
+            </span>
+          </span>
+          <div class="wp-ptl-cascade__hint">
+            Cascade-creates fresh library entries for every missing
+            child (bottom-up — modules first, then inner bundles)
+            before saving this bundle. Without this, broken refs
+            ship into the library.
           </div>
+          <ul class="wp-ptl-cascade__list">
+            <li
+              v-for="n in (cascadeScan?.missingBundleNames ?? [])"
+              :key="`mb-${n}`"
+              class="wp-ptl-cascade__item"
+              data-test="pbtl-cascade-bundle"
+            >
+              <span class="wp-ptl-cascade__kind">BUNDLE</span>
+              <span class="wp-ptl-cascade__name">{{ n }}</span>
+            </li>
+            <li
+              v-for="n in (cascadeScan?.missingModuleNames ?? [])"
+              :key="`mm-${n}`"
+              class="wp-ptl-cascade__item"
+              data-test="pbtl-cascade-module"
+            >
+              <span class="wp-ptl-cascade__kind">MODULE</span>
+              <span class="wp-ptl-cascade__name">{{ n }}</span>
+            </li>
+          </ul>
+        </div>
 
-          <footer class="wp-ptl__foot">
-            <button
-              type="button"
-              class="wp-ptl-btn"
-              data-test="pbtl-cancel"
-              :disabled="busy"
-              @click="close"
-            >Cancel</button>
-            <span class="wp-ptl-spacer" />
-            <button
-              type="button"
-              class="wp-ptl-btn"
-              data-test="pbtl-save-new"
-              :disabled="busy"
-              @click="doSaveAsNew"
-            >Save as new entry</button>
-            <button
-              type="button"
-              class="wp-ptl-btn wp-ptl-btn--primary"
-              data-test="pbtl-update"
-              :disabled="busy || !canUpdateExisting"
-              :title="!isLibraryTracked
-                ? 'No existing library entry to update'
-                : isLibraryMissing
-                  ? 'Library entry has been deleted — save as new entry instead'
-                  : undefined"
-              @click="doUpdate"
-            >Update existing</button>
-          </footer>
+        <div
+          v-if="needsRelink && relinkCandidates.length"
+          class="wp-ptl-relink"
+          data-test="pbtl-relink"
+        >
+          <div class="wp-ptl-relink__title">Re-link to an existing library bundle</div>
+          <p class="wp-ptl-relink__hint">
+            This bundle's content matches a library entry under a different id (a re-import
+            minted a new one). Re-link to reconnect drift + reset instead of adding a duplicate.
+          </p>
+          <SearchInput
+            v-if="relinkCandidates.length > 1"
+            v-model="relinkQuery"
+            size="md"
+            class="wp-ptl-search"
+            data-test="pbtl-relink-search"
+            placeholder="Search by name or id…"
+            aria-label="Search library bundles to re-link"
+          />
+          <ul class="wp-ptl-relink__list">
+            <li
+              v-for="c in relinkFiltered"
+              :key="c.uuid"
+              class="wp-ptl-relink__cand"
+              :class="{ 'is-picked': relinkTarget != null && relinkTarget.uuid === c.uuid }"
+              data-test="pbtl-relink-candidate"
+              @click="relinkPick = c"
+            >
+              <span class="wp-ptl-relink__name">{{ c.name || "(unnamed)" }}</span>
+              <code class="wp-ptl-relink__uuid">{{ c.uuid }}</code>
+              <span
+                class="wp-ptl-relink__tag"
+                :class="c.contentIdentical ? 'is-identical' : 'is-diff'"
+              >{{ c.contentIdentical ? "identical" : "content differs" }}</span>
+            </li>
+          </ul>
+          <Button
+            size="sm"
+            variant="primary"
+            data-test="pbtl-relink-confirm"
+            :disabled="!relinkTarget || undefined"
+            @click="doRelink"
+          >Re-link<template v-if="relinkTarget"> to “{{ relinkTarget.name || relinkTarget.uuid }}”</template></Button>
+        </div>
+
+        <!-- States the observable fact, not a guessed cause — see the
+             matching note in PushToLibraryModal. Danger tone only when
+             there is genuinely nothing to reconnect to. -->
+        <div v-if="needsRelink" class="wp-ptl-note" :class="relinkNoteClass" data-test="pbtl-missing">
+          <template v-if="relinkCandidates.length > 0">
+            This bundle isn’t linked to any library entry under its recorded id.
+            {{ relinkTarget?.contentIdentical
+              ? "A library bundle with identical children is selected above — re-linking reconnects them."
+              : "Pick a match above to re-link, or save it as a new entry." }}
+          </template>
+          <template v-else>
+            This bundle isn’t linked to any library entry under its recorded id, and
+            nothing in the library matches its children or name. “Update existing” is
+            unavailable — “Save as new entry” adds it to the library.
+          </template>
+        </div>
+
+        <div v-if="errorMsg" class="wp-ptl-error" data-test="pbtl-error">
+          {{ errorMsg }}
         </div>
       </div>
-    </Transition>
-  </Teleport>
+
+      <footer class="wp-ptl__foot">
+        <Button size="sm" data-test="pbtl-cancel" :disabled="busy" @click="close">Cancel</Button>
+        <span class="wp-ptl-spacer" />
+        <Button
+          size="sm"
+          data-test="pbtl-save-new"
+          :disabled="busy"
+          @click="doSaveAsNew"
+        >Save as new entry</Button>
+        <Button
+          size="sm"
+          variant="primary"
+          data-test="pbtl-update"
+          :disabled="busy || !canUpdateExisting"
+          :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
+          @click="doUpdate"
+        >Update existing</Button>
+      </footer>
+    </div>
+  </ModalShell>
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-@import "../shared/_modal-motion.css";
-
-.wp-ptl-overlay {
-  position: fixed; inset: 0; z-index: 10000;
-  display: flex; align-items: center; justify-content: center;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
-}
 .wp-ptl {
   width: min(620px, 100%);
   max-height: calc(100vh - 32px);
-  background: var(--wp-bg-1, #0b0b12);
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #2a2a3a));
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
   border-radius: var(--wp-radius-lg, 10px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--wp-shadow-lg);
   display: flex; flex-direction: column;
   overflow: hidden;
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
 }
 .wp-ptl__head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--wp-border, #2a2a3a);
+  border-bottom: 1px solid var(--wp-border);
 }
 .wp-ptl__title { margin: 0; font-size: 14px; font-weight: 600; }
-.wp-ptl__close {
-  background: transparent; border: none; color: var(--wp-text-muted);
-  font-size: 18px; cursor: pointer; line-height: 1; padding: 0 6px;
-}
-.wp-ptl__close:hover { color: var(--wp-text); }
 .wp-ptl__body {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 14px;
@@ -713,25 +655,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   text-transform: uppercase; color: var(--wp-text-dim);
 }
-.wp-ptl-input {
-  width: 100%;
-  background: var(--wp-bg-2, #15151f);
-  color: var(--wp-text, #e7e7ee);
-  border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: inherit;
-}
-.wp-ptl-input:focus { outline: 1px solid var(--wp-accent-500, #8b5cf6); }
-.wp-ptl-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 48px; }
+.wp-ptl-search { width: 100%; }
+/* The kit Textarea draws the box; the description box is two lines tall. */
+.wp-ptl-input--multi { overscroll-behavior: contain; min-height: 48px; }
 .wp-ptl-children {
   margin: 0;
   padding: 6px 8px;
   list-style: none;
-  background: var(--wp-bg-2, #15151f);
-  border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 12px;
   max-height: 160px;
   overflow: auto;
@@ -762,28 +695,28 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-ptl-cascade {
   display: flex; flex-direction: column; gap: 6px;
   padding: 10px 12px;
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 30%, transparent);
-  border-radius: 6px;
+  background: color-mix(in oklab, var(--wp-danger) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 30%, transparent);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
 }
 .wp-ptl-cascade__toggle {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
   cursor: pointer;
 }
 .wp-ptl-cascade__hint {
   font-size: 11.5px;
-  color: var(--wp-text-muted, #a1a1ad);
+  color: var(--wp-text-muted);
   line-height: 1.4;
 }
 .wp-ptl-cascade__list {
   list-style: none;
   margin: 0;
   padding: 4px 6px;
-  background: var(--wp-bg-2, #15151f);
-  border-radius: 4px;
+  background: var(--wp-bg-2);
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font-size: 11.5px;
   max-height: 110px;
   overflow: auto;
@@ -797,42 +730,42 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--wp-danger, #ef4444);
+  color: var(--wp-danger);
   min-width: 56px;
 }
 .wp-ptl-cascade__name {
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .wp-ptl-note {
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 12px;
 }
 .wp-ptl-note--danger {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 32%, transparent);
+  color: var(--wp-danger);
 }
 /* Informational tone for the "pick a match" case — mirrors PushToLibraryModal. */
 .wp-ptl-note--info {
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 10%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
-  color: var(--wp-text, #e7e7ee);
+  background: color-mix(in oklab, var(--wp-accent-500) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
+  color: var(--wp-text);
 }
 .wp-ptl-relink {
   padding: 10px 12px;
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 8%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 30%, transparent);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
+  background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.wp-ptl-relink__title { font-size: 12.5px; font-weight: 600; color: var(--wp-text, #e7e7ee); }
-.wp-ptl-relink__hint { margin: 0; font-size: 11.5px; color: var(--wp-text-muted, #a1a1ad); }
+.wp-ptl-relink__title { font-size: 12.5px; font-weight: 600; color: var(--wp-text); }
+.wp-ptl-relink__hint { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }
 .wp-ptl-relink__list {
   list-style: none; margin: 0; padding: 0;
   max-height: 160px; overflow-y: auto;
@@ -840,58 +773,39 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .wp-ptl-relink__cand {
   display: flex; align-items: baseline; gap: 8px;
-  padding: 5px 8px; border-radius: 4px; cursor: pointer;
+  padding: 5px 8px; border-radius: min(4px, var(--wp-radius-cap, 999px)); cursor: pointer;
 }
-.wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 16%, transparent); }
-.wp-ptl-relink__cand.is-picked { background: color-mix(in oklab, var(--wp-accent-500, #8b5cf6) 28%, transparent); }
-.wp-ptl-relink__name { font-size: 12px; color: var(--wp-text, #e7e7ee); }
-.wp-ptl-relink__uuid { font-family: var(--wp-font-mono, monospace); font-size: 10px; color: var(--wp-text-dim, #6e6e7c); }
+.wp-ptl-relink__cand:hover { background: color-mix(in oklab, var(--wp-accent-500) 16%, transparent); }
+.wp-ptl-relink__cand.is-picked { background: color-mix(in oklab, var(--wp-accent-500) 28%, transparent); }
+.wp-ptl-relink__name { font-size: 12px; color: var(--wp-text); }
+.wp-ptl-relink__uuid { font-family: var(--wp-font-mono, monospace); font-size: 10px; color: var(--wp-text-dim); }
 .wp-ptl-relink__tag {
   margin-left: auto; flex-shrink: 0;
   font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 1px 6px; border-radius: 999px;
+  padding: 1px 6px; border-radius: var(--wp-radius-cap, 999px);
 }
 .wp-ptl-relink__tag.is-identical {
-  color: var(--wp-green, #6ad28b);
-  background: color-mix(in oklab, var(--wp-green, #6ad28b) 16%, transparent);
+  color: var(--wp-green);
+  background: color-mix(in oklab, var(--wp-green) 16%, transparent);
 }
 .wp-ptl-relink__tag.is-diff {
-  color: var(--wp-warn, #facc15);
-  background: color-mix(in oklab, var(--wp-warn, #facc15) 16%, transparent);
+  color: var(--wp-warn);
+  background: color-mix(in oklab, var(--wp-warn) 16%, transparent);
 }
-.wp-ptl-relink .wp-ptl-btn--primary { align-self: flex-start; }
+.wp-ptl-relink .wp-btn--primary { align-self: flex-start; }
 .wp-ptl-error {
   padding: 8px 10px;
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger, #ef4444) 32%, transparent);
-  color: var(--wp-danger, #ef4444);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
+  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--wp-danger) 32%, transparent);
+  color: var(--wp-danger);
   font-size: 12px;
 }
 .wp-ptl__foot {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 14px;
-  border-top: 1px solid var(--wp-border, #2a2a3a);
-  background: var(--wp-bg-1, #0b0b12);
+  border-top: 1px solid var(--wp-border);
+  background: var(--wp-bg-1);
 }
 .wp-ptl-spacer { flex: 1; }
-.wp-ptl-btn {
-  background: var(--wp-bg-3, #1c1c28);
-  color: var(--wp-text, #e7e7ee);
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #2a2a3a));
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.wp-ptl-btn:hover:not(:disabled) { background: color-mix(in oklab, var(--wp-bg-3, #1c1c28) 80%, var(--wp-text, #fff)); }
-.wp-ptl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.wp-ptl-btn--primary {
-  background: var(--wp-accent-500, #8b5cf6);
-  border-color: var(--wp-accent-500, #8b5cf6);
-  color: #fff;
-}
-.wp-ptl-btn--primary:hover:not(:disabled) {
-  background: var(--wp-accent-600, #7c3aed);
-}
 </style>

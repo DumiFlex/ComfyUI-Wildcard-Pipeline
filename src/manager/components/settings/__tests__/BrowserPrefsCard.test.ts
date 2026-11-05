@@ -32,10 +32,10 @@ describe("BrowserPrefsCard", () => {
 
     const wrapper = mount(BrowserPrefsCard);
     await wrapper.find("[data-test='browser-prefs-reset']").trigger("click");
-    // Drive the confirm through the ConfirmDialog child's `confirm` event
+    // Drive the confirm through the ConfirmModal child's `confirm` event
     // rather than reaching for an internal data-test attribute that may
-    // not exist on ConfirmDialog's built-in buttons.
-    const dialog = wrapper.findComponent({ name: "ConfirmDialog" });
+    // not exist on ConfirmModal's built-in buttons.
+    const dialog = wrapper.findComponent({ name: "ConfirmModal" });
     dialog.vm.$emit("confirm");
     await wrapper.vm.$nextTick();
 
@@ -51,7 +51,7 @@ describe("BrowserPrefsCard", () => {
     localStorage.setItem("wp-theme-mode", "dark");
     const wrapper = mount(BrowserPrefsCard);
     await wrapper.find("[data-test='browser-prefs-reset']").trigger("click");
-    const dialog = wrapper.findComponent({ name: "ConfirmDialog" });
+    const dialog = wrapper.findComponent({ name: "ConfirmModal" });
     dialog.vm.$emit("cancel");
     await wrapper.vm.$nextTick();
     expect(localStorage.getItem("wp-theme-mode")).toBe("dark");

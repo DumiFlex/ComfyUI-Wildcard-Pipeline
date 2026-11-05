@@ -7,7 +7,7 @@
  * Discord first — it gets a faster answer and is more likely to be seen, which
  * the copy says outright rather than leaving the user to guess which to pick.
  */
-import Modal from "./ui/Modal.vue";
+import Modal from "@/kit/Modal.vue";
 import { DISCORD_INVITE, GITHUB_NEW_ISSUE } from "../config/links";
 
 defineProps<{ open: boolean }>();
@@ -118,7 +118,7 @@ const emit = defineEmits<{ "update:open": [v: boolean] }>();
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   color: var(--wp-accent-text, var(--wp-accent));
   background: color-mix(in oklab, var(--wp-accent) 18%, transparent);
 }

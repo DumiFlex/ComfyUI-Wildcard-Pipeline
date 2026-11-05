@@ -1,0 +1,36 @@
+{
+  "node": "WP_ContextInjector",
+  "image": "images/docs/wp-context-injector.png",
+  "pins": [
+    {
+      "group": "ports",
+      "term": "upstream (in)",
+      "x": 0.298,
+      "y": 0.2441
+    },
+    {
+      "group": "ports",
+      "term": "input_0 … input_9 (in)",
+      "x": 0.298,
+      "y": 0.2732
+    },
+    {
+      "group": "ports",
+      "term": "context (out)",
+      "x": 0.6257,
+      "y": 0.2441
+    },
+    {
+      "group": "rowOptions",
+      "term": "Name",
+      "x": 0.4939,
+      "y": 0.4213
+    },
+    {
+      "group": "rowOptions",
+      "term": "Hide from prompt (globe)",
+      "x": 0.5693,
+      "y": 0.4242
+    }
+  ]
+}

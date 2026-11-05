@@ -14,6 +14,10 @@
  * whole next config (`src/widgets/model_info.ts` serializes it).
  */
 import { computed, nextTick, ref } from "vue";
+import Button from "@/kit/Button.vue";
+import { inputEl } from "@/manager/utils/kit-field-el";
+import Input from "@/kit/Input.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
 import {
   DEFAULT_VARIANT_RULES,
   compileVariantRules,
@@ -33,8 +37,10 @@ const props = withDefaults(
     lastRun?: ModelInfoRun | null;
     /** Litegraph mode: 2 = muted, 4 = bypassed (dims the widget). */
     nodeMode?: number;
+    /** Text inputs (`family`, `variant`, `name`) wired from another node. */
+    wired?: string[];
   }>(),
-  { loaderName: "", modelWired: false, lastRun: null, nodeMode: 0 },
+  { loaderName: "", modelWired: false, lastRun: null, nodeMode: 0, wired: () => [] },
 );
 const emit = defineEmits<{ "update:modelValue": [next: ModelInfoConfig] }>();
 
@@ -49,8 +55,19 @@ const problemByRow = computed(() => {
   return out;
 });
 
+function isWired(k: Key): boolean {
+  return props.wired.includes(k);
+}
+/** A wired value is only known after a run that used the wire. */
+function wiredValue(k: Key): string {
+  return props.lastRun?.sources[k] === "wired" ? props.lastRun[k] : "";
+}
+
 const detectedName = computed(() => (props.loaderName ? modelStem(props.loaderName) : ""));
-const effectiveName = computed(() => (props.modelValue.name ? modelStem(props.modelValue.name) : detectedName.value));
+const effectiveName = computed(() => {
+  if (isWired("name")) return wiredValue("name");
+  return props.modelValue.name ? modelStem(props.modelValue.name) : detectedName.value;
+});
 const matched = computed(() => matchRule(effectiveName.value, compiled.value.rules));
 
 interface Row { key: Key; label: string; variable: string; value: string; source: string; hint: string }
@@ -81,6 +98,12 @@ const rows = computed<Row[]>(() => {
     source: cfg.name ? "pinned" : detectedName.value ? "from loader" : "",
     hint: props.modelWired ? "no file name found" : "wire a model",
   };
+  for (const row of [family, variant, name]) {
+    if (!isWired(row.key)) continue;
+    row.value = wiredValue(row.key);
+    row.source = "wired";
+    row.hint = `from the ${row.key} input, after a run`;
+  }
   return [family, variant, name];
 });
 
@@ -96,7 +119,7 @@ const editing = ref<Key | null>(null);
 const pinInputs = ref<Partial<Record<Key, HTMLInputElement | null>>>({});
 
 function isPinned(k: Key): boolean {
-  return !!props.modelValue[k];
+  return !isWired(k) && !!props.modelValue[k];
 }
 function setPin(k: Key, value: string): void {
   emit("update:modelValue", { ...props.modelValue, [k]: value.trim() });
@@ -117,7 +140,7 @@ function onPinBlur(k: Key, ev: Event): void {
   if (editing.value === k) editing.value = null;
 }
 function showsInput(k: Key): boolean {
-  return isPinned(k) || editing.value === k;
+  return !isWired(k) && (isPinned(k) || editing.value === k);
 }
 
 /* ── internal (hidden from the Assembler) ─────────────────────────────── */
@@ -173,46 +196,53 @@ function resetRules(): void {
           class="wp-mi__var"
           :class="{ 'is-pinned': isPinned(row.key), 'is-empty': !row.value && !showsInput(row.key) }"
           :data-test="`mi-var-${row.key}`"
+          :data-wp-socket="row.key"
         >
           <span class="wp-mi__var-name" :title="`${row.variable}: ${ROW_TOOLTIPS[row.key]}`">{{ row.label }}</span>
-          <input
+          <Input
             v-if="showsInput(row.key)"
-            :ref="(el) => { pinInputs[row.key] = el as HTMLInputElement | null; }"
+            :ref="(c) => { pinInputs[row.key] = inputEl(c); }"
+            size="sm"
+            mono
+            tone="warn"
             class="wp-mi__pin-input"
-            :value="modelValue[row.key]"
+            :model-value="modelValue[row.key]"
             :placeholder="row.key === 'name' ? 'checkpoint file name' : row.label"
             :data-test="`mi-pin-input-${row.key}`"
             spellcheck="false"
             @keydown.enter="($event.target as HTMLInputElement).blur()"
             @keydown.stop
             @blur="onPinBlur(row.key, $event)"
-          >
+          />
           <span
             v-else
             class="wp-mi__var-value"
             :title="row.value || row.hint"
             :data-test="`mi-value-${row.key}`"
           >{{ row.value || row.hint }}</span>
-          <span class="wp-mi__source" :class="{ 'is-pinned': isPinned(row.key) }">{{ row.source }}</span>
+          <span class="wp-mi__source" :class="{ 'is-pinned': isPinned(row.key), 'is-wired': isWired(row.key) }">
+            <i v-if="isWired(row.key)" class="pi pi-link" aria-hidden="true" />{{ row.source }}
+          </span>
           <span class="wp-mi__actions">
-          <button
-            type="button"
-            class="wp-btn--icon-sm wp-btn--accent"
-            :class="{ 'is-active': isInternal(row.key) }"
-            :title="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
-            :aria-pressed="isInternal(row.key)"
+          <WpIconButton
+            icon="pi-globe"
+            tone="accent"
+            :pressed="isInternal(row.key)"
+            :label="isInternal(row.key) ? `Show ${row.variable} in the Assembler` : `Hide ${row.variable} from the Assembler`"
+            :hint="isInternal(row.key) ? `Internal: hidden from the Assembler. Click to show ${row.variable}` : `Shown in the Assembler. Click to hide ${row.variable}`"
             :data-test="`mi-internal-${row.key}`"
             @click="toggleInternal(row.key)"
-          ><i class="pi pi-globe" aria-hidden="true" /></button>
-          <button
-            type="button"
-            class="wp-btn--icon-sm wp-btn--warn"
-            :class="{ 'is-locked': isPinned(row.key) }"
-            :title="isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
-            :aria-pressed="isPinned(row.key)"
+          />
+          <WpIconButton
+            icon="pi-thumbtack"
+            tone="warn"
+            :pressed="isPinned(row.key)"
+            :disabled="isWired(row.key)"
+            :label="isPinned(row.key) ? `Unpin ${row.variable}` : `Pin ${row.variable}`"
+            :hint="isWired(row.key) ? `Set by the ${row.key} input` : isPinned(row.key) ? 'Unpin: detect it again' : `Pin ${row.variable} to a value of your own`"
             :data-test="`mi-pin-${row.key}`"
             @click="startPin(row)"
-          ><i class="pi pi-thumbtack" aria-hidden="true" /></button>
+          />
           </span>
         </div>
       </div>
@@ -222,14 +252,15 @@ function resetRules(): void {
       <div class="wp-mi__head">
         <span class="wp-mi__label">VARIANT RULES</span>
         <span class="wp-mi__head-note">first match in the file name wins</span>
-        <button
-          v-if="!isDefaultRules"
-          type="button"
+        <Button v-if="!isDefaultRules" size="sm"
+         
+          hint="Put the shipped rules back"
+          variant="ghost"
+          icon="pi-undo"
           class="wp-mi__reset"
-          title="Put the shipped rules back"
           data-test="mi-reset-rules"
           @click="resetRules"
-        >reset</button>
+        >Reset</Button>
       </div>
       <div ref="ruleList" class="wp-mi__rules">
         <div
@@ -244,47 +275,57 @@ function resetRules(): void {
           :data-test="`mi-rule-${i}`"
         >
           <span class="wp-mi__rule-dot" aria-hidden="true" />
-          <input
+          <Input
+            size="sm"
             class="wp-mi__rule-variant"
-            :value="rule.variant"
+            :tone="!modelValue.variant && matched?.row === i ? 'accent' : undefined"
+            :error="problemByRow.has(i)"
+            :model-value="rule.variant"
             placeholder="variant"
             spellcheck="false"
             aria-label="variant"
             @keydown.stop
             @change="editRule(i, { variant: ($event.target as HTMLInputElement).value })"
-          >
-          <input
+          />
+          <Input
+            size="sm"
+            mono
             class="wp-mi__rule-pattern"
-            :value="rule.pattern"
+            :error="problemByRow.has(i)"
+            :model-value="rule.pattern"
             placeholder="pattern, e.g. pony|pdxl"
             spellcheck="false"
             aria-label="pattern"
             @keydown.stop
             @change="editRule(i, { pattern: ($event.target as HTMLInputElement).value })"
-          >
-          <button
-            type="button"
-            class="wp-btn--icon-sm wp-btn--danger"
-            title="Remove this rule"
+          />
+          <WpIconButton
+            icon="pi-trash"
+            tone="danger"
+            label="Remove this rule"
             :data-test="`mi-rule-remove-${i}`"
             @click="removeRule(i)"
-          ><i class="pi pi-trash" aria-hidden="true" /></button>
+          />
         </div>
         <div v-if="modelValue.rules.length === 0" class="wp-mi__ghost">
           No rules, so $model_variant stays empty unless pinned.
         </div>
       </div>
-      <button type="button" class="wp-mi__add" data-test="mi-add-rule" @click="addRule">
-        <i class="pi pi-plus" aria-hidden="true" /> Add rule
-      </button>
+      <Button
+        size="sm"
+        variant="add"
+        icon="pi-plus"
+        block
+        class="wp-mi__add"
+        data-test="mi-add-rule"
+        @click="addRule"
+      >Add rule</Button>
     </section>
   </div>
 </template>
 
 <style scoped>
-/* Icon buttons come from the shared row primitives, same as the Injector
-   and module rows. Layout and tokens follow the Cleaner / Seed List. */
-@import "../shared/row-primitives.css";
+/* Layout and tokens follow the Cleaner / Seed List. */
 
 .wp-mi {
   display: flex;
@@ -310,16 +351,7 @@ function resetRules(): void {
   font-size: 9px;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-mi__reset {
-  background: transparent;
-  border: 0;
-  padding: 0 2px;
-  font: 600 9px var(--wp-font-sans, sans-serif);
-  letter-spacing: 0.04em;
-  color: var(--wp-amber, var(--wp-warn, #fbbf24));
-  cursor: pointer;
-}
-.wp-mi__reset:hover { text-decoration: underline; }
+.wp-mi__reset { margin-left: auto; }
 
 /* DETECTED rows */
 .wp-mi__vars {
@@ -329,7 +361,7 @@ function resetRules(): void {
   padding: 4px;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wp-mi__var {
   display: grid;
@@ -338,7 +370,7 @@ function resetRules(): void {
   gap: 8px;
   min-height: 22px;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wp-mi__var:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
 /* Same 1px spacing as the Injector's row actions. */
@@ -361,23 +393,16 @@ function resetRules(): void {
   font-style: italic;
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-mi__pin-input {
-  min-width: 0;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--wp-bg, #111);
-  color: var(--wp-text);
-  border: 1px solid var(--wp-amber, var(--wp-warn, #fbbf24));
-  border-radius: 3px;
-  font: 11px var(--wp-font-mono, monospace);
-  outline: none;
-}
+/* The kit's sm field, held to the 20px the dense rows are built on. */
+.wp-mi__var .wp-mi__pin-input { min-width: 0; height: 20px; }
 .wp-mi__source {
   font-size: 9px;
   color: var(--wp-text-dim, var(--wp-text3));
   white-space: nowrap;
 }
-.wp-mi__source.is-pinned { color: var(--wp-amber, var(--wp-warn, #fbbf24)); }
+.wp-mi__source.is-wired { color: var(--wp-accent); }
+.wp-mi__source.is-wired .pi { font-size: 8px; margin-right: 3px; }
+.wp-mi__source.is-pinned { color: var(--wp-amber, var(--wp-warn)); }
 /* VARIANT RULES */
 .wp-mi__rules { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
 .wp-mi__rule {
@@ -386,33 +411,17 @@ function resetRules(): void {
   align-items: center;
   gap: 6px;
   padding: 1px 2px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
 }
 .wp-mi__rule-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--wp-border2, var(--wp-border-strong, #444));
+  background: var(--wp-border2, var(--wp-border-strong));
 }
 .wp-mi__rule.is-match .wp-mi__rule-dot { background: var(--wp-accent); }
-.wp-mi__rule.is-match .wp-mi__rule-variant { color: var(--wp-accent-text, var(--wp-accent)); }
-.wp-mi__rule-variant,
-.wp-mi__rule-pattern {
-  min-width: 0;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  color: var(--wp-text);
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  font: 11px var(--wp-font-mono, monospace);
-  outline: none;
-}
-.wp-mi__rule-variant { font-family: var(--wp-font-sans, sans-serif); font-weight: 600; }
-.wp-mi__rule-variant:focus,
-.wp-mi__rule-pattern:focus { border-color: var(--wp-accent); }
-.wp-mi__rule.is-problem .wp-mi__rule-variant,
-.wp-mi__rule.is-problem .wp-mi__rule-pattern { border-color: var(--wp-danger, #ef4444); }
+.wp-mi__rule .wp-mi__rule-variant,
+.wp-mi__rule .wp-mi__rule-pattern { min-width: 0; height: 20px; }
 .wp-mi__ghost {
   padding: 6px 4px;
   font-size: 10px;
@@ -420,26 +429,5 @@ function resetRules(): void {
   color: var(--wp-text-dim, var(--wp-text3));
 }
 
-/* Same dashed affordance as the Injector's "Add template row". */
-.wp-mi__add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 2px;
-  padding: 5px 8px;
-  background: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  border: 1px dashed var(--wp-border2, var(--wp-border));
-  border-radius: var(--wp-radius-sm, 4px);
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  cursor: pointer;
-}
-.wp-mi__add:hover {
-  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
-  color: var(--wp-text);
-  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border2, var(--wp-border)));
-}
-.wp-mi__add .pi { font-size: 10px; }
+.wp-mi__add { margin-top: 2px; }
 </style>

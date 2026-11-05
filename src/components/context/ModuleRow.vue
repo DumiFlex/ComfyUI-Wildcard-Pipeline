@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { inject } from "vue";
+import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
 import PairBadge from "./PairBadge.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import DragHandle from "@/kit/DragHandle.vue";
 
-defineProps<{ module: ModuleEntry; idx: number }>();
+const props = defineProps<{ module: ModuleEntry; idx: number }>();
+
+/** Rows inside a bundle leave the EXAMPLE chip to the bundle header. */
+const inBundle = computed(() => {
+  const origin = (props.module as { bundle_origin?: unknown }).bundle_origin;
+  return typeof origin === "string" && origin !== "";
+});
+const EXAMPLE_TITLE = "From an example workflow, not in your library. Right-click → Save to library to keep it.";
 
 const ctx = inject(ModuleRowCtxKey);
 if (!ctx) throw new Error("ModuleRow: missing moduleRowCtx provider");
@@ -42,14 +52,14 @@ const {
       'wp-conflict-info': severityFor(module._uid ?? module.id) === 'info',
       'wp-state-modified': isModified(module),
       'wp-state-drift': isDrifted(module),
-      'wp-state-missing': isMissingFromLibrary(module),
+      'wp-state-missing': isMissingFromLibrary(module) && !module.example,
       'wp-gap-before': rowGap(idx) === 'before',
       'wp-gap-after': rowGap(idx) === 'after',
       'wp-module--dragging': module._uid === ctx.draggingModuleUid.value,
       'wp-drop-pulse': !!module._uid && ctx.recentDropUids.value.has(module._uid),
       'wp-mod--mod': isModified(module),
       'wp-mod--drift': isDrifted(module),
-      'wp-mod--err': isMissingFromLibrary(module),
+      'wp-mod--err': isMissingFromLibrary(module) && !module.example,
     }"
     :style="!!module._uid && ctx.recentDropUids.value.has(module._uid)
       ? { animationDelay: ctx.pulseDelayFor(module._uid) }
@@ -60,28 +70,17 @@ const {
     @keydown="(ev) => onCardKeydown(ev, module, idx)"
   >
     <div class="wp-module-header">
-      <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder">
-        <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
-          <circle cx="1.5" cy="2" r="1" />
-          <circle cx="4.5" cy="2" r="1" />
-          <circle cx="1.5" cy="6" r="1" />
-          <circle cx="4.5" cy="6" r="1" />
-          <circle cx="1.5" cy="10" r="1" />
-          <circle cx="4.5" cy="10" r="1" />
-        </svg>
+      <span class="wp-drag-handle" aria-hidden="true">
+        <DragHandle title="Drag to reorder" />
       </span>
-      <button type="button" class="wp-collapse-btn" draggable="false"
-        :title="isCollapsed(module) ? 'Expand' : 'Collapse'" @click="toggleCollapsed(idx)">
-        <i :class="['pi', isCollapsed(module) ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i>
-      </button>
-      <label class="wp-toggle" draggable="false"
-        :title="ctx && ctx.currentFrame.value != null ? (ctx.effectiveEnabled(module) ? 'Disable on this frame' : 'Enable on this frame') : (module.enabled ? 'Disable' : 'Enable')">
-        <input type="checkbox"
-          :checked="ctx ? ctx.effectiveEnabled(module) : module.enabled"
-          :aria-label="`enable ${module.meta.name}`"
-          @change="toggleEnabled(idx)" />
-        <span class="wp-toggle-mark"></span>
-      </label>
+      <WpIconButton variant="bare" class="wp-collapse-btn" draggable="false"
+        :icon="isCollapsed(module) ? 'pi-caret-right' : 'pi-caret-down'"
+        :label="isCollapsed(module) ? 'Expand' : 'Collapse'" @click="toggleCollapsed(idx)" />
+      <Checkbox size="sm" draggable="false" data-test="module-enabled"
+        :title="ctx && ctx.currentFrame.value != null ? (ctx.effectiveEnabled(module) ? 'Disable on this frame' : 'Enable on this frame') : (module.enabled ? 'Disable' : 'Enable')"
+        :model-value="ctx ? ctx.effectiveEnabled(module) : module.enabled"
+        :aria-label="`enable ${module.meta.name}`"
+        @update:model-value="toggleEnabled(idx)" />
       <span class="wp-row-type-icon" :title="module.type" aria-hidden="true">
         <i :class="kindIcon(module.type)" />
       </span>
@@ -143,10 +142,12 @@ const {
           title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry." aria-hidden="true"></span>
         <span v-if="isTypeConflict(module)" class="wp-mod-badge wp-mod-badge--clash"
           title="Id clash — a different kind of item uses this id in your library. Right-click → Push to library to add this one as a new entry.">clash</span>
-        <span v-if="isMissingFromLibrary(module)" class="wp-mod-dot wp-mod-dot--missing"
+        <span v-if="isMissingFromLibrary(module) && !module.example" class="wp-mod-dot wp-mod-dot--missing"
           title="Not in library — right-click → Save to library to add it" aria-hidden="true"></span>
-        <span v-if="isMissingFromLibrary(module)" class="wp-mod-badge wp-mod-badge--missing"
+        <span v-if="isMissingFromLibrary(module) && !module.example" class="wp-mod-badge wp-mod-badge--missing"
           title="Not in library — right-click → Save to library to add it">missing</span>
+        <span v-if="isMissingFromLibrary(module) && module.example && !inBundle" class="wp-mod-badge wp-mod-badge--example"
+          data-test="mod-example" :title="EXAMPLE_TITLE">example</span>
         <span v-if="severityFor(module._uid ?? module.id)" class="wp-conflict-dot"
           :class="`wp-conflict-dot--${severityFor(module._uid ?? module.id)}`" :title="conflictTooltip(module._uid ?? module.id)" aria-hidden="true"></span>
         <span v-if="severityFor(module._uid ?? module.id) && conflictBadgeText(module._uid ?? module.id)"
@@ -159,20 +160,19 @@ const {
         <span v-else-if="ctx?.frameEnableOverride(module) === 'on'" class="wp-mod-badge wp-mod-badge--on" data-test="mod-frame-enabled" title="Enabled on this frame">on #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
       </span>
       <div class="wp-mod-actions" draggable="false">
-        <button v-if="isSeedLockable(module)" type="button" class="wp-btn--icon-sm wp-btn--warn"
-          :class="{ 'is-locked': isLocked(module) }" data-test="row-action-lock"
-          :title="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
-          :aria-label="isLocked(module) ? 'Unlock seed' : 'Lock seed'"
-          @click.stop="toggleLockOnCard(idx)"><i class="pi pi-lock" /></button>
-        <button v-if="module.type === 'wildcard' || module.type === 'fixed_values' || module.type === 'combine' || module.type === 'derivation'"
-          type="button" class="wp-btn--icon-sm wp-btn--accent"
-          :class="{ 'is-active': isInternal(module) }" data-test="row-action-internal"
-          :title="isInternal(module) ? 'Unmark internal' : 'Mark internal'"
-          :aria-label="isInternal(module) ? 'Unmark internal' : 'Mark internal'"
-          @click.stop="toggleInternalOnCard(idx)"><i class="pi pi-globe" /></button>
-        <button type="button" class="wp-btn--icon-sm wp-btn--danger"
-          data-test="row-action-remove" title="Remove" aria-label="Remove module"
-          @click.stop="removeModule(idx)"><i class="pi pi-trash" /></button>
+        <WpIconButton v-if="isSeedLockable(module)" icon="pi-lock" tone="warn"
+          :pressed="isLocked(module)" data-test="row-action-lock"
+          :label="isLocked(module) ? 'Unlock seed' : 'Lock seed'"
+          :hint="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
+          @click.stop="toggleLockOnCard(idx)" />
+        <WpIconButton v-if="module.type === 'wildcard' || module.type === 'fixed_values' || module.type === 'combine' || module.type === 'derivation'"
+          icon="pi-globe" tone="accent"
+          :pressed="isInternal(module)" data-test="row-action-internal"
+          :label="isInternal(module) ? 'Unmark internal' : 'Mark internal'"
+          @click.stop="toggleInternalOnCard(idx)" />
+        <WpIconButton icon="pi-trash" tone="danger"
+          data-test="row-action-remove" label="Remove module" hint="Remove"
+          @click.stop="removeModule(idx)" />
       </div>
     </div>
     <div class="wp-collapse-row" :data-collapsed="isCollapsed(module) ? 'true' : 'false'">

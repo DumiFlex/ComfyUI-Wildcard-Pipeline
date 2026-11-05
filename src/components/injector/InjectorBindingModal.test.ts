@@ -15,7 +15,18 @@ const RichTextInputStub = {
   emits: ["update:modelValue"],
   template: `<div class="wp-rt-stub" data-test="ibm-template" :data-model-value="modelValue"></div>`,
 };
-const globalStubs = { RichTextInput: RichTextInputStub };
+// ModalShell teleports to body, out of the wrapper's reach. This stand-in
+// keeps its contract in place: every key inside goes out as `keydown`
+// first, then Escape and a backdrop click go out as `close`.
+const ModalShellStub = {
+  name: "ModalShell",
+  props: ["visible", "label", "labelledby"],
+  emits: ["close", "keydown"],
+  template: `<div v-if="visible" data-test="ibm-overlay" role="dialog" :aria-labelledby="labelledby"
+    @click.self="$emit('close')"
+    @keydown="(e) => { $emit('keydown', e); if (e.key === 'Escape') $emit('close'); }"><slot /></div>`,
+};
+const globalStubs = { RichTextInput: RichTextInputStub, ModalShell: ModalShellStub };
 
 /** Read what the template field is currently showing. */
 function templateValue(w: any): string | undefined {
@@ -86,20 +97,20 @@ describe("InjectorBindingModal — identity section", () => {
       props: { row: makeRow({ slot_name: "input_2", binding: "seed" }) },
     });
     expect(w.find('[data-test="ibm-name"]').text()).toBe("input_2");
-    const input = w.find<HTMLInputElement>('[data-test="ibm-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="ibm-binding"] input');
     expect(input.element.value).toBe("seed");
   });
 
   it("does NOT emit update while typing — draft buffer holds edits until Save", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    const input = w.find<HTMLInputElement>('[data-test="ibm-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="ibm-binding"] input');
     await input.setValue("renamed");
     expect(w.emitted("update")).toBeUndefined();
   });
 
   it("Save emits update with the draft binding + closes", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLInputElement>('[data-test="ibm-binding"]').setValue("renamed");
+    await w.find<HTMLInputElement>('[data-test="ibm-binding"] input').setValue("renamed");
     await w.find('[data-test="ibm-save"]').trigger("click");
     const updates = w.emitted("update")!;
     const last = updates[updates.length - 1][0] as Partial<InjectorRow>;
@@ -193,7 +204,7 @@ describe("InjectorBindingModal — template section", () => {
 describe("InjectorBindingModal — Save / Cancel / keybinds", () => {
   it("Cancel closes without emitting update", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLInputElement>('[data-test="ibm-binding"]').setValue("dropped");
+    await w.find<HTMLInputElement>('[data-test="ibm-binding"] input').setValue("dropped");
     await w.find('[data-test="ibm-cancel"]').trigger("click");
     expect(w.emitted("update")).toBeUndefined();
     expect(w.emitted("close")).toHaveLength(1);
@@ -201,7 +212,7 @@ describe("InjectorBindingModal — Save / Cancel / keybinds", () => {
 
   it("clicking overlay cancels (no update emit)", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLInputElement>('[data-test="ibm-binding"]').setValue("dropped");
+    await w.find<HTMLInputElement>('[data-test="ibm-binding"] input').setValue("dropped");
     await w.find('[data-test="ibm-overlay"]').trigger("click");
     expect(w.emitted("update")).toBeUndefined();
     expect(w.emitted("close")).toHaveLength(1);
@@ -209,7 +220,7 @@ describe("InjectorBindingModal — Save / Cancel / keybinds", () => {
 
   it("Esc cancels", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLInputElement>('[data-test="ibm-binding"]').setValue("dropped");
+    await w.find<HTMLInputElement>('[data-test="ibm-binding"] input').setValue("dropped");
     await w.find('[data-test="ibm-overlay"]').trigger("keydown", { key: "Escape" });
     expect(w.emitted("update")).toBeUndefined();
     expect(w.emitted("close")).toHaveLength(1);
@@ -217,7 +228,7 @@ describe("InjectorBindingModal — Save / Cancel / keybinds", () => {
 
   it("Cmd+Enter saves", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLInputElement>('[data-test="ibm-binding"]').setValue("kept");
+    await w.find<HTMLInputElement>('[data-test="ibm-binding"] input').setValue("kept");
     await w.find('[data-test="ibm-overlay"]').trigger("keydown", { key: "Enter", metaKey: true });
     const updates = w.emitted("update")!;
     expect(updates).toHaveLength(1);
@@ -228,7 +239,7 @@ describe("InjectorBindingModal — Save / Cancel / keybinds", () => {
 
   it("Ctrl+Enter also saves (non-mac users)", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLInputElement>('[data-test="ibm-binding"]').setValue("kept2");
+    await w.find<HTMLInputElement>('[data-test="ibm-binding"] input').setValue("kept2");
     await w.find('[data-test="ibm-overlay"]').trigger("keydown", { key: "Enter", ctrlKey: true });
     expect(w.emitted("update")).toHaveLength(1);
   });
@@ -241,7 +252,7 @@ describe("InjectorBindingModal — Save / Cancel / keybinds", () => {
 
   it("Save button becomes enabled after editing the binding", async () => {
     const w = mountModal(InjectorBindingModal, { props: { row: makeRow() } });
-    await w.find<HTMLInputElement>('[data-test="ibm-binding"]').setValue("changed");
+    await w.find<HTMLInputElement>('[data-test="ibm-binding"] input').setValue("changed");
     const btn = w.find<HTMLButtonElement>('[data-test="ibm-save"]');
     expect(btn.element.disabled).toBe(false);
   });
@@ -315,7 +326,7 @@ describe("InjectorBindingModal — general (template) row", () => {
     await w.find('[data-test="ibm-neg-insert-slot"]').trigger("click");
     await nextTick();
     expect(menuItem("input_0")).not.toBeNull();
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     await nextTick();
     expect(menuItem("input_0")).toBeNull();
   });
@@ -329,7 +340,7 @@ describe("InjectorBindingModal — general (template) row", () => {
     await w.find('[data-test="ibm-insert-slot"]').trigger("click");
     await nextTick();
     expect(menuItem("input_0")).not.toBeNull();
-    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     await nextTick();
     expect(menuItem("input_0")).toBeNull();
   });

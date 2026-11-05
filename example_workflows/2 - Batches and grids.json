@@ -1,0 +1,2383 @@
+{
+  "id": "20bbdf4c-4e74-51e2-86de-364f3c8b7f7c",
+  "revision": 0,
+  "last_node_id": 28,
+  "last_link_id": 27,
+  "nodes": [
+    {
+      "type": "WP_Note",
+      "size": [
+        620,
+        760
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Batches and grids\\n\\nOne **Run** makes nine images of the **same person in the same place**: three shots against three kinds of light, laid out as a labelled XY plot. A quick way to see what the framing and the light do. The lists come with this workflow. Read it left to right.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Sweep every combination |\\n| `2` | A prompt and a label per frame |\\n| `3` | Quick preview |\\n| `4` | One click, nine images |\\n| `5` | The grid |\\n| `6` | A new seed per frame (optional) |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n![The node toolbar, with the indigo ? help button](wp:asset/toolbar-help){width=70%}\\n\\n:pi-images: More ways to batch: [Make variations](docs:howto-variations){button pi-images}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"flag\", \"text\": \"### Batches and grids\\n\\nOne **Run** makes nine images of the **same person in the same place**: three shots against three kinds of light, laid out as a labelled XY plot. A quick way to see what the framing and the light do. The lists come with this workflow. Read it left to right.\\n\\n[Add this workflow's lists to my library](wp:library){button pi-download}\\n\\n| Key | Step |\\n|---|---|\\n| `1` | Sweep every combination |\\n| `2` | A prompt and a label per frame |\\n| `3` | Quick preview |\\n| `4` | One click, nine images |\\n| `5` | The grid |\\n| `6` | A new seed per frame (optional) |\\n\\n:pi-bookmark: Press a step's number key with the canvas focused, or click it in the **Bookmarks** dock (top bar). **Start here** is a bookmark too, so the dock always brings you back to this note.\\n\\n:pi-question-circle:{#6366f1} **Help for any node:** select it and press the indigo **?** in the toolbar above it. Its help page opens over the canvas, with what every socket and control does. On WP Toggles, Note and Bookmark the **pencil** next to it opens the editor.\\n\\n![The node toolbar, with the indigo ? help button](wp:asset/toolbar-help){width=70%}\\n\\n:pi-images: More ways to batch: [Make variations](docs:howto-variations){button pi-images}\\n\\n---\\n\\n**Questions, ideas, packs to share:**\\n\\n[Discord](https://discord.gg/BFYR9WQdVR){button pi-discord #5865f2} [Community packs](https://wp.dumiflex.dev){button pi-globe #22c55e} [Wiki](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki){button pi-github #8b949e} [About these examples](docs:howto-examples){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": -450.0, \"y\": 380.0}, \"zoomMode\": \"fixed\", \"zoom\": 0.7, \"shortcut\": \"\", \"order\": 0}}"
+      },
+      "id": 1,
+      "pos": [
+        -760,
+        0
+      ],
+      "title": "Start here",
+      "order": 0
+    },
+    {
+      "type": "WP_Note",
+      "size": [
+        1000,
+        250
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it once per frame. Its **Sweep combinations** walks *Shot* (3 options) against *Light* (3): 9 frames, and **count** follows it.\\n\\n**Hold other picks** keeps the same person, outfit, place, pose and angle on every frame, so only the swept lists change.\\n\\n[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1400, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"1\", \"order\": 1}}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 1, \"icon\": \"info-circle\", \"text\": \"The **Context Loop** runs everything after it once per frame. Its **Sweep combinations** walks *Shot* (3 options) against *Light* (3): 9 frames, and **count** follows it.\\n\\n**Hold other picks** keeps the same person, outfit, place, pose and angle on every frame, so only the swept lists change.\\n\\n[Sweep combinations](docs:wp-context-loop#sweep-combinations){button pi-th-large}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 1400, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.45, \"shortcut\": \"1\", \"order\": 1}}"
+      },
+      "id": 2,
+      "pos": [
+        0,
+        0
+      ],
+      "title": "Sweep every combination",
+      "order": 1
+    },
+    {
+      "type": "WP_ContextLoop",
+      "size": [
+        400,
+        460
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "values",
+          "name": "values",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "count",
+          "name": "count",
+          "type": "INT",
+          "widget": {
+            "name": "count"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "shape": 6,
+          "type": "PIPELINE_CONTEXT",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "loop_config",
+          "name": "loop_config",
+          "type": "WP_CONTEXT_LOOP_CONFIG",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_ContextLoop"
+      },
+      "widgets_values": [
+        7,
+        "randomize",
+        9,
+        "{\"strategy\": \"hash_index\", \"override_seed\": false, \"iteration_var_name\": \"iteration\", \"bypass\": false, \"iteration_internal\": true, \"total_internal\": true, \"seed_locks\": {}, \"bypass_frames\": [], \"sweep\": {\"enabled\": true, \"limit\": 64, \"hold_others\": true, \"axes\": [{\"uid\": \"2fc1017e64ee\", \"label\": \"Shot\", \"option_ids\": [\"0affffef\", \"eb83f7c2\", \"31064f78\"]}, {\"uid\": \"a1090adc2b02\", \"label\": \"Light\", \"option_ids\": [\"a6128275\", \"46b38494\", \"93c64d08\"]}]}}"
+      ],
+      "widgets_values_named": {
+        "seed": 7,
+        "control_after_generate": "randomize",
+        "count": 9,
+        "wp_context_loop_config": "{\"strategy\": \"hash_index\", \"override_seed\": false, \"iteration_var_name\": \"iteration\", \"bypass\": false, \"iteration_internal\": true, \"total_internal\": true, \"seed_locks\": {}, \"bypass_frames\": [], \"sweep\": {\"enabled\": true, \"limit\": 64, \"hold_others\": true, \"axes\": [{\"uid\": \"2fc1017e64ee\", \"label\": \"Shot\", \"option_ids\": [\"0affffef\", \"eb83f7c2\", \"31064f78\"]}, {\"uid\": \"a1090adc2b02\", \"label\": \"Light\", \"option_ids\": [\"a6128275\", \"46b38494\", \"93c64d08\"]}]}}"
+      },
+      "id": 3,
+      "pos": [
+        0,
+        360
+      ],
+      "order": 2
+    },
+    {
+      "type": "WP_Note",
+      "size": [
+        600,
+        200
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"box\", \"text\": \"**Person**, **Location**, **Wardrobe**, **Light**, **Camera**… are packs of lists stored in this workflow (grey **EXAMPLE** chip). Right-click a header → **Push to library…** to keep one.\\n\\n[Bundles](docs:bundles){button pi-box}\", \"color\": \"teal\", \"bookmark\": null}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"box\", \"text\": \"**Person**, **Location**, **Wardrobe**, **Light**, **Camera**… are packs of lists stored in this workflow (grey **EXAMPLE** chip). Right-click a header → **Push to library…** to keep one.\\n\\n[Bundles](docs:bundles){button pi-box}\", \"color\": \"teal\", \"bookmark\": null}"
+      },
+      "id": 4,
+      "pos": [
+        1060,
+        0
+      ],
+      "title": "Packs, built in",
+      "order": 3
+    },
+    {
+      "type": "WP_Context",
+      "size": [
+        600,
+        420
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "upstream",
+          "name": "upstream",
+          "shape": 7,
+          "type": "PIPELINE_CONTEXT",
+          "link": 1
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_Context"
+      },
+      "widgets_values": [
+        1,
+        "randomize",
+        "{\"version\": 1, \"modules\": [{\"id\": \"0b082d07\", \"_uid\": \"6375fb1d97a2\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Prompt style per model\", \"library_name\": \"Prompt style per model\", \"description\": \"Reads $model_variant / $model_family from WP Model Info and writes only quality words, never a style: Illustrious / NoobAI tags by default, Pony's score tags, nothing for sentence models (Flux, Z-Image, Qwen). Add your style (anime, photo, painting) to $head here or in the template.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"model_variant\", \"op\": \"equals\", \"value\": \"pony\"}, \"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"score_9, score_8_up, score_7_up,\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"score_4, score_5, score_6, worst quality, low quality, bad anatomy, bad hands, extra digits, watermark, text\"}]}, {\"condition\": {\"match\": \"any\", \"conditions\": [{\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"flux\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"zimage\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"qwen_image\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"hidream\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"chroma\"}]}, \"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"\"}]}, {\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"sd15\"}, \"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"best quality,\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"worst quality, low quality, bad anatomy, bad hands, extra digits, watermark, text\"}]}], \"id\": \"246930db\", \"else\": {\"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"masterpiece, best quality, amazing quality,\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"worst quality, low quality, bad anatomy, bad hands, extra digits, watermark, text\"}]}}]}, \"payload_hash\": \"c72a670dcdcd9f36a62005e1f4b76bdadf21bc888f82500688bd7ec0f04f1ead\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6e3ef3bf828d\"}, {\"id\": \"9a3f1945\", \"_uid\": \"dd9b9ff3c7dd\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender\", \"library_name\": \"Gender\", \"description\": \"Drives Facial hair, Makeup and Outfit through constraints.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"gender\", \"sub_categories\": [\"woman\", \"man\"], \"options\": [{\"id\": \"9adad1fd\", \"value\": \"woman\", \"weight\": 1, \"sub_categories\": [\"woman\"]}, {\"id\": \"8300095c\", \"value\": \"man\", \"weight\": 1, \"sub_categories\": [\"man\"]}]}, \"payload_hash\": \"19d9a10f5916d1f5c3a0e7f4fa6b2fdaaae44f0bda76ce3f96155a94dddc43dd\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"f25cf628\", \"_uid\": \"cb7d3224b25e\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Age\", \"library_name\": \"Age\", \"description\": \"Adults only, written as a number.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"age\", \"sub_categories\": [], \"options\": [{\"id\": \"5caa92d5\", \"value\": \"23-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"111f9c67\", \"value\": \"26-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"52489c9a\", \"value\": \"29-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"0bc654a3\", \"value\": \"32-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5e29898a\", \"value\": \"35-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"9bade608\", \"value\": \"38-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"3522665a\", \"value\": \"42-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"753d1a37\", \"value\": \"46-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"54a15ae6\", \"value\": \"53-year-old\", \"weight\": 0.5, \"sub_categories\": []}, {\"id\": \"21df8b52\", \"value\": \"61-year-old\", \"weight\": 0.5, \"sub_categories\": []}]}, \"payload_hash\": \"41ccf33b8334e3e2e74a1b1166b7a5a53a5b6a52b4351b649332ebd87df23b39\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"70619b6d\", \"_uid\": \"5626486c5d70\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Heritage\", \"library_name\": \"Heritage\", \"description\": \"Has a null option, so sometimes nothing is said.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"heritage\", \"sub_categories\": [], \"options\": [{\"id\": \"40ed16f3\", \"value\": \"Korean\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"79bd823a\", \"value\": \"Japanese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2dfec350\", \"value\": \"Chinese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"845c43ff\", \"value\": \"Vietnamese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a84f6db1\", \"value\": \"Indian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"81012a85\", \"value\": \"Pakistani\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"aa7b5bc6\", \"value\": \"Nigerian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ea7c86fc\", \"value\": \"Ethiopian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"3d0ce55d\", \"value\": \"Kenyan\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"bada42b0\", \"value\": \"Brazilian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"9d0ef689\", \"value\": \"Mexican\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"76a2a277\", \"value\": \"Colombian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b41122fb\", \"value\": \"Italian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4eca33bc\", \"value\": \"Spanish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"360a31e5\", \"value\": \"Irish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"49cee25a\", \"value\": \"Swedish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7b8e5c88\", \"value\": \"Polish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ec23acec\", \"value\": \"Greek\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1c05c8fe\", \"value\": \"Turkish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6b160c09\", \"value\": \"Lebanese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2123f36d\", \"value\": \"Egyptian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ea4e9b8c\", \"value\": \"Filipino\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2404d7e5\", \"value\": \"Indonesian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"f344ad80\", \"value\": \"Native American\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4f4cef3d\", \"value\": \"\", \"weight\": 4, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"514608e20ae1c4f5856e99496496bd6c18867aa6605809d04b366a8d8589a887\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"96ad1acb\", \"_uid\": \"82e140ea3651\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Build\", \"library_name\": \"Gender → Build\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"e9c58710\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Build\", \"exceptions\": [], \"matrix\": {\"man\": {\"femme\": {\"mode\": \"reduce\", \"factor\": 0.1}}, \"woman\": {\"masc\": {\"mode\": \"reduce\", \"factor\": 0.3}}}}, \"payload_hash\": \"139cda2076b61f48059efacb07d83a14040e3d08947e24dc6c2010f2ded8a9f6\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"e9c58710\", \"_uid\": \"606f1d23fedd\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Build\", \"library_name\": \"Build\"}, \"entries\": [], \"payload\": {\"var_binding\": \"build\", \"sub_categories\": [\"femme\", \"masc\"], \"options\": [{\"id\": \"dae92705\", \"value\": \"slim build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"fd402435\", \"value\": \"athletic build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6000e035\", \"value\": \"lean and tall\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7c3168e2\", \"value\": \"average build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6e63b9e9\", \"value\": \"muscular build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"94300844\", \"value\": \"soft, rounded figure\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"263c31e6\", \"value\": \"curvy figure\", \"weight\": 1, \"sub_categories\": [\"femme\"]}, {\"id\": \"d0cd3266\", \"value\": \"petite frame\", \"weight\": 1, \"sub_categories\": [\"femme\"]}, {\"id\": \"9ec00170\", \"value\": \"broad-shouldered\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"9a971e7c\", \"value\": \"stocky build\", \"weight\": 1, \"sub_categories\": [\"masc\"]}]}, \"payload_hash\": \"cb5a29941c23d45f82ca2d417c0ef2df2e0ab3f8b5ccf5c259dd04eb8a5bbbd4\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"1d179877\", \"_uid\": \"cae1896d4709\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Skin\", \"library_name\": \"Skin\", \"description\": \"One small detail, or nothing (null option).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"skin\", \"sub_categories\": [], \"options\": [{\"id\": \"3deeff48\", \"value\": \"light freckles across the nose\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4fc90072\", \"value\": \"sun-kissed skin\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1ef42dba\", \"value\": \"a small beauty mark on the cheek\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"50786da1\", \"value\": \"rosy cheeks\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"54ce625a\", \"value\": \"a light dusting of freckles on the shoulders\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"799e89ea\", \"value\": \"a small scar through one eyebrow\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"34949845\", \"value\": \"a tattoo sleeve on one arm\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"392ac2bf\", \"value\": \"\", \"weight\": 4, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"b2b6bdcc3592accc011ac36487d6180270f04aecde7b34b32dfd0341140390a4\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"43c4348a\", \"_uid\": \"0fa2a583f5f1\", \"type\": \"combine\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Subject\", \"library_name\": \"Subject\", \"description\": \"Builds the person's opening words from three picks.\"}, \"entries\": [], \"payload\": {\"template\": \"a $age $heritage $gender\", \"output_var\": \"subject\", \"input_vars\": [\"age\", \"heritage\", \"gender\"]}, \"payload_hash\": \"6d019be4d52cecc617dc1dac6c1a56c064429dd109277699dedd0f7ee0307426\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"c6cbcbbe\", \"_uid\": \"227040064d45\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Facial hair\", \"library_name\": \"Gender → Facial hair\", \"description\": \"An Only exception: a woman gets only the null option.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"c38fb66c\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Facial hair\", \"exceptions\": [{\"source_value\": \"woman\", \"target_value\": \"\", \"mode\": \"only\", \"factor\": 1}], \"matrix\": {}}, \"payload_hash\": \"d9e5f0a36f36a876100d74fb233399c7d6f0efd3b2a627d9876fdf601c5b6baf\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"db26678d\", \"_uid\": \"5e213ad9ebf1\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Makeup\", \"library_name\": \"Gender → Makeup\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"5bff8cc7\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Makeup\", \"exceptions\": [{\"source_value\": \"man\", \"target_value\": \"\", \"mode\": \"only\", \"factor\": 1}], \"matrix\": {}}, \"payload_hash\": \"29fb51b0736efd3463d0b3d91542f3062e09c68632862d008280df77afcbe08c\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"91fce542\", \"_uid\": \"288be4b478b8\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hair\", \"library_name\": \"Hair\", \"description\": \"Reads Hair colours through @{} references.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair\", \"sub_categories\": [], \"options\": [{\"id\": \"fe9594bb\", \"value\": \"short @{cae76267#Hair colours} pixie cut\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"270fac95\", \"value\": \"shoulder-length wavy @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"933213b1\", \"value\": \"long straight @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"02fde974\", \"value\": \"a messy @{cae76267#Hair colours} bun\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2e70ae63\", \"value\": \"curly @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a45878ff\", \"value\": \"a sleek @{cae76267#Hair colours} bob\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d488e788\", \"value\": \"braided @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e10be4da\", \"value\": \"a high @{cae76267#Hair colours} ponytail\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b2ae57ee\", \"value\": \"short cropped @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"97c05103\", \"value\": \"@{cae76267#Hair colours} hair in a side part\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d76ed1ac\", \"value\": \"a natural afro\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d7940c00\", \"value\": \"box braids\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1476ef2f\", \"value\": \"a buzz cut\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"83484816\", \"value\": \"a shaved head\", \"weight\": 0.4, \"sub_categories\": []}]}, \"payload_hash\": \"cb1cd388d8581b8d63483fbcc05d2c237920c4db1c3c65881740dca8bcdfaa87\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"c38fb66c\", \"_uid\": \"c4416ba3c85f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Facial hair\", \"library_name\": \"Facial hair\", \"description\": \"Only a man gets one (constraint with an Only exception).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"facial_hair\", \"sub_categories\": [\"masc\"], \"options\": [{\"id\": \"1dd7f6a8\", \"value\": \"light stubble\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"e9a40a8c\", \"value\": \"a short beard\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"2bbaa139\", \"value\": \"a full beard\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"9aa04e69\", \"value\": \"a neat moustache\", \"weight\": 0.5, \"sub_categories\": [\"masc\"]}, {\"id\": \"e98c254c\", \"value\": \"\", \"weight\": 3, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"2fdff00024f785be6107c23a41d4a875c3e4dca7f68427fedca64b98b32a4a05\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"d4ccad74\", \"_uid\": \"fe1d980e043f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Eyes\", \"library_name\": \"Eyes\"}, \"entries\": [], \"payload\": {\"var_binding\": \"eyes\", \"sub_categories\": [], \"options\": [{\"id\": \"688c9319\", \"value\": \"hazel eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"aaaaf657\", \"value\": \"deep brown eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"50cc22a6\", \"value\": \"grey-green eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"0b00c70e\", \"value\": \"blue eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b868ce8e\", \"value\": \"amber eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6143a080\", \"value\": \"dark eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"bae8bb45\", \"value\": \"light green eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"056788d2\", \"value\": \"\", \"weight\": 3, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"e85976f8deacb0116c7392cd76136015f01799c59d5c449c65fa8d94415643ac\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"5bff8cc7\", \"_uid\": \"8b06eeebbd78\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Makeup\", \"library_name\": \"Makeup\", \"description\": \"A man gets the null option (Only row). Wide shots drop it: too small to see.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"makeup\", \"sub_categories\": [\"natural\", \"bold\"], \"options\": [{\"id\": \"20aed142\", \"value\": \"natural makeup\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"470ebec5\", \"value\": \"no makeup\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"40f7dcda\", \"value\": \"soft rosy blush\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"da6a7aad\", \"value\": \"red lipstick\", \"weight\": 1, \"sub_categories\": [\"bold\"]}, {\"id\": \"9355f2d9\", \"value\": \"winged eyeliner\", \"weight\": 1, \"sub_categories\": [\"bold\"]}, {\"id\": \"f30c1d61\", \"value\": \"smoky eye makeup\", \"weight\": 1, \"sub_categories\": [\"bold\"]}, {\"id\": \"0bd43bba\", \"value\": \"glossy lips\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"6271da40\", \"value\": \"\", \"weight\": 2, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"ebb148889ba9cb41439a44ddbe8f336910f0cb0c9467425f0be135f5353e6855\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"cae76267\", \"_uid\": \"0e7c1f12a3cf\", \"type\": \"wildcard\", \"enabled\": false, \"collapsed\": true, \"meta\": {\"name\": \"Hair colours\", \"library_name\": \"Hair colours\", \"description\": \"A shared list the Hair options read through @{}. Switched off: it never writes a variable itself.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair_colour\", \"sub_categories\": [], \"options\": [{\"id\": \"e6c116ee\", \"value\": \"jet black\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a6aa5a8b\", \"value\": \"dark brown\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"933e05e9\", \"value\": \"chestnut\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6ef93dd\", \"value\": \"honey blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"922059bd\", \"value\": \"platinum blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ac054c4d\", \"value\": \"copper red\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"dfdf8f69\", \"value\": \"auburn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b371fc4c\", \"value\": \"ash brown\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"87f03064\", \"value\": \"salt-and-pepper\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4f3c9269\", \"value\": \"silver-grey\", \"weight\": 0.5, \"sub_categories\": []}, {\"id\": \"0e017322\", \"value\": \"pastel pink\", \"weight\": 0.3, \"sub_categories\": []}]}, \"payload_hash\": \"3f5caa7b4dc0590c288c66d4f7923ba0a097816e239b1d0f64c38239cb41ad60\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"3d8aac3e72b2\"}], \"bundles\": [{\"_uid\": \"6e3ef3bf828d\", \"library_id\": \"cdb998b7\", \"start_idx\": 0, \"end_idx\": 0, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Render\", \"color\": \"#6b7280\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"95db8d1799a8\", \"library_id\": \"50a23553\", \"start_idx\": 1, \"end_idx\": 14, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Person\", \"color\": \"#c9637a\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"1ea7b1d32c73\", \"library_id\": \"8cae90ec\", \"start_idx\": 1, \"end_idx\": 7, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Identity\", \"color\": \"#c9637a\", \"parent_uid\": \"95db8d1799a8\", \"example\": true}, {\"_uid\": \"86ac8be8380c\", \"library_id\": \"df1e4266\", \"start_idx\": 8, \"end_idx\": 13, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Look\", \"color\": \"#c9637a\", \"parent_uid\": \"95db8d1799a8\", \"example\": true}, {\"_uid\": \"3d8aac3e72b2\", \"library_id\": \"f9efda15\", \"start_idx\": 14, \"end_idx\": 14, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Shared lists\", \"color\": \"#8b8b8b\", \"parent_uid\": \"95db8d1799a8\", \"example\": true}]}"
+      ],
+      "widgets_values_named": {
+        "seed": 1,
+        "control_after_generate": "randomize",
+        "wp_modules": "{\"version\": 1, \"modules\": [{\"id\": \"0b082d07\", \"_uid\": \"6375fb1d97a2\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Prompt style per model\", \"library_name\": \"Prompt style per model\", \"description\": \"Reads $model_variant / $model_family from WP Model Info and writes only quality words, never a style: Illustrious / NoobAI tags by default, Pony's score tags, nothing for sentence models (Flux, Z-Image, Qwen). Add your style (anime, photo, painting) to $head here or in the template.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"var\": \"model_variant\", \"op\": \"equals\", \"value\": \"pony\"}, \"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"score_9, score_8_up, score_7_up,\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"score_4, score_5, score_6, worst quality, low quality, bad anatomy, bad hands, extra digits, watermark, text\"}]}, {\"condition\": {\"match\": \"any\", \"conditions\": [{\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"flux\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"zimage\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"qwen_image\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"hidream\"}, {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"chroma\"}]}, \"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"\"}]}, {\"condition\": {\"var\": \"model_family\", \"op\": \"equals\", \"value\": \"sd15\"}, \"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"best quality,\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"worst quality, low quality, bad anatomy, bad hands, extra digits, watermark, text\"}]}], \"id\": \"246930db\", \"else\": {\"action\": {\"target_var\": \"head\", \"mode\": \"replace\", \"value\": \"masterpiece, best quality, amazing quality,\"}, \"extra_actions\": [{\"target_var\": \"tail\", \"mode\": \"replace\", \"value\": \"\"}, {\"target_var\": \"neg_base\", \"mode\": \"replace\", \"value\": \"worst quality, low quality, bad anatomy, bad hands, extra digits, watermark, text\"}]}}]}, \"payload_hash\": \"c72a670dcdcd9f36a62005e1f4b76bdadf21bc888f82500688bd7ec0f04f1ead\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6e3ef3bf828d\"}, {\"id\": \"9a3f1945\", \"_uid\": \"dd9b9ff3c7dd\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender\", \"library_name\": \"Gender\", \"description\": \"Drives Facial hair, Makeup and Outfit through constraints.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"gender\", \"sub_categories\": [\"woman\", \"man\"], \"options\": [{\"id\": \"9adad1fd\", \"value\": \"woman\", \"weight\": 1, \"sub_categories\": [\"woman\"]}, {\"id\": \"8300095c\", \"value\": \"man\", \"weight\": 1, \"sub_categories\": [\"man\"]}]}, \"payload_hash\": \"19d9a10f5916d1f5c3a0e7f4fa6b2fdaaae44f0bda76ce3f96155a94dddc43dd\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"f25cf628\", \"_uid\": \"cb7d3224b25e\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Age\", \"library_name\": \"Age\", \"description\": \"Adults only, written as a number.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"age\", \"sub_categories\": [], \"options\": [{\"id\": \"5caa92d5\", \"value\": \"23-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"111f9c67\", \"value\": \"26-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"52489c9a\", \"value\": \"29-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"0bc654a3\", \"value\": \"32-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5e29898a\", \"value\": \"35-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"9bade608\", \"value\": \"38-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"3522665a\", \"value\": \"42-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"753d1a37\", \"value\": \"46-year-old\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"54a15ae6\", \"value\": \"53-year-old\", \"weight\": 0.5, \"sub_categories\": []}, {\"id\": \"21df8b52\", \"value\": \"61-year-old\", \"weight\": 0.5, \"sub_categories\": []}]}, \"payload_hash\": \"41ccf33b8334e3e2e74a1b1166b7a5a53a5b6a52b4351b649332ebd87df23b39\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"70619b6d\", \"_uid\": \"5626486c5d70\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Heritage\", \"library_name\": \"Heritage\", \"description\": \"Has a null option, so sometimes nothing is said.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"heritage\", \"sub_categories\": [], \"options\": [{\"id\": \"40ed16f3\", \"value\": \"Korean\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"79bd823a\", \"value\": \"Japanese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2dfec350\", \"value\": \"Chinese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"845c43ff\", \"value\": \"Vietnamese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a84f6db1\", \"value\": \"Indian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"81012a85\", \"value\": \"Pakistani\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"aa7b5bc6\", \"value\": \"Nigerian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ea7c86fc\", \"value\": \"Ethiopian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"3d0ce55d\", \"value\": \"Kenyan\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"bada42b0\", \"value\": \"Brazilian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"9d0ef689\", \"value\": \"Mexican\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"76a2a277\", \"value\": \"Colombian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b41122fb\", \"value\": \"Italian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4eca33bc\", \"value\": \"Spanish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"360a31e5\", \"value\": \"Irish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"49cee25a\", \"value\": \"Swedish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7b8e5c88\", \"value\": \"Polish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ec23acec\", \"value\": \"Greek\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1c05c8fe\", \"value\": \"Turkish\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6b160c09\", \"value\": \"Lebanese\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2123f36d\", \"value\": \"Egyptian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ea4e9b8c\", \"value\": \"Filipino\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2404d7e5\", \"value\": \"Indonesian\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"f344ad80\", \"value\": \"Native American\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4f4cef3d\", \"value\": \"\", \"weight\": 4, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"514608e20ae1c4f5856e99496496bd6c18867aa6605809d04b366a8d8589a887\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"96ad1acb\", \"_uid\": \"82e140ea3651\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Build\", \"library_name\": \"Gender → Build\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"e9c58710\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Build\", \"exceptions\": [], \"matrix\": {\"man\": {\"femme\": {\"mode\": \"reduce\", \"factor\": 0.1}}, \"woman\": {\"masc\": {\"mode\": \"reduce\", \"factor\": 0.3}}}}, \"payload_hash\": \"139cda2076b61f48059efacb07d83a14040e3d08947e24dc6c2010f2ded8a9f6\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"e9c58710\", \"_uid\": \"606f1d23fedd\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Build\", \"library_name\": \"Build\"}, \"entries\": [], \"payload\": {\"var_binding\": \"build\", \"sub_categories\": [\"femme\", \"masc\"], \"options\": [{\"id\": \"dae92705\", \"value\": \"slim build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"fd402435\", \"value\": \"athletic build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6000e035\", \"value\": \"lean and tall\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7c3168e2\", \"value\": \"average build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6e63b9e9\", \"value\": \"muscular build\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"94300844\", \"value\": \"soft, rounded figure\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"263c31e6\", \"value\": \"curvy figure\", \"weight\": 1, \"sub_categories\": [\"femme\"]}, {\"id\": \"d0cd3266\", \"value\": \"petite frame\", \"weight\": 1, \"sub_categories\": [\"femme\"]}, {\"id\": \"9ec00170\", \"value\": \"broad-shouldered\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"9a971e7c\", \"value\": \"stocky build\", \"weight\": 1, \"sub_categories\": [\"masc\"]}]}, \"payload_hash\": \"cb5a29941c23d45f82ca2d417c0ef2df2e0ab3f8b5ccf5c259dd04eb8a5bbbd4\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"1d179877\", \"_uid\": \"cae1896d4709\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Skin\", \"library_name\": \"Skin\", \"description\": \"One small detail, or nothing (null option).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"skin\", \"sub_categories\": [], \"options\": [{\"id\": \"3deeff48\", \"value\": \"light freckles across the nose\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4fc90072\", \"value\": \"sun-kissed skin\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1ef42dba\", \"value\": \"a small beauty mark on the cheek\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"50786da1\", \"value\": \"rosy cheeks\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"54ce625a\", \"value\": \"a light dusting of freckles on the shoulders\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"799e89ea\", \"value\": \"a small scar through one eyebrow\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"34949845\", \"value\": \"a tattoo sleeve on one arm\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"392ac2bf\", \"value\": \"\", \"weight\": 4, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"b2b6bdcc3592accc011ac36487d6180270f04aecde7b34b32dfd0341140390a4\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"43c4348a\", \"_uid\": \"0fa2a583f5f1\", \"type\": \"combine\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Subject\", \"library_name\": \"Subject\", \"description\": \"Builds the person's opening words from three picks.\"}, \"entries\": [], \"payload\": {\"template\": \"a $age $heritage $gender\", \"output_var\": \"subject\", \"input_vars\": [\"age\", \"heritage\", \"gender\"]}, \"payload_hash\": \"6d019be4d52cecc617dc1dac6c1a56c064429dd109277699dedd0f7ee0307426\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"1ea7b1d32c73\"}, {\"id\": \"c6cbcbbe\", \"_uid\": \"227040064d45\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Facial hair\", \"library_name\": \"Gender → Facial hair\", \"description\": \"An Only exception: a woman gets only the null option.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"c38fb66c\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Facial hair\", \"exceptions\": [{\"source_value\": \"woman\", \"target_value\": \"\", \"mode\": \"only\", \"factor\": 1}], \"matrix\": {}}, \"payload_hash\": \"d9e5f0a36f36a876100d74fb233399c7d6f0efd3b2a627d9876fdf601c5b6baf\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"db26678d\", \"_uid\": \"5e213ad9ebf1\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Makeup\", \"library_name\": \"Gender → Makeup\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"5bff8cc7\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Makeup\", \"exceptions\": [{\"source_value\": \"man\", \"target_value\": \"\", \"mode\": \"only\", \"factor\": 1}], \"matrix\": {}}, \"payload_hash\": \"29fb51b0736efd3463d0b3d91542f3062e09c68632862d008280df77afcbe08c\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"91fce542\", \"_uid\": \"288be4b478b8\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Hair\", \"library_name\": \"Hair\", \"description\": \"Reads Hair colours through @{} references.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair\", \"sub_categories\": [], \"options\": [{\"id\": \"fe9594bb\", \"value\": \"short @{cae76267#Hair colours} pixie cut\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"270fac95\", \"value\": \"shoulder-length wavy @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"933213b1\", \"value\": \"long straight @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"02fde974\", \"value\": \"a messy @{cae76267#Hair colours} bun\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2e70ae63\", \"value\": \"curly @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a45878ff\", \"value\": \"a sleek @{cae76267#Hair colours} bob\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d488e788\", \"value\": \"braided @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e10be4da\", \"value\": \"a high @{cae76267#Hair colours} ponytail\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b2ae57ee\", \"value\": \"short cropped @{cae76267#Hair colours} hair\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"97c05103\", \"value\": \"@{cae76267#Hair colours} hair in a side part\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d76ed1ac\", \"value\": \"a natural afro\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d7940c00\", \"value\": \"box braids\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1476ef2f\", \"value\": \"a buzz cut\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"83484816\", \"value\": \"a shaved head\", \"weight\": 0.4, \"sub_categories\": []}]}, \"payload_hash\": \"cb1cd388d8581b8d63483fbcc05d2c237920c4db1c3c65881740dca8bcdfaa87\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"c38fb66c\", \"_uid\": \"c4416ba3c85f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Facial hair\", \"library_name\": \"Facial hair\", \"description\": \"Only a man gets one (constraint with an Only exception).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"facial_hair\", \"sub_categories\": [\"masc\"], \"options\": [{\"id\": \"1dd7f6a8\", \"value\": \"light stubble\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"e9a40a8c\", \"value\": \"a short beard\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"2bbaa139\", \"value\": \"a full beard\", \"weight\": 1, \"sub_categories\": [\"masc\"]}, {\"id\": \"9aa04e69\", \"value\": \"a neat moustache\", \"weight\": 0.5, \"sub_categories\": [\"masc\"]}, {\"id\": \"e98c254c\", \"value\": \"\", \"weight\": 3, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"2fdff00024f785be6107c23a41d4a875c3e4dca7f68427fedca64b98b32a4a05\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"d4ccad74\", \"_uid\": \"fe1d980e043f\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Eyes\", \"library_name\": \"Eyes\"}, \"entries\": [], \"payload\": {\"var_binding\": \"eyes\", \"sub_categories\": [], \"options\": [{\"id\": \"688c9319\", \"value\": \"hazel eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"aaaaf657\", \"value\": \"deep brown eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"50cc22a6\", \"value\": \"grey-green eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"0b00c70e\", \"value\": \"blue eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b868ce8e\", \"value\": \"amber eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"6143a080\", \"value\": \"dark eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"bae8bb45\", \"value\": \"light green eyes\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"056788d2\", \"value\": \"\", \"weight\": 3, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"e85976f8deacb0116c7392cd76136015f01799c59d5c449c65fa8d94415643ac\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"5bff8cc7\", \"_uid\": \"8b06eeebbd78\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Makeup\", \"library_name\": \"Makeup\", \"description\": \"A man gets the null option (Only row). Wide shots drop it: too small to see.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"makeup\", \"sub_categories\": [\"natural\", \"bold\"], \"options\": [{\"id\": \"20aed142\", \"value\": \"natural makeup\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"470ebec5\", \"value\": \"no makeup\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"40f7dcda\", \"value\": \"soft rosy blush\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"da6a7aad\", \"value\": \"red lipstick\", \"weight\": 1, \"sub_categories\": [\"bold\"]}, {\"id\": \"9355f2d9\", \"value\": \"winged eyeliner\", \"weight\": 1, \"sub_categories\": [\"bold\"]}, {\"id\": \"f30c1d61\", \"value\": \"smoky eye makeup\", \"weight\": 1, \"sub_categories\": [\"bold\"]}, {\"id\": \"0bd43bba\", \"value\": \"glossy lips\", \"weight\": 1, \"sub_categories\": [\"natural\"]}, {\"id\": \"6271da40\", \"value\": \"\", \"weight\": 2, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"ebb148889ba9cb41439a44ddbe8f336910f0cb0c9467425f0be135f5353e6855\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"86ac8be8380c\"}, {\"id\": \"cae76267\", \"_uid\": \"0e7c1f12a3cf\", \"type\": \"wildcard\", \"enabled\": false, \"collapsed\": true, \"meta\": {\"name\": \"Hair colours\", \"library_name\": \"Hair colours\", \"description\": \"A shared list the Hair options read through @{}. Switched off: it never writes a variable itself.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"hair_colour\", \"sub_categories\": [], \"options\": [{\"id\": \"e6c116ee\", \"value\": \"jet black\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a6aa5a8b\", \"value\": \"dark brown\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"933e05e9\", \"value\": \"chestnut\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e6ef93dd\", \"value\": \"honey blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"922059bd\", \"value\": \"platinum blonde\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"ac054c4d\", \"value\": \"copper red\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"dfdf8f69\", \"value\": \"auburn\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b371fc4c\", \"value\": \"ash brown\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"87f03064\", \"value\": \"salt-and-pepper\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4f3c9269\", \"value\": \"silver-grey\", \"weight\": 0.5, \"sub_categories\": []}, {\"id\": \"0e017322\", \"value\": \"pastel pink\", \"weight\": 0.3, \"sub_categories\": []}]}, \"payload_hash\": \"3f5caa7b4dc0590c288c66d4f7923ba0a097816e239b1d0f64c38239cb41ad60\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"3d8aac3e72b2\"}], \"bundles\": [{\"_uid\": \"6e3ef3bf828d\", \"library_id\": \"cdb998b7\", \"start_idx\": 0, \"end_idx\": 0, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Render\", \"color\": \"#6b7280\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"95db8d1799a8\", \"library_id\": \"50a23553\", \"start_idx\": 1, \"end_idx\": 14, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Person\", \"color\": \"#c9637a\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"1ea7b1d32c73\", \"library_id\": \"8cae90ec\", \"start_idx\": 1, \"end_idx\": 7, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Identity\", \"color\": \"#c9637a\", \"parent_uid\": \"95db8d1799a8\", \"example\": true}, {\"_uid\": \"86ac8be8380c\", \"library_id\": \"df1e4266\", \"start_idx\": 8, \"end_idx\": 13, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Look\", \"color\": \"#c9637a\", \"parent_uid\": \"95db8d1799a8\", \"example\": true}, {\"_uid\": \"3d8aac3e72b2\", \"library_id\": \"f9efda15\", \"start_idx\": 14, \"end_idx\": 14, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Shared lists\", \"color\": \"#8b8b8b\", \"parent_uid\": \"95db8d1799a8\", \"example\": true}]}"
+      },
+      "id": 5,
+      "pos": [
+        460,
+        360
+      ],
+      "title": "WP Context · Person",
+      "order": 4
+    },
+    {
+      "type": "WP_Context",
+      "size": [
+        600,
+        420
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "upstream",
+          "name": "upstream",
+          "shape": 7,
+          "type": "PIPELINE_CONTEXT",
+          "link": 2
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "links": [
+            3,
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_Context"
+      },
+      "widgets_values": [
+        2,
+        "randomize",
+        "{\"version\": 1, \"modules\": [{\"id\": \"e752635f\", \"_uid\": \"017f60a54d8d\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Place\", \"library_name\": \"Place\", \"description\": \"Tagged studio, home, urban, nature, coast: the tags drive Time and Outfit.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"place\", \"sub_categories\": [\"studio\", \"home\", \"urban\", \"nature\", \"coast\"], \"options\": [{\"id\": \"988e3854\", \"value\": \"in a studio against a plain grey backdrop\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"877ca29a\", \"value\": \"in a studio with a warm beige paper backdrop\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"572428f1\", \"value\": \"in front of a textured plaster wall in a studio\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"aaad8684\", \"value\": \"in a sunlit loft apartment\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"292eacc5\", \"value\": \"in a cosy living room with plants\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"14720b56\", \"value\": \"in a minimalist kitchen\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"ad27a7ff\", \"value\": \"on a rumpled bed in a bright bedroom\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"b4cd071c\", \"value\": \"on a busy city sidewalk\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"2f4cecf7\", \"value\": \"in a narrow cobblestone alley\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"3b473cc3\", \"value\": \"on a rooftop terrace overlooking the city\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"be9c143e\", \"value\": \"in a retro diner booth\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"e6db4fb7\", \"value\": \"on a subway platform\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"08a46817\", \"value\": \"in a quiet café by the window\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"80bc8d6c\", \"value\": \"in a wildflower meadow\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"7c50513a\", \"value\": \"on a forest trail\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"33e79105\", \"value\": \"by a mountain lake\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"bea50e57\", \"value\": \"in a desert canyon\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"315e5e43\", \"value\": \"on a sandy beach\", \"weight\": 1, \"sub_categories\": [\"coast\"]}, {\"id\": \"7cdc9fbe\", \"value\": \"on a wooden pier\", \"weight\": 1, \"sub_categories\": [\"coast\"]}, {\"id\": \"6930a321\", \"value\": \"on rocky sea cliffs\", \"weight\": 1, \"sub_categories\": [\"coast\"]}]}, \"payload_hash\": \"cf90d81f6944d78ed67e4ba3d734e8e0dca60daa7e1f9ae6c6f02feacc49458b\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6d3ee007ec43\"}, {\"id\": \"1d1180e8\", \"_uid\": \"51501f1aff74\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Place → Time\", \"library_name\": \"Place → Time\", \"description\": \"A studio only takes the studio option; everywhere else never does.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"e752635f\", \"target_wildcard_id\": \"e49091a7\", \"source_wildcard_name\": \"Place\", \"target_wildcard_name\": \"Time of day\", \"exceptions\": [], \"matrix\": {\"studio\": {\"studio\": {\"mode\": \"only\", \"factor\": 1}}, \"home\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}}, \"urban\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}}, \"nature\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}, \"night\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"coast\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}}}}, \"payload_hash\": \"01d9b181c82593ffd1c1f8e2620534e8f69f721a97a600ce447b499b68940ade\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6d3ee007ec43\"}, {\"id\": \"e49091a7\", \"_uid\": \"d013eda11f54\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Time of day\", \"library_name\": \"Time of day\", \"description\": \"A studio has no time of day, so it has an option of its own.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"time\", \"sub_categories\": [\"day\", \"golden\", \"night\", \"studio\"], \"options\": [{\"id\": \"e6145a2e\", \"value\": \"in the morning\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"869a72e7\", \"value\": \"at midday\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"bd25bafa\", \"value\": \"on an overcast afternoon\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"06391224\", \"value\": \"at golden hour\", \"weight\": 1.5, \"sub_categories\": [\"golden\"]}, {\"id\": \"0085f5bd\", \"value\": \"at blue hour\", \"weight\": 1, \"sub_categories\": [\"night\"]}, {\"id\": \"38dd870e\", \"value\": \"at night\", \"weight\": 1, \"sub_categories\": [\"night\"]}, {\"id\": \"616e198d\", \"value\": \"under studio lights\", \"weight\": 1, \"sub_categories\": [\"studio\"]}]}, \"payload_hash\": \"9342cfa07a970297ba9ef2fcaaf000d37fc45972169713e1d95be89547466e3b\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6d3ee007ec43\"}, {\"id\": \"2a39c017\", \"_uid\": \"4c2a0cbac7ea\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Place → Outfit\", \"library_name\": \"Place → Outfit\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"e752635f\", \"target_wildcard_id\": \"cc47ffd0\", \"source_wildcard_name\": \"Place\", \"target_wildcard_name\": \"Outfit\", \"exceptions\": [], \"matrix\": {\"coast\": {\"swim\": {\"mode\": \"boost\", \"factor\": 5}, \"summer\": {\"mode\": \"boost\", \"factor\": 2}, \"outerwear\": {\"mode\": \"exclude\", \"factor\": 0}, \"formal\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"nature\": {\"sport\": {\"mode\": \"boost\", \"factor\": 2}, \"outerwear\": {\"mode\": \"boost\", \"factor\": 3}, \"formal\": {\"mode\": \"reduce\", \"factor\": 0.2}, \"swim\": {\"mode\": \"exclude\", \"factor\": 0}}, \"urban\": {\"street\": {\"mode\": \"boost\", \"factor\": 2}, \"swim\": {\"mode\": \"exclude\", \"factor\": 0}, \"lounge\": {\"mode\": \"exclude\", \"factor\": 0}}, \"home\": {\"lounge\": {\"mode\": \"boost\", \"factor\": 4}, \"swim\": {\"mode\": \"exclude\", \"factor\": 0}, \"outerwear\": {\"mode\": \"reduce\", \"factor\": 0.2}}, \"studio\": {\"swim\": {\"mode\": \"reduce\", \"factor\": 0.3}}}}, \"payload_hash\": \"5cc426edd1bdde09a78c2a094ce4a486b00aeb02a9398de99e46dd943974780f\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"289b8344\", \"_uid\": \"6daa15e54a0b\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Outfit\", \"library_name\": \"Gender → Outfit\", \"description\": \"Reads Gender from the first Context: a constraint works across nodes.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"cc47ffd0\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Outfit\", \"exceptions\": [], \"matrix\": {\"man\": {\"femme\": {\"mode\": \"reduce\", \"factor\": 0.1}}, \"woman\": {\"masc\": {\"mode\": \"reduce\", \"factor\": 0.2}}}}, \"payload_hash\": \"cafceb22381a61e61e952b1cc3cff2a318cd00698e47621535d2c8aca811b28e\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"cc47ffd0\", \"_uid\": \"e30f7109ef10\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Outfit\", \"library_name\": \"Outfit\", \"description\": \"Tags say what each outfit is; the SHOES tags are choices (accepts), printed as $outfit.SHOES. The grey sweater is the fallback when the rules leave nothing.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"outfit\", \"sub_categories\": [\"casual\", \"sneakers\", \"boots\", \"ankle-boots\", \"loafers\", \"street\", \"formal\", \"femme\", \"heels\", \"sandals\", \"summer\", \"swim\", \"barefoot\", \"masc\", \"sport\", \"trainers\", \"outerwear\", \"lounge\"], \"options\": [{\"id\": \"dca2ecff\", \"value\": \"a white t-shirt and light-wash jeans\", \"weight\": 1, \"sub_categories\": [\"casual\", \"sneakers\", \"boots\"]}, {\"id\": \"07963ab0\", \"value\": \"an oversized knit sweater and black jeans\", \"weight\": 1, \"sub_categories\": [\"casual\", \"ankle-boots\", \"sneakers\"]}, {\"id\": \"507f1f44\", \"value\": \"a linen shirt and chinos\", \"weight\": 1, \"sub_categories\": [\"casual\", \"loafers\", \"sneakers\"]}, {\"id\": \"cee6b10d\", \"value\": \"a denim jacket over a hoodie\", \"weight\": 1, \"sub_categories\": [\"street\", \"sneakers\"]}, {\"id\": \"a2099aeb\", \"value\": \"a black leather jacket and dark jeans\", \"weight\": 1, \"sub_categories\": [\"street\", \"boots\"]}, {\"id\": \"c31a9a96\", \"value\": \"cargo pants and a cropped bomber jacket\", \"weight\": 1, \"sub_categories\": [\"street\", \"sneakers\"]}, {\"id\": \"231b1a23\", \"value\": \"a tailored charcoal suit\", \"weight\": 1, \"sub_categories\": [\"formal\", \"loafers\"]}, {\"id\": \"3c1a07d2\", \"value\": \"a black slip dress\", \"weight\": 1, \"sub_categories\": [\"formal\", \"femme\", \"heels\", \"sandals\"]}, {\"id\": \"da21d84f\", \"value\": \"an emerald satin evening gown\", \"weight\": 0.6, \"sub_categories\": [\"formal\", \"femme\", \"heels\"]}, {\"id\": \"b1701f3a\", \"value\": \"a crisp white button-up and pleated trousers\", \"weight\": 1, \"sub_categories\": [\"formal\", \"loafers\", \"heels\"]}, {\"id\": \"28b153b3\", \"value\": \"a floral sundress\", \"weight\": 1, \"sub_categories\": [\"summer\", \"femme\", \"sandals\", \"sneakers\"]}, {\"id\": \"eddb0e91\", \"value\": \"linen shorts and a short-sleeved shirt\", \"weight\": 1, \"sub_categories\": [\"summer\", \"sandals\", \"sneakers\"]}, {\"id\": \"cc91f474\", \"value\": \"a ribbed tank top and a midi skirt\", \"weight\": 1, \"sub_categories\": [\"summer\", \"femme\", \"sandals\"]}, {\"id\": \"b6b14e34\", \"value\": \"a black one-piece swimsuit\", \"weight\": 0.6, \"sub_categories\": [\"swim\", \"femme\", \"barefoot\"], \"negative\": \"jeans, jacket\"}, {\"id\": \"c4d4f063\", \"value\": \"swim shorts and an open shirt\", \"weight\": 0.6, \"sub_categories\": [\"swim\", \"masc\", \"barefoot\"], \"negative\": \"jeans, jacket\"}, {\"id\": \"36e1c87e\", \"value\": \"leggings and a sports bra\", \"weight\": 1, \"sub_categories\": [\"sport\", \"femme\", \"trainers\"]}, {\"id\": \"c9d31f56\", \"value\": \"a track jacket and joggers\", \"weight\": 1, \"sub_categories\": [\"sport\", \"trainers\"]}, {\"id\": \"429d32ec\", \"value\": \"a long camel wool coat over a turtleneck\", \"weight\": 1, \"sub_categories\": [\"outerwear\", \"ankle-boots\", \"loafers\"]}, {\"id\": \"b3448400\", \"value\": \"a waxed rain jacket and hiking trousers\", \"weight\": 1, \"sub_categories\": [\"outerwear\", \"boots\"]}, {\"id\": \"665c5177\", \"value\": \"a cosy oversized hoodie and sweatpants\", \"weight\": 1, \"sub_categories\": [\"lounge\", \"barefoot\", \"sneakers\"]}, {\"id\": \"5b0f99a6\", \"value\": \"a silk robe over pyjamas\", \"weight\": 0.6, \"sub_categories\": [\"lounge\", \"barefoot\"]}, {\"id\": \"d71f7c3d\", \"value\": \"a plain grey crew-neck sweater and jeans\", \"weight\": 1, \"sub_categories\": [\"casual\", \"sneakers\", \"ankle-boots\"], \"fallback\": true}], \"tag_groups\": {\"SHOES\": [\"sneakers\", \"boots\", \"heels\", \"loafers\", \"sandals\", \"barefoot\", \"trainers\", \"ankle-boots\"]}, \"tag_group_kinds\": {\"SHOES\": \"accepts\"}}, \"payload_hash\": \"cef550eece7841e2daca412b8a85e34d16b1cde1ab406c81493eedf3f2baac67\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"a475e205\", \"_uid\": \"51129ba264b5\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Accessories\", \"library_name\": \"Accessories\", \"description\": \"Picks 0 to 2 (multi-pick range on this row).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"accessories\", \"sub_categories\": [], \"options\": [{\"id\": \"cd669eeb\", \"value\": \"thin gold hoop earrings\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e4f8b7a9\", \"value\": \"a silver chain necklace\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"40366238\", \"value\": \"round tortoiseshell glasses\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"f1c957b0\", \"value\": \"a leather watch\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"65b5f74b\", \"value\": \"a wide-brim hat\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"3b1b5b37\", \"value\": \"a silk scarf\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"77dfc203\", \"value\": \"a canvas tote bag\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c857c2e1\", \"value\": \"small stud earrings\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"cec525ae\", \"value\": \"aviator sunglasses\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"e7874660cfa3c0ab955198c1c107786eb4b4ce56d2d268dcae79dee1ebb5a352\", \"instance\": {\"pick_min\": 0, \"pick_max\": 2, \"pick_separator\": \", \"}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"7e904d0e\", \"_uid\": \"14ff9dd7795e\", \"type\": \"combine\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shoes line\", \"library_name\": \"Shoes line\", \"description\": \"Reads the shoes rolled with the outfit. Framing hides details empties it in tight shots.\"}, \"entries\": [], \"payload\": {\"template\": \"and $outfit.SHOES\", \"output_var\": \"shoes_line\", \"input_vars\": [\"outfit\"]}, \"payload_hash\": \"9a2a38b9869f818fab5c33d58f2f515a761467862004fd010794f29557a625a5\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"e401c357\", \"_uid\": \"a1090adc2b02\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Light\", \"library_name\": \"Light\", \"description\": \"Tagged by when it can happen; Time → Light keeps it believable.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"light\", \"sub_categories\": [\"studio\", \"day\", \"indoor\", \"golden\", \"night\", \"street\", \"outdoor\"], \"options\": [{\"id\": \"45ebcc38\", \"value\": \"soft key light from a large softbox\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"a6128275\", \"value\": \"Rembrandt lighting\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"df64c3d0\", \"value\": \"butterfly lighting\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"26404b91\", \"value\": \"dramatic rim light on a dark background\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"080aa2ec\", \"value\": \"a single hard spotlight with deep shadows\", \"weight\": 0.6, \"sub_categories\": [\"studio\"]}, {\"id\": \"46b38494\", \"value\": \"soft window light\", \"weight\": 1, \"sub_categories\": [\"day\", \"indoor\"]}, {\"id\": \"42d238b9\", \"value\": \"open shade, even soft light\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"3b1eaa3b\", \"value\": \"dappled sunlight through leaves\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"6490707a\", \"value\": \"bright midday sun with crisp shadows\", \"weight\": 0.6, \"sub_categories\": [\"day\"]}, {\"id\": \"63d48a92\", \"value\": \"warm low sun, long shadows\", \"weight\": 1, \"sub_categories\": [\"golden\"]}, {\"id\": \"93c64d08\", \"value\": \"backlit by the setting sun, lens flare\", \"weight\": 1, \"sub_categories\": [\"golden\"]}, {\"id\": \"0fb9734e\", \"value\": \"glowing golden rim light\", \"weight\": 1, \"sub_categories\": [\"golden\"]}, {\"id\": \"7792d63f\", \"value\": \"neon signs reflecting on wet pavement\", \"weight\": 1, \"sub_categories\": [\"night\", \"street\"]}, {\"id\": \"55902f84\", \"value\": \"warm street lamps\", \"weight\": 1, \"sub_categories\": [\"night\", \"street\"]}, {\"id\": \"4bd56281\", \"value\": \"candlelight and warm practical lamps\", \"weight\": 1, \"sub_categories\": [\"night\", \"indoor\"]}, {\"id\": \"6abd2913\", \"value\": \"moonlight and a clear starry sky\", \"weight\": 1, \"sub_categories\": [\"night\", \"outdoor\"]}, {\"id\": \"a3ad997d\", \"value\": \"cool blue ambient light\", \"weight\": 1, \"sub_categories\": [\"night\"]}]}, \"payload_hash\": \"df587d7387752fb1aba4f064a89197e8389a2aa5c473003c6be8b6de465d35b4\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"a2aa76635d9e\"}, {\"id\": \"326fdd4d\", \"_uid\": \"2fc1017e64ee\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shot\", \"library_name\": \"Shot\", \"description\": \"Framing comes first in the prompt. Tagged full, half, close.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"shot\", \"sub_categories\": [\"full\", \"half\", \"close\"], \"options\": [{\"id\": \"0affffef\", \"value\": \"full body\", \"weight\": 1, \"sub_categories\": [\"full\"]}, {\"id\": \"16d437ca\", \"value\": \"wide shot\", \"weight\": 1, \"sub_categories\": [\"full\"]}, {\"id\": \"eb83f7c2\", \"value\": \"cowboy shot\", \"weight\": 1, \"sub_categories\": [\"half\"]}, {\"id\": \"dcae3b61\", \"value\": \"upper body\", \"weight\": 1, \"sub_categories\": [\"half\"]}, {\"id\": \"31064f78\", \"value\": \"portrait\", \"weight\": 1, \"sub_categories\": [\"close\"]}, {\"id\": \"49a28511\", \"value\": \"close-up\", \"weight\": 1, \"sub_categories\": [\"close\"]}]}, \"payload_hash\": \"c6e5d8aaa6824b160af23f33dd0544261d4a34365ca235609c7358fb8a6d8138\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"5afd1934\", \"_uid\": \"40c4c93deca0\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Angle\", \"library_name\": \"Angle\"}, \"entries\": [], \"payload\": {\"var_binding\": \"angle\", \"sub_categories\": [], \"options\": [{\"id\": \"3f2e6483\", \"value\": \"eye-level\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a56a6400\", \"value\": \"slightly low angle\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"54667603\", \"value\": \"slightly high angle\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1da86da4\", \"value\": \"candid, from the side\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"09bbc5b0\", \"value\": \"over-the-shoulder\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"182fb7a1\", \"value\": \"\", \"weight\": 3, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"59b067342b95ae4f4f132ed7ec4adc6fdb46f108895b655f2dc9883127f0bc1b\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"280446ea\", \"_uid\": \"9935e29bea2b\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shot → Focus\", \"library_name\": \"Shot → Focus\", \"description\": \"A blurred background for tight shots, the scenery for the full body.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"326fdd4d\", \"target_wildcard_id\": \"e4251663\", \"source_wildcard_name\": \"Shot\", \"target_wildcard_name\": \"Focus\", \"exceptions\": [], \"matrix\": {\"close\": {\"tele\": {\"mode\": \"boost\", \"factor\": 4}, \"wide\": {\"mode\": \"exclude\", \"factor\": 0}}, \"half\": {\"normal\": {\"mode\": \"boost\", \"factor\": 3}}, \"full\": {\"wide\": {\"mode\": \"boost\", \"factor\": 3}, \"tele\": {\"mode\": \"reduce\", \"factor\": 0.3}}}}, \"payload_hash\": \"d1f6e5f838ba2cdf6a7192e8557097281ba927bfcc4640f38e4cc3d7dca67405\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"e4251663\", \"_uid\": \"f402cfc70602\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Focus\", \"library_name\": \"Focus\", \"description\": \"How much of the background shows: tight shots blur it, wide ones show it.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"focus\", \"sub_categories\": [\"tele\", \"normal\", \"wide\"], \"options\": [{\"id\": \"c3a69874\", \"value\": \"depth of field, blurry background\", \"weight\": 1, \"sub_categories\": [\"tele\"]}, {\"id\": \"0879d040\", \"value\": \"bokeh\", \"weight\": 1, \"sub_categories\": [\"tele\"]}, {\"id\": \"f00c2bc5\", \"value\": \"sharp focus\", \"weight\": 1, \"sub_categories\": [\"normal\"]}, {\"id\": \"972580b2\", \"value\": \"soft focus\", \"weight\": 1, \"sub_categories\": [\"normal\"]}, {\"id\": \"f8625d65\", \"value\": \"detailed background\", \"weight\": 1, \"sub_categories\": [\"wide\"]}, {\"id\": \"2bc5e832\", \"value\": \"scenery\", \"weight\": 0.5, \"sub_categories\": [\"wide\"]}]}, \"payload_hash\": \"395abe26e0ffc2370f8fea7a608ed7cb4b291648601948c2773ef66a3dc8f3a8\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"0677ea73\", \"_uid\": \"378fa165f6ce\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Palette\", \"library_name\": \"Palette\", \"description\": \"Some palettes carry a negative of their own (option negatives).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"palette\", \"sub_categories\": [], \"options\": [{\"id\": \"5ca6da7d\", \"value\": \"warm colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7f5a7691\", \"value\": \"muted colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"cd0e698c\", \"value\": \"vibrant colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"415f67b3\", \"value\": \"soft pastel colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5228cd66\", \"value\": \"high contrast\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2f00ebc5\", \"value\": \"cool tones\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b4a1ef67\", \"value\": \"monochrome\", \"weight\": 0.5, \"sub_categories\": [], \"negative\": \"colourful, saturated\"}, {\"id\": \"1d9e3506\", \"value\": \"natural colours\", \"weight\": 2, \"sub_categories\": [], \"negative\": \"oversaturated\"}]}, \"payload_hash\": \"eb054b418ccc718d90c73c78d23f1face450825003c6406576ecb50bd12812a3\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"476537fe\", \"_uid\": \"9bda9d32a17e\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Framing hides details\", \"library_name\": \"Framing hides details\", \"description\": \"Wide shots drop makeup and skin detail, tight shots drop the shoes: the camera can't see them.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"match\": \"any\", \"conditions\": [{\"var\": \"shot\", \"op\": \"contains\", \"value\": \"full body\"}, {\"var\": \"shot\", \"op\": \"contains\", \"value\": \"wide\"}]}, \"action\": {\"target_var\": \"makeup\", \"mode\": \"replace\", \"value\": \"\"}, \"extra_actions\": [{\"target_var\": \"skin\", \"mode\": \"replace\", \"value\": \"\"}]}], \"id\": \"37873348\", \"else\": {\"action\": {\"target_var\": \"shoes_line\", \"mode\": \"replace\", \"value\": \"\"}}}]}, \"payload_hash\": \"fedb263450cbbdf063fda151abf7f1cc487c4ac14a5dbd27756734f37caa3608\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"120d1d8c\", \"_uid\": \"393f6936ce1e\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shot → Pose\", \"library_name\": \"Shot → Pose\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"326fdd4d\", \"target_wildcard_id\": \"626b6b42\", \"source_wildcard_name\": \"Shot\", \"target_wildcard_name\": \"Pose\", \"exceptions\": [], \"matrix\": {\"close\": {\"body\": {\"mode\": \"exclude\", \"factor\": 0}}, \"half\": {\"body\": {\"mode\": \"reduce\", \"factor\": 0.4}}}}, \"payload_hash\": \"842cff223a18727553bd1c0b0ae721771bfcaa5e8c2174e89ba241500b41676a\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"95eaf3f7da4d\"}, {\"id\": \"626b6b42\", \"_uid\": \"767b3dc14111\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Pose\", \"library_name\": \"Pose\", \"description\": \"Body poses need the legs in frame (Shot → Pose).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"pose\", \"sub_categories\": [\"body\", \"any\"], \"options\": [{\"id\": \"14ec211b\", \"value\": \"standing with hands in pockets\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"b80b3261\", \"value\": \"leaning against a wall\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"9a15f55d\", \"value\": \"walking towards the camera\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"b57ee4aa\", \"value\": \"sitting cross-legged\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"94e1e515\", \"value\": \"sitting on the ground, knees drawn up\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"faf87bb9\", \"value\": \"crouching down\", \"weight\": 0.5, \"sub_categories\": [\"body\"]}, {\"id\": \"1dbf421c\", \"value\": \"arms crossed\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"396c8dc4\", \"value\": \"one hand in their hair\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"fc8978a8\", \"value\": \"looking back over the shoulder\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"85e7ca1a\", \"value\": \"chin resting on a hand\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"90941e5e\", \"value\": \"adjusting a sleeve\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"17291f30\", \"value\": \"laughing mid-movement\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"239fdac0\", \"value\": \"head tilted slightly\", \"weight\": 1, \"sub_categories\": [\"any\"]}]}, \"payload_hash\": \"d3167ed65a41c0e05003a6d5cacd41e2a89259bbf79b20e038ea5d320a3545bc\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"95eaf3f7da4d\"}, {\"id\": \"355a7f26\", \"_uid\": \"77ed0ad84a21\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Expression\", \"library_name\": \"Expression\"}, \"entries\": [], \"payload\": {\"var_binding\": \"expression\", \"sub_categories\": [], \"options\": [{\"id\": \"e2a3929f\", \"value\": \"a soft smile\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"824e0bc1\", \"value\": \"a wide, genuine laugh\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"937f06c5\", \"value\": \"a calm, neutral look\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"418a1e46\", \"value\": \"a confident gaze\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"757a49d4\", \"value\": \"a playful smirk\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4f5c1a29\", \"value\": \"a thoughtful, distant look\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"fa8c04e1\", \"value\": \"eyes closed, relaxed\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4262e997\", \"value\": \"a shy half-smile\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d2ae8242\", \"value\": \"a serious, intense stare\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c3a353ec\", \"value\": \"raised eyebrows, amused\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"9c7399798168cb3202b02ffb60beecb29f87ed9046e4c4557c168aa54e61cbc9\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"95eaf3f7da4d\"}], \"bundles\": [{\"_uid\": \"6d3ee007ec43\", \"library_id\": \"f9c08b19\", \"start_idx\": 0, \"end_idx\": 2, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Location\", \"color\": \"#4f9d69\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"87592cde7e01\", \"library_id\": \"3e97d2a8\", \"start_idx\": 3, \"end_idx\": 7, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Wardrobe\", \"color\": \"#c08a3e\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"a2aa76635d9e\", \"library_id\": \"72329875\", \"start_idx\": 8, \"end_idx\": 8, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Light\", \"color\": \"#d4b33a\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"0ae31b68cf71\", \"library_id\": \"3b25553f\", \"start_idx\": 9, \"end_idx\": 14, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Camera\", \"color\": \"#5a7fc9\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"95eaf3f7da4d\", \"library_id\": \"f8150b76\", \"start_idx\": 15, \"end_idx\": 17, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Direction\", \"color\": \"#8d6cc4\", \"parent_uid\": null, \"example\": true}]}"
+      ],
+      "widgets_values_named": {
+        "seed": 2,
+        "control_after_generate": "randomize",
+        "wp_modules": "{\"version\": 1, \"modules\": [{\"id\": \"e752635f\", \"_uid\": \"017f60a54d8d\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Place\", \"library_name\": \"Place\", \"description\": \"Tagged studio, home, urban, nature, coast: the tags drive Time and Outfit.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"place\", \"sub_categories\": [\"studio\", \"home\", \"urban\", \"nature\", \"coast\"], \"options\": [{\"id\": \"988e3854\", \"value\": \"in a studio against a plain grey backdrop\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"877ca29a\", \"value\": \"in a studio with a warm beige paper backdrop\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"572428f1\", \"value\": \"in front of a textured plaster wall in a studio\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"aaad8684\", \"value\": \"in a sunlit loft apartment\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"292eacc5\", \"value\": \"in a cosy living room with plants\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"14720b56\", \"value\": \"in a minimalist kitchen\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"ad27a7ff\", \"value\": \"on a rumpled bed in a bright bedroom\", \"weight\": 1, \"sub_categories\": [\"home\"]}, {\"id\": \"b4cd071c\", \"value\": \"on a busy city sidewalk\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"2f4cecf7\", \"value\": \"in a narrow cobblestone alley\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"3b473cc3\", \"value\": \"on a rooftop terrace overlooking the city\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"be9c143e\", \"value\": \"in a retro diner booth\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"e6db4fb7\", \"value\": \"on a subway platform\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"08a46817\", \"value\": \"in a quiet café by the window\", \"weight\": 1, \"sub_categories\": [\"urban\"]}, {\"id\": \"80bc8d6c\", \"value\": \"in a wildflower meadow\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"7c50513a\", \"value\": \"on a forest trail\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"33e79105\", \"value\": \"by a mountain lake\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"bea50e57\", \"value\": \"in a desert canyon\", \"weight\": 1, \"sub_categories\": [\"nature\"]}, {\"id\": \"315e5e43\", \"value\": \"on a sandy beach\", \"weight\": 1, \"sub_categories\": [\"coast\"]}, {\"id\": \"7cdc9fbe\", \"value\": \"on a wooden pier\", \"weight\": 1, \"sub_categories\": [\"coast\"]}, {\"id\": \"6930a321\", \"value\": \"on rocky sea cliffs\", \"weight\": 1, \"sub_categories\": [\"coast\"]}]}, \"payload_hash\": \"cf90d81f6944d78ed67e4ba3d734e8e0dca60daa7e1f9ae6c6f02feacc49458b\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6d3ee007ec43\"}, {\"id\": \"1d1180e8\", \"_uid\": \"51501f1aff74\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Place → Time\", \"library_name\": \"Place → Time\", \"description\": \"A studio only takes the studio option; everywhere else never does.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"e752635f\", \"target_wildcard_id\": \"e49091a7\", \"source_wildcard_name\": \"Place\", \"target_wildcard_name\": \"Time of day\", \"exceptions\": [], \"matrix\": {\"studio\": {\"studio\": {\"mode\": \"only\", \"factor\": 1}}, \"home\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}}, \"urban\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}}, \"nature\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}, \"night\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"coast\": {\"studio\": {\"mode\": \"exclude\", \"factor\": 0}}}}, \"payload_hash\": \"01d9b181c82593ffd1c1f8e2620534e8f69f721a97a600ce447b499b68940ade\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6d3ee007ec43\"}, {\"id\": \"e49091a7\", \"_uid\": \"d013eda11f54\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Time of day\", \"library_name\": \"Time of day\", \"description\": \"A studio has no time of day, so it has an option of its own.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"time\", \"sub_categories\": [\"day\", \"golden\", \"night\", \"studio\"], \"options\": [{\"id\": \"e6145a2e\", \"value\": \"in the morning\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"869a72e7\", \"value\": \"at midday\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"bd25bafa\", \"value\": \"on an overcast afternoon\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"06391224\", \"value\": \"at golden hour\", \"weight\": 1.5, \"sub_categories\": [\"golden\"]}, {\"id\": \"0085f5bd\", \"value\": \"at blue hour\", \"weight\": 1, \"sub_categories\": [\"night\"]}, {\"id\": \"38dd870e\", \"value\": \"at night\", \"weight\": 1, \"sub_categories\": [\"night\"]}, {\"id\": \"616e198d\", \"value\": \"under studio lights\", \"weight\": 1, \"sub_categories\": [\"studio\"]}]}, \"payload_hash\": \"9342cfa07a970297ba9ef2fcaaf000d37fc45972169713e1d95be89547466e3b\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"6d3ee007ec43\"}, {\"id\": \"2a39c017\", \"_uid\": \"4c2a0cbac7ea\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Place → Outfit\", \"library_name\": \"Place → Outfit\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"e752635f\", \"target_wildcard_id\": \"cc47ffd0\", \"source_wildcard_name\": \"Place\", \"target_wildcard_name\": \"Outfit\", \"exceptions\": [], \"matrix\": {\"coast\": {\"swim\": {\"mode\": \"boost\", \"factor\": 5}, \"summer\": {\"mode\": \"boost\", \"factor\": 2}, \"outerwear\": {\"mode\": \"exclude\", \"factor\": 0}, \"formal\": {\"mode\": \"reduce\", \"factor\": 0.3}}, \"nature\": {\"sport\": {\"mode\": \"boost\", \"factor\": 2}, \"outerwear\": {\"mode\": \"boost\", \"factor\": 3}, \"formal\": {\"mode\": \"reduce\", \"factor\": 0.2}, \"swim\": {\"mode\": \"exclude\", \"factor\": 0}}, \"urban\": {\"street\": {\"mode\": \"boost\", \"factor\": 2}, \"swim\": {\"mode\": \"exclude\", \"factor\": 0}, \"lounge\": {\"mode\": \"exclude\", \"factor\": 0}}, \"home\": {\"lounge\": {\"mode\": \"boost\", \"factor\": 4}, \"swim\": {\"mode\": \"exclude\", \"factor\": 0}, \"outerwear\": {\"mode\": \"reduce\", \"factor\": 0.2}}, \"studio\": {\"swim\": {\"mode\": \"reduce\", \"factor\": 0.3}}}}, \"payload_hash\": \"5cc426edd1bdde09a78c2a094ce4a486b00aeb02a9398de99e46dd943974780f\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"289b8344\", \"_uid\": \"6daa15e54a0b\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Gender → Outfit\", \"library_name\": \"Gender → Outfit\", \"description\": \"Reads Gender from the first Context: a constraint works across nodes.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"9a3f1945\", \"target_wildcard_id\": \"cc47ffd0\", \"source_wildcard_name\": \"Gender\", \"target_wildcard_name\": \"Outfit\", \"exceptions\": [], \"matrix\": {\"man\": {\"femme\": {\"mode\": \"reduce\", \"factor\": 0.1}}, \"woman\": {\"masc\": {\"mode\": \"reduce\", \"factor\": 0.2}}}}, \"payload_hash\": \"cafceb22381a61e61e952b1cc3cff2a318cd00698e47621535d2c8aca811b28e\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"cc47ffd0\", \"_uid\": \"e30f7109ef10\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Outfit\", \"library_name\": \"Outfit\", \"description\": \"Tags say what each outfit is; the SHOES tags are choices (accepts), printed as $outfit.SHOES. The grey sweater is the fallback when the rules leave nothing.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"outfit\", \"sub_categories\": [\"casual\", \"sneakers\", \"boots\", \"ankle-boots\", \"loafers\", \"street\", \"formal\", \"femme\", \"heels\", \"sandals\", \"summer\", \"swim\", \"barefoot\", \"masc\", \"sport\", \"trainers\", \"outerwear\", \"lounge\"], \"options\": [{\"id\": \"dca2ecff\", \"value\": \"a white t-shirt and light-wash jeans\", \"weight\": 1, \"sub_categories\": [\"casual\", \"sneakers\", \"boots\"]}, {\"id\": \"07963ab0\", \"value\": \"an oversized knit sweater and black jeans\", \"weight\": 1, \"sub_categories\": [\"casual\", \"ankle-boots\", \"sneakers\"]}, {\"id\": \"507f1f44\", \"value\": \"a linen shirt and chinos\", \"weight\": 1, \"sub_categories\": [\"casual\", \"loafers\", \"sneakers\"]}, {\"id\": \"cee6b10d\", \"value\": \"a denim jacket over a hoodie\", \"weight\": 1, \"sub_categories\": [\"street\", \"sneakers\"]}, {\"id\": \"a2099aeb\", \"value\": \"a black leather jacket and dark jeans\", \"weight\": 1, \"sub_categories\": [\"street\", \"boots\"]}, {\"id\": \"c31a9a96\", \"value\": \"cargo pants and a cropped bomber jacket\", \"weight\": 1, \"sub_categories\": [\"street\", \"sneakers\"]}, {\"id\": \"231b1a23\", \"value\": \"a tailored charcoal suit\", \"weight\": 1, \"sub_categories\": [\"formal\", \"loafers\"]}, {\"id\": \"3c1a07d2\", \"value\": \"a black slip dress\", \"weight\": 1, \"sub_categories\": [\"formal\", \"femme\", \"heels\", \"sandals\"]}, {\"id\": \"da21d84f\", \"value\": \"an emerald satin evening gown\", \"weight\": 0.6, \"sub_categories\": [\"formal\", \"femme\", \"heels\"]}, {\"id\": \"b1701f3a\", \"value\": \"a crisp white button-up and pleated trousers\", \"weight\": 1, \"sub_categories\": [\"formal\", \"loafers\", \"heels\"]}, {\"id\": \"28b153b3\", \"value\": \"a floral sundress\", \"weight\": 1, \"sub_categories\": [\"summer\", \"femme\", \"sandals\", \"sneakers\"]}, {\"id\": \"eddb0e91\", \"value\": \"linen shorts and a short-sleeved shirt\", \"weight\": 1, \"sub_categories\": [\"summer\", \"sandals\", \"sneakers\"]}, {\"id\": \"cc91f474\", \"value\": \"a ribbed tank top and a midi skirt\", \"weight\": 1, \"sub_categories\": [\"summer\", \"femme\", \"sandals\"]}, {\"id\": \"b6b14e34\", \"value\": \"a black one-piece swimsuit\", \"weight\": 0.6, \"sub_categories\": [\"swim\", \"femme\", \"barefoot\"], \"negative\": \"jeans, jacket\"}, {\"id\": \"c4d4f063\", \"value\": \"swim shorts and an open shirt\", \"weight\": 0.6, \"sub_categories\": [\"swim\", \"masc\", \"barefoot\"], \"negative\": \"jeans, jacket\"}, {\"id\": \"36e1c87e\", \"value\": \"leggings and a sports bra\", \"weight\": 1, \"sub_categories\": [\"sport\", \"femme\", \"trainers\"]}, {\"id\": \"c9d31f56\", \"value\": \"a track jacket and joggers\", \"weight\": 1, \"sub_categories\": [\"sport\", \"trainers\"]}, {\"id\": \"429d32ec\", \"value\": \"a long camel wool coat over a turtleneck\", \"weight\": 1, \"sub_categories\": [\"outerwear\", \"ankle-boots\", \"loafers\"]}, {\"id\": \"b3448400\", \"value\": \"a waxed rain jacket and hiking trousers\", \"weight\": 1, \"sub_categories\": [\"outerwear\", \"boots\"]}, {\"id\": \"665c5177\", \"value\": \"a cosy oversized hoodie and sweatpants\", \"weight\": 1, \"sub_categories\": [\"lounge\", \"barefoot\", \"sneakers\"]}, {\"id\": \"5b0f99a6\", \"value\": \"a silk robe over pyjamas\", \"weight\": 0.6, \"sub_categories\": [\"lounge\", \"barefoot\"]}, {\"id\": \"d71f7c3d\", \"value\": \"a plain grey crew-neck sweater and jeans\", \"weight\": 1, \"sub_categories\": [\"casual\", \"sneakers\", \"ankle-boots\"], \"fallback\": true}], \"tag_groups\": {\"SHOES\": [\"sneakers\", \"boots\", \"heels\", \"loafers\", \"sandals\", \"barefoot\", \"trainers\", \"ankle-boots\"]}, \"tag_group_kinds\": {\"SHOES\": \"accepts\"}}, \"payload_hash\": \"cef550eece7841e2daca412b8a85e34d16b1cde1ab406c81493eedf3f2baac67\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"a475e205\", \"_uid\": \"51129ba264b5\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Accessories\", \"library_name\": \"Accessories\", \"description\": \"Picks 0 to 2 (multi-pick range on this row).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"accessories\", \"sub_categories\": [], \"options\": [{\"id\": \"cd669eeb\", \"value\": \"thin gold hoop earrings\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"e4f8b7a9\", \"value\": \"a silver chain necklace\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"40366238\", \"value\": \"round tortoiseshell glasses\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"f1c957b0\", \"value\": \"a leather watch\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"65b5f74b\", \"value\": \"a wide-brim hat\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"3b1b5b37\", \"value\": \"a silk scarf\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"77dfc203\", \"value\": \"a canvas tote bag\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c857c2e1\", \"value\": \"small stud earrings\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"cec525ae\", \"value\": \"aviator sunglasses\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"e7874660cfa3c0ab955198c1c107786eb4b4ce56d2d268dcae79dee1ebb5a352\", \"instance\": {\"pick_min\": 0, \"pick_max\": 2, \"pick_separator\": \", \"}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"7e904d0e\", \"_uid\": \"14ff9dd7795e\", \"type\": \"combine\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shoes line\", \"library_name\": \"Shoes line\", \"description\": \"Reads the shoes rolled with the outfit. Framing hides details empties it in tight shots.\"}, \"entries\": [], \"payload\": {\"template\": \"and $outfit.SHOES\", \"output_var\": \"shoes_line\", \"input_vars\": [\"outfit\"]}, \"payload_hash\": \"9a2a38b9869f818fab5c33d58f2f515a761467862004fd010794f29557a625a5\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"87592cde7e01\"}, {\"id\": \"e401c357\", \"_uid\": \"a1090adc2b02\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Light\", \"library_name\": \"Light\", \"description\": \"Tagged by when it can happen; Time → Light keeps it believable.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"light\", \"sub_categories\": [\"studio\", \"day\", \"indoor\", \"golden\", \"night\", \"street\", \"outdoor\"], \"options\": [{\"id\": \"45ebcc38\", \"value\": \"soft key light from a large softbox\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"a6128275\", \"value\": \"Rembrandt lighting\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"df64c3d0\", \"value\": \"butterfly lighting\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"26404b91\", \"value\": \"dramatic rim light on a dark background\", \"weight\": 1, \"sub_categories\": [\"studio\"]}, {\"id\": \"080aa2ec\", \"value\": \"a single hard spotlight with deep shadows\", \"weight\": 0.6, \"sub_categories\": [\"studio\"]}, {\"id\": \"46b38494\", \"value\": \"soft window light\", \"weight\": 1, \"sub_categories\": [\"day\", \"indoor\"]}, {\"id\": \"42d238b9\", \"value\": \"open shade, even soft light\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"3b1eaa3b\", \"value\": \"dappled sunlight through leaves\", \"weight\": 1, \"sub_categories\": [\"day\"]}, {\"id\": \"6490707a\", \"value\": \"bright midday sun with crisp shadows\", \"weight\": 0.6, \"sub_categories\": [\"day\"]}, {\"id\": \"63d48a92\", \"value\": \"warm low sun, long shadows\", \"weight\": 1, \"sub_categories\": [\"golden\"]}, {\"id\": \"93c64d08\", \"value\": \"backlit by the setting sun, lens flare\", \"weight\": 1, \"sub_categories\": [\"golden\"]}, {\"id\": \"0fb9734e\", \"value\": \"glowing golden rim light\", \"weight\": 1, \"sub_categories\": [\"golden\"]}, {\"id\": \"7792d63f\", \"value\": \"neon signs reflecting on wet pavement\", \"weight\": 1, \"sub_categories\": [\"night\", \"street\"]}, {\"id\": \"55902f84\", \"value\": \"warm street lamps\", \"weight\": 1, \"sub_categories\": [\"night\", \"street\"]}, {\"id\": \"4bd56281\", \"value\": \"candlelight and warm practical lamps\", \"weight\": 1, \"sub_categories\": [\"night\", \"indoor\"]}, {\"id\": \"6abd2913\", \"value\": \"moonlight and a clear starry sky\", \"weight\": 1, \"sub_categories\": [\"night\", \"outdoor\"]}, {\"id\": \"a3ad997d\", \"value\": \"cool blue ambient light\", \"weight\": 1, \"sub_categories\": [\"night\"]}]}, \"payload_hash\": \"df587d7387752fb1aba4f064a89197e8389a2aa5c473003c6be8b6de465d35b4\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"a2aa76635d9e\"}, {\"id\": \"326fdd4d\", \"_uid\": \"2fc1017e64ee\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shot\", \"library_name\": \"Shot\", \"description\": \"Framing comes first in the prompt. Tagged full, half, close.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"shot\", \"sub_categories\": [\"full\", \"half\", \"close\"], \"options\": [{\"id\": \"0affffef\", \"value\": \"full body\", \"weight\": 1, \"sub_categories\": [\"full\"]}, {\"id\": \"16d437ca\", \"value\": \"wide shot\", \"weight\": 1, \"sub_categories\": [\"full\"]}, {\"id\": \"eb83f7c2\", \"value\": \"cowboy shot\", \"weight\": 1, \"sub_categories\": [\"half\"]}, {\"id\": \"dcae3b61\", \"value\": \"upper body\", \"weight\": 1, \"sub_categories\": [\"half\"]}, {\"id\": \"31064f78\", \"value\": \"portrait\", \"weight\": 1, \"sub_categories\": [\"close\"]}, {\"id\": \"49a28511\", \"value\": \"close-up\", \"weight\": 1, \"sub_categories\": [\"close\"]}]}, \"payload_hash\": \"c6e5d8aaa6824b160af23f33dd0544261d4a34365ca235609c7358fb8a6d8138\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"5afd1934\", \"_uid\": \"40c4c93deca0\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Angle\", \"library_name\": \"Angle\"}, \"entries\": [], \"payload\": {\"var_binding\": \"angle\", \"sub_categories\": [], \"options\": [{\"id\": \"3f2e6483\", \"value\": \"eye-level\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"a56a6400\", \"value\": \"slightly low angle\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"54667603\", \"value\": \"slightly high angle\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"1da86da4\", \"value\": \"candid, from the side\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"09bbc5b0\", \"value\": \"over-the-shoulder\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"182fb7a1\", \"value\": \"\", \"weight\": 3, \"sub_categories\": [], \"is_null\": true}]}, \"payload_hash\": \"59b067342b95ae4f4f132ed7ec4adc6fdb46f108895b655f2dc9883127f0bc1b\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"280446ea\", \"_uid\": \"9935e29bea2b\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shot → Focus\", \"library_name\": \"Shot → Focus\", \"description\": \"A blurred background for tight shots, the scenery for the full body.\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"326fdd4d\", \"target_wildcard_id\": \"e4251663\", \"source_wildcard_name\": \"Shot\", \"target_wildcard_name\": \"Focus\", \"exceptions\": [], \"matrix\": {\"close\": {\"tele\": {\"mode\": \"boost\", \"factor\": 4}, \"wide\": {\"mode\": \"exclude\", \"factor\": 0}}, \"half\": {\"normal\": {\"mode\": \"boost\", \"factor\": 3}}, \"full\": {\"wide\": {\"mode\": \"boost\", \"factor\": 3}, \"tele\": {\"mode\": \"reduce\", \"factor\": 0.3}}}}, \"payload_hash\": \"d1f6e5f838ba2cdf6a7192e8557097281ba927bfcc4640f38e4cc3d7dca67405\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"e4251663\", \"_uid\": \"f402cfc70602\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Focus\", \"library_name\": \"Focus\", \"description\": \"How much of the background shows: tight shots blur it, wide ones show it.\"}, \"entries\": [], \"payload\": {\"var_binding\": \"focus\", \"sub_categories\": [\"tele\", \"normal\", \"wide\"], \"options\": [{\"id\": \"c3a69874\", \"value\": \"depth of field, blurry background\", \"weight\": 1, \"sub_categories\": [\"tele\"]}, {\"id\": \"0879d040\", \"value\": \"bokeh\", \"weight\": 1, \"sub_categories\": [\"tele\"]}, {\"id\": \"f00c2bc5\", \"value\": \"sharp focus\", \"weight\": 1, \"sub_categories\": [\"normal\"]}, {\"id\": \"972580b2\", \"value\": \"soft focus\", \"weight\": 1, \"sub_categories\": [\"normal\"]}, {\"id\": \"f8625d65\", \"value\": \"detailed background\", \"weight\": 1, \"sub_categories\": [\"wide\"]}, {\"id\": \"2bc5e832\", \"value\": \"scenery\", \"weight\": 0.5, \"sub_categories\": [\"wide\"]}]}, \"payload_hash\": \"395abe26e0ffc2370f8fea7a608ed7cb4b291648601948c2773ef66a3dc8f3a8\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"0677ea73\", \"_uid\": \"378fa165f6ce\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Palette\", \"library_name\": \"Palette\", \"description\": \"Some palettes carry a negative of their own (option negatives).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"palette\", \"sub_categories\": [], \"options\": [{\"id\": \"5ca6da7d\", \"value\": \"warm colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"7f5a7691\", \"value\": \"muted colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"cd0e698c\", \"value\": \"vibrant colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"415f67b3\", \"value\": \"soft pastel colours\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"5228cd66\", \"value\": \"high contrast\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"2f00ebc5\", \"value\": \"cool tones\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"b4a1ef67\", \"value\": \"monochrome\", \"weight\": 0.5, \"sub_categories\": [], \"negative\": \"colourful, saturated\"}, {\"id\": \"1d9e3506\", \"value\": \"natural colours\", \"weight\": 2, \"sub_categories\": [], \"negative\": \"oversaturated\"}]}, \"payload_hash\": \"eb054b418ccc718d90c73c78d23f1face450825003c6406576ecb50bd12812a3\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"476537fe\", \"_uid\": \"9bda9d32a17e\", \"type\": \"derivation\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Framing hides details\", \"library_name\": \"Framing hides details\", \"description\": \"Wide shots drop makeup and skin detail, tight shots drop the shoes: the camera can't see them.\"}, \"entries\": [], \"payload\": {\"rules\": [{\"branches\": [{\"condition\": {\"match\": \"any\", \"conditions\": [{\"var\": \"shot\", \"op\": \"contains\", \"value\": \"full body\"}, {\"var\": \"shot\", \"op\": \"contains\", \"value\": \"wide\"}]}, \"action\": {\"target_var\": \"makeup\", \"mode\": \"replace\", \"value\": \"\"}, \"extra_actions\": [{\"target_var\": \"skin\", \"mode\": \"replace\", \"value\": \"\"}]}], \"id\": \"37873348\", \"else\": {\"action\": {\"target_var\": \"shoes_line\", \"mode\": \"replace\", \"value\": \"\"}}}]}, \"payload_hash\": \"fedb263450cbbdf063fda151abf7f1cc487c4ac14a5dbd27756734f37caa3608\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"0ae31b68cf71\"}, {\"id\": \"120d1d8c\", \"_uid\": \"393f6936ce1e\", \"type\": \"constraint\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Shot → Pose\", \"library_name\": \"Shot → Pose\"}, \"entries\": [], \"payload\": {\"source_wildcard_id\": \"326fdd4d\", \"target_wildcard_id\": \"626b6b42\", \"source_wildcard_name\": \"Shot\", \"target_wildcard_name\": \"Pose\", \"exceptions\": [], \"matrix\": {\"close\": {\"body\": {\"mode\": \"exclude\", \"factor\": 0}}, \"half\": {\"body\": {\"mode\": \"reduce\", \"factor\": 0.4}}}}, \"payload_hash\": \"842cff223a18727553bd1c0b0ae721771bfcaa5e8c2174e89ba241500b41676a\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"95eaf3f7da4d\"}, {\"id\": \"626b6b42\", \"_uid\": \"767b3dc14111\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Pose\", \"library_name\": \"Pose\", \"description\": \"Body poses need the legs in frame (Shot → Pose).\"}, \"entries\": [], \"payload\": {\"var_binding\": \"pose\", \"sub_categories\": [\"body\", \"any\"], \"options\": [{\"id\": \"14ec211b\", \"value\": \"standing with hands in pockets\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"b80b3261\", \"value\": \"leaning against a wall\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"9a15f55d\", \"value\": \"walking towards the camera\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"b57ee4aa\", \"value\": \"sitting cross-legged\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"94e1e515\", \"value\": \"sitting on the ground, knees drawn up\", \"weight\": 1, \"sub_categories\": [\"body\"]}, {\"id\": \"faf87bb9\", \"value\": \"crouching down\", \"weight\": 0.5, \"sub_categories\": [\"body\"]}, {\"id\": \"1dbf421c\", \"value\": \"arms crossed\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"396c8dc4\", \"value\": \"one hand in their hair\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"fc8978a8\", \"value\": \"looking back over the shoulder\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"85e7ca1a\", \"value\": \"chin resting on a hand\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"90941e5e\", \"value\": \"adjusting a sleeve\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"17291f30\", \"value\": \"laughing mid-movement\", \"weight\": 1, \"sub_categories\": [\"any\"]}, {\"id\": \"239fdac0\", \"value\": \"head tilted slightly\", \"weight\": 1, \"sub_categories\": [\"any\"]}]}, \"payload_hash\": \"d3167ed65a41c0e05003a6d5cacd41e2a89259bbf79b20e038ea5d320a3545bc\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"95eaf3f7da4d\"}, {\"id\": \"355a7f26\", \"_uid\": \"77ed0ad84a21\", \"type\": \"wildcard\", \"enabled\": true, \"collapsed\": true, \"meta\": {\"name\": \"Expression\", \"library_name\": \"Expression\"}, \"entries\": [], \"payload\": {\"var_binding\": \"expression\", \"sub_categories\": [], \"options\": [{\"id\": \"e2a3929f\", \"value\": \"a soft smile\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"824e0bc1\", \"value\": \"a wide, genuine laugh\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"937f06c5\", \"value\": \"a calm, neutral look\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"418a1e46\", \"value\": \"a confident gaze\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"757a49d4\", \"value\": \"a playful smirk\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4f5c1a29\", \"value\": \"a thoughtful, distant look\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"fa8c04e1\", \"value\": \"eyes closed, relaxed\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"4262e997\", \"value\": \"a shy half-smile\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"d2ae8242\", \"value\": \"a serious, intense stare\", \"weight\": 1, \"sub_categories\": []}, {\"id\": \"c3a353ec\", \"value\": \"raised eyebrows, amused\", \"weight\": 1, \"sub_categories\": []}]}, \"payload_hash\": \"9c7399798168cb3202b02ffb60beecb29f87ed9046e4c4557c168aa54e61cbc9\", \"instance\": {}, \"example\": true, \"bundle_origin\": \"95eaf3f7da4d\"}], \"bundles\": [{\"_uid\": \"6d3ee007ec43\", \"library_id\": \"f9c08b19\", \"start_idx\": 0, \"end_idx\": 2, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Location\", \"color\": \"#4f9d69\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"87592cde7e01\", \"library_id\": \"3e97d2a8\", \"start_idx\": 3, \"end_idx\": 7, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Wardrobe\", \"color\": \"#c08a3e\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"a2aa76635d9e\", \"library_id\": \"72329875\", \"start_idx\": 8, \"end_idx\": 8, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Light\", \"color\": \"#d4b33a\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"0ae31b68cf71\", \"library_id\": \"3b25553f\", \"start_idx\": 9, \"end_idx\": 14, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Camera\", \"color\": \"#5a7fc9\", \"parent_uid\": null, \"example\": true}, {\"_uid\": \"95eaf3f7da4d\", \"library_id\": \"f8150b76\", \"start_idx\": 15, \"end_idx\": 17, \"enabled\": true, \"collapsed\": true, \"inserted_at_hash\": \"\", \"name\": \"Direction\", \"color\": \"#8d6cc4\", \"parent_uid\": null, \"example\": true}]}"
+      },
+      "id": 6,
+      "pos": [
+        1120,
+        360
+      ],
+      "title": "WP Context · Scene",
+      "order": 5
+    },
+    {
+      "type": "WP_Note",
+      "size": [
+        1060,
+        200
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"The **Assembler** writes the prompt and the **Cleaner** tidies it. The second Assembler, under the Cleaner, writes the label `$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and columns.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 2300, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"2\", \"order\": 2}}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 2, \"icon\": \"info-circle\", \"text\": \"The **Assembler** writes the prompt and the **Cleaner** tidies it. The second Assembler, under the Cleaner, writes the label `$shot · $light`: **Label & Grid** reads its two parts as the grid's rows and columns.\\n\\n[Prompt Assembler](docs:wp-prompt-assembler){button pi-book}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 2300, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"2\", \"order\": 2}}"
+      },
+      "id": 7,
+      "pos": [
+        1780,
+        0
+      ],
+      "title": "A prompt and a label per frame",
+      "order": 6
+    },
+    {
+      "type": "WP_PromptAssembler",
+      "size": [
+        500,
+        640
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "link": 3
+        },
+        {
+          "localized_name": "template",
+          "name": "template",
+          "type": "STRING",
+          "widget": {
+            "name": "template"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "negative_template",
+          "name": "negative_template",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "negative_template"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            5
+          ]
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_PromptAssembler",
+        "wp_negatives_opt_in": true
+      },
+      "widgets_values": [
+        "$head $shot, $subject, $build, $skin, $hair, $facial_hair, $eyes, $makeup, wearing $outfit $shoes_line, $accessories, $pose, $expression, $place $time, $light, $angle, $focus, $palette$tail",
+        "$neg_base, $negatives",
+        ""
+      ],
+      "widgets_values_named": {
+        "template": "$head $shot, $subject, $build, $skin, $hair, $facial_hair, $eyes, $makeup, wearing $outfit $shoes_line, $accessories, $pose, $expression, $place $time, $light, $angle, $focus, $palette$tail",
+        "negative_template": "$neg_base, $negatives",
+        "assembler-helper": ""
+      },
+      "id": 8,
+      "pos": [
+        1780,
+        360
+      ],
+      "order": 7
+    },
+    {
+      "type": "WP_PromptCleaner",
+      "size": [
+        500,
+        520
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "blocklist",
+          "name": "blocklist",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": 5
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "negative"
+          },
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            13
+          ]
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "STRING",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_PromptCleaner"
+      },
+      "widgets_values": [
+        "",
+        "",
+        "{\"mode\":\"tags\",\"intensity\":\"balanced\",\"rules_override\":{},\"blocklist\":{\"kind\":\"list\",\"entries\":[]}}"
+      ],
+      "widgets_values_named": {
+        "prompt": "",
+        "negative": "",
+        "wp_cleaner": "{\"mode\":\"tags\",\"intensity\":\"balanced\",\"rules_override\":{},\"blocklist\":{\"kind\":\"list\",\"entries\":[]}}"
+      },
+      "id": 9,
+      "pos": [
+        2340,
+        360
+      ],
+      "order": 8
+    },
+    {
+      "type": "WP_PromptAssembler",
+      "size": [
+        500,
+        470
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "link": 4
+        },
+        {
+          "localized_name": "template",
+          "name": "template",
+          "type": "STRING",
+          "widget": {
+            "name": "template"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "negative_template",
+          "name": "negative_template",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "negative_template"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            24
+          ]
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_PromptAssembler",
+        "wp_negatives_opt_in": true
+      },
+      "widgets_values": [
+        "$shot · $light",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "template": "$shot · $light",
+        "negative_template": "",
+        "assembler-helper": ""
+      },
+      "id": 10,
+      "pos": [
+        2340,
+        920
+      ],
+      "title": "WP Prompt Assembler · grid labels",
+      "order": 9
+    },
+    {
+      "type": "WP_Note",
+      "size": [
+        940,
+        330
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
+      },
+      "id": 11,
+      "pos": [
+        2960,
+        0
+      ],
+      "title": "Quick preview",
+      "order": 10
+    },
+    {
+      "type": "WP_Toggles",
+      "size": [
+        460,
+        150
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "upstream",
+          "name": "upstream",
+          "shape": 7,
+          "type": "PIPELINE_CONTEXT",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "links": [
+            7,
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_Toggles"
+      },
+      "widgets_values": [
+        "{\"version\": 1, \"mode\": \"one\", \"group_var\": \"steps\", \"group_upstream\": true, \"rows\": [{\"id\": \"996c84f0\", \"kind\": \"toggle\", \"name\": \"Quick\", \"var\": \"quick_preview\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"chip\", \"value\": \"12\"}, {\"id\": \"51ce16e1\", \"kind\": \"toggle\", \"name\": \"Full\", \"var\": \"full_render\", \"on\": true, \"pin\": false, \"out\": 0, \"style\": \"chip\", \"value\": \"30\"}]}"
+      ],
+      "widgets_values_named": {
+        "wp_toggles": "{\"version\": 1, \"mode\": \"one\", \"group_var\": \"steps\", \"group_upstream\": true, \"rows\": [{\"id\": \"996c84f0\", \"kind\": \"toggle\", \"name\": \"Quick\", \"var\": \"quick_preview\", \"on\": false, \"pin\": false, \"out\": 0, \"style\": \"chip\", \"value\": \"12\"}, {\"id\": \"51ce16e1\", \"kind\": \"toggle\", \"name\": \"Full\", \"var\": \"full_render\", \"on\": true, \"pin\": false, \"out\": 0, \"style\": \"chip\", \"value\": \"30\"}]}"
+      },
+      "id": 12,
+      "pos": [
+        2960,
+        360
+      ],
+      "title": "WP Toggles · steps",
+      "order": 11
+    },
+    {
+      "type": "WP_VarToInt",
+      "size": [
+        460,
+        180
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "link": 7
+        },
+        {
+          "localized_name": "index",
+          "name": "index",
+          "type": "INT",
+          "widget": {
+            "name": "index"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "default",
+          "name": "default",
+          "type": "INT",
+          "widget": {
+            "name": "default"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "value",
+          "name": "value",
+          "type": "INT",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "properties": {
+        "var_name": "$steps",
+        "Node name for S&R": "WP_VarToInt"
+      },
+      "widgets_values": [
+        "$steps",
+        0,
+        30
+      ],
+      "widgets_values_named": {
+        "wp_var_name": "$steps",
+        "index": 0,
+        "default": 30
+      },
+      "id": 13,
+      "pos": [
+        2960,
+        580
+      ],
+      "title": "Steps",
+      "order": 12
+    },
+    {
+      "type": "WP_VarToBool",
+      "size": [
+        460,
+        180
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "context",
+          "name": "context",
+          "type": "PIPELINE_CONTEXT",
+          "link": 8
+        },
+        {
+          "localized_name": "index",
+          "name": "index",
+          "type": "INT",
+          "widget": {
+            "name": "index"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "default",
+          "name": "default",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "default"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "value",
+          "name": "value",
+          "type": "BOOLEAN",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "var_name": "$quick_preview",
+        "Node name for S&R": "WP_VarToBool"
+      },
+      "widgets_values": [
+        "$quick_preview",
+        0,
+        false
+      ],
+      "widgets_values_named": {
+        "wp_var_name": "$quick_preview",
+        "index": 0,
+        "default": false
+      },
+      "id": 14,
+      "pos": [
+        2960,
+        820
+      ],
+      "title": "Quick preview?",
+      "order": 13
+    },
+    {
+      "type": "EmptyLatentImage",
+      "size": [
+        420,
+        110
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "batch_size",
+          "name": "batch_size",
+          "type": "INT",
+          "widget": {
+            "name": "batch_size"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "LATENT",
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            10
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        512,
+        768,
+        1
+      ],
+      "widgets_values_named": {
+        "width": 512,
+        "height": 768,
+        "batch_size": 1
+      },
+      "id": 15,
+      "pos": [
+        3480,
+        360
+      ],
+      "title": "Quick size",
+      "order": 14
+    },
+    {
+      "type": "EmptyLatentImage",
+      "size": [
+        420,
+        110
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "width",
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "height",
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "batch_size",
+          "name": "batch_size",
+          "type": "INT",
+          "widget": {
+            "name": "batch_size"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "LATENT",
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        832,
+        1216,
+        1
+      ],
+      "widgets_values_named": {
+        "width": 832,
+        "height": 1216,
+        "batch_size": 1
+      },
+      "id": 16,
+      "pos": [
+        3480,
+        530
+      ],
+      "title": "Full size",
+      "order": 15
+    },
+    {
+      "type": "ComfySwitchNode",
+      "size": [
+        420,
+        80
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "on_false",
+          "name": "on_false",
+          "shape": 7,
+          "type": "LATENT",
+          "link": 9
+        },
+        {
+          "localized_name": "on_true",
+          "name": "on_true",
+          "shape": 7,
+          "type": "LATENT",
+          "link": 10
+        },
+        {
+          "localized_name": "switch",
+          "name": "switch",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "switch"
+          },
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "output",
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ComfySwitchNode"
+      },
+      "widgets_values": [
+        false
+      ],
+      "widgets_values_named": {
+        "switch": false
+      },
+      "id": 17,
+      "pos": [
+        3480,
+        820
+      ],
+      "title": "Latent",
+      "order": 16
+    },
+    {
+      "type": "WP_Note",
+      "size": [
+        1280,
+        230
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run** once. The sampler seed is **fixed**, so only the prompt changes between cells: a fair comparison.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"4\", \"order\": 4}}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 4, \"icon\": \"info-circle\", \"text\": \"Pick your model in **Load Checkpoint** and press **Run** once. The sampler seed is **fixed**, so only the prompt changes between cells: a fair comparison.\\n\\n:pi-star:{#f59e0b} The lists describe people in plain words and name no style, so they work with any model. **Render** writes quality tags for Illustrious and NoobAI by default and adapts for Pony or Flux; add your style (anime, photo, painting) to the template. [Illustrious checkpoints](https://civitai.com/models?baseModels=Illustrious){button pi-search #3b82f6}\\n\\n[Seeds & loops](docs:seeds-and-loops){button pi-refresh}\", \"color\": \"\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4660, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"4\", \"order\": 4}}"
+      },
+      "id": 18,
+      "pos": [
+        4020,
+        0
+      ],
+      "title": "One click, nine images",
+      "order": 17
+    },
+    {
+      "type": "CheckpointLoaderSimple",
+      "size": [
+        420,
+        100
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "ckpt_name",
+          "name": "ckpt_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "ckpt_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            16
+          ]
+        },
+        {
+          "localized_name": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            12,
+            14
+          ]
+        },
+        {
+          "localized_name": "VAE",
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CheckpointLoaderSimple"
+      },
+      "widgets_values": [
+        "sd_xl_base_1.0.safetensors"
+      ],
+      "widgets_values_named": {
+        "ckpt_name": "sd_xl_base_1.0.safetensors"
+      },
+      "id": 19,
+      "pos": [
+        4020,
+        360
+      ],
+      "order": 18
+    },
+    {
+      "type": "CLIPTextEncode",
+      "size": [
+        400,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 12
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "CONDITIONING",
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            18
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      },
+      "id": 20,
+      "pos": [
+        4500,
+        360
+      ],
+      "title": "Positive",
+      "order": 19
+    },
+    {
+      "type": "CLIPTextEncode",
+      "size": [
+        400,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 14
+        },
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "CONDITIONING",
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            19
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      },
+      "id": 21,
+      "pos": [
+        4500,
+        560
+      ],
+      "title": "Negative",
+      "order": 20
+    },
+    {
+      "type": "KSampler",
+      "size": [
+        320,
+        280
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 16
+        },
+        {
+          "localized_name": "positive",
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 18
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 19
+        },
+        {
+          "localized_name": "latent_image",
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 21
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": 27
+        },
+        {
+          "localized_name": "steps",
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": 22
+        },
+        {
+          "localized_name": "cfg",
+          "name": "cfg",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "sampler_name",
+          "name": "sampler_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "scheduler",
+          "name": "scheduler",
+          "type": "COMBO",
+          "widget": {
+            "name": "scheduler"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "denoise",
+          "name": "denoise",
+          "type": "FLOAT",
+          "widget": {
+            "name": "denoise"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "LATENT",
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        42,
+        "fixed",
+        28,
+        5.5,
+        "euler_ancestral",
+        "normal",
+        1
+      ],
+      "widgets_values_named": {
+        "seed": 42,
+        "control_after_generate": "fixed",
+        "steps": 28,
+        "cfg": 5.5,
+        "sampler_name": "euler_ancestral",
+        "scheduler": "normal",
+        "denoise": 1
+      },
+      "id": 22,
+      "pos": [
+        4960,
+        360
+      ],
+      "order": 21
+    },
+    {
+      "type": "VAEDecode",
+      "size": [
+        320,
+        50
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "samples",
+          "name": "samples",
+          "type": "LATENT",
+          "link": 20
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            23
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode"
+      },
+      "id": 23,
+      "pos": [
+        4960,
+        700
+      ],
+      "order": 22
+    },
+    {
+      "type": "WP_Note",
+      "size": [
+        1580,
+        230
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** has two outputs: `images` (each one with its label) and `grid` (one sheet, saved here). Rows come from label part 1, columns from part 2.\\n\\n:pi-image: Want the images with no labels? Wire **VAE Decode** straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-th-large}\", \"color\": \"info\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 6220, \"y\": 760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"5\", \"order\": 5}}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"icon\", \"look\": \"card\", \"step\": 1, \"icon\": \"th-large\", \"text\": \"**Label & Grid** has two outputs: `images` (each one with its label) and `grid` (one sheet, saved here). Rows come from label part 1, columns from part 2.\\n\\n:pi-image: Want the images with no labels? Wire **VAE Decode** straight into a **Save Image**.\\n\\n[WP Label & Grid](docs:wp-label-grid){button pi-th-large}\", \"color\": \"info\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 6220, \"y\": 760}, \"zoomMode\": \"fixed\", \"zoom\": 0.5, \"shortcut\": \"5\", \"order\": 5}}"
+      },
+      "id": 24,
+      "pos": [
+        5420,
+        0
+      ],
+      "title": "The grid",
+      "order": 23
+    },
+    {
+      "type": "WP_LabelGrid",
+      "size": [
+        520,
+        490
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 23
+        },
+        {
+          "localized_name": "labels",
+          "name": "labels",
+          "shape": 7,
+          "type": "STRING",
+          "link": 24
+        },
+        {
+          "localized_name": "label_text",
+          "name": "label_text",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "localized_name": "title",
+          "name": "title",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "localized_name": "row_headers",
+          "name": "row_headers",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "localized_name": "column_headers",
+          "name": "column_headers",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "localized_name": "grid",
+          "name": "grid",
+          "type": "IMAGE",
+          "links": [
+            25
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_LabelGrid"
+      },
+      "widgets_values": [
+        "{\"label\": \"\", \"position\": \"none\", \"align\": \"center\", \"font\": \"default\", \"font_size\": 0, \"text_color\": \"#ffffff\", \"label_color\": \"#000000\", \"grid\": true, \"arrange\": \"auto\", \"columns\": 0, \"rows_from\": \"part:1\", \"row_headers\": \"\", \"columns_from\": \"part:2\", \"column_headers\": \"\", \"title\": \"Same person and place: three shots \\u00d7 three lights\", \"gap\": 8, \"margin\": 16, \"background\": \"#ffffff\", \"header_color\": \"#000000\", \"cell_width\": 512}"
+      ],
+      "widgets_values_named": {
+        "wp_label_grid": "{\"label\": \"\", \"position\": \"none\", \"align\": \"center\", \"font\": \"default\", \"font_size\": 0, \"text_color\": \"#ffffff\", \"label_color\": \"#000000\", \"grid\": true, \"arrange\": \"auto\", \"columns\": 0, \"rows_from\": \"part:1\", \"row_headers\": \"\", \"columns_from\": \"part:2\", \"column_headers\": \"\", \"title\": \"Same person and place: three shots \\u00d7 three lights\", \"gap\": 8, \"margin\": 16, \"background\": \"#ffffff\", \"header_color\": \"#000000\", \"cell_width\": 512}"
+      },
+      "id": 25,
+      "pos": [
+        5420,
+        360
+      ],
+      "order": 24
+    },
+    {
+      "type": "SaveImage",
+      "size": [
+        1000,
+        1040
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 25
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "wp-examples/grid"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "wp-examples/grid"
+      },
+      "id": 26,
+      "pos": [
+        6000,
+        360
+      ],
+      "order": 25
+    },
+    {
+      "type": "WP_Note",
+      "size": [
+        980,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 6, \"icon\": \"info-circle\", \"text\": \"Un-bypass the **Seed List** (select it, Ctrl+B) to give every frame its own sampler seed. It follows the Loop's frame count through `loop_config`. Bypassed, the sampler's fixed seed is used.\\n\\n[WP Seed List](docs:wp-seed-list){button pi-list}\", \"color\": \"neutral\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4510, \"y\": 1900}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"6\", \"order\": 6}}"
+      ],
+      "widgets_values_named": {
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 6, \"icon\": \"info-circle\", \"text\": \"Un-bypass the **Seed List** (select it, Ctrl+B) to give every frame its own sampler seed. It follows the Loop's frame count through `loop_config`. Bypassed, the sampler's fixed seed is used.\\n\\n[WP Seed List](docs:wp-seed-list){button pi-list}\", \"color\": \"neutral\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 4510, \"y\": 1900}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"6\", \"order\": 6}}"
+      },
+      "id": 27,
+      "pos": [
+        4020,
+        1600
+      ],
+      "title": "A new seed per frame (optional)",
+      "order": 26
+    },
+    {
+      "type": "WP_SeedList",
+      "size": [
+        460,
+        370
+      ],
+      "flags": {},
+      "mode": 4,
+      "inputs": [
+        {
+          "localized_name": "loop_config",
+          "name": "loop_config",
+          "shape": 7,
+          "type": "WP_CONTEXT_LOOP_CONFIG",
+          "link": 26
+        },
+        {
+          "localized_name": "base_seed",
+          "name": "base_seed",
+          "type": "INT",
+          "widget": {
+            "name": "base_seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "count",
+          "name": "count",
+          "type": "INT",
+          "widget": {
+            "name": "count"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "shape": 6,
+          "type": "INT",
+          "links": [
+            27
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "WP_SeedList"
+      },
+      "widgets_values": [
+        42,
+        "randomize",
+        9,
+        "{\"strategy\":\"hash_index\",\"override_seed\":false,\"override_count\":true,\"override_strategy\":true,\"seed_locks\":{}}"
+      ],
+      "widgets_values_named": {
+        "base_seed": 42,
+        "control_after_generate": "randomize",
+        "count": 9,
+        "wp_seed_list_config": "{\"strategy\":\"hash_index\",\"override_seed\":false,\"override_count\":true,\"override_strategy\":true,\"seed_locks\":{}}"
+      },
+      "id": 28,
+      "pos": [
+        4020,
+        1840
+      ],
+      "order": 27
+    }
+  ],
+  "links": [
+    [
+      1,
+      3,
+      0,
+      5,
+      0,
+      "PIPELINE_CONTEXT"
+    ],
+    [
+      2,
+      5,
+      0,
+      6,
+      0,
+      "PIPELINE_CONTEXT"
+    ],
+    [
+      3,
+      6,
+      0,
+      8,
+      0,
+      "PIPELINE_CONTEXT"
+    ],
+    [
+      4,
+      6,
+      0,
+      10,
+      0,
+      "PIPELINE_CONTEXT"
+    ],
+    [
+      5,
+      8,
+      0,
+      9,
+      1,
+      "STRING"
+    ],
+    [
+      6,
+      8,
+      1,
+      9,
+      2,
+      "STRING"
+    ],
+    [
+      7,
+      12,
+      0,
+      13,
+      0,
+      "PIPELINE_CONTEXT"
+    ],
+    [
+      8,
+      12,
+      0,
+      14,
+      0,
+      "PIPELINE_CONTEXT"
+    ],
+    [
+      9,
+      16,
+      0,
+      17,
+      0,
+      "LATENT"
+    ],
+    [
+      10,
+      15,
+      0,
+      17,
+      1,
+      "LATENT"
+    ],
+    [
+      11,
+      14,
+      0,
+      17,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      12,
+      19,
+      1,
+      20,
+      0,
+      "CLIP"
+    ],
+    [
+      13,
+      9,
+      0,
+      20,
+      1,
+      "STRING"
+    ],
+    [
+      14,
+      19,
+      1,
+      21,
+      0,
+      "CLIP"
+    ],
+    [
+      15,
+      9,
+      1,
+      21,
+      1,
+      "STRING"
+    ],
+    [
+      16,
+      19,
+      0,
+      22,
+      0,
+      "MODEL"
+    ],
+    [
+      17,
+      19,
+      2,
+      23,
+      1,
+      "VAE"
+    ],
+    [
+      18,
+      20,
+      0,
+      22,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      19,
+      21,
+      0,
+      22,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      20,
+      22,
+      0,
+      23,
+      0,
+      "LATENT"
+    ],
+    [
+      21,
+      17,
+      0,
+      22,
+      3,
+      "LATENT"
+    ],
+    [
+      22,
+      13,
+      0,
+      22,
+      5,
+      "INT"
+    ],
+    [
+      23,
+      23,
+      0,
+      25,
+      0,
+      "IMAGE"
+    ],
+    [
+      24,
+      10,
+      0,
+      25,
+      1,
+      "STRING"
+    ],
+    [
+      25,
+      25,
+      1,
+      26,
+      0,
+      "IMAGE"
+    ],
+    [
+      26,
+      3,
+      1,
+      28,
+      0,
+      "WP_CONTEXT_LOOP_CONFIG"
+    ],
+    [
+      27,
+      28,
+      0,
+      22,
+      4,
+      "INT"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Prompt, once per frame",
+      "bounding": [
+        -40,
+        -60,
+        2920,
+        1460
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "Quick preview",
+      "bounding": [
+        2920,
+        -60,
+        1020,
+        1460
+      ],
+      "color": "#b06634",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "Image",
+      "bounding": [
+        3980,
+        -60,
+        1360,
+        1460
+      ],
+      "color": "#2f6b4f",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "Grid",
+      "bounding": [
+        5380,
+        -60,
+        1660,
+        1460
+      ],
+      "color": "#7a4ea8",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "Optional · a new seed per frame",
+      "bounding": [
+        3980,
+        1540,
+        1060,
+        720
+      ],
+      "color": "#6b7280",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.22,
+      "offset": [
+        2540,
+        380
+      ]
+    },
+    "reroutes": [
+      {
+        "id": 1,
+        "pos": [
+          1740,
+          400
+        ],
+        "linkIds": [
+          4
+        ]
+      },
+      {
+        "id": 2,
+        "pos": [
+          1740,
+          960
+        ],
+        "linkIds": [
+          4
+        ],
+        "parentId": 1
+      },
+      {
+        "id": 3,
+        "pos": [
+          2940,
+          400
+        ],
+        "linkIds": [
+          8
+        ]
+      },
+      {
+        "id": 4,
+        "pos": [
+          2940,
+          860
+        ],
+        "linkIds": [
+          8
+        ],
+        "parentId": 3
+      },
+      {
+        "id": 5,
+        "pos": [
+          4460,
+          390
+        ],
+        "linkIds": [
+          12
+        ]
+      },
+      {
+        "id": 6,
+        "pos": [
+          4460,
+          420
+        ],
+        "linkIds": [
+          12
+        ],
+        "parentId": 5
+      },
+      {
+        "id": 7,
+        "pos": [
+          2894,
+          400
+        ],
+        "linkIds": [
+          13
+        ]
+      },
+      {
+        "id": 8,
+        "pos": [
+          2894,
+          1450
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 7
+      },
+      {
+        "id": 9,
+        "pos": [
+          4476,
+          1450
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 8
+      },
+      {
+        "id": 10,
+        "pos": [
+          4476,
+          460
+        ],
+        "linkIds": [
+          13
+        ],
+        "parentId": 9
+      },
+      {
+        "id": 11,
+        "pos": [
+          4460,
+          390
+        ],
+        "linkIds": [
+          14
+        ]
+      },
+      {
+        "id": 12,
+        "pos": [
+          4460,
+          432
+        ],
+        "linkIds": [
+          14
+        ],
+        "parentId": 11
+      },
+      {
+        "id": 13,
+        "pos": [
+          2906,
+          412
+        ],
+        "linkIds": [
+          15
+        ]
+      },
+      {
+        "id": 14,
+        "pos": [
+          2906,
+          1462
+        ],
+        "linkIds": [
+          15
+        ],
+        "parentId": 13
+      },
+      {
+        "id": 15,
+        "pos": [
+          4488,
+          1462
+        ],
+        "linkIds": [
+          15
+        ],
+        "parentId": 14
+      },
+      {
+        "id": 16,
+        "pos": [
+          4488,
+          472
+        ],
+        "linkIds": [
+          15
+        ],
+        "parentId": 15
+      },
+      {
+        "id": 17,
+        "pos": [
+          4470,
+          336
+        ],
+        "linkIds": [
+          16
+        ]
+      },
+      {
+        "id": 18,
+        "pos": [
+          4908,
+          336
+        ],
+        "linkIds": [
+          16
+        ],
+        "parentId": 17
+      },
+      {
+        "id": 19,
+        "pos": [
+          4908,
+          400
+        ],
+        "linkIds": [
+          16
+        ],
+        "parentId": 18
+      },
+      {
+        "id": 20,
+        "pos": [
+          4480,
+          324
+        ],
+        "linkIds": [
+          17
+        ]
+      },
+      {
+        "id": 21,
+        "pos": [
+          4918,
+          324
+        ],
+        "linkIds": [
+          17
+        ],
+        "parentId": 20
+      },
+      {
+        "id": 22,
+        "pos": [
+          4918,
+          730
+        ],
+        "linkIds": [
+          17
+        ],
+        "parentId": 21
+      },
+      {
+        "id": 23,
+        "pos": [
+          5296,
+          390
+        ],
+        "linkIds": [
+          20
+        ]
+      },
+      {
+        "id": 24,
+        "pos": [
+          5296,
+          670
+        ],
+        "linkIds": [
+          20
+        ],
+        "parentId": 23
+      },
+      {
+        "id": 25,
+        "pos": [
+          4954,
+          670
+        ],
+        "linkIds": [
+          20
+        ],
+        "parentId": 24
+      },
+      {
+        "id": 26,
+        "pos": [
+          4954,
+          730
+        ],
+        "linkIds": [
+          20
+        ],
+        "parentId": 25
+      },
+      {
+        "id": 27,
+        "pos": [
+          3940,
+          1040
+        ],
+        "linkIds": [
+          21
+        ]
+      },
+      {
+        "id": 28,
+        "pos": [
+          4928,
+          1040
+        ],
+        "linkIds": [
+          21
+        ],
+        "parentId": 27
+      },
+      {
+        "id": 29,
+        "pos": [
+          4928,
+          440
+        ],
+        "linkIds": [
+          21
+        ],
+        "parentId": 28
+      },
+      {
+        "id": 30,
+        "pos": [
+          3440,
+          1060
+        ],
+        "linkIds": [
+          22
+        ]
+      },
+      {
+        "id": 31,
+        "pos": [
+          4938,
+          1060
+        ],
+        "linkIds": [
+          22
+        ],
+        "parentId": 30
+      },
+      {
+        "id": 32,
+        "pos": [
+          4938,
+          510
+        ],
+        "linkIds": [
+          22
+        ],
+        "parentId": 31
+      },
+      {
+        "id": 33,
+        "pos": [
+          5320,
+          740
+        ],
+        "linkIds": [
+          23
+        ]
+      },
+      {
+        "id": 34,
+        "pos": [
+          5380,
+          740
+        ],
+        "linkIds": [
+          23
+        ],
+        "parentId": 33
+      },
+      {
+        "id": 35,
+        "pos": [
+          5380,
+          400
+        ],
+        "linkIds": [
+          23
+        ],
+        "parentId": 34
+      },
+      {
+        "id": 36,
+        "pos": [
+          2880,
+          950
+        ],
+        "linkIds": [
+          24
+        ]
+      },
+      {
+        "id": 37,
+        "pos": [
+          2880,
+          1414
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 36
+      },
+      {
+        "id": 38,
+        "pos": [
+          5392,
+          1414
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 37
+      },
+      {
+        "id": 39,
+        "pos": [
+          5392,
+          420
+        ],
+        "linkIds": [
+          24
+        ],
+        "parentId": 38
+      },
+      {
+        "id": 40,
+        "pos": [
+          430,
+          420
+        ],
+        "linkIds": [
+          26
+        ]
+      },
+      {
+        "id": 41,
+        "pos": [
+          430,
+          1426
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 40
+      },
+      {
+        "id": 42,
+        "pos": [
+          3990,
+          1426
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 41
+      },
+      {
+        "id": 43,
+        "pos": [
+          3990,
+          1880
+        ],
+        "linkIds": [
+          26
+        ],
+        "parentId": 42
+      },
+      {
+        "id": 44,
+        "pos": [
+          4520,
+          1880
+        ],
+        "linkIds": [
+          27
+        ]
+      },
+      {
+        "id": 45,
+        "pos": [
+          4520,
+          1438
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 44
+      },
+      {
+        "id": 46,
+        "pos": [
+          4948,
+          1438
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 45
+      },
+      {
+        "id": 47,
+        "pos": [
+          4948,
+          480
+        ],
+        "linkIds": [
+          27
+        ],
+        "parentId": 46
+      }
+    ],
+    "linkExtensions": [
+      {
+        "id": 4,
+        "parentId": 2
+      },
+      {
+        "id": 8,
+        "parentId": 4
+      },
+      {
+        "id": 12,
+        "parentId": 6
+      },
+      {
+        "id": 13,
+        "parentId": 10
+      },
+      {
+        "id": 14,
+        "parentId": 12
+      },
+      {
+        "id": 15,
+        "parentId": 16
+      },
+      {
+        "id": 16,
+        "parentId": 19
+      },
+      {
+        "id": 17,
+        "parentId": 22
+      },
+      {
+        "id": 20,
+        "parentId": 26
+      },
+      {
+        "id": 21,
+        "parentId": 29
+      },
+      {
+        "id": 22,
+        "parentId": 32
+      },
+      {
+        "id": 23,
+        "parentId": 35
+      },
+      {
+        "id": 24,
+        "parentId": 39
+      },
+      {
+        "id": 26,
+        "parentId": 43
+      },
+      {
+        "id": 27,
+        "parentId": 47
+      }
+    ]
+  },
+  "version": 0.4
+}

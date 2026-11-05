@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import Toggle from "../../ui/Toggle.vue";
-import Select from "../../ui/Select.vue";
-import type { SelectOption } from "../../ui/select-types";
-import SettingGroup from "../SettingGroup.vue";
+import WpSwitch from "@/kit/WpSwitch.vue";
+import Select from "@/kit/Select.vue";
+import type { SelectOption } from "@/kit/select-types";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import { useUiStore, type SubcatDefault } from "../../../stores/uiStore";
 
@@ -22,7 +22,8 @@ const SUBCAT_DEFAULT_OPTIONS: SelectOption[] = [
       hint="A group with no tags in it normally disappears when you save the wildcard. Turn this on to keep the empty box so you can fill it later."
       setting-key="keep-empty-groups"
     >
-      <Toggle
+      <WpSwitch
+        size="md"
         :model-value="ui.keepEmptyTagGroups"
         aria-label="Keep empty tag groups"
         data-test="settings-keep-empty-groups"

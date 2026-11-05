@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Chip from "@/kit/Chip.vue";
+import WpNumber from "@/kit/WpNumber.vue";
+import { computed, inject, ref } from "vue";
 import {
   effectiveWeight,
   isEnabled,
@@ -9,6 +12,7 @@ import {
 } from "../probability";
 import { splitRefFilter, tokenizeRich, type RichToken } from "../../../../../widgets/richTokenize";
 import { cacheVersion, ensure, isConfirmedMissing, lookup } from "../../../../../extension/preview-resolver";
+import { CONTEXT_POOLS_KEY } from "../../../../../extension/context-pools";
 import type { PairingBadge } from "../../../../../extension/constraint-pairs";
 import { matches, parse, readsAs } from "@/manager/parsing/subcatFilter";
 import { formatProbability } from "@/manager/utils/percent";
@@ -56,6 +60,15 @@ const emit = defineEmits<{
   "toggle": [optionId: string];
   "weight": [optionId: string, weight: number | null];
 }>();
+
+/** This node's own wildcards (switched-off rows included), provided by the
+ *  Context widget. The engine resolves a `@{}` ref against these BEFORE the
+ *  library, so a ref to one of them is never broken — even on a machine whose
+ *  library has never seen it (an example workflow, a shared workflow). */
+const contextPools = inject(CONTEXT_POOLS_KEY, undefined);
+function nodePool(uuid: string | undefined) {
+  return uuid ? contextPools?.value.get(uuid) : undefined;
+}
 
 const enabled = computed(() => isEnabled(props.option, props.instance, props.multiActive === true));
 
@@ -127,7 +140,7 @@ const hasBrokenRef = computed(() => {
   void cacheVersion.value;
   return tokens.value.some((t) => {
     const uuid = t.kind === "ref" ? t.meta?.uuid : undefined;
-    return typeof uuid === "string" && isConfirmedMissing(uuid);
+    return typeof uuid === "string" && !nodePool(uuid) && isConfirmedMissing(uuid);
   });
 });
 
@@ -143,13 +156,16 @@ function refDisplay(
   raw: string,
 ): string {
   if (!uuid) return raw;
-  // Priority: live library lookup → cached `#name` from the token →
-  // raw token text (which still carries `@{uuid#name}` or bare uuid).
-  // Mirrors the SPA's RefChip label-fallback chain so broken refs
-  // surface the cached name instead of a bare uuid.
+  // Priority: live library lookup → this node's own copy → cached `#name`
+  // from the token → raw token text (which still carries `@{uuid#name}` or
+  // bare uuid). Mirrors the SPA's RefChip label-fallback chain so broken
+  // refs surface the cached name instead of a bare uuid.
   const hit = lookup(uuid);
   if (hit?.varBinding && hit.varBinding.trim()) return `@${hit.varBinding.trim()}`;
   if (hit?.name && hit.name.trim()) return `@${hit.name.trim()}`;
+  const local = nodePool(uuid);
+  if (local?.varBinding) return `@${local.varBinding}`;
+  if (local?.name.trim()) return `@${local.name.trim()}`;
   if (cachedName && cachedName.trim()) {
     // Drop a leaked `!null` exclude-null marker so the label reads `@mood`,
     // not `@mood!null` (the marker surfaces as the ban icon instead).
@@ -159,13 +175,14 @@ function refDisplay(
   return raw;
 }
 
-/** True when the ref's uuid resolves against neither the live preview-
- *  resolver cache nor any local sibling in the chain — i.e. broken
+/** True when the ref's uuid resolves against neither this node's own
+ *  wildcards nor the live preview-resolver cache — i.e. broken
  *  reference. Drives the danger-tint + `?` icon on the option chip
  *  so canvas-side broken refs read the same way as the SPA's RefChip
  *  unresolved state. */
 function refIsUnresolved(uuid: string | undefined): boolean {
   if (!uuid) return false;
+  if (nodePool(uuid)) return false;
   // `lookup` is the resolver cache; truthy means we know a live
   // entry exists for this uuid (live name/varBinding either populated
   // now or already polled). Anything falsey reads as broken.
@@ -307,51 +324,17 @@ function clampWeight(n: number): number {
   return Number.isFinite(n) && n > 0 ? n : WEIGHT_MIN;
 }
 
-function onWeightInput(ev: Event): void {
-  const raw = (ev.target as HTMLInputElement).value.trim();
-  if (raw === "") {
+/** Typed or stepped weight. An empty box clears the weight (back to 1);
+ *  WpNumber already snaps typed fuzz and steps with the step's precision. */
+function onWeight(n: number | null): void {
+  if (n === null) {
     emit("weight", props.option.id, null);
     return;
   }
-  const n = Number(raw);
-  if (Number.isFinite(n)) {
-    // Snap to 3 decimals so fuzz tails (e.g. autofill / native step that
-    // beat our keydown intercept) don't leak into stored data, while
-    // still honouring legit 2-decimal precision a user might type.
-    const snapped = Math.round(n * 1000) / 1000;
-    emitWeight(clampWeight(snapped));
-  }
-}
-
-/** Route ArrowUp / ArrowDown / wheel through `bumpWeight()` so the
- *  step uses rounded math instead of the browser's native float step. */
-function onWeightKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "ArrowUp") {
-    ev.preventDefault();
-    bumpWeight(1);
-  } else if (ev.key === "ArrowDown") {
-    ev.preventDefault();
-    bumpWeight(-1);
-  }
-}
-function onWeightWheel(ev: WheelEvent): void {
-  const target = ev.target as HTMLInputElement;
-  if (document.activeElement !== target) return;
-  ev.preventDefault();
-  bumpWeight(ev.deltaY < 0 ? 1 : -1);
+  emitWeight(clampWeight(n));
 }
 
 const WEIGHT_STEP = 0.1;
-
-function bumpWeight(direction: 1 | -1): void {
-  if (!enabled.value) return;
-  // Round to 1 decimal so 1.0 + 0.1 doesn't drift to 1.0999... visually.
-  const next = Math.max(
-    WEIGHT_MIN,
-    Math.round((weight.value + direction * WEIGHT_STEP) * 10) / 10,
-  );
-  emitWeight(next);
-}
 
 /** Percentage label, delegated to the SPA's `formatProbability` so both
  *  editors agree digit-for-digit. The canvas modal used to round to a whole
@@ -399,33 +382,15 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
     }"
     :title="hasBrokenRef ? 'References a module that is not in the library' : undefined"
   >
-    <span
+    <Checkbox
       class="opt__check"
-      :class="{ 'opt__check--on': enabled && !nullDisabledInMulti }"
+      size="sm"
+      :model-value="enabled && !nullDisabledInMulti"
+      :disabled="interactionLocked"
+      :aria-label="`Use option ${option.value || 'empty'}`"
       data-test="opt-check"
-      role="checkbox"
-      :aria-checked="enabled"
-      :aria-disabled="interactionLocked"
-      :tabindex="interactionLocked ? -1 : 0"
-      @click="onToggle"
-      @keydown.space.prevent="onToggle"
-    >
-      <!-- Inline SVG checkmark instead of PrimeIcon: precise sizing
-           (8×8 inside 14px box) without the icon-font's intrinsic
-           line-height inflating the glyph past the box edge. -->
-      <svg
-        v-if="enabled && !nullDisabledInMulti"
-        class="opt__check-tick"
-        width="8"
-        height="8"
-        viewBox="0 0 12 12"
-        aria-hidden="true"
-      >
-        <path d="M2.5 6.5 L5 9 L9.5 3.5"
-              fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </span>
+      @update:model-value="onToggle"
+    />
     <span class="opt__name" data-test="opt-name" :class="{ 'opt__name--null': option.is_null }">
       <span class="opt__name-main" :title="option.value || undefined">
       <span
@@ -454,15 +419,9 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
           :data-uuid="tok.meta?.uuid"
           class="opt__tok opt__tok--chip"
         />
-        <RefChip
-          v-else-if="tok.kind === 'var'"
-          :kind="'var'"
-          :name="tok.raw.replace(/^\$/, '')"
-          :resolved="true"
-          :producer="varProducers?.get(tok.raw.replace(/^\$/, ''))"
-          graph-aware
-          class="opt__tok opt__tok--chip"
-        />
+        <!-- A `$name` in a wildcard option is NOT a read: the engine prints it
+             as written (wildcards set variables, they don't read them), so
+             it falls through to plain text like the library editor shows. -->
         <span
           v-else-if="tok.kind === 'dp-brace'"
           class="opt__tok opt__tok--brace"
@@ -504,45 +463,20 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
       </span>
       <span class="opt__prob-pct" data-test="opt-prob-pct">{{ fmtPct(probability) }}</span>
     </span>
-    <span class="opt__weight-wrap" :class="{ 'opt__weight-wrap--off': !enabled }">
-      <input
-        class="opt__weight"
-        data-test="opt-weight"
-        type="number"
-        step="0.1"
-        min="0.01"
-        :value="weight"
-        :disabled="!enabled"
-        :aria-label="`Weight for ${option.value}`"
-        @input="onWeightInput"
-        @keydown="onWeightKeydown"
-        @wheel="onWeightWheel"
-      />
-      <span class="opt__spin">
-        <button
-          type="button"
-          class="opt__spin-btn"
-          data-test="opt-weight-up"
-          tabindex="-1"
-          :disabled="!enabled"
-          :aria-label="`Increase weight for ${option.value}`"
-          @click="bumpWeight(1)"
-        ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-          <path d="M0 5 L4 0 L8 5 Z" fill="currentColor" />
-        </svg></button>
-        <button
-          type="button"
-          class="opt__spin-btn"
-          data-test="opt-weight-down"
-          tabindex="-1"
-          :disabled="!enabled"
-          :aria-label="`Decrease weight for ${option.value}`"
-          @click="bumpWeight(-1)"
-        ><svg width="6" height="4" viewBox="0 0 8 5" aria-hidden="true">
-          <path d="M0 0 L4 5 L8 0 Z" fill="currentColor" />
-        </svg></button>
-      </span>
-    </span>
+    <WpNumber
+      class="opt__weight-wrap"
+      :model-value="weight"
+      :min="WEIGHT_MIN"
+      :step="WEIGHT_STEP"
+      commit="input"
+      nullable
+      :disabled="!enabled"
+      :aria-label="`Weight for ${option.value}`"
+      :up-label="`Increase weight for ${option.value}`"
+      :down-label="`Decrease weight for ${option.value}`"
+      data-test="opt-weight"
+      @update:model-value="onWeight"
+    />
     <span class="opt__cat">
       <span
         v-for="tag in visibleTags"
@@ -551,9 +485,9 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
         :data-test="`opt-cat-${tag}`"
         :style="chipStyle(tag)"
       >{{ tag }}</span>
-      <button
+      <Chip
         v-if="hiddenTagCount > 0 || catExpanded"
-        type="button"
+        as="button"
         class="opt__cat-more"
         :data-test="`opt-cat-more-${option.id}`"
         :aria-expanded="catExpanded"
@@ -561,7 +495,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
           ? `Collapse tags for ${option.value}`
           : `Show ${hiddenTagCount} more tags for ${option.value}`"
         @click.stop="catExpanded = !catExpanded"
-      >{{ catExpanded ? "−" : `+${hiddenTagCount}` }}</button>
+      >{{ catExpanded ? "−" : `+${hiddenTagCount}` }}</Chip>
     </span>
   </div>
 </template>
@@ -586,39 +520,11 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 }
 .opt:last-child { border-bottom: none; }
 .opt--broken {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger) 6%, transparent);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .opt:hover { background: var(--wp-row-hover, rgba(255, 255, 255, 0.02)); }
-.opt__check {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  background: var(--wp-bg);
-  flex-shrink: 0;
-}
-.opt__check-tick {
-  display: block;
-}
-.opt__check--on {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
-/* Category-filtered rows are read-only — the chip controls them.
- * Show a "not-allowed" cursor + slight opacity so the user knows the
- * per-option checkbox is intentionally inert in this state. */
-/* Any locked checkbox — category-filtered OR the null row in multi-pick —
- * reads as intentionally inert: not-allowed cursor + dimmed. Keyed on
- * aria-disabled so both lock reasons share one rule. */
-.opt__check[aria-disabled="true"] {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
+.opt__check { flex-shrink: 0; }
 .opt--filtered { cursor: default; }
 .opt__name {
   /* Outer cell is a flex row so the trailing pair-badge cluster
@@ -651,12 +557,12 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 .opt__neg {
   flex: 0 0 auto;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: var(--wp-danger, #ef4444);
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 14%, transparent);
+  color: var(--wp-danger);
+  background: color-mix(in srgb, var(--wp-danger) 14%, transparent);
   cursor: help;
 }
 .opt__neg--fb {
@@ -679,7 +585,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   padding: 2px 8px;
   background: color-mix(in srgb, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
   border: 1px dashed var(--wp-border-soft, var(--wp-border));
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted, var(--wp-text2));
   font: 10px var(--wp-font-mono);
 }
@@ -709,7 +615,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 }
 .opt__tok--ref,
 .opt__tok--var {
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 0 5px;
   gap: 3px;
   border: 1px solid;
@@ -729,13 +635,13 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   align-items: center;
   gap: 2px;
   margin-left: 2px;
-  color: var(--wp-status-modified, #fbbf24);
+  color: var(--wp-status-modified);
 }
 .opt__tok-funnel { font-size: 8px; line-height: 1; }
 .opt__tok-nonull { font-size: 8px; line-height: 1; opacity: 0.85; }
 .opt__tok--ref {
-  background: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-kind-wildcard, #a855f7) 50%, transparent);
+  background: color-mix(in srgb, var(--wp-kind-wildcard) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-kind-wildcard) 50%, transparent);
   color: var(--wp-kind-wildcard);
 }
 /* Unresolved ref — broken reference (target uuid not in library +
@@ -744,20 +650,19 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
  * the same broken-state grammar. Wins over the base `.opt__tok--ref`
  * accent via selector specificity. */
 .opt__tok--ref.opt__tok--unresolved {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 50%, transparent);
-  color: var(--wp-danger, #ef4444);
+  background: color-mix(in srgb, var(--wp-danger) 15%, transparent);
+  border-color: color-mix(in srgb, var(--wp-danger) 50%, transparent);
+  color: var(--wp-danger);
   cursor: help;
 }
 .opt__tok--var {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 15%, transparent);
-  border-color: color-mix(in srgb, var(--wp-success, #22c55e) 50%, transparent);
-  color: var(--wp-success);
+  color: var(--wp-accent-text);
+  font-weight: 600;
 }
 /* Plain `{a|b|c}` inline-choice block — warn-tone yellow (matches the
  * SPA `wp-rt-dp-brace` palette in `manager/styles/rich-text.css`). */
 .opt__tok--brace {
-  color: var(--wp-warn, #fcd34d);
+  color: var(--wp-warn);
   font-weight: 600;
 }
 /* `{N$$sep$$a|b|c}` multi-pick block — distinct teal/green tone so users
@@ -766,7 +671,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
  * NO background / box (continuous block-coloured text) — same treatment the
  * SPA editor + preview now use for brace-block scaffolding. */
 .opt__tok--multi {
-  color: var(--wp-rt-token-good, #4ad4c4);
+  color: var(--wp-rt-token-good);
   font-weight: 500;
 }
 .opt__tok--escape {
@@ -788,14 +693,14 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   flex: 1;
   height: 4px;
   background: var(--wp-bg);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   overflow: hidden;
 }
 .opt__prob-bar > span {
   display: block;
   height: 100%;
   background: var(--wp-accent);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   transition: width var(--wp-motion-hover) ease;
 }
 .opt__prob-pct {
@@ -805,90 +710,10 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   text-align: right;
 }
 .opt--off .opt__prob-pct { color: var(--wp-text-dim, var(--wp-text3)); }
-/* Weight input wrapper holds the number field plus a stacked custom
- * spinner pair. The wrapper carries the border + bg so the input and
- * spinner read as a single themed control. Native browser spinners
- * are hidden via `appearance: textfield` (FF) + ::-webkit pseudo
- * elements; the up/down buttons we render do the same job but
- * styled to fit the dark/light theme. */
-.opt__weight-wrap {
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: 2px;
-  width: 100%;
-  height: 22px;
-  overflow: hidden;
-}
-.opt__weight-wrap:focus-within {
-  border-color: var(--wp-accent);
-}
-.opt__weight {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  padding: 0 6px;
-  font: 10px var(--wp-font-mono);
-  color: var(--wp-text-muted, var(--wp-text2));
-  text-align: right;
-  width: 100%;
-  min-width: 0;
-  -moz-appearance: textfield;
-}
-.opt__weight::-webkit-outer-spin-button,
-.opt__weight::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.opt__weight:focus {
-  outline: none;
-  color: var(--wp-text);
-}
-.opt--weighted .opt__weight {
-  color: var(--wp-accent-text, var(--wp-text));
-}
-.opt--weighted .opt__weight-wrap {
-  border-color: var(--wp-accent);
-}
-.opt--off .opt__weight-wrap {
-  background: transparent;
-  border-color: var(--wp-border-soft, var(--wp-border));
-}
-.opt--off .opt__weight {
-  color: var(--wp-text-dim, var(--wp-text3));
-}
-.opt__spin {
-  display: flex;
-  flex-direction: column;
-  width: 14px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
-.opt__spin-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  line-height: 0;
-}
-.opt__spin-btn + .opt__spin-btn {
-  border-top: 1px solid var(--wp-border);
-}
-.opt__spin-btn:hover { color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,0.10); }
-.opt__spin-btn:disabled {
-  cursor: not-allowed;
-  color: var(--wp-text-dim, var(--wp-text3));
-  opacity: 0.4;
-  background: transparent;
-}
+/* The weight is a WpNumber; the row only tints it. */
+.opt__weight-wrap { width: 100%; }
+.opt--weighted .opt__weight-wrap { border-color: var(--wp-accent); }
+.opt--weighted .opt__weight-wrap :deep(.wp-cnum__field) { color: var(--wp-accent-text, var(--wp-text)); }
 /* CATEGORY column — option's sub-category tags as small chips, one per
  * axis-coloured tag. Wraps + right-aligns so multi-tag options stay
  * readable in the narrow column. Read-only here (membership is edited in
@@ -904,7 +729,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   display: inline-flex;
   align-items: center;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font: 8px var(--wp-font-sans);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -918,11 +743,13 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
 }
 /* `+N` / `−` disclosure for the hidden tags. Styled as a neutral chip so it
  * reads as part of the tag run rather than as a row action. */
-.opt__cat-more {
+/* A kit Chip (as a button) in the old dashed "+N" look. */
+.wp-chip.opt__cat-more {
+  height: auto;
   display: inline-flex;
   align-items: center;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
   font: 8px var(--wp-font-sans);
   letter-spacing: 0.06em;
   white-space: nowrap;
@@ -931,7 +758,7 @@ const hiddenTagCount = computed(() => allTags.value.length - visibleTags.value.l
   border: 1px dashed color-mix(in srgb, var(--wp-text3) 45%, transparent);
   background: transparent;
 }
-.opt__cat-more:hover {
+.wp-chip.opt__cat-more:hover {
   color: var(--wp-text);
   border-color: var(--wp-accent);
 }

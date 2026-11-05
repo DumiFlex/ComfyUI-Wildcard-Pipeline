@@ -27,3 +27,9 @@ contact_links:
     about: |
       Check the wiki first — most "how does X work" questions are
       already answered there.
+
+  - name: 🔒 Security issue — report privately
+    url: https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/security/advisories/new
+    about: |
+      Please don't open a public issue for a vulnerability. See
+      SECURITY.md for what to include.

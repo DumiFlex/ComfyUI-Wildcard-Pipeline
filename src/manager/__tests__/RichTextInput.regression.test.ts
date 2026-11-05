@@ -33,6 +33,17 @@ function setCaretAt(node: Node, offset: number): void {
   sel?.addRange(range);
 }
 
+/** Deepest first / last descendant of `node` — a text atom's span may hold
+ *  nested inline-token spans (e.g. a coloured `.wp-rt-var` run). */
+function deepest(node: Node, end: "first" | "last"): Node {
+  let n = node;
+  for (;;) {
+    const next = end === "first" ? n.firstChild : n.lastChild;
+    if (!next) return n;
+    n = next;
+  }
+}
+
 /** Place caret at the END of the host's content (raw-text length). */
 function caretAtEnd(host: HTMLElement): void {
   const spans = host.querySelectorAll<HTMLElement>(".wp-rt__text");
@@ -41,7 +52,7 @@ function caretAtEnd(host: HTMLElement): void {
     return;
   }
   const last = spans[spans.length - 1];
-  const t = last.firstChild;
+  const t = last.firstChild ? deepest(last, "last") : null;
   if (t && t.nodeType === Node.TEXT_NODE) {
     setCaretAt(t, (t.textContent ?? "").length);
   } else {
@@ -57,7 +68,7 @@ function caretAtStart(host: HTMLElement): void {
     return;
   }
   const first = spans[0];
-  const t = first.firstChild;
+  const t = first.firstChild ? deepest(first, "first") : null;
   if (t && t.nodeType === Node.TEXT_NODE) {
     setCaretAt(t, 0);
   } else {
@@ -129,7 +140,7 @@ async function pasteText(host: HTMLElement, text: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────
 
 describe("Tier 1 — user-reported corruption regressions", () => {
-  it("$testo + space + 2× Backspace leaves empty input with editable host + ZWSP span", async () => {
+  it("$testo + space + 2× Backspace deletes one char at a time, host stays editable", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", surface: "combine" },
       attachTo: document.body,
@@ -137,22 +148,26 @@ describe("Tier 1 — user-reported corruption regressions", () => {
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
     host.focus();
     await typeIntoFirstSpan(host, "$testo ");
-    // After space-settle: 1 var chip expected.
-    expect(wrap.findAll(".wp-refchip").length).toBe(1);
+    // `$var` is coloured text, never a chip.
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$testo"]);
     // 1st Backspace: removes trailing space.
     caretAtEnd(host);
     await pressKey(host, "Backspace");
-    // 2nd Backspace: should atomically remove the chip.
+    // 2nd Backspace: removes ONE char of the name, not the whole token.
     caretAtEnd(host);
     await pressKey(host, "Backspace");
     // Assertions:
+    let events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("$test");
     expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$test"]);
     expect(host.querySelectorAll(".wp-rt__text").length).toBeGreaterThanOrEqual(1);
     expect(host.getAttribute("contenteditable")).toBe("true");
     // Host must be able to accept new content (atoms shape valid).
     await typeIntoFirstSpan(host, "x");
-    const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("x");
+    events = wrap.emitted("update:modelValue") ?? [];
+    expect(events[events.length - 1]?.[0]).toBe("$testx");
     wrap.unmount();
   });
 
@@ -234,7 +249,7 @@ describe("Tier 1 — user-reported corruption regressions", () => {
     wrap.unmount();
   });
 
-  it("Paste containing $name (combine surface) creates chip + preserves surrounding text", async () => {
+  it("Paste containing $name (combine surface) colours the var + preserves surrounding text", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", surface: "combine" },
       attachTo: document.body,
@@ -245,8 +260,9 @@ describe("Tier 1 — user-reported corruption regressions", () => {
     await pasteText(host, "hi $person done");
     const events = wrap.emitted("update:modelValue") ?? [];
     expect(events[events.length - 1]?.[0]).toBe("hi $person done");
-    // Chip created, surrounding text intact.
-    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    // Var rendered as a coloured text run (no chip), surrounding text intact.
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$person"]);
     wrap.unmount();
   });
 
@@ -304,14 +320,15 @@ describe("Tier 1 — user-reported corruption regressions", () => {
     wrap.unmount();
   });
 
-  it("Mixed $testo $$cost: Backspace consumes space + atomic $testo chip; $$cost intact", async () => {
+  it("Mixed $testo $$cost: $testo is a coloured var run; $$cost stays literal", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "$testo $$cost", surface: "combine" },
       attachTo: document.body,
     });
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
-    // Initially: 1 var chip ($testo), $$cost is literal text.
-    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    // Initially: 1 var run ($testo), $$cost is literal text.
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$testo"]);
     // Confirm $$cost was NOT chipified.
     expect(host.textContent ?? "").toContain("$$cost");
     wrap.unmount();
@@ -351,11 +368,11 @@ describe("Tier 1 — user-reported corruption regressions", () => {
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
     host.focus();
     await typeIntoFirstSpan(host, "$person ");
-    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$person"]);
     // Select all + overwrite.
     selectAll(host);
     await typeIntoFirstSpan(host, "fresh content");
-    // Verify chip cleared + new content present + host editable.
+    // Verify new content present + host editable.
     expect(host.getAttribute("contenteditable")).toBe("true");
     const events = wrap.emitted("update:modelValue") ?? [];
     const last = events[events.length - 1]?.[0] as string | undefined;
@@ -385,11 +402,12 @@ describe("Tier 2 — surface gates chip render kinds", () => {
     wrap.unmount();
   });
 
-  it("combine surface: $name renders as var chip", () => {
+  it("combine surface: $name renders as coloured var text, no chip", () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "$testo", surface: "combine" },
     });
-    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(wrap.findAll(".wp-rt__text .wp-rt-var").map((v) => v.text())).toEqual(["$testo"]);
     wrap.unmount();
   });
 
@@ -439,7 +457,7 @@ describe("Tier 3 — atomic chip delete gated by surface", () => {
     wrap.unmount();
   });
 
-  it("combine surface: Backspace immediately after $name chip deletes atomically", async () => {
+  it("combine surface: Backspace at the end of $name deletes ONE char (no atomic)", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "$testo", surface: "combine" },
       attachTo: document.body,
@@ -449,7 +467,8 @@ describe("Tier 3 — atomic chip delete gated by surface", () => {
     caretAtEnd(host);
     await pressKey(host, "Backspace");
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("");
+    expect(events[events.length - 1]?.[0]).toBe("$test");
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$test"]);
     wrap.unmount();
   });
 
@@ -482,7 +501,7 @@ describe("Tier 3 — atomic chip delete gated by surface", () => {
     wrap.unmount();
   });
 
-  it("combine surface: Forward-Delete on $name chip deletes atomically", async () => {
+  it("combine surface: Forward-Delete at the start of $name deletes ONE char (no atomic)", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "$testo", surface: "combine" },
       attachTo: document.body,
@@ -492,7 +511,9 @@ describe("Tier 3 — atomic chip delete gated by surface", () => {
     caretAtStart(host);
     await pressKey(host, "Delete");
     const events = wrap.emitted("update:modelValue") ?? [];
-    expect(events[events.length - 1]?.[0]).toBe("");
+    // Only the `$` goes; what is left is plain text, no longer a var.
+    expect(events[events.length - 1]?.[0]).toBe("testo");
+    expect(wrap.findAll(".wp-rt-var").length).toBe(0);
     wrap.unmount();
   });
 });
@@ -505,13 +526,14 @@ describe("Tier 3 — atomic chip delete gated by surface", () => {
 describe("Tier 4 — caret + editability invariants", () => {
   it("after applyAtoms with empty result, host has 1 wp-rt__text span with ZWSP content", async () => {
     const wrap = mount(RichTextInput, {
-      props: { modelValue: "$test", surface: "combine" },
+      // Refs are the chips that still delete atomically (`$var` is text).
+      props: { modelValue: "@{aabbccdd}", surface: "wildcard" },
       attachTo: document.body,
     });
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
     host.focus();
     caretAtEnd(host);
-    await pressKey(host, "Backspace");  // atomic delete of $test chip
+    await pressKey(host, "Backspace");  // atomic delete of the @{aabbccdd} chip
     // Stronger assertions: exact span structure + ZWSP content + no chip.
     const spans = host.querySelectorAll(".wp-rt__text");
     expect(spans.length).toBe(1);
@@ -552,13 +574,14 @@ describe("Tier 4 — caret + editability invariants", () => {
 
   it("after chip atomic delete, host accepts further input AND emits new content", async () => {
     const wrap = mount(RichTextInput, {
-      props: { modelValue: "$x", surface: "combine" },
+      // Refs are the chips that still delete atomically (`$var` is text).
+      props: { modelValue: "@{aabbccdd}", surface: "wildcard" },
       attachTo: document.body,
     });
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
     host.focus();
     // Sanity: chip present pre-delete.
-    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    expect(wrap.findAll(".wp-refchip--ref").length).toBe(1);
     caretAtEnd(host);
     await pressKey(host, "Backspace");
     // Stronger: after delete, ATOM state should reflect cleared content.
@@ -605,17 +628,17 @@ describe("Tier 5 — programmatic apply syncs DOM correctly", () => {
     host.focus();
     // Type into the first span (browser path — doesn't update atoms reactively).
     await typeIntoFirstSpan(host, "$testo ");
-    // After space-settle, atoms reassign. Host should now reflect ONE chip
-    // for $testo + trailing space — NOT `$testo` raw text + chip.
+    // After space-settle, atoms reassign. Host should now reflect ONE
+    // coloured var run for $testo + trailing space — NOT duplicated text.
     const text = host.textContent?.replace(new RegExp(ZWSP, "g"), "");
-    // Expect serialised form via chip atom, not duplicated literal text.
-    // Acceptable: "$testo " (chip serializes to $testo) — but no "$testo$testo".
     expect(text).not.toContain("$testo$testo");
-    expect(wrap.findAll(".wp-refchip").length).toBe(1);
+    expect(text).toBe("$testo ");
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$testo"]);
     wrap.unmount();
   });
 
-  it("Repeated blur cycles do not compound chips", async () => {
+  it("Repeated blur cycles do not compound var runs", async () => {
     const wrap = mount(RichTextInput, {
       props: { modelValue: "", surface: "combine" },
       attachTo: document.body,
@@ -623,12 +646,13 @@ describe("Tier 5 — programmatic apply syncs DOM correctly", () => {
     const host = wrap.find(".wp-rt__host").element as HTMLElement;
     host.focus();
     await typeIntoFirstSpan(host, "$testo ");
-    expect(wrap.findAll(".wp-refchip").length).toBe(1);
+    expect(wrap.findAll(".wp-rt-var").length).toBe(1);
     for (let i = 0; i < 5; i++) {
       host.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
       await flushPromises();
     }
-    expect(wrap.findAll(".wp-refchip").length).toBe(1);
+    expect(wrap.findAll(".wp-refchip").length).toBe(0);
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$testo"]);
     wrap.unmount();
   });
 
@@ -643,8 +667,8 @@ describe("Tier 5 — programmatic apply syncs DOM correctly", () => {
     // Parent flips modelValue out from under the user.
     await wrap.setProps({ modelValue: "external $other" });
     await flushPromises();
-    // External value wins — chip rendered, no leftover "user typing".
-    expect(wrap.findAll(".wp-refchip--var").length).toBe(1);
+    // External value wins — var run rendered, no leftover "user typing".
+    expect(wrap.findAll(".wp-rt-var").map((v) => v.text())).toEqual(["$other"]);
     const text = host.textContent?.replace(new RegExp(ZWSP, "g"), "");
     expect(text).not.toContain("user typing");
     wrap.unmount();

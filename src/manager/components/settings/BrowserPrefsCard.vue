@@ -5,9 +5,9 @@
  * fixes the dot-prefix bug (wp.releaseCheck used to survive).
  */
 import { ref } from "vue";
-import Button from "../ui/Button.vue";
-import Card from "../ui/Card.vue";
-import ConfirmDialog from "../../../components/shared/ConfirmDialog.vue";
+import Button from "@/kit/Button.vue";
+import Card from "@/kit/Card.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 
 interface ResetItem {
   label: string;
@@ -76,12 +76,12 @@ function cancelReset(): void { confirmOpen.value = false; }
       @click="openConfirm"
     >Reset preferences</Button>
 
-    <ConfirmDialog
-      :visible="confirmOpen"
+    <ConfirmModal
+      :open="confirmOpen"
       title="Reset browser preferences?"
       body="Clears theme, density, filters, recents, and other per-device settings. The page will reload."
       confirm-label="Reset"
-      variant="danger"
+      tone="danger"
       @confirm="doReset"
       @cancel="cancelReset"
     />

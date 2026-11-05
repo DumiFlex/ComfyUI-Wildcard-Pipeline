@@ -1,6 +1,7 @@
 """Module type registry + resolver context factory."""
 from __future__ import annotations
 
+import dataclasses
 import random
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,6 +24,9 @@ class _RuntimeResolveContext:
     warnings: list[dict[str, Any]]
     _vars: dict[str, Any]
     _catalog: dict[str, dict[str, Any]]
+    # Per-site stream root (engine/syntax/streams.py), from the handler's
+    # `build_resolve_ctx(..., stream=...)`. None keeps one shared stream.
+    stream_key: str | None = None
     # Back-channels for the syntax resolver's nested-`@{}` path so it
     # can apply constraints to wildcards reached transitively (same
     # rule book as the chain-level wildcard handler). Both default to
@@ -219,6 +223,7 @@ def build_resolve_ctx(
     surface: SurfaceKind,
     *,
     strict: bool = False,
+    stream: str | None = None,
 ) -> ResolveContext:
     """Build a ResolveContext from a pipeline run's ctx dict + a surface label.
 
@@ -260,7 +265,17 @@ def build_resolve_ctx(
         _ref_log=ref_log if isinstance(ref_log, list) else None,
         _ref_owner=ctx.get("__wp_current_module_uid__"),
         _negs=negs if isinstance(negs, dict) else None,
+        stream_key=stream,
     )
+
+
+def restream(resolve_ctx: ResolveContext, stream: str | None) -> ResolveContext:
+    """The same resolve context on another stream root. Shares every table
+    (vars, picks, hits, ...), so writes seen through one are seen through
+    the other; only where its rolls come from changes."""
+    if dataclasses.is_dataclass(resolve_ctx) and not isinstance(resolve_ctx, type):
+        return dataclasses.replace(resolve_ctx, stream_key=stream)  # type: ignore[return-value]
+    return resolve_ctx
 
 
 from engine.modules.dispatcher import (  # noqa: E402

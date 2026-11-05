@@ -112,7 +112,7 @@ describe("ModulePickerModal — filters", () => {
   it("category dropdown narrows to the chosen category", async () => {
     const wrapper = await mountReady();
     await openFilters(wrapper);
-    const select = wrapper.find<HTMLSelectElement>('[data-testid="picker-filter-category"]');
+    const select = wrapper.find<HTMLSelectElement>('[data-testid="picker-filter-category"] select');
     select.element.value = "cat-scene";
     await select.trigger("change");
     const rows = wrapper.findAll(".wp-picker__row");
@@ -376,7 +376,7 @@ function mountPickerSync(opts: {
 describe("ModulePickerModal kind tabs", () => {
   it("renders 6 kind tabs (All + 5 kinds)", () => {
     const wrapper = mountPickerSync({ modules: [] });
-    expect(wrapper.findAll(".wp-picker-tab")).toHaveLength(6);
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(6);
   });
 
   it("each kind tab uses the canonical PrimeIcons class", () => {

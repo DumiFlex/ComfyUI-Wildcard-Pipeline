@@ -293,6 +293,21 @@ describe("collectUpstreamProducers", () => {
     expect(out.frame.internal).toBe(true);
     expect(out.frame_total.kind).toBe("loop");
     expect(out.frame_total.internal).toBe(false);
+    expect(out.frame_value).toBeUndefined();
+  });
+
+  it("adds $<name>_value once the loop's values input is wired", () => {
+    const loop: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextLoop",
+      inputs: [{ name: "values", link: 7 }],
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_context_loop_config", value: JSON.stringify({ iteration_var_name: "frame" }) }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const out = collectUpstreamProducers(chain([loop, pov], { 100: { origin_id: 1, target_id: 2 } }), pov);
+    expect(out.frame_value.kind).toBe("loop");
+    expect(out.frame_value.internal).toBe(false);
   });
 
   it("reports the LAST writer and counts the writes it shadowed", () => {
@@ -898,6 +913,13 @@ describe("collectUpstreamResolved derivation condition groups", () => {
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "is_empty", value: "" }), asm).light).toBe("hard");
   });
 
+  it("previews the NOT-toggled tests (schema v10)", () => {
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_contains", value: "day" }), asm).light).toBe("soft");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_contains", value: "nig" }), asm).light).toBe("hard");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "^n" }), asm).light).toBe("hard");
+    expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "(" }), asm).light).toBe("hard");
+  });
+
   it("an \"Add to negative\" action leaves the variable's value alone", () => {
     const g = groupGraph(mood);
     const ctxNode = g._nodes[0];
@@ -1197,6 +1219,28 @@ describe("collectLocalResolvedForModule", () => {
     expect(result.style).toBe("moody");
     // editing module excluded — its own binding doesn't surface
     expect(result.result).toBeUndefined();
+  });
+
+  it("match_variable only matches options the node's toggles keep", () => {
+    const wc = (enabled: string[]) => ({
+      id: "wc000002", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+      instance: { match_variable: "variant", enabled_options: enabled },
+      payload: { var_binding: "model", options: [
+        { id: "o1", value: "pony" }, { id: "o2", value: "sdxl" },
+        { id: "fb", value: "other", fallback: true },
+      ] },
+    });
+    const fixed = (variant: string) => ({
+      id: "fv000001", type: "fixed_values", enabled: true, meta: { name: "" }, entries: [],
+      payload: { values: [{ id: "v1", name: "variant", value: variant }] },
+    });
+    // A toggled-off option doesn't match; a toggled-off fallback isn't used.
+    let { ctx, graph } = singleNode([fixed("pony"), wc(["o2"])]);
+    expect(collectLocalResolvedForModule(graph, ctx).model).toBe("sdxl");
+    ({ ctx, graph } = singleNode([fixed("flux"), wc(["o1", "o2"])]));
+    expect(collectLocalResolvedForModule(graph, ctx).model).toBe("pony");
+    ({ ctx, graph } = singleNode([fixed("flux"), wc(["o1", "fb"])]));
+    expect(collectLocalResolvedForModule(graph, ctx).model).toBe("other");
   });
 
   it("excludes the editing module's own binding", () => {

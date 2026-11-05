@@ -4,6 +4,7 @@
  * with a friendly label, the module that raised it (click to open it in
  * the trace) and the engine's own message with its refs as chips.
  */
+import Button from "@/kit/Button.vue";
 import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import type { TraceStep, WarningRow } from "./debug-model";
@@ -43,11 +44,12 @@ function ownerLabel(key: string | null): string {
         <div class="wp-dbg-warn__head">
           <span class="wp-dbg-warn__label" :title="w.type">{{ w.label }}</span>
           <span v-if="w.detailText" class="wp-dbg-warn__detail">{{ w.detailText }}</span>
-          <button
+          <Button
             v-if="w.stepKey && ownerLabel(w.stepKey)"
-            type="button"
+            variant="link"
+            size="sm"
             class="wp-dbg-warn__owner"
-            title="Show the module in the trace"
+            hint="Show the module in the trace"
             data-test="dbg-warning-owner"
             @click="emit('goto-step', w.stepKey)"
           >
@@ -56,7 +58,7 @@ function ownerLabel(key: string | null): string {
               :style="{ background: `var(--wp-kind-${stepsByKey.get(w.stepKey)?.kind})` }"
             />
             {{ ownerLabel(w.stepKey) }}
-          </button>
+          </Button>
         </div>
         <div v-if="w.message" class="wp-dbg-warn__msg">
           <RichTextPreview
@@ -88,7 +90,7 @@ function ownerLabel(key: string | null): string {
   margin-top: 5px;
   background: var(--wp-warn);
 }
-.wp-dbg-warn.is-error .wp-dbg-warn__dot { background: var(--wp-red, #e5484d); }
+.wp-dbg-warn.is-error .wp-dbg-warn__dot { background: var(--wp-red); }
 .wp-dbg-warn.is-info .wp-dbg-warn__dot { background: var(--wp-info, var(--wp-accent)); }
 .wp-dbg-warn__body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .wp-dbg-warn__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -96,24 +98,19 @@ function ownerLabel(key: string | null): string {
 .wp-dbg-warn__detail {
   font-size: 10px;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
   color: var(--wp-warn);
 }
-.wp-dbg-warn.is-error .wp-dbg-warn__detail { background: color-mix(in oklab, var(--wp-red, #e5484d) 14%, transparent); color: var(--wp-red, #e5484d); }
-.wp-dbg-warn__owner {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  font: 500 10.5px/1.4 var(--wp-font-sans);
-  color: var(--wp-text-dim);
-  cursor: pointer;
+.wp-dbg-warn.is-error .wp-dbg-warn__detail { background: color-mix(in oklab, var(--wp-red) 14%, transparent); color: var(--wp-red); }
+/* A kit link Button, kept at the warning line's small size. */
+.wp-dbg-warn__owner.wp-btn {
+  margin-left: auto; gap: 5px; height: auto; min-height: 0; padding: 0;
+  font: 500 10.5px/1.4 var(--wp-font-sans); color: var(--wp-text-dim);
 }
-.wp-dbg-warn__owner:hover { color: var(--wp-text); text-decoration: underline; }
+.wp-dbg-warn__owner.wp-btn:hover { color: var(--wp-text); }
 .wp-dbg-warn__msg { font-size: 11px; color: var(--wp-text-muted); word-break: break-word; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; }
+.wp-dbg-warn__owner.wp-btn :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.wp-dbg-warn__owner.wp-btn :deep(.wp-btn__label) { line-height: inherit; }
 </style>

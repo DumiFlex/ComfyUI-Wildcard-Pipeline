@@ -1,0 +1,36 @@
+{
+  "node": "WP_VarToInt",
+  "image": "images/docs/wp-var-to-int.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "context (in)",
+      "x": 0.281,
+      "y": 0.2106
+    },
+    {
+      "group": "controls",
+      "term": "var_name",
+      "x": 0.2845,
+      "y": 0.3306
+    },
+    {
+      "group": "controls",
+      "term": "index",
+      "x": 0.281,
+      "y": 0.4553
+    },
+    {
+      "group": "controls",
+      "term": "default",
+      "x": 0.281,
+      "y": 0.5212
+    },
+    {
+      "group": "controls",
+      "term": "value (out)",
+      "x": 0.653,
+      "y": 0.2106
+    }
+  ]
+}

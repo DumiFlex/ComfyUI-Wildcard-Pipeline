@@ -116,7 +116,9 @@ class _IOType:
     def Input(self, name: str = "", **kwargs: Any) -> _Slot:
         return _Slot(kind="input", type_name=self._type_name, name=name, **kwargs)
 
-    def Output(self, name: str = "", is_output_list: bool = False) -> _Slot:
+    def Output(
+        self, name: str = "", is_output_list: bool = False, tooltip: str | None = None,
+    ) -> _Slot:
         # ``is_output_list`` mirrors comfy_api/latest/_io.py:Output.__init__.
         # WP_SeedList relies on this so a downstream node with
         # ``is_input_list=True`` fans the seed list out one-per-iteration.
@@ -125,6 +127,7 @@ class _IOType:
             type_name=self._type_name,
             name=name,
             is_output_list=is_output_list,
+            tooltip=tooltip,
         )
 
 

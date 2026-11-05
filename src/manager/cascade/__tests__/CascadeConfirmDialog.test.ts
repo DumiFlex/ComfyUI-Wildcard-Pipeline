@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 
@@ -20,6 +20,8 @@ describe("CascadeConfirmDialog", () => {
     mockComposable.dryRun.mockReset();
     mockComposable.apply.mockReset();
   });
+  // A closed dialog stays in the DOM for its leave Transition in jsdom.
+  afterEach(() => { document.body.innerHTML = ""; });
 
   it("loads dry-run on open + displays affected entities", async () => {
     mockComposable.dryRun.mockResolvedValue({
@@ -69,11 +71,11 @@ describe("CascadeConfirmDialog", () => {
       attachTo: document.body,
     });
     await flushPromises();
-    // Now wraps Modal.vue, which exposes `.wp-modal__backdrop` with
-    // `@mousedown.self` — clicking the backdrop dispatches mousedown
-    // (mouseup → click won't bubble through the self modifier).
-    const backdrop = document.body.querySelector(".wp-modal__backdrop") as HTMLElement;
+    // Modal sits on ModalShell: a backdrop close needs the press to start
+    // (mousedown) and end (click) on the backdrop.
+    const backdrop = document.body.querySelector('[data-test="modal-backdrop"]') as HTMLElement;
     backdrop.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await flushPromises();
     expect(wrap.emitted("cancelled")).toBeTruthy();
     wrap.unmount();

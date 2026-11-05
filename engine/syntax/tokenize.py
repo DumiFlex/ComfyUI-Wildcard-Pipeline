@@ -41,17 +41,23 @@ _VAR_RE = re.compile(
 #   group 4 — optional `!null`: the exclude-null marker (drops the null
 #             option from the nested pick). Separate from the expression.
 #
-# Name/expr char-classes exclude `!` (the null-marker delimiter) so the
-# segments stay unambiguous; sub-category names additionally forbid the
+# The name excludes `!` (the null-marker delimiter); the expr may hold `!`
+# (read as `not`) anywhere but a trailing `!null`, so the segments stay
+# unambiguous; sub-category names additionally forbid the
 # boolean grammar chars (see `subcat_filter.validate_subcat_name`),
 # enforced at the editor + API boundary, not at parse time.
 _REF_RE = re.compile(
-    r"@\{([0-9a-f]{8})(?:#([^#:}@{!]*))?(?::([^}!]*))?(?:!([^}]*))?\}"
+    r"@\{([0-9a-f]{8})(?:#([^#:}@{!]*))?(?::((?:[^}!]|!(?!null\}))*))?(?:!([^}]*))?\}"
 )
 # Multi-pick prefix: {N$$sep$$ or {N-M~$$sep$$ — group 1 is the count (a fixed
 # `N` or a `N-M` range), group 2 is the optional `~` independent flag (repeats
 # allowed; absent = unique), group 3 is the separator (may be empty). SP2b.
 _MULTI_PREFIX_RE = re.compile(r"^\{(\d+(?:-\d+)?)(~?)\$\$(.*?)\$\$", flags=re.DOTALL)
+# Dynamic Prompts shorthand `{N$$a|b}` (no separator): joined by ", ". Tried
+# only when the full prefix doesn't match; it used to fall through to a
+# single pick with `$$` read as an escaped `$` ("2$a").
+_MULTI_SHORT_RE = re.compile(r"^\{(\d+(?:-\d+)?)(~?)\$\$")
+_SHORT_SEP = ", "
 
 
 def _split_top_level_pipes(s: str) -> list[str]:
@@ -114,11 +120,13 @@ def _scan_brace_block(
 
     # Detect multi-pick prefix: N$$sep$$
     body_with_braces = "{" + body  # match against `{N$$sep$$...`
-    multi_match = _MULTI_PREFIX_RE.match(body_with_braces)
+    multi_match = _MULTI_PREFIX_RE.match(body_with_braces) or _MULTI_SHORT_RE.match(
+        body_with_braces,
+    )
     if multi_match:
         count_raw = multi_match.group(1)            # "N" or "N-M"
         independent = multi_match.group(2) == "~"   # SP2b: repeats allowed
-        sep = multi_match.group(3)
+        sep = multi_match.group(3) if multi_match.re is _MULTI_PREFIX_RE else _SHORT_SEP
         # Body remaining after the prefix is the branch list
         prefix_len = multi_match.end() - 1  # subtract the leading `{` we added
         rest = body[prefix_len:]

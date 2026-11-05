@@ -528,7 +528,31 @@ def test_never_applied_message_distinguishes_present_vs_absent():
         if x.get("type") == "constraint_never_applied"
     )
     assert w["detail"]["target_present"] is True
+    assert w["detail"]["ref_only"] is False
+    assert w["severity"] == "warn"
     assert "is in the chain" in w["message"]
+
+    # Target reached only through a ref in an option this run didn't draw
+    # (a recipe wildcard): info, and it says so.
+    carrier = _wildcard("44444444", "outfit", [
+        {"id": "r1", "value": "plain", "weight": 1},
+        {"id": "r2", "value": "@{33333333}", "weight": 0},
+    ])
+    modules_ref = [
+        _wildcard("11111111", "src", [
+            {"id": "s1", "value": "a", "weight": 1, "sub_categories": ["x"]},
+        ]),
+        _constraint("22222222", "11111111", TGT),
+        carrier,
+    ]
+    ctx = PipelineEngine().run(modules_ref, ctx={"__wp_catalog__": {}}, seed=0)
+    w = next(
+        x for x in ctx["__wp_warnings__"]
+        if x.get("type") == "constraint_never_applied"
+    )
+    assert w["detail"]["ref_only"] is True
+    assert w["severity"] == "info"
+    assert "none of them was drawn" in w["message"]
 
 
 # ─────────────────────────────────────────────────────────────────────

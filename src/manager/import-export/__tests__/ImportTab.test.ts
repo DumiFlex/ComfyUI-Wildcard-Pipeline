@@ -33,7 +33,10 @@ function makeV0PayloadJson(): string {
   return JSON.stringify({
     schema_version: 0,
     bundles: [],
-    wildcards: [{ uuid: "w1", name: "$one" }, { uuid: "w2", name: "$two" }],
+    wildcards: [
+      { uuid: "w1", name: "$one", payload: { options: [] } },
+      { uuid: "w2", name: "$two", payload: { options: [] } },
+    ],
     fixed_values: [],
     combines: [],
     derivations: [],
@@ -296,9 +299,9 @@ describe("ImportTab.vue", () => {
       schema_version: 1,
       bundles: [],
       wildcards: [
-        { id: "w1", name: "a" },
-        { id: "w2", name: "b" },
-        { id: "w3", name: "c" },
+        { id: "w1", name: "a", payload: { options: [] } },
+        { id: "w2", name: "b", payload: { options: [] } },
+        { id: "w3", name: "c", payload: { options: [] } },
       ],
       fixed_values: [],
       combines: [],

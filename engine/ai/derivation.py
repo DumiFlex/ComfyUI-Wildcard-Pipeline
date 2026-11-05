@@ -1,0 +1,920 @@
+"""Derivation rules from plain language.
+
+The model answers in a flat spec, forced by a JSON schema:
+
+    {"rules": [{
+        "summary": str,
+        "branches": [{"match": "all" | "any",
+                      "conditions": [{"var", "op", "value"}],
+                      "actions": [{"target_var", "mode", "value"}]}],
+        "else_actions": [{"target_var", "mode", "value"}],
+    }]}
+
+`compile_rules` turns that into payload rules the editor appends:
+
+- ``$`` is stripped from variable names, which must be plain identifiers;
+- one condition stays a single test, several become an all/any group;
+- the first action is the branch's ``action``, the rest ``extra_actions``
+  (absent, never ``[]``, for one action);
+- an ``equals`` / ``not_equals`` value that matches a wildcard option except
+  for case is corrected to the option's spelling, since the engine compares
+  exactly;
+- action values may point at wildcards by name (``@{Colors:warm}``); those
+  are compiled to id refs by `refs.compile_text` (unknown names and tags are
+  refused); conditions are literal text or ``$var`` only;
+- every rule gets a fresh id and must pass `DerivationHandler.validate_payload`.
+
+Rules that can't be used are dropped and reported; things that work but look
+wrong (a variable nobody sets, a value the wildcard doesn't have) come back as
+warnings the editor shows next to the rule.
+"""
+from __future__ import annotations
+
+import json
+import re
+import secrets
+from typing import Any
+
+from engine.ai import about, adult, library_vars
+from engine.ai import negation as ai_negation
+from engine.ai import refs as ai_refs
+from engine.modules.derivation_handler import (
+    _VALID_MODES,
+    _VALID_OPS,
+    NEGATIVE_MODES,
+    DerivationHandler,
+)
+
+MAX_RULES = 20
+MAX_BRANCHES = 12
+MAX_CONDITIONS = 8
+MAX_ACTIONS = 6
+MAX_VALUE_LEN = 1000
+
+_IDENT = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,63}$")
+_NO_VALUE_OPS = {"exists", "not_exists", "is_set", "is_unset", "is_empty", "is_not_empty"}
+_VAR_READ = re.compile(r"\$([a-zA-Z_][a-zA-Z0-9_]*)")
+
+_STR = {"type": "string"}
+
+
+
+def join_piece(mode: Any, value: str) -> str:
+    """The engine joins append / prepend text as written: "tie" + "watch"
+    is "tiewatch". A list piece gets its comma (", watch" / "watch, ");
+    text that already brings its own separator is kept as it is."""
+    if value and mode == "append" and not re.match(r"[,;.\s]", value):
+        return ", " + value
+    if value and mode == "prepend" and not re.search(r"[,;.\s]$", value):
+        return value + ", "
+    return value
+
+def _obj(props: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "object", "additionalProperties": False,
+        "required": list(props), "properties": props,
+    }
+
+
+_ACTION = _obj({
+    "target_var": _STR,
+    "mode": {"type": "string", "enum": sorted(_VALID_MODES)},
+    "value": _STR,
+})
+#: A condition value: text, or a number for a frame test ($iteration
+#: equals 1). Under a JSON grammar small models can't write a digit inside
+#: a string reliably (the 9B wrote "}]}]," for "1"); a bare number is easy.
+_COND_VALUE = {"anyOf": [_STR, {"type": "integer"}]}
+_CONDITION = _obj({
+    "var": _STR,
+    "op": {"type": "string", "enum": sorted(_VALID_OPS)},
+    "value": _COND_VALUE,
+})
+
+SCHEMA: dict[str, Any] = _obj({
+    "rules": {"type": "array", "items": _obj({
+        "summary": _STR,
+        "branches": {"type": "array", "items": _obj({
+            "match": {"type": "string", "enum": ["all", "any"]},
+            "conditions": {"type": "array", "items": _CONDITION},
+            "actions": {"type": "array", "items": _ACTION},
+        })},
+        "else_actions": {"type": "array", "items": _ACTION},
+    })},
+})
+
+#: The editor panel's answer when the module already has rules: each rule
+#: may say which of them it changes (bench R3, R6: "add a branch" became a
+#: second rule, which never kept the old rule's ELSE).
+EDIT_SCHEMA: dict[str, Any] = _obj({
+    "rules": {"type": "array", "items": _obj({
+        "edits": {"type": "integer"},
+        **SCHEMA["properties"]["rules"]["items"]["properties"],
+    })},
+})
+
+EDIT_NOTE = """\
+The module already has the rules listed under "It already has these rules", \
+numbered. To change one of them (add a branch, change a value, add an ELSE), \
+answer with that rule's number in "edits" and write only the branches you add \
+or change, plus else_actions when the ELSE changes; the rest of the rule is \
+kept. A new rule has "edits": 0.\
+"""
+
+SYSTEM_PROMPT = """\
+You write derivation rules for Wildcard Pipeline, a ComfyUI extension that \
+builds image-generation prompts from variables. Wildcards pick a random option \
+and store it in a variable (for example $class = "mage"). A derivation rule \
+reads variables and sets others, so later text can use them.
+
+How a rule runs: its branches are checked top to bottom and the FIRST branch \
+whose conditions hold runs its actions; if none holds, else_actions run (leave \
+else_actions empty for no else). "Anyone else", "otherwise", "for the rest" \
+or "by default" is else_actions, never a branch of its own. Separate rules run \
+independently, one after another.
+
+Conditions (var is a variable name, no $; it may also read $name.0, \
+$name.AXIS or $name.neg as name.0, name.AXIS, name.neg):
+- equals / not_equals: exact, case-sensitive text match. Use the option text \
+exactly as listed.
+- contains / not_contains: value is (not) a substring. matches / \
+not_matches: value is a regular expression that does (not) match.
+- exists / not_exists: the variable was set at all. is_empty: set but empty \
+(a wildcard rolled its empty option). is_not_empty: has a value. is_unset: \
+missing or empty. These take value "".
+- match "all" needs every condition, "any" needs one.
+
+Actions:
+- replace: set target_var to value. append / prepend: add value after / \
+before what target_var already holds (a ", " between them is added for you).
+- negative: add value to target_var's negative prompt. negative_replace: make \
+value its only negative.
+- value is prompt text. It may read variables as $name, and also \
+$name.0 (the first of a multi-pick, .1 the second), $name.AXIS (the tag an \
+"accepts" tag group rolled, like $outfit.SHOES) and $name.neg (the \
+variable's negative words). It may pick: {a|b}, or @{Wildcard name} / \
+@{Wildcard name:tag} for a fresh pick from a wildcard listed below ("if \
+$class is mage, append @{Weapons:arcane} to $gear"). Condition values are \
+plain text or one $name, never picks.
+
+Use the library's variable names and option texts when the request refers to \
+them. Some variables are set at run time outside the library (the WP Context \
+Loop's frame variables, anything a WP Context Injector brings in); reading \
+them is fine when the request mentions them. $iteration is the CURRENT frame \
+number as text: a rule per frame tests it ($iteration equals "1" for the \
+first frame, matches "^[3-4]$" for frames 3 to 4). $iteration_total is how \
+many frames the loop runs in all (e.g. "4"), the same in every frame: never \
+test it to pick a frame. A new variable name is fine when the \
+request asks for one: letters, digits and _ only. Write one rule per \
+independent decision, and a short summary of what each rule does. Don't add \
+commentary; the output is data for the user's own library.\
+"""
+
+
+def build_prompt(
+    *, instruction: str, name: str, catalog_text: str, existing_rules: list[str],
+    description: str = "", labels: list[str] | None = None, refs_text: str = "",
+    numbered: bool = False,
+) -> str:
+    lines = [f"Derivation module: {name or '(unnamed)'}"]
+    lines.extend(about.lines(description, labels or []))
+    if existing_rules and numbered:
+        lines.append("It already has these rules (don't repeat them; to change one, "
+                     "give its number in \"edits\"):")
+        lines.extend(f"{i}. {r}" for i, r in enumerate(existing_rules[:40], 1))
+    elif existing_rules:
+        lines.append("It already has these rules (don't repeat them):")
+        lines.extend(f"- {r}" for r in existing_rules[:40])
+    lines.append("")
+    lines.append("Variables in the library (name, where it comes from, its options):")
+    lines.append(catalog_text or "(none yet)")
+    if refs_text:
+        lines.append("")
+        lines.append("Wildcards an action can pick from with @{name}:")
+        lines.append(refs_text)
+    lines.append("")
+    lines.append(f"Request: {instruction.strip()}")
+    return "\n".join(lines)
+
+
+def describe_rule(rule: dict[str, Any]) -> str:
+    """One line for the prompt: ``IF $a equals x → $b = y; ELSE …``."""
+    parts: list[str] = []
+
+    def cond(c: dict[str, Any]) -> str:
+        if "conditions" in c:
+            j = " and " if c.get("match") == "all" else " or "
+            return "(" + j.join(cond(x) for x in c["conditions"] if isinstance(x, dict)) + ")"
+        v = "" if c.get("op") in _NO_VALUE_OPS else f' "{c.get("value", "")}"'
+        return f"${c.get('var', '')} {c.get('op', '')}{v}"
+
+    def acts(clause: dict[str, Any]) -> str:
+        out = []
+        for a in [clause.get("action"), *(clause.get("extra_actions") or [])]:
+            if isinstance(a, dict):
+                mode, target = a.get("mode", "replace"), a.get("target_var", "")
+                out.append(f'{mode} ${target} "{a.get("value", "")}"')
+        return ", ".join(out)
+
+    for i, b in enumerate(rule.get("branches") or []):
+        if isinstance(b, dict) and isinstance(b.get("condition"), dict):
+            parts.append(f"{'IF' if i == 0 else 'ELIF'} {cond(b['condition'])} → {acts(b)}")
+    if isinstance(rule.get("else"), dict):
+        parts.append(f"ELSE → {acts(rule['else'])}")
+    return "; ".join(parts)
+
+
+def _var_name(raw: Any) -> str | None:
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip().lstrip("$").strip()
+    return name if _IDENT.match(name) and not name.startswith("__") else None
+
+
+#: What a condition may read: a variable, or one through an accessor the
+#: engine reads in conditions ($x.0, $x.AXIS, $x.neg, $x.0.neg).
+_COND_VAR = re.compile(
+    r"^([a-zA-Z_][a-zA-Z0-9_]{0,63})((?:\.(?:\d{1,3}|[a-zA-Z_][a-zA-Z0-9_]{0,39})){0,2})$")
+
+
+def _cond_var(raw: Any) -> tuple[str, str] | None:
+    """``(what the condition reads, its base variable)`` or None."""
+    if not isinstance(raw, str):
+        return None
+    m = _COND_VAR.match(raw.strip().lstrip("$").strip())
+    if m is None or m.group(1).startswith("__"):
+        return None
+    return m.group(1) + m.group(2), m.group(1)
+
+
+#: A condition value that is only JSON punctuation.
+_JUNK = re.compile(r"[\s\[\]{}:,\"']+")
+#: Two JSON closers in a row inside a value ("1}]", "}],"): the model's
+#: grammar closed the object where the text belonged.
+_JUNK_TAIL = re.compile(r"[}\]]\s*[}\],]")
+#: The WP Context Loop's frame variables: numbers written as text.
+_FRAME_VARS = frozenset(library_vars.LOOP_VARS)
+#: A frame count small enough to be a frame number by mistake.
+MAX_FRAME_MIXUP = 12
+
+
+def _flat(text: Any) -> str:
+    return re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else ""
+
+
+class _Drop(Exception):
+    """This rule can't be used; the message says why."""
+
+
+def _new_id(taken: set[str]) -> str:
+    while True:
+        rid = f"r_ai{secrets.token_hex(4)}"
+        if rid not in taken:
+            taken.add(rid)
+            return rid
+
+
+def compile_rules(
+    raw: Any, *, catalog: dict[str, dict[str, Any]], taken_ids: set[str] | None = None,
+    refs: ai_refs.RefIndex | None = None, existing: list[dict[str, Any]] | None = None,
+    request: str = "", read_vars: set[str] | None = None,
+) -> dict[str, Any]:
+    """Check the model's rules. Returns
+    ``{"rules": [{"rule", "summary", "warnings", "replaces"?}], "skipped":
+    [{"text", "reason"}]}``. Raises ValueError when the answer isn't the
+    expected shape at all.
+
+    ``existing`` are the module's rules: an answer rule with ``edits: N``
+    changes rule N (`merge_edit`) and comes back with ``replaces`` (that
+    rule's id), and a new rule whose ELSE overwrites what an existing one
+    sets is warned. ``request`` lands "add 'x' to $y" as an append
+    (`land_modes`). ``read_vars`` are the variables the library reads: a
+    rule setting one nobody reads is warned."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("rules"), list):
+        raise ValueError("the model's answer wasn't a list of rules")
+    taken = set(taken_ids or ())
+    raw = {**raw, "rules": _tidy_rules(raw["rules"])}
+    if request:
+        land_modes(raw["rules"], request)
+    # Variables these rules set count as known, so a rule may read what an
+    # earlier one in the same answer writes without a warning.
+    catalog = dict(catalog)
+    for item in raw["rules"][:MAX_RULES]:
+        for target in _answer_targets(item):
+            catalog.setdefault(target, {"name": target, "sources": [], "values": [], "tags": []})
+    out: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = list(raw.get("_notes") or [])
+    for item in raw["rules"][:MAX_RULES]:
+        if not isinstance(item, dict):
+            continue
+        summary = _flat(item.get("summary"))[:200]
+        warnings: list[str] = []
+        try:
+            rule = _compile_rule(item, catalog, warnings, refs)
+        except _Drop as e:
+            skipped.append({"text": summary or "a rule", "reason": str(e)})
+            continue
+        edits = item.get("edits")
+        old = None
+        if isinstance(edits, int) and not isinstance(edits, bool) and existing \
+                and 1 <= edits <= len(existing) and isinstance(existing[edits - 1], dict):
+            old = existing[edits - 1]
+            # Two answer rules editing one rule: the second builds on the
+            # first, which it then takes the place of.
+            prev = next((x for x in out if x.get("replaces") and x["replaces"] == old.get("id")),
+                        None)
+            if prev is not None:
+                out.remove(prev)
+            rule = merge_edit(prev["rule"] if prev else old, rule, request)
+            rule = {"id": old.get("id") or _new_id(taken), **{
+                k: v for k, v in rule.items() if k != "id"}}
+        else:
+            rule = {"id": _new_id(taken), **rule}
+        try:
+            DerivationHandler.validate_payload({"rules": [rule]})
+        except ValueError as e:
+            skipped.append({"text": summary or "a rule", "reason": str(e)})
+            continue
+        entry: dict[str, Any] = {
+            "rule": rule, "summary": summary or describe_rule(rule),
+            "warnings": list(dict.fromkeys(warnings)),
+        }
+        if old is not None:
+            entry["replaces"] = rule["id"]
+            entry["summary"] = summary or describe_rule(rule)
+        out.append(entry)
+    _overwrite_warnings(out, existing or [])
+    if read_vars is not None:
+        for x in out:
+            unread = [t for t in _rule_targets(x["rule"]) if t not in read_vars]
+            if unread:
+                x["warnings"].append(
+                    "Nothing in your library reads $" + ", $".join(unread)
+                    + " yet; a template or combine has to read it for it to print")
+    return {"rules": out, "skipped": skipped}
+
+
+def _rule_targets(rule: dict[str, Any]) -> list[str]:
+    """The variables a compiled rule writes (negative actions don't count)."""
+    out: list[str] = []
+    for c in [*(rule.get("branches") or []), rule.get("else")]:
+        if not isinstance(c, dict):
+            continue
+        for a in [c.get("action"), *(c.get("extra_actions") or [])]:
+            if isinstance(a, dict) and a.get("mode") not in NEGATIVE_MODES \
+                    and isinstance(a.get("target_var"), str) and a["target_var"] not in out:
+                out.append(a["target_var"])
+    return out
+
+
+def _else_replaces(rule: dict[str, Any]) -> list[str]:
+    e = rule.get("else")
+    if not isinstance(e, dict):
+        return []
+    return [a["target_var"] for a in [e.get("action"), *(e.get("extra_actions") or [])]
+            if isinstance(a, dict) and a.get("mode") == "replace"
+            and isinstance(a.get("target_var"), str)]
+
+
+def _overwrite_warnings(out: list[dict[str, Any]], existing: list[dict[str, Any]]) -> None:
+    """Rules run one after another, so a rule whose ELSE replaces $x
+    overwrites what an earlier rule wrote to $x whenever its own branches
+    don't match (bench R1 run 3: rule 2's ELSE autumn undid rule 1's
+    winter). A changed rule keeps its place; a new one runs last."""
+    changed = {x["replaces"]: x["rule"] for x in out if x.get("replaces")}
+    order: list[tuple[str, dict[str, Any]]] = [
+        (f"rule {i}", changed.get(r.get("id"), r)) for i, r in enumerate(existing, 1)
+        if isinstance(r, dict)]
+    order += [("a rule above it", x["rule"]) for x in out if not x.get("replaces")]
+    for i, (_, rule) in enumerate(order):
+        x = next((y for y in out if y["rule"] is rule), None)
+        if x is None:
+            continue
+        for var in _else_replaces(rule):
+            earlier = [label for label, r in order[:i] if var in _rule_targets(r)]
+            if earlier:
+                x["warnings"].append(
+                    f"Its ELSE sets ${var} whenever its own branches don't match, so it "
+                    f"overwrites ${var} from {earlier[0]}; join them into one rule, or drop "
+                    "the ELSE")
+
+
+def _cond_key(c: Any) -> str:
+    return json.dumps(c, sort_keys=True, default=str)
+
+
+def merge_edit(old: dict[str, Any], new: dict[str, Any], request: str = "") -> dict[str, Any]:
+    """An edit of an existing rule: a branch with the same condition as an
+    old one replaces it, other branches go after the old ones (before the
+    ELSE), and the old ELSE stays unless the edit writes one (bench R6 run 1
+    dropped "else Adventurer", so cleric and ranger lost their title). A
+    request to drop the ELSE ("no else", "remove the otherwise") clears it."""
+    branches = [dict(b) for b in old.get("branches") or [] if isinstance(b, dict)]
+    keys = [_cond_key(b.get("condition")) for b in branches]
+    for b in new.get("branches") or []:
+        k = _cond_key(b.get("condition"))
+        if k in keys:
+            branches[keys.index(k)] = b
+        else:
+            branches.append(b)
+            keys.append(k)
+    out: dict[str, Any] = {"branches": branches[:MAX_BRANCHES]}
+    if isinstance(new.get("else"), dict):
+        out["else"] = new["else"]
+    elif isinstance(old.get("else"), dict) and not re.search(
+            r"\b(?:no|drop|remove|delete|without)\s+(?:the\s+)?(?:else|otherwise|default)\b",
+            request or "", re.I):
+        out["else"] = old["else"]
+    return out
+
+
+#: "add 'dry ground' to $season", "append rain to $weather".
+_ADD_TO = re.compile(r"\b(?:add|append)\s+['\"“‘]?([^'\"”’$]{1,80}?)['\"”’]?\s+to\s+\$(\w+)",
+                     re.I)
+_ADD_TO_NEG = re.compile(r"\badd\s+['\"“‘]?([^'\"”’$]{1,80}?)['\"”’]?\s+to\s+(?:the\s+)?"
+                         r"(?:\$(\w+)'s\s+)?negative", re.I)
+
+
+def land_modes(rules: list[Any], request: str) -> None:
+    """Actions whose mode contradicts the request's words, set right in
+    place (bench R4 run 3: "add 'dry ground' to $season" came back as a
+    replace, which wipes the season)."""
+    wants = [(m.group(1).strip().lower(), m.group(2), "append")
+             for m in _ADD_TO.finditer(request or "")]
+    for item in rules:
+        if not isinstance(item, dict):
+            continue
+        for clause in [*(item.get("branches") or []), {"actions": item.get("else_actions")}]:
+            if not isinstance(clause, dict):
+                continue
+            for a in clause.get("actions") or []:
+                if not isinstance(a, dict) or a.get("mode") != "replace":
+                    continue
+                target = _var_name(a.get("target_var"))
+                value = str(a.get("value") or "").strip().strip("'\"").lower()
+                for text, var, mode in wants:
+                    if target == var and value and (value in text or text in value):
+                        a["mode"] = mode
+
+
+def _is_else_only(item: dict[str, Any]) -> bool:
+    return not item.get("branches") and bool(item.get("else_actions"))
+
+
+#: A test that holds whenever the variable has any value: as the last
+#: branch after others on that variable it is "anyone else".
+_ANY_VALUE = {"exists", "is_set", "is_not_empty"}
+
+
+def _last_branch_as_else(item: dict[str, Any]) -> dict[str, Any]:
+    """Browser test (9B): "anyone else → Adventurer" came back as a last
+    branch testing ``class not_equals ""`` after the mage and warrior
+    branches. With no else yet, a last branch whose one condition only asks
+    that the earlier branches' variable has a value is that rule's ELSE."""
+    branches = item.get("branches") or []
+    if len(branches) < 2 or item.get("else_actions"):
+        return item
+    last = branches[-1]
+    conds = [c for c in last.get("conditions") or [] if isinstance(c, dict)]
+    if len(conds) != 1 or not last.get("actions"):
+        return item
+    c = conds[0]
+    op, var = c.get("op"), _var_name(c.get("var"))
+    anything = op in _ANY_VALUE or (op == "not_equals" and not str(c.get("value") or "").strip())
+    earlier = {_var_name(x.get("var")) for b in branches[:-1] for x in b.get("conditions") or []
+               if isinstance(x, dict)}
+    if not anything or not var or earlier != {var}:
+        return item
+    return {**item, "branches": branches[:-1], "else_actions": last["actions"]}
+
+
+def _tidy_rules(rules: list[Any]) -> list[Any]:
+    """The rules the way a small model means them (chat eval round 1, 9B):
+
+    - a rule that is only a summary is dropped, and one written twice is
+      kept once (one answer repeated the same rule 64 times);
+    - a branch holding only conditions followed by one holding only actions
+      is one branch;
+    - a rule with only ``else_actions`` ("Default title if class is unset")
+      becomes the ELSE of the rule before it when that one has none, goes
+      when it repeats that ELSE, and otherwise sets its variables only when
+      they are still empty (an ``is_empty`` test), which is what a default
+      means;
+    - a rule with only branches, followed by one testing the same variables
+      that adds more branches and an ELSE, is one rule (`_continues`).
+
+    Notes on what changed ride along as ``_notes`` (shown as skipped)."""
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in rules:
+        if not isinstance(item, dict):
+            continue
+        key = json.dumps({k: v for k, v in item.items() if k != "summary"}, sort_keys=True,
+                         default=str)
+        if key in seen or not (item.get("branches") or item.get("else_actions")):
+            continue
+        seen.add(key)
+        item = {**item, "branches": _join_branches(item.get("branches"))}
+        item = _last_branch_as_else(item)
+        prev = out[-1] if out else None
+        if _is_else_only(item):
+            acts = item["else_actions"]
+            if prev is not None and not prev.get("else_actions") and prev.get("branches"):
+                out[-1] = {**prev, "else_actions": acts}
+                # Bench R1 run 3: "snowfall → winter", then "heat haze or
+                # clear → summer", then "otherwise autumn" as three rules.
+                # With its ELSE the second is the rest of the first.
+                if len(out) >= 2 and _continues(out[-2], out[-1]):
+                    out[-2:] = [{**out[-2], "branches": [*out[-2]["branches"],
+                                                         *out[-1]["branches"]],
+                                 "else_actions": acts}]
+                continue
+            if prev is not None and prev.get("else_actions") == acts:
+                continue
+            targets = [t for t in (_var_name(a.get("target_var")) for a in acts
+                                   if isinstance(a, dict)) if t]
+            if targets:
+                item = {"summary": item.get("summary"), "branches": [{
+                    "match": "any", "conditions": [{"var": targets[0], "op": "is_empty"}],
+                    "actions": acts}]}
+        if prev is not None and _continues(prev, item):
+            out[-1] = {**prev, "branches": [*prev["branches"], *item["branches"]],
+                       "else_actions": item["else_actions"]}
+            continue
+        out.append(item)
+    return out
+
+
+def _tested(item: dict[str, Any]) -> set[str]:
+    return {v for b in item.get("branches") or [] if isinstance(b, dict)
+            for c in b.get("conditions") or [] if isinstance(c, dict)
+            for v in [_var_name(c.get("var"))] if v}
+
+
+def _continues(prev: dict[str, Any], item: dict[str, Any]) -> bool:
+    """Whether ``item`` is the rest of ``prev`` split off. Re-test (9B):
+    "mage → Archmage" as one rule, then "warrior → Champion, else
+    Adventurer" as the next; rules run in order, so that ELSE overwrote the
+    mage's title. Both test the same variables, write the same ones, and the
+    first has no ELSE of its own."""
+    if prev.get("else_actions") or not prev.get("branches") or not item.get("branches"):
+        return False
+    if not item.get("else_actions"):
+        return False
+    tested = _tested(prev)
+    return bool(tested) and tested == _tested(item) \
+        and set(_answer_targets(prev)) <= set(_answer_targets(item))
+
+
+def _join_branches(raw: Any) -> list[Any]:
+    """Branches with a conditions-only branch and the actions-only one after
+    it joined (the 9B split each IF into two objects)."""
+    branches = [b for b in raw if isinstance(b, dict)] if isinstance(raw, list) else []
+    out: list[dict[str, Any]] = []
+    for b in branches:
+        if not b.get("conditions") and not b.get("actions"):
+            continue  # {"match": "any"} alone
+        prev = out[-1] if out else None
+        if (b.get("actions") and not b.get("conditions") and prev is not None
+                and prev.get("conditions") and not prev.get("actions")):
+            out[-1] = {**prev, "actions": b["actions"]}
+            continue
+        out.append(b)
+    return out
+
+
+def _answer_targets(item: Any) -> list[str]:
+    if not isinstance(item, dict):
+        return []
+    acts = list(item.get("else_actions") or [])
+    for b in item.get("branches") or []:
+        if isinstance(b, dict):
+            acts.extend(b.get("actions") or [])
+    names = [_var_name(a.get("target_var")) for a in acts if isinstance(a, dict)]
+    return [n for n in names if n]
+
+
+def _compile_rule(
+    item: dict[str, Any], catalog: dict[str, dict[str, Any]], warnings: list[str],
+    refs: ai_refs.RefIndex | None = None,
+) -> dict[str, Any]:
+    branches: list[dict[str, Any]] = []
+    raw_branches = [b for b in (item.get("branches") or [])[:MAX_BRANCHES] if isinstance(b, dict)]
+    dropped: list[str] = []
+    for i, b in enumerate(raw_branches, 1):
+        # One broken branch costs that branch, not the rule (chat eval round
+        # 2: a good IF went down with a bad second one, three times).
+        where = f"branch {i}: " if len(raw_branches) > 1 else ""
+        try:
+            condition = _compile_group(b, catalog, warnings, 0)
+            actions = _compile_actions(b.get("actions"), catalog, warnings, refs)
+        except _Drop as e:
+            dropped.append(f"{where}{e}")
+            continue
+        if condition is None or not actions:
+            continue
+        branch: dict[str, Any] = {"condition": condition, "action": actions[0]}
+        if len(actions) > 1:
+            branch["extra_actions"] = actions[1:]
+        branches.append(branch)
+    if not branches:
+        raise _Drop("; ".join(dropped) or "no usable condition and action")
+    warnings.extend(f"left out {d}" for d in dropped)
+    rule: dict[str, Any] = {"branches": branches}
+    else_actions = _compile_actions(item.get("else_actions"), catalog, warnings, refs)
+    if else_actions:
+        clause: dict[str, Any] = {"action": else_actions[0]}
+        if len(else_actions) > 1:
+            clause["extra_actions"] = else_actions[1:]
+        rule["else"] = clause
+    return rule
+
+
+#: How deep the chat may nest condition groups ("a and (b or c)").
+MAX_GROUP_DEPTH = 3
+
+
+def _compile_group(
+    g: dict[str, Any], catalog: dict[str, dict[str, Any]], warnings: list[str], depth: int,
+) -> dict[str, Any] | None:
+    """A branch's (or group's) conditions as one condition: a single test
+    stays bare, several become an all/any group. A condition that holds
+    ``conditions`` itself is a nested group."""
+    match = g.get("match")
+    conds: list[dict[str, Any]] = []
+    for k, x in enumerate((g.get("conditions") or [])[:MAX_CONDITIONS], 1):
+        if isinstance(x, dict) and set(x) == {"match"}:
+            # {"match": "any"} written as a condition: it is the group's.
+            match = match or x["match"]
+            continue
+        if isinstance(x, dict) and "var" not in x and not isinstance(x.get("conditions"), list):
+            hint = ('; "match" belongs on the branch, next to "conditions"'
+                    if "match" in x else "")
+            raise _Drop(f'condition {k} has no "var" (the variable it tests){hint}')
+        c = _compile_condition(x, catalog, warnings, depth)
+        if c is not None:
+            conds.append(c)
+    if not conds:
+        return None
+    if match == "any" and len(conds) > 1:
+        # Bench R4 run 1: "$weather exists OR $weather not_contains rain"
+        # always holds; the exists test only meant "has a value".
+        tested = {c.get("var") for c in conds if c.get("op") not in _ANY_VALUE}
+        kept = [c for c in conds if not (c.get("op") in _ANY_VALUE and c.get("var") in tested)]
+        if len(kept) < len(conds):
+            warnings.append("Left out an \"exists\" test joined by OR: with it the branch "
+                            "always holds")
+            conds = kept
+    if len(conds) == 1:
+        return conds[0]
+    return {"match": "any" if match == "any" else "all", "conditions": conds}
+
+
+def _compile_condition(
+    c: Any, catalog: dict[str, dict[str, Any]], warnings: list[str], depth: int = 0,
+) -> dict[str, Any] | None:
+    if not isinstance(c, dict):
+        return None
+    if isinstance(c.get("conditions"), list) and "var" not in c:
+        if depth + 1 >= MAX_GROUP_DEPTH:
+            raise _Drop(f"groups nest at most {MAX_GROUP_DEPTH} deep")
+        return _compile_group(c, catalog, warnings, depth + 1)
+    got = _cond_var(c.get("var"))
+    op = c.get("op")
+    if got is None:
+        raise _Drop(f"{c.get('var')!r} isn't a variable name")
+    var, base = got
+    if op not in _VALID_OPS:
+        raise _Drop(f"unknown test {op!r}")
+    raw_value = c.get("value")
+    if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool):
+        raw_value = str(raw_value)
+    value = "" if op in _NO_VALUE_OPS else _flat(raw_value)[:MAX_VALUE_LEN]
+    if value and (_JUNK.fullmatch(value) or _JUNK_TAIL.search(value)):
+        # The 9B wrote "}]}], " where "1" belonged ($iteration equals 1).
+        raise _Drop(f"the value for ${var} came out as {value!r}, which is JSON, not text; "
+                    'write it as a quoted string, e.g. "value": "1", or as a bare number, '
+                    '"value": 1')
+    if base in _FRAME_VARS and op not in _NO_VALUE_OPS:
+        value = _frame_value(var, op, value)
+        if base == "iteration_total" and op in ("equals", "not_equals") \
+                and value.isdigit() and 1 <= int(value) <= MAX_FRAME_MIXUP:
+            warnings.append(FRAME_MIXUP)
+    entry = catalog.get(base)
+    if entry is None:
+        warnings.append(unset_note(base))
+    elif var != base:
+        entry = None  # an accessor reads part of it, not one of its options
+    if value.startswith("$") and op not in _NO_VALUE_OPS:
+        read = value[1:]
+        if not _IDENT.match(read.split(".")[0]):
+            raise _Drop(f"{value!r} isn't a variable name")
+        if read.split(".")[0] not in catalog:
+            warnings.append(unset_note(read.split(".")[0]))
+    elif "@{" in value or ai_refs.has_pick(value):
+        raise _Drop("a condition compares with plain text or one $variable, not a pick")
+    if op in ("matches", "not_matches"):
+        try:
+            re.compile(value)
+        except re.error:
+            raise _Drop(f"{value!r} isn't a valid pattern") from None
+    if op in ("equals", "not_equals") and entry and entry["values"]:
+        if value not in entry["values"]:
+            fixed = next((v for v in entry["values"] if v.lower() == value.lower()), None)
+            if fixed is not None:
+                value = fixed
+            elif any(s["kind"] == "wildcard" for s in entry["sources"]):
+                op, value = _near_test(var, op, value, entry, warnings)
+    return {"var": var, "op": op, "value": value}
+
+
+#: The card warning (and the model's note) for a test that reads the frame
+#: count where the frame number was meant. Chat eval (9B): "$iteration_total
+#: equals 3" for the third frame, which only a 3-frame loop ever matches.
+FRAME_MIXUP = "$iteration_total is the frame count; the current frame is $iteration"
+
+
+def _frame_value(var: str, op: str, value: str) -> str:
+    """A frame test's value as the engine compares it: a whole number for
+    equals / not_equals / contains, a pattern with a digit for matches.
+    Anything else is a drop that spells out the expected form, since the
+    model's grammar is what garbled it (never store "}]}],")."""
+    clean = value.strip().strip("\"'")
+    expected = ('write it as text, "value": "1" (or "2"), or "op": "matches" with "value": '
+                '"^[3-4]$" for frames 3 to 4')
+    if op in ("matches", "not_matches"):
+        if clean and re.search(r"\d", clean) and not re.search(r"[{},\"]", clean):
+            return clean
+        raise _Drop(f"the pattern for ${var} came out as {value!r}; {expected}")
+    if clean.isdigit():
+        return str(int(clean)) if op in ("equals", "not_equals") else clean
+    raise _Drop(f"the value for ${var} came out as {value!r}, not a frame number; {expected}")
+
+
+def _near_test(var: str, op: str, value: str, entry: dict[str, Any],
+               warnings: list[str]) -> tuple[str, str]:
+    """An ``equals`` test on text no option has. A tag ("elf" on options
+    that only say "pointed ears") becomes a test on the options carrying
+    it; a piece of an option ("dense forest") becomes a ``contains`` test.
+    Anything else is a warning a rebuild should fix."""
+    neg = op == "not_equals"
+    tagged = (entry.get("tagged") or {}).get(value.lower().lstrip("#")) or []
+    if tagged:
+        pattern = "^(?:" + "|".join(re.escape(v) for v in tagged) + ")$"
+        if len(pattern) <= MAX_VALUE_LEN:
+            warnings.append(f'Tests the ${var} options tagged #{value.lower().lstrip("#")} '
+                            f'("{value}" is a tag, not an option)')
+            return ("not_matches" if neg else "matches"), pattern
+    low = value.lower()
+    hits = [v for v in entry["values"] if low and low in v.lower()]
+    if hits:
+        at = hits[0].lower().index(low)
+        return ("not_contains" if neg else "contains"), hits[0][at:at + len(value)]
+    warnings.append(f'${var} has no option "{value}"')
+    return op, value
+
+
+def unset_note(var: str) -> str:
+    return (f"nothing in your library sets ${var} (fine if a WP Context Injector "
+            "or an earlier Context sets it)")
+
+
+#: Quote pairs a small model wraps a whole value in.
+_QUOTES = {'"': '"', "'": "'", "\u201c": "\u201d", "\u2018": "\u2019", "`": "`"}
+
+
+def _unquote(value: str) -> str:
+    """A value written inside its own quotes, without them. Re-test (9B):
+    every $iteration rule set $shot to "'establishing shot'", which prints
+    the quotes. One with quotes inside ("say 'hi' and 'bye'") stays."""
+    while len(value) >= 2 and _QUOTES.get(value[0]) == value[-1] \
+            and value[0] not in value[1:-1] and value[-1] not in value[1:-1]:
+        value = value[1:-1].strip()
+    return value
+
+
+#: A request for a catch-all: what everyone the branches don't match gets.
+_CATCH_ALL = re.compile(r"\b(?:any(?:one|body|thing)|every(?:one|body|thing)|all|the)\s+"
+                        r"(?:else|others?)\b|\botherwise\b|\bfor\s+the\s+rest\b|"
+                        r"\bby\s+default\b|\bif\s+none\b|\bin\s+all\s+other\s+cases\b",
+                        re.I)
+
+
+def missing_else(asked: str, rules: list[dict[str, Any]]) -> str:
+    """A warning when the request asks for a catch-all ("anyone else gets
+    Adventurer") and no rule has an ELSE, or "". Re-test (9B): all three
+    drafts kept the mage and warrior branches and dropped the rest quietly."""
+    m = _CATCH_ALL.search(asked or "")
+    if not m or any(isinstance(r.get("else"), dict) for r in rules):
+        return ""
+    return (f"You asked for \"{m.group(0)}\", but no rule has an ELSE for it; "
+            "add one, or ask again")
+
+
+def else_schema(targets: list[str]) -> dict[str, Any]:
+    """The repair answer for a dropped catch-all: only the ELSE actions, the
+    target an enum of what the rules already write (small models choose
+    well and write names badly)."""
+    return _obj({"otherwise": {"type": "array", "items": _obj({
+        "target_var": {"type": "string", "enum": targets},
+        "mode": {"type": "string", "enum": sorted(_VALID_MODES)},
+        "value": _STR,
+    })}})
+
+
+ELSE_SYSTEM = (
+    "You add the missing catch-all to derivation rules. Answer only with the ELSE "
+    "actions: what the variable gets when none of the rule's branches match. Give the "
+    "value exactly as the request says it, no quotes around it.")
+
+
+def else_prompt(instruction: str, rules: list[dict[str, Any]]) -> str:
+    lines = [f"Request: {instruction.strip()}", "", "Rules written so far:"]
+    lines += [f"- {describe_rule(r)}" for r in rules[:8]]
+    lines.append("")
+    lines.append("The request asks for a catch-all (\"anyone else\", \"otherwise\", \"by "
+                 "default\") that none of these rules has. Answer with its actions only.")
+    return "\n".join(lines)
+
+
+def attach_else(answer: Any, rules: list[dict[str, Any]], catalog: dict[str, dict[str, Any]],
+                refs: ai_refs.RefIndex | None = None) -> str:
+    """Put the repair answer's actions on the last rule that tests something
+    and has no ELSE. Returns what was added, or ""."""
+    raw = answer.get("otherwise") if isinstance(answer, dict) else None
+    warnings: list[str] = []
+    try:
+        actions = _compile_actions(raw, catalog, warnings, refs)
+    except _Drop:
+        return ""
+    if not actions:
+        return ""
+    for rule in reversed(rules):
+        if rule.get("branches") and not isinstance(rule.get("else"), dict):
+            clause: dict[str, Any] = {"action": actions[0]}
+            if len(actions) > 1:
+                clause["extra_actions"] = actions[1:]
+            rule["else"] = clause
+            try:
+                DerivationHandler.validate_payload({"rules": [rule]})
+            except ValueError:
+                rule.pop("else", None)
+                return ""
+            return ", ".join(f"${a['target_var']} = {a['value']}" for a in actions)
+    return ""
+
+
+def _compile_actions(
+    raw: Any, catalog: dict[str, dict[str, Any]], warnings: list[str],
+    refs: ai_refs.RefIndex | None = None,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    acts = [a for a in (raw if isinstance(raw, list) else [])[:MAX_ACTIONS] if isinstance(a, dict)]
+    for a in acts:
+        try:
+            out.extend(_compile_action(a, catalog, warnings, refs))
+        except _Drop as e:
+            if len(acts) == 1:
+                raise
+            # Bench Z8: one bad action ("$pose.neg") cost the whole rule.
+            warnings.append(f"left out an action: {e}")
+    return out
+
+
+def _compile_action(
+    a: dict[str, Any], catalog: dict[str, dict[str, Any]], warnings: list[str],
+    refs: ai_refs.RefIndex | None = None,
+) -> list[dict[str, Any]]:
+    """One action as ``[action]``, or ``[]`` when it does nothing."""
+    raw_target = str(a.get("target_var") or "").strip().lstrip("$")
+    mode = a.get("mode") if a.get("mode") in _VALID_MODES else "replace"
+    if raw_target.endswith(".neg") and _var_name(raw_target[:-4]):
+        # "$pose.neg" as the target: words for the pose's negative.
+        raw_target = raw_target[:-4]
+        if mode not in NEGATIVE_MODES:
+            mode = "negative"
+    target = _var_name(raw_target)
+    if target is None:
+        raise _Drop(f"{a.get('target_var')!r} isn't a variable name")
+    value = _got if isinstance(_got := a.get("value"), str) else ""
+    value = _unquote(re.sub(r"\s+", " ", value).strip())[:MAX_VALUE_LEN]
+    value = join_piece(mode, value)
+    try:
+        value = ai_refs.compile_text(value, surface="action", refs=refs)
+    except ValueError as e:
+        raise _Drop(str(e)) from None
+    if not value and mode != "replace":
+        return []
+    left_out = ai_negation.excluded(value) if mode not in NEGATIVE_MODES else ""
+    if left_out:
+        # "no guns, no rifles" written as the value would print them.
+        warnings.append(f"\"{value[:60]}\" only says what to leave out: it adds "
+                        f"{left_out[:60]} to ${target}'s negative instead")
+        mode, value = "negative", left_out
+    why = adult.blocked(value) if mode not in NEGATIVE_MODES else ""
+    if why:
+        raise _Drop(why)
+    for read in _VAR_READ.findall(value):
+        if read not in catalog and read != target:
+            warnings.append(unset_note(read))
+    return [{"target_var": target, "mode": mode, "value": value}]

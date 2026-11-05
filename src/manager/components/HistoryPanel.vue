@@ -7,11 +7,15 @@
  *   Right (1fr)    — preview of the selected snapshot: date, name, raw JSON
  *                    and a "Restore this version" primary action.
  *
- * Click outside / Esc closes. Body scroll is locked while open.
+ * A kit Modal: click outside or Esc closes, Tab stays inside, focus goes
+ * back to the History button. The snapshot is a CodeBlock with copy.
  */
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
-import Button from "./ui/Button.vue";
-import RelativeDate from "./RelativeDate.vue";
+import { computed, ref, watch } from "vue";
+import Button from "@/kit/Button.vue";
+import ListRow from "@/kit/ListRow.vue";
+import Modal from "@/kit/Modal.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
+import RelativeDate from "@/kit/RelativeDate.vue";
 import type { ModuleHistoryEntry } from "../api/types";
 
 const props = defineProps<{
@@ -39,10 +43,6 @@ watch(ordered, () => {
 const currentEntry = computed(() =>
   ordered.value[selected.value] ?? null,
 );
-
-function close(): void {
-  emit("update:open", false);
-}
 
 function restore(entry: ModuleHistoryEntry): void {
   emit("restore", entry);
@@ -74,59 +74,26 @@ function snapshotDate(entry: ModuleHistoryEntry): string {
   }
 }
 
-function onKey(e: KeyboardEvent): void {
-  if (e.key === "Escape" && props.open) close();
-}
-
-onMounted(() => {
-  window.addEventListener("keydown", onKey);
-});
-onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKey);
-});
-
 watch(
   () => props.open,
   (next) => {
-    if (typeof document === "undefined") return;
-    document.body.style.overflow = next ? "hidden" : "";
     if (next) selected.value = 0;
   },
 );
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      v-if="open"
-      class="wp-history-overlay"
-      data-test="history-overlay"
-      @mousedown.self="close"
-    >
-      <div
-        class="wp-history-panel"
-        role="dialog"
-        aria-label="Version history"
-        data-test="history-panel"
-      >
-        <!-- Header -->
-        <div class="wp-history-panel__header">
-          <div>
-            <h3 class="wp-history-panel__title">Version history</h3>
-            <p class="wp-history-panel__sub">
-              Last {{ entries.length }} save{{ entries.length === 1 ? "" : "s" }} ·
-              oldest is overwritten on save
-            </p>
-          </div>
-          <Button
-            icon="pi-times"
-            variant="ghost"
-            aria-label="Close history"
-            data-test="history-close"
-            @click="close"
-          />
-        </div>
-
+  <Modal :open="open" size="lg" @update:open="emit('update:open', $event)">
+    <template #header="{ titleId }">
+      <div>
+        <h3 :id="titleId" class="wp-modal__title wp-history-panel__title">Version history</h3>
+        <p class="wp-history-panel__sub">
+          Last {{ entries.length }} save{{ entries.length === 1 ? "" : "s" }} ·
+          oldest is overwritten on save
+        </p>
+      </div>
+    </template>
+      <div class="wp-history-panel" data-test="history-panel">
         <!-- Empty state -->
         <div
           v-if="!ordered.length"
@@ -142,23 +109,22 @@ watch(
         <div v-else class="wp-history-panel__body">
           <!-- Left: list of snapshots -->
           <div class="wp-history-list" data-test="history-list">
-            <button
+            <ListRow
               v-for="(entry, idx) in ordered"
               :key="`${entry.saved_at}-${idx}`"
-              type="button"
               class="wp-history-item"
-              :data-active="idx === selected ? 'true' : 'false'"
+              :selected="idx === selected"
               :data-test="`history-entry-${idx}`"
               @click="selected = idx"
             >
-              <div class="wp-history-item__top">
+              <span class="wp-history-item__top">
                 <span class="wp-history-item__label">{{ itemLabel(idx) }}</span>
                 <span class="wp-history-item__time">
                   <RelativeDate :value="entry.saved_at" />
                 </span>
-              </div>
-              <div class="wp-history-item__name">{{ entry.name || "(untitled)" }}</div>
-            </button>
+              </span>
+              <span class="wp-history-item__name">{{ entry.name || "(untitled)" }}</span>
+            </ListRow>
           </div>
 
           <!-- Right: preview pane -->
@@ -180,7 +146,14 @@ watch(
                   @click="restore(currentEntry)"
                 >Restore this version</Button>
               </div>
-              <pre class="wp-history-preview__json">{{ previewJson(currentEntry) }}</pre>
+              <CodeBlock
+                class="wp-history-preview__json"
+                :code="previewJson(currentEntry)"
+                title="Saved data"
+                language="JSON"
+                size="sm"
+                default-wrap
+              />
             </template>
             <div v-else class="wp-dim wp-history-preview__placeholder">
               Select a snapshot to preview.
@@ -188,53 +161,16 @@ watch(
           </div>
         </div>
       </div>
-    </div>
-  </Teleport>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-history-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  background: var(--wp-overlay-bg, rgba(0, 0, 0, 0.55));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--wp-space-7);
-  animation: wp-history-fade-in 0.15s ease-out;
-}
-@keyframes wp-history-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 .wp-history-panel {
-  width: min(880px, 100%);
-  max-height: min(640px, calc(100vh - 48px));
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-lg, 10px);
+  /* The two panes run to the dialog's edges. */
+  margin: -12px -14px;
+  height: min(560px, calc(100vh - 140px));
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  box-shadow: var(--wp-shadow-lg);
-}
-
-.wp-history-panel__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--wp-space-5);
-  padding: var(--wp-space-6) var(--wp-space-6);
-  border-bottom: 1px solid var(--wp-border);
-  flex-shrink: 0;
-}
-.wp-history-panel__title {
-  margin: 0;
-  font-size: var(--wp-text-md);
-  font-weight: 600;
-  color: var(--wp-text);
 }
 .wp-history-panel__sub {
   margin: 2px 0 0;
@@ -260,26 +196,9 @@ watch(
   gap: var(--wp-space-2);
 }
 
-.wp-history-item {
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius);
-  padding: var(--wp-space-5) var(--wp-space-5);
-  color: var(--wp-text);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-}
-.wp-history-item:hover {
-  background: var(--wp-bg-3);
-}
-.wp-history-item[data-active="true"] {
-  background: rgba(124, 58, 237, 0.20);
-  background: color-mix(in oklab, var(--wp-accent-600) 20%, transparent);
-  border-color: rgba(139, 92, 246, 0.50);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 50%, transparent);
-}
+/* A kit ListRow holding two lines: label + time, then the saved name. */
+.wp-history-item { padding: var(--wp-space-4) var(--wp-space-5); }
+.wp-history-item :deep(.wp-list-row__label) { display: flex; flex-direction: column; }
 .wp-history-item__top {
   display: flex;
   justify-content: space-between;
@@ -334,16 +253,10 @@ watch(
 }
 .wp-history-preview__json {
   flex: 1;
-  margin: 0;
-  padding: var(--wp-space-6) var(--wp-space-6);
-  overflow: auto;
-  font-family: var(--wp-font-mono, ui-monospace, monospace);
-  font-size: var(--wp-text-xs);
-  color: var(--wp-text-muted);
-  background: var(--wp-bg);
-  white-space: pre-wrap;
-  word-break: break-word;
+  min-height: 0;
+  margin: var(--wp-space-5) var(--wp-space-6) var(--wp-space-6);
 }
+.wp-history-preview__json :deep(.wp-code__pre) { flex: 1; min-height: 0; }
 .wp-history-preview__placeholder {
   padding: var(--wp-space-7);
   font-size: var(--wp-text-base);
@@ -362,7 +275,7 @@ watch(
 }
 .wp-history-empty i {
   font-size: var(--wp-text-3xl);
-  color: var(--wp-text-dim, #6e6e7c);
+  color: var(--wp-text-dim);
   margin-bottom: var(--wp-space-5);
 }
 .wp-history-empty p {
@@ -372,6 +285,7 @@ watch(
 .wp-history-empty__hint {
   margin-top: var(--wp-space-2) !important;
   font-size: var(--wp-text-sm);
-  color: var(--wp-text-dim, #6e6e7c);
+  color: var(--wp-text-dim);
 }
+.wp-history-panel__title { margin: 0; font-size: var(--wp-text-md); font-weight: 600; color: var(--wp-text); }
 </style>

@@ -1,34 +1,49 @@
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import Select from "../../ui/Select.vue";
-import Icon from "../../ui/Icon.vue";
-import type { SelectOption } from "../../ui/select-types";
-import HsvPicker from "../../../../components/shared/HsvPicker.vue";
-import SettingGroup from "../SettingGroup.vue";
+import Select from "@/kit/Select.vue";
+import Icon from "@/kit/Icon.vue";
+import type { SelectOption } from "@/kit/select-types";
+import HsvPicker from "@/kit/HsvPicker.vue";
+import RadioGroup from "@/kit/RadioGroup.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
-import SegControl, { type SegOption } from "../SegControl.vue";
+import ThemeChoices from "../ThemeChoices.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { useUiStore, type DensityMode, type MotionMode, type StartPage, type ThemeMode } from "../../../stores/uiStore";
-import { ACCENT_OPTIONS, SWATCH_PREVIEW, useTweaksStore } from "../../../stores/tweaksStore";
+import { computed } from "vue";
+import { ACCENT_LABELS, ACCENT_OPTIONS, PALETTE_OPTIONS, SWATCH_PREVIEW, useTweaksStore, type AccentName } from "../../../stores/tweaksStore";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
+/** "Theme's own" first, then the presets, then Custom. */
+const SWATCHES: AccentName[] = ["theme", ...ACCENT_OPTIONS, "custom"];
+/** The colour theme's own accent, for the "Theme's own" swatch. */
+const ownAccent = computed(() => PALETTE_OPTIONS.find((p) => p.id === tweaks.palette)?.swatch[ui.resolvedTheme][2]);
 
-const THEMES: SegOption<ThemeMode>[] = [
+/** Theme's own: half its accent; Custom: the picked colour once chosen
+ *  (the colour wheel until then); presets: their 500 stop. */
+function swatchStyle(name: AccentName): Record<string, string | undefined> {
+  if (name === "theme") return { "--own-accent": ownAccent.value };
+  if (name === "custom") return tweaks.accent === "custom" ? { background: tweaks.customHex } : {};
+  return { background: SWATCH_PREVIEW[name] };
+}
+
+const THEMES: SegmentedOption<ThemeMode>[] = [
   { value: "dark", label: "Dark", icon: "pi-moon" },
   { value: "light", label: "Light", icon: "pi-sun" },
   { value: "auto", label: "Auto", icon: "pi-desktop" },
 ];
-const DENSITIES: SegOption<DensityMode>[] = [
+const DENSITIES: SegmentedOption<DensityMode>[] = [
   { value: "compact", label: "Compact" },
   { value: "comfortable", label: "Comfortable" },
   { value: "cozy", label: "Cozy" },
 ];
 type SidebarChoice = "expanded" | "collapsed";
-const SIDEBAR: SegOption<SidebarChoice>[] = [
+const SIDEBAR: SegmentedOption<SidebarChoice>[] = [
   { value: "expanded", label: "Labels" },
   { value: "collapsed", label: "Icons only" },
 ];
-const MOTION: SegOption<MotionMode>[] = [
+const MOTION: SegmentedOption<MotionMode>[] = [
   { value: "auto", label: "Match system" },
   { value: "reduce", label: "Always reduce" },
 ];
@@ -47,9 +62,25 @@ function setSidebar(v: SidebarChoice): void {
 </script>
 
 <template>
-  <SettingGroup title="Look">
-    <SettingRow label="Theme" hint="Dark, light, or follow the system." setting-key="theme">
-      <SegControl
+  <SettingGroup title="Theme">
+    <SettingRow
+      label="Colours"
+      hint="The colour theme for the manager: surfaces, text and its own accent. Module kind colours stay the same in every theme."
+      setting-key="colours"
+      stacked
+    >
+      <ThemeChoices kind="palette" />
+    </SettingRow>
+    <SettingRow
+      label="Look"
+      hint="Everything that is not colour: corners, type, borders and how a selected item is drawn. Works with any colour theme."
+      setting-key="look"
+      stacked
+    >
+      <ThemeChoices kind="look" />
+    </SettingRow>
+    <SettingRow label="Mode" hint="Dark, light, or follow the system." setting-key="theme">
+      <WpSegmented
         :model-value="ui.themeMode"
         :options="THEMES"
         aria-label="Theme"
@@ -59,37 +90,33 @@ function setSidebar(v: SidebarChoice): void {
     </SettingRow>
     <SettingRow
       label="Accent color"
-      hint="The highlight color for buttons, links and selection. Pick a preset or your own."
+      :hint="tweaks.accentLocked
+        ? 'High contrast keeps its own accent, so this is off while it is the colour theme.'
+        : 'The highlight color for buttons, links and selection. Keep the colour theme\'s own, pick a preset, or your own.'"
       setting-key="accent"
-      :stacked="tweaks.accent === 'custom'"
+      :stacked="tweaks.accent === 'custom' && !tweaks.accentLocked"
     >
-      <div class="wp-set-swatches" role="radiogroup" aria-label="Accent color">
-        <button
-          v-for="name in ACCENT_OPTIONS"
-          :key="name"
-          type="button"
-          role="radio"
-          class="wp-set-swatch"
-          :aria-checked="tweaks.accent === name"
-          :aria-label="`Accent: ${name}`"
-          :title="name"
-          :style="{ background: SWATCH_PREVIEW[name] }"
-          :data-test="`settings-accent-${name}`"
-          @click="tweaks.setAccent(name)"
-        />
-        <button
-          type="button"
-          role="radio"
-          class="wp-set-swatch wp-set-swatch--custom"
-          :aria-checked="tweaks.accent === 'custom'"
-          aria-label="Accent: custom"
-          title="Custom"
-          :style="tweaks.accent === 'custom' ? { background: tweaks.customHex } : undefined"
-          data-test="settings-accent-custom"
-          @click="tweaks.setAccent('custom')"
-        ><Icon name="pi-palette" /></button>
-      </div>
-      <div v-if="tweaks.accent === 'custom'" class="wp-set-picker">
+      <RadioGroup
+        class="wp-set-swatches"
+        :class="{ 'is-locked': tweaks.accentLocked }"
+        :model-value="tweaks.accentLocked ? 'theme' : tweaks.accent"
+        :options="SWATCHES.map((name) => ({ value: name, label: ACCENT_LABELS[name] }))"
+        variant="swatch"
+        named
+        :disabled="tweaks.accentLocked"
+        aria-label="Accent color"
+        test-prefix="settings-accent"
+        @update:model-value="(name) => tweaks.setAccent(name)"
+      >
+        <template #swatch="{ option }">
+          <span
+            class="wp-set-swatch"
+            :class="{ 'wp-set-swatch--theme': option.value === 'theme', 'wp-set-swatch--custom': option.value === 'custom' }"
+            :style="swatchStyle(option.value)"
+          />
+        </template>
+      </RadioGroup>
+      <div v-if="tweaks.accent === 'custom' && !tweaks.accentLocked" class="wp-set-picker">
         <HsvPicker
           :model-value="tweaks.customHex"
           aria-label="Custom accent color"
@@ -102,7 +129,7 @@ function setSidebar(v: SidebarChoice): void {
       hint="Spacing and control height across the manager. The canvas nodes have their own density under Canvas."
       setting-key="density"
     >
-      <SegControl
+      <WpSegmented
         :model-value="ui.density"
         :options="DENSITIES"
         aria-label="Density"
@@ -111,7 +138,7 @@ function setSidebar(v: SidebarChoice): void {
       />
     </SettingRow>
     <SettingRow label="Reduce motion" hint="Turn animations and transitions off in the manager." setting-key="motion">
-      <SegControl
+      <WpSegmented
         :model-value="ui.motion"
         :options="MOTION"
         aria-label="Reduce motion"
@@ -123,7 +150,7 @@ function setSidebar(v: SidebarChoice): void {
 
   <SettingGroup title="Layout">
     <SettingRow label="Sidebar" hint="Show the navigation with labels, or as icons only." setting-key="sidebar">
-      <SegControl
+      <WpSegmented
         :model-value="ui.sidebarCollapsed ? 'collapsed' : 'expanded'"
         :options="SIDEBAR"
         aria-label="Sidebar"
@@ -156,24 +183,18 @@ function setSidebar(v: SidebarChoice): void {
 </template>
 
 <style scoped>
-.wp-set-swatches { display: flex; gap: 10px; align-items: center; }
-.wp-set-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  padding: 0;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-.wp-set-swatch[aria-checked="true"] { outline: 2px solid var(--wp-text); outline-offset: 2px; }
-.wp-set-swatch:focus-visible { outline: 2px solid var(--wp-accent-500); outline-offset: 2px; }
+/* The kit's named swatches; the slot paints each one (a plain colour, the
+ * split "Theme's own", the rainbow "Custom"). */
+.wp-set-swatch { display: block; width: 100%; height: 100%; }
+.wp-set-swatches :deep(.wp-radio-group__swatch) { width: 24px; height: 24px; }
 .wp-set-swatch--custom {
-  background: conic-gradient(#f43f5e, #f59e0b, #22c55e, #14b8a6, #6366f1, #a855f7, #f43f5e);
-  color: #fff;
-  font-size: 11px;
+  background: conic-gradient(hsl(350 89% 60%), hsl(38 92% 50%), hsl(142 71% 45%), hsl(173 80% 40%), hsl(239 84% 67%), hsl(271 91% 65%), hsl(350 89% 60%));
 }
+/* "Theme's own": half the live accent, half the page, so it reads as
+ * "whatever the colour theme brings". */
+.wp-set-swatch--theme { background: linear-gradient(135deg, var(--own-accent) calc(50% - 0.75px), var(--wp-bg-3) calc(50% + 0.75px)); }
+/* Locked (High contrast): the theme's own stays readable, the rest fade. */
+.wp-set-swatches.is-locked :deep([data-test="settings-accent-theme"]) { opacity: 1; }
 .wp-set-picker { width: 100%; max-width: 360px; }
 .wp-set-link { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 </style>

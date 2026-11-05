@@ -114,8 +114,8 @@ def test_defaults_missing_arrays_to_empty():
 # nothing to do), schema_version preserved. Only v > MAX_KNOWN rejects.
 
 
-def test_max_known_schema_version_is_9():
-    assert MAX_KNOWN_SCHEMA_VERSION == 9
+def test_max_known_schema_version_is_10():
+    assert MAX_KNOWN_SCHEMA_VERSION == 10
 
 
 def test_v3_payload_passes_through_unchanged():

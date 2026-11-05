@@ -43,6 +43,12 @@ describe("docs registry", () => {
     }
   });
 
+  it("searching for AI terms finds the AI assistant page", () => {
+    for (const q of ["ai", "ollama", "LM Studio", "draft"]) {
+      expect(searchPages(q).some((p) => p.id === "ai-assistant"), q).toBe(true);
+    }
+  });
+
   it("toneVar maps tones to css vars; bundle + neutral are muted", () => {
     expect(toneVar("node")).toContain("--wp-node");
     expect(toneVar("wildcard")).toContain("--wp-kind-wildcard");

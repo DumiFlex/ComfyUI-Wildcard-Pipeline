@@ -13,6 +13,8 @@
  * - src/components/**\/*.{vue,css}
  * - src/extension/**\/*.css
  * - src/widgets/**\/*.css
+ * - node_modules/@dumiflex/wp-kit/src/*.{vue,css} (the shared kit, from its npm package; not its theme/,
+ *   which is the manager's page sheet)
  *
  * NOT included: src/manager/** (separate bundle with its own scope —
  * Tailwind utilities + global tokens.css are intentional there).
@@ -43,6 +45,8 @@ const LEGACY_ALLOWLIST = new Set([
 const SCOPES = [
   "src/components/**/*.vue",
   "src/components/**/*.css",
+  "node_modules/@dumiflex/wp-kit/src/*.vue",
+  "node_modules/@dumiflex/wp-kit/src/*.css",
   "src/extension/**/*.css",
   "src/widgets/**/*.css",
 ];
@@ -66,7 +70,7 @@ function extractUnscopedStyles(vueSource) {
 
 /** Find top-level class selectors. Match `.classname` at the start of
  *  a rule (after `}`, newline, or block start). */
-const TOP_LEVEL_CLASS_RE = /(?:^|[}\n])\s*(\.[a-zA-Z][\w-]*)/g;
+const TOP_LEVEL_CLASS_RE = /(?:^|[}\n])\s*(\.[a-zA-Z][\w-]*)(:has\(\.wp-)?/g;
 
 function violationsIn(content) {
   const violations = [];
@@ -76,6 +80,9 @@ function violationsIn(content) {
     const selector = m[1];
     if (ALLOWED_PREFIXES.some((re) => re.test(selector))) continue;
     if (LEGACY_ALLOWLIST.has(selector)) continue;
+    // A host element scoped to the ones holding ours (`.lg-node:has(.wp-note)`,
+    // to restyle the node frame around a widget) can't match anyone else's.
+    if (m[2]) continue;
     const offset = m.index;
     const line = stripped.slice(0, offset).split("\n").length;
     violations.push({ selector, line });

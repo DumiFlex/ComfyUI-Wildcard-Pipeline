@@ -21,8 +21,12 @@ import { applyVarAccessor, type ResolvedValue } from "../../../../../widgets/ric
 // asset and only pulled in when the combine instance modal opens. Bundle
 // budget is tight — eager import pushes total over.
 import type { VarProducerLike } from "../../../../../manager/components/RefChip.vue";
+import Button from "@/kit/Button.vue";
 const RichTextInput = defineAsyncComponent(
   () => import("../../../../../manager/components/RichTextInput.vue"),
+);
+const NegativeField = defineAsyncComponent(
+  () => import("../../../../../manager/components/NegativeField.vue"),
 );
 
 const props = withDefaults(
@@ -65,6 +69,7 @@ const availableVars = computed<string[]>(() => {
 const payload = computed(() => (props.module.payload ?? {}) as {
   template?: string;
   output_var?: string;
+  negative?: string;
 });
 const instance = computed(() => props.module.instance ?? {});
 const libraryTemplate = computed(() => payload.value.template ?? "");
@@ -84,6 +89,18 @@ const templateValue = computed(() =>
 const templateOverridden = computed(() => {
   const ov = instance.value.template_override;
   return ov !== undefined && ov !== null && ov !== libraryTemplate.value;
+});
+
+// The combine's negative follows its template: the instance can override it
+// (`negative_override`, "" clears it), else the library's `negative` applies.
+const libraryNegative = computed(() => payload.value.negative ?? "");
+const negativeValue = computed(() => {
+  const ov = instance.value.negative_override;
+  return typeof ov === "string" ? ov : libraryNegative.value;
+});
+const negativeOverridden = computed(() => {
+  const ov = instance.value.negative_override;
+  return typeof ov === "string" && ov.trim() !== libraryNegative.value.trim();
 });
 
 // Tokenize once with surface="combine". Frontend tokenizer mirrors
@@ -267,6 +284,16 @@ function onTemplateInput(next: string): void {
 function onResetTemplate(): void {
   emit("update", patchInstance(props.module, "template_override", null));
 }
+
+function onNegativeInput(next: string | undefined): void {
+  const v = next ?? "";
+  const collapsed = v.trim() === libraryNegative.value.trim() ? null : v;
+  emit("update", patchInstance(props.module, "negative_override", collapsed));
+}
+
+function onResetNegative(): void {
+  emit("update", patchInstance(props.module, "negative_override", null));
+}
 </script>
 
 <template>
@@ -275,15 +302,16 @@ function onResetTemplate(): void {
       <span class="wp-tpl__label">Template</span>
       <span class="wp-tpl__hint">$name refs · $$ for literal $ · {a|b|c} inline choice</span>
       <div class="wp-tpl__head-actions">
-        <button
+        <Button
           v-if="templateOverridden"
-          type="button"
-          class="wp-tpl__reset"
+          size="sm"
+          variant="outline"
+          icon="pi-replay"
           data-test="tpl-reset"
-          title="Restore template to library default"
+          hint="Restore template to library default"
           aria-label="Reset template to library default"
           @click="onResetTemplate"
-        ><i class="pi pi-replay" aria-hidden="true" /></button>
+        />
       </div>
     </div>
 
@@ -367,6 +395,36 @@ function onResetTemplate(): void {
       </div>
     </template>
 
+    <div class="wp-tpl__head wp-tpl__head--neg">
+      <span class="wp-tpl__label">Negative</span>
+      <span class="wp-tpl__hint">goes to the Assembler's negative when its template uses ${{ outputVar || "output" }}</span>
+      <div class="wp-tpl__head-actions">
+        <Button
+          v-if="negativeOverridden"
+          size="sm"
+          variant="outline"
+          icon="pi-replay"
+          data-test="tpl-neg-reset"
+          hint="Restore negative to library default"
+          aria-label="Reset negative to library default"
+          @click="onResetNegative"
+        />
+      </div>
+    </div>
+    <NegativeField
+      :model-value="negativeValue"
+      :var-suggestions="availableVars"
+      :var-producers="varProducerMap"
+      graph-aware
+      surface="combine"
+      label="combine"
+      always-open
+      test-id="tpl-negative"
+      :placeholder="libraryNegative || 'words to keep out of the image'"
+      :class="{ 'wp-tpl__input--mod': negativeOverridden }"
+      @update:model-value="onNegativeInput"
+    />
+
     <div class="wp-tpl__stored" data-test="tpl-stored-as">
       <span class="wp-tpl__stored-arrow">→ stored as</span>
       <span
@@ -382,6 +440,9 @@ function onResetTemplate(): void {
   padding: 12px 16px;
   background: var(--wp-bg);
   border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
+}
+.wp-tpl__head--neg {
+  margin-top: 10px;
 }
 .wp-tpl__head {
   display: flex;
@@ -416,7 +477,7 @@ function onResetTemplate(): void {
   box-sizing: border-box;
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 6px 8px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text);
@@ -452,14 +513,11 @@ function onResetTemplate(): void {
 .wp-tpl__detected-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px 10px;
 }
+/* Coloured names, not chips: variables read as text everywhere. */
 .wp-tpl__pill {
-  padding: 2px 6px;
   font: 600 10px var(--wp-font-mono);
-  background: color-mix(in srgb, currentColor 12%, var(--wp-bg-deep, var(--wp-bg)));
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 999px;
 }
 
 .wp-tpl__preview-label {
@@ -473,7 +531,7 @@ function onResetTemplate(): void {
 .wp-tpl__preview {
   background: var(--wp-bg-deep, var(--wp-bg));
   border: 1px dashed var(--wp-border);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   padding: 8px 10px;
   font: 11px/1.5 var(--wp-font-mono);
   color: var(--wp-text-muted, var(--wp-text2));
@@ -484,7 +542,7 @@ function onResetTemplate(): void {
 .tpl-tok--text { color: var(--wp-text); }
 .tpl-tok--var { font-weight: 600; }
 .tpl-tok--var-error {
-  color: var(--wp-danger, #e05252);
+  color: var(--wp-danger);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
 }
@@ -493,16 +551,16 @@ function onResetTemplate(): void {
   font-weight: 600;
 }
 .tpl-tok--ref-error {
-  color: var(--wp-danger, #e05252);
+  color: var(--wp-danger);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
 }
 .tpl-tok--alt {
-  color: var(--wp-amber, #d4a04a);
+  color: var(--wp-amber);
   font-weight: 600;
 }
 .tpl-tok--repeat {
-  color: var(--wp-teal, #4ad4c4);
+  color: var(--wp-teal);
   font-weight: 600;
 }
 .tpl-tok--escape {
@@ -517,10 +575,10 @@ function onResetTemplate(): void {
   font-weight: 600;
   background: color-mix(in srgb, currentColor 14%, transparent);
   padding: 0 3px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .tpl-tok--var-unresolved {
-  color: var(--wp-status-modified, #f59e0b);
+  color: var(--wp-status-modified);
   text-decoration: underline dashed;
   text-underline-offset: 2px;
   font-weight: 600;

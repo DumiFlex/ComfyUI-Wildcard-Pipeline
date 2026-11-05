@@ -6,6 +6,8 @@ Slots:
                  rules_override, blocklist)
 
   - negative : STRING (optional) — cleaned by the rule list's negative column
+  - blocklist: STRING (optional, socket only) — entries added to the widget's
+                 blocklist
 
 Output:
   - prompt   : STRING
@@ -19,6 +21,7 @@ ComfyUI `executed` event.
 """
 
 import json
+import re
 from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
@@ -38,6 +41,23 @@ def _parse_config(raw: dict[str, Any] | str | None) -> dict[str, Any]:
             return {}
         return data if isinstance(data, dict) else {}
     return raw
+
+
+def _with_wired_blocklist(cfg: dict[str, Any], wired: Any) -> dict[str, Any]:
+    """Add a wired ``blocklist`` text's entries to the panel's. List mode
+    splits on commas and newlines (as the Blocklist dialog does); regex mode
+    takes one pattern per line, so a ``{1,3}`` survives."""
+    if not isinstance(wired, str) or not wired.strip():
+        return cfg
+    block = dict(cfg.get("blocklist") or {})
+    kind = block.get("kind", "list")
+    parts = wired.splitlines() if kind == "regex" else re.split(r"[,\n]", wired)
+    entries = [e for e in (block.get("entries") or []) if isinstance(e, str)]
+    for part in (p.strip() for p in parts):
+        if part and part not in entries:
+            entries.append(part)
+    block["entries"] = entries
+    return {**cfg, "blocklist": block}
 
 
 class WPPromptCleaner(io.ComfyNode):
@@ -80,6 +100,16 @@ class WPPromptCleaner(io.ComfyNode):
                         "negative output is empty."
                     ),
                 ),
+                io.String.Input(
+                    "blocklist",
+                    optional=True,
+                    force_input=True,
+                    tooltip=(
+                        "Extra blocklist entries from another node, added to the "
+                        "panel's: comma- or newline-separated in list mode, one "
+                        "per line in regex mode."
+                    ),
+                ),
                 # Optional (execute defaults it) only so it sorts after `negative`:
                 # the frontend lays out required inputs before optional ones.
                 CleanerWidgetInput.Input(
@@ -92,8 +122,8 @@ class WPPromptCleaner(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, prompt, wp_cleaner="{}", negative=None):
-        cfg = _parse_config(wp_cleaner)
+    def execute(cls, prompt, wp_cleaner="{}", negative=None, blocklist=None):
+        cfg = _with_wired_blocklist(_parse_config(wp_cleaner), blocklist)
         cleaner = PromptCleaner()
         result = cleaner.run(prompt, cfg)
         text = result["text"]

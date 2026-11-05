@@ -20,7 +20,7 @@ name: Build tag list
 # That stability is the point: the SPA's "download tag list" button hardcodes
 # that URL and never needs updating. A per-run tag would break it every time.
 #
-# The tag is intentionally not semver, so semantic-release ignores it and this
+# The tag is intentionally not semver, so release-please ignores it and this
 # never looks like a product release.
 on:
   workflow_dispatch:

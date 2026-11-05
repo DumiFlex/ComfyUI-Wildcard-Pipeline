@@ -37,20 +37,20 @@ describe("IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
     });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]').element;
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input').element;
     expect(input.value).toBe("outfit_top");
   });
 
   it("placeholder on binding input shows library var_binding when no override", () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]').element;
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input').element;
     expect(input.placeholder).toBe("outfit");
     expect(input.value).toBe("");
   });
 
   it("emits update with new variable_binding when binding input changes", async () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "outfit_top";
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -62,7 +62,7 @@ describe("IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
     });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "";
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -76,7 +76,7 @@ describe("IdentitySection", () => {
     // junk char can never enter the produced-var name. DOM reflects it too
     // (controlled input — force-sync so it can't diverge from the model).
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "out,fit;top!";
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -87,7 +87,7 @@ describe("IdentitySection", () => {
 
   it("renders $-prefix label on binding input", () => {
     const w = mount(IdentitySection, { props: { module: makeModule() } });
-    expect(w.find('[data-test="id-binding-prefix"]').text()).toBe("$");
+    expect(w.find('[data-test="id-binding"] .wp-input-group__affix--prefix').text()).toBe("$");
   });
 
   it("name input renders with non-default value", () => {
@@ -108,21 +108,21 @@ describe("IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ meta: { name: "Custom", library_name: "outfit" } }) },
     });
-    expect(w.find('[data-test="id-name"]').classes()).toContain("id__input--mod");
+    expect(w.find('[data-test="id-name"]').attributes("data-tone")).toBe("accent");
   });
 
   it("name input does NOT get mod class when value equals library_name", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ meta: { name: "outfit", library_name: "outfit" } }) },
     });
-    expect(w.find('[data-test="id-name"]').classes()).not.toContain("id__input--mod");
+    expect(w.find('[data-test="id-name"]').attributes("data-tone")).toBeUndefined();
   });
 
   it("binding input gets mod class when override is set", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
     });
-    expect(w.find('[data-test="id-binding"]').classes()).toContain("wp-vbind-input--mod");
+    expect(w.find('[data-test="id-binding"]').attributes("data-tone")).toBe("accent");
   });
 
   it("typing binding equal to library default does NOT auto-clear (override sticks)", async () => {
@@ -135,7 +135,7 @@ describe("IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
     });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "outfit"; // matches library var_binding
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -147,7 +147,7 @@ describe("IdentitySection", () => {
     const w = mount(IdentitySection, {
       props: { module: makeModule({ instance: { variable_binding: "outfit_top" } }) },
     });
-    const input = w.find<HTMLInputElement>('[data-test="id-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="id-binding"] input');
     input.element.value = "";
     await input.trigger("input");
     const updates = w.emitted("update")!;
@@ -229,5 +229,18 @@ describe("IdentitySection", () => {
       },
     });
     expect(w.find('[data-test="id-binding-collision"]').classes()).toContain("id__collision--warn");
+  });
+
+  it("tones the binding field: warn on a sibling clash, accent on an upstream shadow", () => {
+    const plain = mount(IdentitySection, { props: { module: makeModule() } });
+    expect(plain.find('[data-test="id-binding"]').attributes("data-tone")).toBeUndefined();
+    const sib = mount(IdentitySection, {
+      props: { module: makeModule(), siblingVars: ["outfit"], upstreamVars: ["outfit"] },
+    });
+    expect(sib.find('[data-test="id-binding"]').attributes("data-tone")).toBe("warn");
+    const up = mount(IdentitySection, {
+      props: { module: makeModule(), upstreamVars: ["outfit"] },
+    });
+    expect(up.find('[data-test="id-binding"]').attributes("data-tone")).toBe("accent");
   });
 });

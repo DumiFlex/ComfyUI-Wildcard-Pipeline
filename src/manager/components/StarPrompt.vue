@@ -34,8 +34,8 @@
  * at a low number it argues against starring.
  */
 import { computed } from "vue";
-import Button from "./ui/Button.vue";
-import Icon from "./ui/Icon.vue";
+import Button from "@/kit/Button.vue";
+import Icon from "@/kit/Icon.vue";
 import { GITHUB_REPO } from "../config/links";
 import { useEngagementStore, measureSubstance } from "../stores/engagementStore";
 import { useModuleStore } from "../stores/moduleStore";
@@ -94,13 +94,7 @@ function star(): void {
   align-items: center;
   gap: var(--wp-space-4);
   padding: var(--wp-space-4) var(--wp-space-5);
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in oklab, var(--wp-accent-500) 7%, transparent),
-      transparent 60%
-    ),
-    var(--wp-bg-1);
+  background: color-mix(in oklab, var(--wp-accent-500) 5%, var(--wp-bg-1));
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-lg);
 }
@@ -134,8 +128,7 @@ function star(): void {
   gap: var(--wp-space-2);
   flex: none;
 }
-@media (max-width: 760px) {
-  .wp-star { flex-wrap: wrap; }
-  .wp-star__actions { width: 100%; justify-content: flex-end; }
-}
+/* Page area narrower than 560px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="560"] .wp-star { flex-wrap: wrap; }
+.wp-content[data-lt~="560"] .wp-star__actions { width: 100%; justify-content: flex-end; }
 </style>

@@ -286,7 +286,101 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // 462,555 bytes before it. Same "guide, not a cap" rule as above.
 // RAISED 464 -> 468 KB on 2026-10-07 for the zoom's Details panel and the
 // frame-click zoom (lazy picker chunk); the branch sat at 476,239 bytes.
-const TOTAL_LIMIT = 468 * 1024;     // 468 KB
+// RAISED 468 -> 472 KB on 2026-10-14 for the Split loading mark in the canvas
+// modals (Load template, Push to library); Dumi asked for it everywhere.
+// RAISED 472 -> 476 KB on 2026-10-14 for negatives on node fixed values and
+// combines (NegativeField in their lazy editor chunks) and the chat round;
+// the branch sat at 483,532 bytes.
+// RAISED 476 -> 480 KB on 2026-10-14 when the AI knowledge round (canvas-facts
+// answer, ~0.6 KB in boot) landed on top of it.
+// Same "guide, not a cap" rule as above.
+// dev's canvas widget lifecycle fix (2026-10-16, ~0.65 KB in boot) fits in
+// the same 480 KB.
+// RAISED 480 -> 496 KB on 2026-10-17 for client-side shape checks on install
+// (review finding H1): the canvas can install community dependencies, so the
+// Zod validators ship as their own lazy chunk (shape-check-*.mjs, ~17 KB
+// gzip) that loads only when something is installed. dev sat at 485,671
+// bytes; the branch at 502,904.
+// RAISED 496 -> 512 KB on 2026-10-27 for the shared component kit (Dumi
+// approved one component per control for canvas + manager): ContextMenu now
+// places itself through kit/floating.ts (branch 508,348 bytes,
+// 444 over), and the canvas twins (Button, Switch, Tabs, Popover, Tooltip)
+// land next in widget chunks, never in boot.
+// RAISED 512 -> 536 KB on 2026-10-29 for WP Toggles (#200) landing on top of
+// WP Note (#199): the toggles widget, its row outputs and the merge command
+// are lazy widget chunks (boot unchanged); the merge sat at 545,077 bytes.
+// RAISED 536 -> 552 KB on 2026-10-29 for WP Toggles' mute / bypass control
+// and WP Node Group (a new frontend-only node + panel), the clean/edit views
+// and the richer Pick one: lazy widget chunks plus a few KB of boot glue
+// (registration, the prompt strip); the branch sat at 552,937 bytes.
+// RAISED 552 -> 576 KB on 2026-10-29 for the WP Note editor: a formatting
+// bar, links to any docs page and section (the page/section catalog, ~5 KB
+// gzip) and icons from the full PrimeIcons list. All of it is in the note's
+// lazy chunks (NoteWidget, NotePeek, note-markdown), loaded only when a
+// note is on the canvas; boot unchanged. dev sat at ~556,000 bytes after #201, the merge at 575,436.
+// RAISED 576 -> 584 KB on 2026-10-29 for WP Bookmark (a frontend-only node
+// that jumps the canvas to a saved spot): its widget and the Bookmarks dock
+// are lazy chunks (~11 KB, plus the kit pieces they share), with ~5 KB of
+// boot glue for the node, the jump, the hidden filter and the one shortcut
+// listener, plus a WP Note that can be a bookmark (the shared jump fields);
+// the branch sat at 595,973 bytes after merging the WP Note editor.
+// RAISED 584 -> 586 KB on 2026-10-29 for the bookmark polish: frameless WP
+// Bookmark (shared with WP Note in _frameless.ts), the free-area measuring
+// for jumps and the dock, the draggable dock and Use this view; boot +1 KB,
+// the rest in the lazy bookmark chunks; the branch sat at 598,327 bytes.
+// RAISED 586 -> 590 KB on 2026-11-02 for bookmarks on the free canvas (the
+// side / bottom panel pane, minimap and zoom controls, the dock's snap
+// spots), the page key probe for shortcuts, and the note's tables, task
+// boxes and callouts (~1.2 KB gzip, in the bookmark and note chunks).
+// RAISED 590 -> 596 KB on 2026-11-02 for kit 0.5.0 (one field box, one
+// Chip, CodeBlock syntax colours, Skeleton shapes; ~2.5 KB gzip on its own,
+// dev at 606,638 bytes) and the loading shapes that replace empty states and
+// spinners in the list pages, editors, pickers and settings (~1.2 KB, mostly
+// in lazy manager chunks); the branch sat at 607,885 bytes.
+// RAISED 596 -> 600 KB on 2026-11-02 for kit 0.6.0: one Button, Modal,
+// Checkbox, switch and colour field for both sides. Button now carries its
+// stylesheet scoped plus the tooltip, ConfirmModal runs on Modal + ModalShell
+// with the focus trap, and Checkbox/Popover grew to cover what WpCheck and the
+// canvas popovers did; WpButton, CloseButton, ConfirmDialog and WpCheck went
+// (net ~4.1 KB gzip: dev 607,885 -> 611,998 bytes).
+// RAISED 600 -> 603 KB on 2026-11-03 for the kit buttons batch A: the
+// sub-category filter picker (shared with the canvas Pool section) now draws
+// its tags, operators and axis rows with Chip and ListRow and its actions
+// with Button, which pulls those pieces and the tooltip into its chunk
+// (dev 613,654 -> 616,336 bytes).
+// RAISED 603 -> 607 KB on 2026-11-03 for the canvas kit buttons (batches A
+// and B): the note editor's toolbar is the kit Toolbar with Buttons, the note
+// and bundle colours RadioGroup swatches (+ ColorField), the Var Picker the kit
+// Combobox with its Popover, the pickers' rows ListRows, and the debug viewer /
+// image filter use Button and WpIconButton, which pull those pieces into the
+// canvas chunks (dev ~616,500 -> 619,558 bytes).
+// RAISED 607 -> 608 KB on 2026-11-03 for the end of the kit migration: every
+// text field (manager and canvas) is the kit Input / Textarea / SearchInput and
+// the last canvas toggles are Chips (kit 0.10.0), which pull those pieces into
+// more chunks (619,558 -> 622,398 bytes).
+// RAISED 608 -> 610 KB on 2026-11-03 for kit 0.11.0: Input and Textarea carry
+// their own scoped styles (so canvas fields look right without local copies)
+// and the editors' menus moved onto Popover / DropdownMenu / Modal
+// (621,933 -> 623,679 bytes). Batch B drops the canvas fields' local copies.
+// RAISED 610 -> 614 KB on 2026-11-03 for the selection-toolbar "?" and pencil
+// (#225: the help dialog chunk and the toolbar commands in the boot chunk),
+// the labels-toggle fix (#249) and kit 0.14's bigger canvas controls
+// (623,679 -> 626,405 bytes).
+// RAISED 614 -> 630 KB on 2026-11-03 for the WP Note add-to-library button
+// (#252): pressing it runs the Import tab's install pipeline (shape check
+// with Zod, migrations, commit, reattach) from the canvas, so those land in
+// the extension build as lazy chunks that load on the press only
+// (626,405 -> 636,864 bytes).
+// RAISED 630 -> 640 KB on 2026-11-04 for pictures in WP Note: the
+// Pictures panel, the canvas re-encode (note-images.ts) and the picture
+// syntax ride in the note's lazy editor chunk (dev was already ~636.9 KB).
+const TOTAL_LIMIT = 640 * 1024;     // 640 KB
+// The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
+// two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
+// `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
+// warning means "raise the budget in this PR with a line above saying why";
+// a failure means something grew by far more than one feature should.
+const TOTAL_FAIL_LIMIT = Math.round(TOTAL_LIMIT * 1.05);
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length;
@@ -327,6 +421,8 @@ for (const file of files) {
   console.log(`  ${rel.padEnd(40)}  ${(size / 1024).toFixed(2).padStart(7)} KB`);
 }
 manifest.total = total;
+manifest.budget = TOTAL_LIMIT;
+manifest.failAt = TOTAL_FAIL_LIMIT;
 console.log(`  ${"TOTAL".padEnd(40)}  ${(total / 1024).toFixed(2).padStart(7)} KB`);
 
 const entry = files.find((f) => f.endsWith("main.js"));
@@ -341,9 +437,15 @@ if (entry) {
   }
 }
 
-if (total > TOTAL_LIMIT) {
-  console.error(`✗ Total js/ gzip ${total} bytes exceeds budget ${TOTAL_LIMIT}`);
+if (total > TOTAL_FAIL_LIMIT) {
+  console.error(
+    `✗ Total js/ gzip ${total} bytes exceeds budget ${TOTAL_LIMIT} by more than 5% (fails above ${TOTAL_FAIL_LIMIT})`,
+  );
   failed = true;
+} else if (total > TOTAL_LIMIT) {
+  const msg = `Total js/ gzip ${total} bytes is over the ${TOTAL_LIMIT}-byte budget (fails above ${TOTAL_FAIL_LIMIT}); raise TOTAL_LIMIT in scripts/check-bundle-size.mjs with a note saying why`;
+  console.warn(`⚠ ${msg}`);
+  if (process.env.GITHUB_ACTIONS) console.log(`::warning title=Bundle size::${msg}`);
 } else {
   console.log(`✓ Total within budget (${total} / ${TOTAL_LIMIT} bytes gzipped)`);
 }

@@ -330,6 +330,14 @@ describe("AssemblerHelper var-color rendering", () => {
     expect(btn.element.disabled).toBe(true);
   });
 
+  it("clear-template button works when only the negative template has text", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["mood"], template: "", negativeTemplate: "blurry", onClearTemplate: () => {} },
+    });
+    const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-clear-template-icon"]');
+    expect(btn.element.disabled).toBe(false);
+  });
+
   it("preview area shows empty-state ghost when template is empty", () => {
     const wrapper = mount(AssemblerHelper, {
       props: { upstreamVars: ["mood"], template: "" },
@@ -516,14 +524,21 @@ describe("AssemblerHelper negative preview", () => {
     expect(line.find(`.${varColorClass("hair")}`).text()).toBe("blonde");
   });
 
-  it("empty negative template is just the words; hidden when nothing to show", () => {
+  it("$negatives alone is just the words; hidden when nothing to show", () => {
     const shown = mount(AssemblerHelper, {
-      props: { ...base, template: "$hair, $mood", negativeTemplate: "" },
+      props: { ...base, template: "$hair, $mood", negativeTemplate: "$negatives" },
     });
     expect(shown.find('[data-test="asm-neg-preview"]').text()).toBe("blonde, lowres, sad");
     const hidden = mount(AssemblerHelper, {
-      props: { ...base, template: "a portrait", negativeTemplate: "" },
+      props: { ...base, template: "a portrait", negativeTemplate: "$negatives" },
     });
     expect(hidden.find('[data-test="asm-neg-preview"]').exists()).toBe(false);
+  });
+
+  it("an empty negative box is an empty negative, whatever the variables carry", () => {
+    const w = mount(AssemblerHelper, {
+      props: { ...base, template: "$hair, $mood", negativeTemplate: "" },
+    });
+    expect(w.find('[data-test="asm-neg-preview"]').exists()).toBe(false);
   });
 });

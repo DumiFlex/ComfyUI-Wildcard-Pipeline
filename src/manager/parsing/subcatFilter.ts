@@ -3,7 +3,7 @@
 //
 // Grammar (precedence not > and > or; or/and n-ary, flattened):
 //   expr := or ; or := and (("or"|",") and)* ; and := unary ("and" unary)*
-//   unary := "not" unary | atom ; atom := SUBCAT | "(" or ")"
+//   unary := ("not" | "!") unary | atom ; atom := SUBCAT | "(" or ")"
 export type Ast =
   | { tag: string }
   | { op: "not"; x: Ast }
@@ -14,13 +14,14 @@ export class ParseError extends Error {}
 export const RESERVED = new Set(["and", "or", "not", "null"]);
 const NAME_RE = /^[^\s()!,#:}@{$]+$/u;
 // group1 = a real token; group2 = any stray non-space char => error.
-const TOKEN_RE = /(\(|\)|,|[^\s()!,#:}@{$]+)|(\S)/gu;
+const TOKEN_RE = /(\(|\)|,|!|[^\s()!,#:}@{$]+)|(\S)/gu;
 
 export function parse(s: string): Ast | null {
   const toks: string[] = [];
   for (const m of s.matchAll(TOKEN_RE)) {
     if (m[2] !== undefined) throw new ParseError(`unexpected character '${m[2]}'`);
-    toks.push(m[1]);
+    // `!warm` is read as `not warm`. Mirrors Python `_tokenize`.
+    toks.push(m[1] === "!" ? "not" : m[1]);
   }
   if (toks.length === 0) return null;
   let pos = 0;

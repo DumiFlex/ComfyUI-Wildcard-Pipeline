@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import Button from "@/kit/Button.vue";
 import { ref, computed, watch } from "vue";
 
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "@/kit/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
 import { type ResolvedValue } from "../../widgets/richTokenize";
 import {
@@ -10,7 +11,7 @@ import {
 } from "./editors/_shell";
 import { setLibraryHash } from "./drift-store";
 import { pushToast } from "../shared/toast-store";
-import ConfirmDialog from "../shared/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import PushToLibraryModal from "./PushToLibraryModal.vue";
 import WildcardInstanceModal from "./editors/wildcard/WildcardInstanceModal.vue";
 import FixedValuesInstanceModal from "./editors/fixed-values/FixedValuesInstanceModal.vue";
@@ -165,7 +166,7 @@ const RESET_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly InstanceFieldKey[]
     "pick_min", "pick_max", "pick_separator",
   ],
   fixed_values: ["values_overrides", "enabled_options"],
-  combine: ["template_override", "variable_binding"],
+  combine: ["template_override", "negative_override", "variable_binding"],
   derivation: [
     "disabled_rule_ids",
     "disabled_branch_keys",
@@ -348,9 +349,12 @@ function save() {
           Array.isArray(libraryValues)
           && libraryValues.length === v2Override.length
           && libraryValues.every((lib, i) => {
-            const l = lib as { id?: unknown; name?: unknown; value?: unknown };
-            const cur = v2Override[i] as { id?: unknown; name?: unknown; value?: unknown };
-            return l.id === cur.id && l.name === cur.name && l.value === cur.value;
+            const l = lib as { id?: unknown; name?: unknown; value?: unknown; negative?: unknown };
+            const cur = v2Override[i] as { id?: unknown; name?: unknown; value?: unknown; negative?: unknown };
+            // An override row without `negative` keeps the library's.
+            const sameNeg = typeof cur.negative !== "string"
+              || cur.negative.trim() === (typeof l.negative === "string" ? l.negative.trim() : "");
+            return l.id === cur.id && l.name === cur.name && l.value === cur.value && sameNeg;
           });
         if (sameAsLibrary) {
           delete (inst as { values_overrides?: unknown }).values_overrides;
@@ -381,14 +385,35 @@ function save() {
         next.instance = inst;
       }
     } else {
-      // Inline-created path — payload.values is the only store. v2
-      // modal still emits entries in sync, so derivation works
-      // identically to the v1 path.
-      const values = next.entries.map((e, i) => ({
-        id: `val_${i.toString(16).padStart(4, "0")}`,
-        name: e.variable_name,
-        value: e.value,
-      }));
+      // Inline-created path — payload.values is the only store. The v2
+      // modal writes its rows to `values_overrides` (ids + negatives
+      // kept), so fold those into payload.values; otherwise derive from
+      // entries, carrying each row's id + negative over by position.
+      type Row = { id?: string; name?: string; value?: string; negative?: string };
+      const current = ((next.payload as { values?: Row[] } | undefined)?.values ?? []);
+      let values: Row[];
+      if (Array.isArray(v2Override)) {
+        const byId = new Map(current.map((r) => [r.id, r]));
+        values = (v2Override as Row[]).map((r) => {
+          const neg = typeof r.negative === "string" ? r.negative : byId.get(r.id)?.negative ?? "";
+          const row: Row = { id: r.id, name: r.name, value: r.value };
+          if (neg.trim()) row.negative = neg;
+          return row;
+        });
+        delete (inst as { values_overrides?: unknown }).values_overrides;
+        next.instance = inst;
+      } else {
+        values = next.entries.map((e, i) => {
+          const row: Row = {
+            id: current[i]?.id ?? `val_${i.toString(16).padStart(4, "0")}`,
+            name: e.variable_name,
+            value: e.value,
+          };
+          const neg = current[i]?.negative;
+          if (typeof neg === "string" && neg.trim()) row.negative = neg;
+          return row;
+        });
+      }
       next.payload = { ...(next.payload ?? {}), values };
     }
   }
@@ -416,7 +441,7 @@ function cancel() {
       data-test="modal-frame-banner"
     >
       <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-      <button type="button" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</button>
+      <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
     </div>
 
     <!-- v2 wildcard branch — single-pane tailored modal renders its
@@ -517,13 +542,13 @@ function cancel() {
   <!-- Themed confirm dialog — replaces window.confirm() for any
        prompt the modal raises (reset overrides, reset to library,
        save to library). Single-instance: only one prompt at a time. -->
-  <ConfirmDialog
-    :visible="confirmDialog !== null"
+  <ConfirmModal
+    :open="confirmDialog !== null"
     :title="confirmDialog?.title ?? ''"
     :body="confirmDialog?.body ?? ''"
     :confirm-label="confirmDialog?.confirmLabel ?? 'Confirm'"
     :cancel-label="confirmDialog?.cancelLabel ?? 'Cancel'"
-    :variant="confirmDialog?.variant ?? 'default'"
+    :tone="confirmDialog?.variant === 'danger' ? 'danger' : 'accent'"
     @confirm="onConfirmDialogConfirm"
     @cancel="onConfirmDialogCancel"
   />
@@ -538,10 +563,6 @@ function cancel() {
     @saved="onPushToLibrarySaved"
   />
 </template>
-
-<style>
-@import "../shared/theme.css";
-</style>
 
 <style scoped>
 /* All styling now lives in the per-kind v2 modal components
@@ -564,7 +585,7 @@ function cancel() {
   align-items: center;
   justify-content: space-between;
   padding: 7px 11px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   /* solid surface (amber mixed into the modal bg, not over the canvas) so the
    * text stays readable; amber = the override/warning accent used elsewhere. */
   background: color-mix(in oklab, var(--wp-amber) 14%, var(--wp-bg2));
@@ -572,18 +593,10 @@ function cancel() {
   color: var(--wp-amber);
   font: 500 11px var(--wp-font-sans);
 }
-.wp-modal-frame-banner button {
+.wp-modal-frame-banner .wp-btn {
   flex-shrink: 0;
-  padding: 4px 10px;
-  border-radius: 4px;
-  border: 1px solid color-mix(in oklab, var(--wp-amber) 55%, transparent);
-  background: color-mix(in oklab, var(--wp-amber) 20%, transparent);
+  border-color: color-mix(in oklab, var(--wp-amber) 55%, transparent);
   color: var(--wp-amber);
-  font: 600 10px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-modal-frame-banner button:hover {
-  background: color-mix(in oklab, var(--wp-amber) 32%, transparent);
 }
 </style>
 

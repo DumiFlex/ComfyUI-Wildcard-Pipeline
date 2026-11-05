@@ -31,7 +31,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 /**
  * Highest schema version this runtime can correctly READ + WRITE — distinct
  * from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
- * v2→v3 through v7→v8 are no-ops). This is the value advertised to the community
+ * v2→v3 through v9→v10 are no-ops). This is the value advertised to the community
  * publish-gate / boot catalog-probe ("am I new enough to publish?").
  *
  * MAINTENANCE CONTRACT: bump this whenever `schemaVersionForPayload()` learns
@@ -39,7 +39,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * very shapes this runtime just learned to produce, one version up. The
  * regression test below pins MAX_KNOWN >= the highest content-stamp.
  */
-export const MAX_KNOWN_SCHEMA_VERSION = 9;
+export const MAX_KNOWN_SCHEMA_VERSION = 10;
 
 /**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
@@ -145,6 +145,15 @@ export const NEGATIVES_SCHEMA_VERSION = 8;
  * option is flagged — see `schemaVersionForPayload` / `usesFallbackOption`.
  */
 export const FALLBACK_SCHEMA_VERSION = 9;
+
+/**
+ * Community catalog version for the derivation editor's NOT toggle: the
+ * `not_contains` and `not_matches` tests (the only tests that had no
+ * negation). Additive, no migrator; a pre-v10 runtime would refuse the
+ * unknown op at validation, so the stamp makes it refuse the pack up front.
+ * Publish stamps it only when a test uses one (`usesNegatedTests`).
+ */
+export const NEGATED_TESTS_SCHEMA_VERSION = 10;
 
 export interface MigrationOk<T> {
   ok: true;

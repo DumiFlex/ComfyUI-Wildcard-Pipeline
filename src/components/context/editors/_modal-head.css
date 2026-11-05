@@ -77,16 +77,4 @@
   margin-top: 2px;
 }
 
-.wp-cbm__close, .wp-cnm__close, .wp-dvm__close, .wp-fvm__close, .wp-wcm__close {
-  background: transparent;
-  border: 0;
-  color: var(--wp-text-dim, var(--wp-text3));
-  cursor: pointer;
-  padding: 4px;
-}
-.wp-cbm__close:hover, .wp-cnm__close:hover, .wp-dvm__close:hover, .wp-fvm__close:hover, .wp-wcm__close:hover {
-  color: var(--wp-text);
-}
-.wp-cbm__close .pi, .wp-cnm__close .pi, .wp-dvm__close .pi, .wp-fvm__close .pi, .wp-wcm__close .pi {
-  font-size: 12px;
-}
+/* The × is the shared CloseButton (components/shared). */

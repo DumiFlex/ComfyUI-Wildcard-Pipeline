@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import DocPage from "../../../components/docs/DocPage.vue";
 import DocSection from "../../../components/docs/DocSection.vue";
-import DocCallout from "../../../components/docs/DocCallout.vue";
+import DocAnnotated from "../../../components/docs/DocAnnotated.vue";
+import DocUseWhen from "../../../components/docs/DocUseWhen.vue";
+import Banner from "@/kit/Banner.vue";
 import DocFlow from "../../../components/docs/DocFlow.vue";
 import DocKeyList from "../../../components/docs/DocKeyList.vue";
+import DocFields from "../../../components/docs/DocFields.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
+import DocRef from "../../../components/docs/DocRef.vue";
 import VarToken from "../../../components/docs/VarToken.vue";
 
 const vars = [
@@ -13,15 +17,14 @@ const vars = [
   { term: "$model_name", desc: "The checkpoint's file name without folders or extension, e.g. ponyDiffusionV6XL." },
 ];
 
-const ports = [
-  { term: "upstream (in)", desc: "An existing Context to extend. Only nodes after Model Info see its variables, so it usually goes first." },
-  { term: "model (in)", desc: "The MODEL from your checkpoint loader. Gives the family, and the node follows the wire back to the loader for the file name, stepping over LoRA loaders and other model patches." },
-  { term: "Detected", desc: "The three values and where each comes from. Variant and name update as soon as you change the loader's checkpoint; the family shows after the first run." },
-  { term: "Globe", desc: "Whether the Assembler can use the variable. All three start internal: later rules read them, but the Assembler leaves them out of the prompt and its variable chips. Click the globe to use one in the Assembler." },
-  { term: "Pin", desc: "Use your own value for a row instead of the detected one: a file name when no model is wired, or a variant to try your Pony rules without switching checkpoint. Click it again to go back to detection." },
-  { term: "Variant rules", desc: "Variant + pattern rows. The first pattern found in the file name sets $model_variant and its row lights up. Case-insensitive; | separates alternatives. A broken row is outlined in red and skipped with a WP Debug warning. Reset puts the shipped rules back." },
-  { term: "context (out)", desc: "The upstream Context plus the three variables. To use a value outside the pipeline, turn its globe off and put it in an Assembler template." },
+const caveats = [
+  { term: "Flux.1 and Flux.2", desc: "Both read as flux." },
+  { term: "Anima", desc: "Probably reads as cosmos." },
+  { term: "Z-Image", desc: "Probably reads as lumina2." },
+  { term: "Models with no entry", desc: "Krea 2, Kolors and others read as their class name, in lower case with underscores." },
+  { term: "Merges", desc: "A file name without \"noob\", \"pony\" or \"illustrious\" in it gets no variant." },
 ];
+
 </script>
 
 <template>
@@ -46,10 +49,24 @@ const ports = [
         sdxl for both. <VarToken>$model_variant</VarToken> tells them apart, and it can only come
         from the file name.
       </p>
+      <p>Some models read in ways you might not expect:</p>
+      <DocKeyList :items="caveats" />
+      <p>
+        Check once what the node reads for your checkpoint, then pin the variant or add a rule for
+        its file name. Notes per model are on <DocRef id="prompt-writing" />.
+      </p>
+      <DocUseWhen
+        :good="[
+          'One pack that writes different quality tags, LoRAs or styles per checkpoint',
+        ]"
+        :better="[
+          'A workflow that only ever runs one model: a fixed value is simpler',
+        ]"
+      />
     </DocSection>
 
     <DocSection title="Where it goes">
-      <DocFlow
+      <DocFlow figure="wp-model-info-flow"
         :stages="[
           { icon: 'pi pi-database', name: 'Load Checkpoint', sub: 'MODEL', tone: 'neutral' },
           { icon: 'pi pi-microchip', name: 'WP Model Info', sub: '$model_variant', tone: 'node' },
@@ -58,15 +75,20 @@ const ports = [
         :arrows="['MODEL', 'context']"
         caption="Model Info heads the chain, so every Context after it can read the model variables."
       />
-      <DocCallout variant="warn">
+      <Banner tone="warn" note>
         If a node that loads LoRAs from the prompt sits on the model, wire Model Info to the
         MODEL from <b>before</b> that node. Otherwise the prompt needs the model and the model
         needs the prompt, and ComfyUI refuses to run the loop.
-      </DocCallout>
+      </Banner>
+      <DocAnnotated
+        src="images/docs/wp-model-info.png"
+        ratio="1720 / 752"
+        caption="WP Model Info with the family and the checkpoint file name given as text: the family is sdxl, the name is ponyDiffusionV6XL and the pony rule matches it, so the variant is pony."
+      />
     </DocSection>
 
-    <DocSection title="Ports &amp; widget">
-      <DocKeyList :items="ports" />
+    <DocSection title="Inputs, outputs and controls">
+      <DocFields node="WP_ModelInfo" group="ports" />
     </DocSection>
 
     <DocSection title="LoRAs per model">
@@ -90,24 +112,24 @@ const ports = [
         the detected variant, and any constraint can use it as its source, for example
         “if Model is pony, exclude photo styles”.
       </p>
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         Mark one option of that wildcard as the fallback (for example “other”), so checkpoints
         your rules don't recognise still get a predictable pick. Without a fallback the wildcard
         rolls as usual and WP Debug notes that nothing matched.
-      </DocCallout>
+      </Banner>
     </DocSection>
 
     <DocSection title="Good to know">
-      <DocCallout variant="tip">
+      <Banner tone="info" note>
         The canvas previews <VarToken>$model_variant</VarToken> and
         <VarToken>$model_name</VarToken> from the loader's file name straight away.
         <VarToken>$model_family</VarToken> needs the loaded model, so it previews as a placeholder
         until the first run (or pin it).
-      </DocCallout>
-      <DocCallout variant="tip">
-        Model Info changes nothing in your library, so shared modules that branch on
-        <VarToken>$model_variant</VarToken> need no schema update.
-      </DocCallout>
+      </Banner>
+      <Banner tone="info" note>
+        Model Info lives in the workflow, not your library, so packs that branch on
+        <VarToken>$model_variant</VarToken> work on any version that has the node.
+      </Banner>
     </DocSection>
 
     <DocSection title="Works with">

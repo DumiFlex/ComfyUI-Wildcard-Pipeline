@@ -1,11 +1,14 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import AppLayout from "../layout/AppLayout.vue";
+import FrameLayout from "../layout/FrameLayout.vue";
 import { startPagePath } from "./start-page";
+import { FRAMED, staysInFrame } from "./frame-mode";
 
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    component: AppLayout,
+    // Inside the canvas help dialog the docs show alone (router/frame-mode.ts).
+    component: FRAMED ? FrameLayout : AppLayout,
     children: [
       { path: "", redirect: () => startPagePath() },
       { path: "dashboard", name: "dashboard", component: () => import("../views/Dashboard.vue") },
@@ -33,10 +36,13 @@ const routes: RouteRecordRaw[] = [
       { path: "templates/:id/edit", name: "templates-edit", component: () => import("../views/TemplateEditor.vue"), props: true },
       { path: "categories", name: "categories", component: () => import("../views/Categories.vue") },
       { path: "tags", name: "tags", component: () => import("../views/Tags.vue") },
+      { path: "health", name: "health", component: () => import("../views/LibraryHealth.vue") },
       { path: "import-export", name: "import-export", component: () => import("../views/ImportExport.vue") },
       { path: "test", name: "test", component: () => import("../views/TestRunner.vue") },
+      { path: "pack-builder", name: "pack-builder", component: () => import("../views/PackBuilder.vue") },
       { path: "settings/:section?", name: "settings", component: () => import("../views/Settings.vue"), props: true },
       { path: "whats-new", name: "whats-new", component: () => import("../views/WhatsNew.vue") },
+      { path: "kit", name: "kit", component: () => import("../views/Kit.vue") },
       // Both docs routes render the same Docs.vue. They share a `layoutKey`
       // so AppLayout's keyed <RouterView> does NOT remount the view when
       // switching between doc pages — the nav stays mounted (preserving its
@@ -68,4 +74,16 @@ const routes: RouteRecordRaw[] = [
   { path: "/:pathMatch(.*)*", name: "not-found", component: () => import("../views/NotFound.vue") },
 ];
 
-export default createRouter({ history: createWebHistory("/wp/"), routes });
+const router = createRouter({ history: createWebHistory("/wp/"), routes });
+
+// In the help frame, a link that leaves the docs (an editor, Settings, the
+// library) opens the full manager in a new tab and the frame stays put.
+if (FRAMED) {
+  router.beforeEach((to) => {
+    if (staysInFrame(to.path)) return true;
+    window.open(`${window.location.origin}/wp${to.fullPath}`, "_blank", "noopener");
+    return false;
+  });
+}
+
+export default router;

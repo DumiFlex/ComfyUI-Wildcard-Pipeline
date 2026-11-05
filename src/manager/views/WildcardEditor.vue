@@ -6,37 +6,42 @@
  *  1. Identity (name + category + description + tags + `$varBinding`)
  *  2. Sub-categories group boxes (one per `tag_groups` axis + an
  *     ungrouped box; each box owns its pills + an inline "+ tag", §4.3/H1)
+ *     — `components/wildcard-editor/WildcardSubcategoriesCard.vue`
  *  3. Options table (weight + value RichTextInput + a per-option grouped
  *     multi-select for `sub_categories[]`, §4.3/H2)
  *
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import WpNumber from "@/kit/WpNumber.vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
 import { useRouter, useRoute } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
-import Card from "../components/ui/Card.vue";
-import Button from "../components/ui/Button.vue";
+import { usePanelAction } from "../composables/usePanelAction";
+import Card from "@/kit/Card.vue";
+import Button from "@/kit/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
-import Input from "../components/ui/Input.vue";
 import RichTextInput from "../components/RichTextInput.vue";
 import NegativeField from "../components/NegativeField.vue";
 import { appendNegative, pruneBlankNegatives, setNegative } from "../utils/negatives";
 import BulkAddPanel from "../components/BulkAddPanel.vue";
-import TagPickerMenu from "../components/TagPickerMenu.vue";
 import SelectionToolbar from "../components/SelectionToolbar.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import type { ParsedBulkOption } from "../utils/bulkParse";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
-import { axisHueAt, UNGROUPED_HUE } from "../../components/shared/axis-color";
-import { useToast } from "../composables/useToast";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
+import { axisHueAt } from "../../components/shared/axis-color";
+import { useToast } from "@/kit/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
+import { registerAiAction } from "../composables/useAiActions";
 import DraftBanner from "../components/DraftBanner.vue";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
@@ -58,10 +63,12 @@ import {
   collectLibraryWildcardRefs,
 } from "../utils/library-suggestions";
 import { appendSnapshot, readHistory } from "../utils/history";
-import { formatProbability } from "../utils/percent";
 import type {
   ModuleHistoryEntry,
   WildcardOption,
+  AiDraftGroup,
+  AiWildcardEditAction,
+  AiWildcardEditChange,
   WildcardPayload,
 } from "../api/types";
 import { useCascadeStore } from "../cascade/cascade-store";
@@ -72,7 +79,26 @@ import CascadeRenameDialog from "../cascade/CascadeRenameDialog.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
 import type { ResolveWarning } from "../utils/resolveTokens";
 import { brokenRefLabels } from "../utils/validateModule";
-import { NEG_ACCESSOR } from "../../widgets/richTokenize";
+import AiWildcardPanel from "../components/ai/AiWildcardPanel.vue";
+import { useAiConfig } from "../composables/useAiConfig";
+import WildcardSubcategoriesCard from "../components/wildcard-editor/WildcardSubcategoriesCard.vue";
+import OptionFilterBar from "../components/wildcard-editor/OptionFilterBar.vue";
+import OptionTagsCell from "../components/wildcard-editor/OptionTagsCell.vue";
+import OptionProbabilityCell from "../components/wildcard-editor/OptionProbabilityCell.vue";
+import {
+  acceptsPromotionRefusal,
+  axisIndexOf,
+  buildSubcatGroups,
+  normalizeTagGroupKinds,
+  normalizeTagGroups,
+  OTHER_AXIS,
+  serializeTagGroupKinds,
+  serializeTagGroups,
+  tagChipStyle,
+  toggledOptionTags,
+  totalWeightOf,
+  type SubcatGroup,
+} from "../components/wildcard-editor/tag-groups";
 
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
@@ -145,36 +171,12 @@ const tagGroups = ref<Record<string, string[]>>({});
  *  entries are ever stored, keeping an untouched payload byte-identical. */
 const tagGroupKinds = ref<Record<string, "accepts">>({});
 
-/** An `accepts` group is addressable as `$var.NAME`, so its name has to
- *  survive the accessor grammar. A `classify` group keeps any name. */
-const AXIS_IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const options = ref<WildcardOption[]>([
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
   { id: `opt_${Math.random().toString(16).slice(2, 8)}`, value: "", weight: 1, sub_categories: [] },
 ]);
-/** Which group box currently has its inline "+ tag" input open, plus
- *  its draft text + live validation error. `OTHER_AXIS` is the synthetic
- *  ungrouped box (tags added there go to the registry but no axis). */
-const OTHER_AXIS = "__ungrouped__";
-const addTagAxis = ref<string | null>(null);
-const addTagDraft = ref("");
-const addTagError = ref("");
-/** Which pill's kebab menu is open, as `<axis>::<tag>` (axis namespaces
- *  the key so the same tag in two boxes doesn't collide). */
-const openKebab = ref<string | null>(null);
-/** The "Move to group…" submenu target — `<axis>::<tag>` of the pill
- *  whose move picker is expanded. */
-const moveMenuFor = ref<string | null>(null);
-/** Which option row's tag picker is expanded (option id), H2. */
+/** Which option row's tag picker is open (option id), H2. */
 const openOptTagPicker = ref<string | null>(null);
-/** When a menu opens too close to the viewport bottom we flip it to open
- *  upward so it isn't clipped off the end of the page (bugs #1/#4). */
-const kebabDropUp = ref(false);
-const pickerDropUp = ref(false);
-/** Drag-and-drop state: which pill tag is being dragged + which group box
- *  it's currently hovering, for the drop highlight (bug #2). */
-const draggedTag = ref<string | null>(null);
-const dragOverAxis = ref<string | null>(null);
 const saving = ref(false);
 const saveState = ref<SaveState>("idle");
 const saveError = ref<string>("");
@@ -193,6 +195,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -226,10 +231,75 @@ function snapshot(): string {
  *     wording changes.
  */
 const bulkPending = ref(false);
+/** The AI panel (Settings › AI assistant). The button only shows once the
+ *  assistant is turned on. A draft not yet added counts as unsaved work. */
+const ai = useAiConfig();
+const aiDraftOpen = ref(false);
+const aiPending = ref(false);
 
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => bulkPending.value || snapshot() !== baseline.value,
+  () => bulkPending.value || aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
+
+/** The chat's draft this new wildcard was opened with (Save creates it at
+ *  the id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+const fillFromChat = registerOpenEditor({
+  id: props.id, type: "wildcard", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
+  name, description, tags, categoryId, contentRating,
+  payload: () => currentPayload() as unknown as Record<string, unknown>,
+  setPayload: (p) => {
+    const next = p as Partial<WildcardPayload>;
+    if (Array.isArray(next.options)) {
+      options.value = next.options.map((o) => ({
+        ...o, sub_categories: Array.isArray(o.sub_categories) ? [...o.sub_categories] : [],
+      })) as typeof options.value;
+    }
+    if (Array.isArray(next.sub_categories)) subCategories.value = [...next.sub_categories];
+    if (next.tag_groups) {
+      tagGroups.value = normalizeTagGroups(next.tag_groups, subCategories.value);
+      tagGroupKinds.value = normalizeTagGroupKinds(next.tag_group_kinds, tagGroups.value);
+    }
+    if (typeof next.var_binding === "string" && next.var_binding) varBinding.value = next.var_binding;
+  },
+});
+
+// The chat's `draft_options`: open the AI panel on Add and draft there, so
+// the user picks what to keep exactly as if they had asked the panel.
+const aiPanel = ref<InstanceType<typeof AiWildcardPanel> | null>(null);
+registerAiAction("draft_options", async (args) => {
+  if (!ai.config.value?.enabled) return "couldn't: the assistant is off";
+  aiDraftOpen.value = true;
+  await nextTick();
+  if (!aiPanel.value) return "couldn't: the AI panel didn't open";
+  return aiPanel.value.draft(String(args.instruction ?? ""), Number(args.count) || 10);
+}, (args) => !!props.id && args.id === props.id);
+
+// The chat's `use_panel`: Describe, or one of the AI panel's tabs (Add drafts
+// new options; the edits work on the selected options, or all of them).
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+async function viaEdit(action: AiWildcardEditAction, text: string): Promise<string> {
+  aiDraftOpen.value = true;
+  await nextTick();
+  return aiPanel.value ? aiPanel.value.edit(action, text) : "couldn't: the AI panel didn't open";
+}
+usePanelAction({
+  id: () => props.id,
+  identity: identityCard,
+  panels: {
+    add: async (text) => {
+      aiDraftOpen.value = true;
+      await nextTick();
+      return aiPanel.value ? aiPanel.value.draft(text, 10) : "couldn't: the AI panel didn't open";
+    },
+    remove: (text) => viaEdit("remove", text),
+    rewrite: (text) => viaEdit("rewrite", text),
+    retag: (text) => viaEdit("retag", text),
+    reweight: (text) => viaEdit("reweight", text),
+  },
+});
 
 const draft = useEditorDraft({
   kind: "wildcard",
@@ -313,15 +383,6 @@ const uuidToTagGroups = computed(() => refData.value.uuidToTagGroups);
  * insertion order) plus a trailing "ungrouped" box for registry tags not
  * claimed by any axis. Each box owns its pills + an inline "+ tag". */
 
-interface SubcatGroup {
-  /** Axis name, or the OTHER_AXIS sentinel for the ungrouped box. */
-  axis: string;
-  /** Registry tags in this box (group members ∩ registry, in registry order). */
-  tags: string[];
-  /** True for the synthetic ungrouped box (no rename/move-target). */
-  isOther: boolean;
-}
-
 /** Sub-Categories section disclosure. The default is set once on load from the
  *  `subcatDefault` display-pref (see `uiStore`): `"populated"` opens it only
  *  when the wildcard already has groups (so a well-tagged wildcard's axes don't
@@ -342,342 +403,33 @@ function resolveSubcatDefaultOpen(): boolean {
   }
 }
 
-/** What the collapsed section reports, so shutting it doesn't hide whether the
- *  wildcard is tagged at all. */
-const subcatSummary = computed<string>(() => {
-  const tags = subCategories.value.length;
-  if (tags === 0) return "No sub-categories yet.";
-  const axes = Object.keys(tagGroups.value).length;
-  const t = `${tags} tag${tags === 1 ? "" : "s"}`;
-  return axes > 0 ? `${t} across ${axes} ax${axes === 1 ? "is" : "es"}` : t;
-});
+/** The registry as group boxes (see `buildSubcatGroups`) — the option tag
+ *  picker and the options filter group their tags the same way the card does. */
+const subcatGroups = computed<SubcatGroup[]>(() =>
+  buildSubcatGroups(tagGroups.value, subCategories.value),
+);
 
-const subcatGroups = computed<SubcatGroup[]>(() => {
-  const groups: SubcatGroup[] = [];
-  const claimed = new Set<string>();
-  for (const [axis, members] of Object.entries(tagGroups.value)) {
-    // Keep registry order so a tag's position is stable across boxes.
-    const tags = subCategories.value.filter(
-      (t) => Array.isArray(members) && members.includes(t),
-    );
-    tags.forEach((t) => claimed.add(t));
-    // Named axes always render (even when empty) so a freshly-created
-    // "+ Group" box is visible and can receive its first tag.
-    groups.push({ axis, tags, isOther: false });
-  }
-  const ungrouped = subCategories.value.filter((t) => !claimed.has(t));
-  // The ungrouped box only appears when it has tags OR there are no named
-  // axes at all (so a brand-new wildcard still shows one box to add into).
-  if (ungrouped.length > 0 || groups.length === 0) {
-    groups.push({ axis: OTHER_AXIS, tags: ungrouped, isOther: true });
-  }
-  return groups;
-});
+const subcatCard = ref<InstanceType<typeof WildcardSubcategoriesCard> | null>(null);
 
-/** Index of the axis a tag belongs to (-1 when ungrouped) — drives the
- *  per-axis chip hue via the shared `axisHueAt` palette so a tag reads
- *  with the same colour across every surface. */
-function axisIndexOf(tag: string): number {
-  const axes = Object.keys(tagGroups.value);
-  for (let i = 0; i < axes.length; i++) {
-    if (tagGroups.value[axes[i]]?.includes(tag)) return i;
-  }
-  return -1;
+/** Rename an axis (see the card's `renameGroup`). Kept reachable on the
+ *  editor so callers and tests need not know the card exists. */
+function renameGroup(oldAxis: string, nextAxis: string): boolean {
+  return subcatCard.value?.renameGroup(oldAxis, nextAxis) ?? false;
 }
 
+/** Disband an axis (see the card's `ungroupAxis`). */
+function ungroupAxis(axis: string): void {
+  subcatCard.value?.ungroupAxis(axis);
+}
+
+/** Per-axis chip hue (shared `axisHueAt` palette), so a tag reads with the
+ *  same colour across every surface. */
 function tagHue(tag: string): string {
-  return axisHueAt(axisIndexOf(tag));
+  return axisHueAt(axisIndexOf(tagGroups.value, tag));
 }
 
 function chipStyle(tag: string): Record<string, string> {
-  return { "--chip-hue": tagHue(tag) };
-}
-
-/** Hue for a whole group box, keyed by axis NAME (vs `tagHue`, keyed by a
- *  member tag). Drives the coloured group header + left accent so each axis
- *  reads as a distinct colour cluster (#8). OTHER_AXIS stays neutral. */
-function axisHue(axis: string): string {
-  if (axis === OTHER_AXIS) return UNGROUPED_HUE;
-  return axisHueAt(Object.keys(tagGroups.value).indexOf(axis));
-}
-
-/** How many options carry this tag — the pill's `(count)` badge. */
-function tagUsageCount(tag: string): number {
-  return options.value.filter((o) => (o.sub_categories ?? []).includes(tag)).length;
-}
-
-/** Options carrying NO tag from an accepts axis — for those picks `$var.AXIS`
- *  resolves to empty. Advisory only (non-blocking): an under-covered axis is a
- *  valid design ("only some outfits specify shoes"). Excludes the null option,
- *  which deliberately produces nothing. */
-function axisUncoveredCount(axis: string): number {
-  const members = tagGroups.value[axis] ?? [];
-  if (members.length === 0) return 0;
-  const memberSet = new Set(members);
-  return options.value.filter(
-    (o) => !(o as { is_null?: boolean }).is_null
-      && !(o.sub_categories ?? []).some((t) => memberSet.has(t)),
-  ).length;
-}
-
-function kebabKey(axis: string, tag: string): string {
-  return `${axis}::${tag}`;
-}
-
-/** True when the trigger that fired `ev` sits within `menuPx` of the
- *  viewport bottom — i.e. a downward menu would be clipped, so flip up. */
-function shouldDropUp(ev: MouseEvent | undefined, menuPx: number): boolean {
-  const el = ev?.currentTarget as HTMLElement | null;
-  const r = el?.getBoundingClientRect();
-  return !!r && window.innerHeight - r.bottom < menuPx;
-}
-
-function toggleKebab(axis: string, tag: string, ev?: MouseEvent): void {
-  const key = kebabKey(axis, tag);
-  const opening = openKebab.value !== key;
-  openKebab.value = opening ? key : null;
-  moveMenuFor.value = null;
-  if (opening) kebabDropUp.value = shouldDropUp(ev, 200);
-}
-
-function closeMenus(): void {
-  openKebab.value = null;
-  moveMenuFor.value = null;
-}
-
-/** Close every transient overlay: kebab + its submenu, the inline add-tag
- *  input, and the per-option tag picker. Used by the document-level
- *  outside-click + Escape handlers (bug #3). */
-function closeAllMenus(): void {
-  closeMenus();
-  cancelAddTag();
-  openOptTagPicker.value = null;
-  // The options filter's tag menu is teleported like the per-option one, so it
-  // needs the same dismissal — without this it stayed open until its own
-  // button was clicked again.
-  optTagMenuOpen.value = false;
-}
-
-/** Outside-click: any pointer landing outside an open menu / its trigger
- *  dismisses everything. Clicks inside these regions are handled by their
- *  own (`@click.stop`) handlers, so we bail when the target is within one. */
-function onDocPointerDown(e: MouseEvent): void {
-  const t = e.target as HTMLElement | null;
-  if (
-    t?.closest(
-      // `.opt-tags__picker` is listed separately: the menu is teleported to
-      // <body>, so it is no longer inside `.opt-tags` and would otherwise be
-      // dismissed by its own clicks.
-      ".subcat-pill, .subcat-menu, .subcat-addtag, .subcat-addtag__open, .opt-tags,"
-      + " .opt-tags__picker, .wc-optfilter__tagbtn",
-    )
-  ) {
-    return;
-  }
-  closeAllMenus();
-}
-
-function onDocKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape") closeAllMenus();
-}
-
-/* ── Inline "+ tag" per group ──────────────────────────────────────── */
-
-function openAddTag(axis: string): void {
-  addTagAxis.value = axis;
-  addTagDraft.value = "";
-  addTagError.value = "";
-}
-
-function cancelAddTag(): void {
-  addTagAxis.value = null;
-  addTagDraft.value = "";
-  addTagError.value = "";
-}
-
-/** Validate + commit a new tag into the registry and (when not the
- *  ungrouped box) the target axis. Validation mirrors the shared parser's
- *  `validateSubcatName` (whitespace / reserved / disallowed-char rules)
- *  so the SPA rejects exactly what the engine + TS validator reject. */
-function commitAddTag(axis: string): void {
-  const raw = addTagDraft.value.trim();
-  if (!raw) { cancelAddTag(); return; }
-  const err = validateSubcatName(raw);
-  if (err) { addTagError.value = err; return; }
-  if (subCategories.value.includes(raw)) {
-    addTagError.value = `"${raw}" already exists`;
-    return;
-  }
-  subCategories.value = [...subCategories.value, raw];
-  if (axis !== OTHER_AXIS) {
-    const members = tagGroups.value[axis] ?? [];
-    tagGroups.value = { ...tagGroups.value, [axis]: [...members, raw] };
-  }
-  // Keep the input open + cleared so several tags can be added in a row.
-  addTagDraft.value = "";
-  addTagError.value = "";
-}
-
-/* ── "+ Group" + group rename / ungroup ─────────────────────────────── */
-
-/** Create a new empty axis with an auto-incrementing default name. */
-function addGroup(): void {
-  let n = Object.keys(tagGroups.value).length + 1;
-  let candidate = `group ${n}`;
-  while (tagGroups.value[candidate] !== undefined) {
-    n += 1;
-    candidate = `group ${n}`;
-  }
-  tagGroups.value = { ...tagGroups.value, [candidate]: [] };
-  // Open its add-tag input straight away so the new box is usable.
-  openAddTag(candidate);
-}
-
-/** Rename an axis in place. Preserves insertion order + members.
- *
- *  Axis names are not part of the `@{}` ref grammar, but an `accepts` axis IS
- *  addressable as `$var.NAME`, so a rename can strand a template read. The
- *  kind is carried across here; a stranded read is reported by the
- *  `unknown_tag_axis` conflict rule rather than blocked, matching how every
- *  other cross-module reference is handled.
- *
- *  Returns whether the rename was applied. A refused rename leaves the group
- *  exactly as it was and tells the user why, so the caller can put the old
- *  name back in the input. */
-function renameGroup(oldAxis: string, nextAxis: string): boolean {
-  const trimmed = nextAxis.trim();
-  if (!trimmed || trimmed === oldAxis) return false;
-  if (tagGroups.value[trimmed] !== undefined) {
-    toast.push({
-      severity: "warn",
-      summary: `A group named "${trimmed}" already exists`,
-      detail: `"${oldAxis}" keeps its name.`,
-      life: 6000,
-    });
-    return false;
-  }
-  // An accepts group is read as `$var.NAME`. Renaming it to something that
-  // grammar cannot parse used to demote it to classify without a word, which
-  // quietly broke every `$var.AXIS` read of it. Refuse instead, the same way
-  // `toggleGroupKind` refuses to promote such a name.
-  if (tagGroupKinds.value[oldAxis] === "accepts" && trimmed === NEG_ACCESSOR) {
-    toast.push({
-      severity: "warn",
-      summary: `"${oldAxis}" keeps its name`,
-      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
-      life: 6000,
-    });
-    return false;
-  }
-  if (tagGroupKinds.value[oldAxis] === "accepts" && !AXIS_IDENT.test(trimmed)) {
-    toast.push({
-      severity: "warn",
-      summary: `"${oldAxis}" keeps its name`,
-      detail: "An accepts group is read as $var.NAME, so its name must be "
-        + "letters, digits and underscores, starting with a letter. "
-        + "Switch it to classify first to use any name.",
-      life: 6000,
-    });
-    return false;
-  }
-  const next: Record<string, string[]> = {};
-  for (const [axis, members] of Object.entries(tagGroups.value)) {
-    next[axis === oldAxis ? trimmed : axis] = members;
-  }
-  tagGroups.value = next;
-
-  if (tagGroupKinds.value[oldAxis] !== undefined) {
-    const nextKinds = { ...tagGroupKinds.value };
-    delete nextKinds[oldAxis];
-    nextKinds[trimmed] = "accepts";
-    tagGroupKinds.value = nextKinds;
-  }
-  return true;
-}
-
-/** The group-name input's change handler. The input is bound one-way to the
- *  group's name, so when a rename is refused nothing re-renders it — reset it
- *  by hand or it keeps showing a name that was never stored. */
-function onGroupNameChange(oldAxis: string, e: Event): void {
-  const input = e.target as HTMLInputElement;
-  if (!renameGroup(oldAxis, input.value)) input.value = oldAxis;
-}
-
-/** Disband an axis — its tags fall back into the ungrouped box (they
- *  stay in the registry, just lose their grouping). */
-function ungroupAxis(axis: string): void {
-  if (tagGroups.value[axis] === undefined) return;
-  const next = { ...tagGroups.value };
-  delete next[axis];
-  tagGroups.value = next;
-  // The kind goes with the group; a kind naming no group is invalid payload.
-  if (tagGroupKinds.value[axis] !== undefined) {
-    const nextKinds = { ...tagGroupKinds.value };
-    delete nextKinds[axis];
-    tagGroupKinds.value = nextKinds;
-  }
-}
-
-/** Destinations the "Move to group…" submenu offers for a pill in
- *  `fromAxis`: every other named axis + an "ungrouped" entry, minus the
- *  axis the pill already lives in. */
-function moveTargets(fromAxis: string): Array<{ axis: string; label: string }> {
-  const out: Array<{ axis: string; label: string }> = [];
-  for (const axis of Object.keys(tagGroups.value)) {
-    if (axis === fromAxis) continue;
-    out.push({ axis, label: axis });
-  }
-  if (fromAxis !== OTHER_AXIS) {
-    out.push({ axis: OTHER_AXIS, label: "ungrouped" });
-  }
-  return out;
-}
-
-/** Move a tag from its current axis into `targetAxis` (OTHER_AXIS =
- *  ungroup it). A tag lives in at most one axis (§2.2). */
-function moveTagToGroup(tag: string, targetAxis: string): void {
-  const next: Record<string, string[]> = {};
-  for (const [axis, members] of Object.entries(tagGroups.value)) {
-    next[axis] = members.filter((m) => m !== tag);
-  }
-  if (targetAxis !== OTHER_AXIS) {
-    next[targetAxis] = [...(next[targetAxis] ?? []), tag];
-  }
-  tagGroups.value = next;
-  closeMenus();
-}
-
-/* ── Drag-and-drop pills between group boxes (bug #2) ───────────────── */
-
-function onPillDragStart(tag: string, e: DragEvent): void {
-  draggedTag.value = tag;
-  closeMenus();
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", tag);
-  }
-}
-
-function onPillDragEnd(): void {
-  draggedTag.value = null;
-  dragOverAxis.value = null;
-}
-
-function onGroupDragOver(axis: string): void {
-  if (draggedTag.value !== null) dragOverAxis.value = axis;
-}
-
-function onGroupDragLeave(axis: string): void {
-  if (dragOverAxis.value === axis) dragOverAxis.value = null;
-}
-
-/** Drop a dragged pill into `axis` (OTHER_AXIS box = ungroup). Reuses the
- *  same move routine the kebab "Move to group…" submenu calls. */
-function onGroupDrop(axis: string): void {
-  const tag = draggedTag.value;
-  draggedTag.value = null;
-  dragOverAxis.value = null;
-  if (tag !== null) moveTagToGroup(tag, axis);
+  return tagChipStyle(tagGroups.value, tag);
 }
 
 /* ── Per-option grouped multi-select (§4.3, H2) ─────────────────────── */
@@ -686,103 +438,12 @@ function onGroupDrop(axis: string): void {
  *  registry boxes but used to render the grouped checkbox sections. */
 const optionTagGroups = computed<SubcatGroup[]>(() => subcatGroups.value);
 
-/**
- * Axes the user has folded shut in the sub-categories editor, by axis name.
- *
- * A wildcard with five axes and thirty tags fills the whole panel, and while
- * you are working on one axis the other four are just distance between you and
- * the options table. Per-axis rather than one global toggle so folding is a
- * way to focus, not an all-or-nothing switch.
- *
- * Session state, deliberately not persisted: it describes what you are doing
- * right now, and a fold remembered from last week would hide tags from
- * someone who has never seen them.
- */
-const collapsedAxes = ref<Set<string>>(new Set());
-
-function toggleAxisCollapsed(axis: string): void {
-  const next = new Set(collapsedAxes.value);
-  if (next.has(axis)) next.delete(axis);
-  else next.add(axis);
-  collapsedAxes.value = next;
-}
-
-
-
-/**
- * Viewport coordinates for the teleported tag menu.
- *
- * The menu used to be `position: absolute` inside the table cell, which put it
- * inside `.wp-editor__body` — an `overflow: auto` scroller. Anything extending
- * past that container's edge was simply cut off, which is why the menu lost its
- * bottom rows near the foot of the page. Teleporting to <body> and positioning
- * from the trigger's rect is what every other popover here already does.
- */
-const optTagAnchor = ref({ top: 0, left: 0, width: 0 });
-/** Height reserved when deciding whether to flip above the trigger. Matches
- *  the menu's own cap (240px list + search + padding). */
-const OPT_TAG_MENU_PX = 300;
-
-function toggleOptTagPicker(optionId: string, ev?: MouseEvent): void {
-  const opening = openOptTagPicker.value !== optionId;
-  openOptTagPicker.value = opening ? optionId : null;
-  if (!opening) return;
-  pickerDropUp.value = shouldDropUp(ev, OPT_TAG_MENU_PX);
-  optTagTriggerEl = (ev?.currentTarget as HTMLElement | null) ?? null;
-  const r = optTagTriggerEl?.getBoundingClientRect();
-  if (!r) return;
-  // Fixed coordinates, so no scroll offset is added — and the menu is
-  // re-anchored on every open rather than tracked, since the editor body
-  // scrolls underneath it and a stale anchor is worse than a closed menu.
-  optTagAnchor.value = {
-    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
-    left: r.left,
-    width: r.width,
-  };
-}
-
-/** The button the open menu belongs to, so it can be re-measured on scroll. */
-let optTagTriggerEl: HTMLElement | null = null;
-
-/**
- * Keep the menu attached to its trigger while the editor scrolls under it.
- *
- * A fixed-position popover does not move with the page, so without this it
- * would sit stranded beside unrelated rows. Closing instead was the first
- * attempt and is wrong: the browser scrolls a partly-visible button into view
- * as part of clicking it, so opening a menu near either edge closed it in the
- * same gesture.
- *
- * Once the trigger has left the viewport entirely there is nothing to anchor
- * to, and closing IS right.
- */
-function reanchorOptTagPicker(ev?: Event): void {
-  // A scroll that happens INSIDE a teleported menu is the user reading its own
-  // list — with the wheel or by dragging its scrollbar — and must not dismiss
-  // it. Only movement of the surface UNDER the menu is a reason to react.
-  const from = ev?.target as HTMLElement | null;
-  if (from?.closest?.(".opt-tags__picker")) return;
-  // Re-measure rather than dismiss. Closing on any layout change meant the
-  // menu vanished the moment the list behind it changed height — filtering to
-  // zero results shortens the page, which fires a scroll, which closed the
-  // very menu you were using to filter.
-  if (optTagMenuOpen.value) {
-    const r = optFilterTriggerEl?.getBoundingClientRect();
-    if (!r || r.bottom < 0 || r.top > window.innerHeight) optTagMenuOpen.value = false;
-    else positionFilterMenu();
-  }
-  if (openOptTagPicker.value === null || !optTagTriggerEl) return;
-  const r = optTagTriggerEl.getBoundingClientRect();
-  if (r.bottom < 0 || r.top > window.innerHeight) {
-    openOptTagPicker.value = null;
-    return;
-  }
-  pickerDropUp.value = window.innerHeight - r.bottom < OPT_TAG_MENU_PX;
-  optTagAnchor.value = {
-    top: pickerDropUp.value ? r.top - 4 : r.bottom + 4,
-    left: r.left,
-    width: r.width,
-  };
+/** The tag picker Popover opens or closes a row's menu. A close only clears
+ *  the row it came from: pressing another row's chevron closes this one
+ *  (outside press) just before that row opens. */
+function setOptTagPicker(optionId: string, open: boolean): void {
+  if (open) openOptTagPicker.value = optionId;
+  else if (openOptTagPicker.value === optionId) openOptTagPicker.value = null;
 }
 
 
@@ -819,32 +480,13 @@ function optionTagView(o: WildcardOption) {
   );
 }
 
-function visibleOptionTags(o: WildcardOption): string[] {
-  return optionTagView(o).visible;
-}
-
-function hiddenOptionTagCount(o: WildcardOption): number {
-  return optionTagView(o).hiddenCount;
-}
-
-/** True when a FOLDED tag satisfies the filter, so the pill can say so. */
-function hiddenTagsMatch(o: WildcardOption): boolean {
-  return optionTagView(o).hiddenHasMatch;
-}
-
 /** Toggle a tag's membership on an option. Preserves registry order so
  *  the chips render in a stable sequence regardless of click order. */
 function toggleOptionTag(o: WildcardOption, tag: string): void {
-  const current = new Set(o.sub_categories ?? []);
-  if (current.has(tag)) current.delete(tag);
-  else current.add(tag);
-  o.sub_categories = subCategories.value.filter((t) => current.has(t));
+  o.sub_categories = toggledOptionTags(subCategories.value, o.sub_categories ?? [], tag);
 }
 
-const totalWeight = computed(() => {
-  const sum = options.value.reduce((acc, o) => acc + (Number(o.weight) || 0), 0);
-  return sum > 0 ? sum : 1;
-});
+const totalWeight = computed(() => totalWeightOf(options.value));
 
 function probabilityFor(o: WildcardOption): number {
   return ((Number(o.weight) || 0) / totalWeight.value) * 100;
@@ -859,136 +501,10 @@ function toggleFallback(o: WildcardOption): void {
   if (on) o.fallback = true;
 }
 
-/** Coerce a raw `payload.tag_groups` into the editor's reactive shape:
- *  drop non-array members, keep only tags that are in the registry, and
- *  preserve insertion order. A tag claimed by two axes (shouldn't happen
- *  per §2.2) is kept only in the first that lists it. */
-function normalizeTagGroups(
-  raw: unknown,
-  registry: string[],
-): Record<string, string[]> {
-  if (typeof raw !== "object" || raw === null) return {};
-  const reg = new Set(registry);
-  const seen = new Set<string>();
-  const out: Record<string, string[]> = {};
-  for (const [axis, members] of Object.entries(raw as Record<string, unknown>)) {
-    if (!Array.isArray(members)) { out[axis] = []; continue; }
-    const kept: string[] = [];
-    for (const m of members) {
-      if (typeof m === "string" && reg.has(m) && !seen.has(m)) {
-        kept.push(m);
-        seen.add(m);
-      }
-    }
-    out[axis] = kept;
-  }
-  return out;
-}
-
-/** Build the `payload.tag_groups` to persist: keep only members still in the
- *  registry, and return `null` when nothing is left so the payload omits the
- *  key entirely.
- *
- *  An axis that ends up empty is dropped unless the user has asked to keep
- *  empties — see `uiStore.keepEmptyTagGroups`. Dropping was unconditional,
- *  which meant a group created and not yet filled vanished on save; that is
- *  right for a box made by accident and wrong for one made on purpose, and
- *  only the user knows which it was. An empty axis persists as `{axis: []}`,
- *  a shape the engine's validator already accepts. */
-/** Coerce a raw `payload.tag_group_kinds` into the editor's shape: keep only
- *  `accepts` entries naming a group that actually exists, since `classify` is
- *  the default and a kind for a vanished group is meaningless. */
-function normalizeTagGroupKinds(
-  raw: unknown,
-  groups: Record<string, string[]>,
-): Record<string, "accepts"> {
-  if (!raw || typeof raw !== "object") return {};
-  const out: Record<string, "accepts"> = {};
-  for (const [axis, kind] of Object.entries(raw as Record<string, unknown>)) {
-    if (kind === "accepts" && axis in groups) out[axis] = "accepts";
-  }
-  return out;
-}
-
-/** Build `payload.tag_group_kinds`, restricted to groups that survived
- *  serialisation. Returns null when nothing is promoted so the payload omits
- *  the key entirely — that omission is what keeps existing wildcards
- *  byte-identical. */
-function serializeTagGroupKinds(
-  serializedGroups: Record<string, string[]> | null,
-): Record<string, "accepts"> | null {
-  const out: Record<string, "accepts"> = {};
-  for (const axis of Object.keys(tagGroupKinds.value)) {
-    // An axis dropped by `serializeTagGroups` (empty, not kept) must not leave
-    // a kind behind — the engine rejects a kind naming a missing group.
-    if (serializedGroups && axis in serializedGroups) out[axis] = "accepts";
-  }
-  return Object.keys(out).length > 0 ? out : null;
-}
-
-/** Flip a group between descriptive (`classify`, the default) and `accepts`.
- *
- *  Refuses a name the accessor grammar cannot parse, here in the editor where
- *  the user can still fix it cheaply, rather than at save time where the
- *  message arrives after the work is done. Nothing is stored on refusal and
- *  the button renders from `tagGroupKinds`, so the control cannot end up
- *  showing a state we declined to keep. */
-function toggleGroupKind(axis: string): void {
-  const next = { ...tagGroupKinds.value };
-  if (next[axis] === "accepts") {
-    delete next[axis];
-    tagGroupKinds.value = next;
-    return;
-  }
-  if (axis === NEG_ACCESSOR) {
-    toast.push({
-      severity: "warn",
-      summary: `Rename "${axis}" first`,
-      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
-      life: 6000,
-    });
-    return;
-  }
-  if (!AXIS_IDENT.test(axis)) {
-    toast.push({
-      severity: "warn",
-      summary: `Rename "${axis}" first`,
-      detail: "An accepts group is read as $var.NAME, so its name must be "
-        + "letters, digits and underscores, starting with a letter.",
-      life: 6000,
-    });
-    return;
-  }
-  next[axis] = "accepts";
-  tagGroupKinds.value = next;
-}
-
-function serializeTagGroups(): Record<string, string[]> | null {
-  const reg = new Set(subCategories.value);
-  const keepEmpty = ui.keepEmptyTagGroups;
-  const out: Record<string, string[]> = {};
-  for (const [axis, members] of Object.entries(tagGroups.value)) {
-    const kept = members.filter((m) => reg.has(m));
-    if (kept.length > 0 || keepEmpty) out[axis] = kept;
-  }
-  return Object.keys(out).length > 0 ? out : null;
-}
-
-onUnmounted(() => {
-  document.removeEventListener("click", onDocPointerDown);
-  document.removeEventListener("keydown", onDocKeydown);
-  window.removeEventListener("scroll", reanchorOptTagPicker, true);
-  window.removeEventListener("resize", reanchorOptTagPicker);
-});
+// `normalizeTagGroups` / `normalizeTagGroupKinds` / `serializeTagGroups` /
+// `serializeTagGroupKinds` live in `components/wildcard-editor/tag-groups`.
 
 onMounted(async () => {
-  // Outside-click + Escape dismissal for all transient menus (bug #3).
-  document.addEventListener("click", onDocPointerDown);
-  document.addEventListener("keydown", onDocKeydown);
-  // Capture, so a scroll in ANY nested scroller reaches this — scroll events
-  // do not bubble, and the editor body is the one that actually moves.
-  window.addEventListener("scroll", reanchorOptTagPicker, true);
-  window.addEventListener("resize", reanchorOptTagPicker);
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
     try {
@@ -1029,9 +545,26 @@ onMounted(async () => {
   }
   // After every load path (existing row, blank new, starter) settle the
   // sub-category panel to the user's chosen default.
+  loaded.value = true;
   subcatOpen.value = resolveSubcatDefaultOpen();
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed wildcard, unsaved.
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    chatDraftNote(chatDraft);
+  }
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  toast.push({
+    severity: "info",
+    summary: "From the assistant",
+    detail: d.newCategory
+      ? `Check it and Save to keep it. It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`
+      : "Check it and Save to keep it.",
+  });
+}
 
 /** Drop a sub-category from local draft state: the registry, every
  *  option's membership, AND any axis that lists it. Mirrors the server
@@ -1120,7 +653,7 @@ function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_coun
 
   if (dialogProps.kind === "wildcard") {
     // Whole-entity delete confirmed from the cascade dialog.
-    moduleStore.remove(dialogProps.id);
+    moduleStore.removeLocal(dialogProps.id);
     toast.push({
       severity: "success",
       summary: `"${name.value}" deleted`,
@@ -1203,26 +736,8 @@ function onCascadeDialogCancelled(): void {
   cascadeDialogOpen.value = false;
 }
 
-/* ── Pill kebab actions (Rename / Move / Delete) ────────────────────── */
-
-/** Kebab → Rename… — closes the menu and opens the existing cascade
- *  rename dialog (expression-aware via Chunk E). */
-function onKebabRename(subcat: string): void {
-  closeMenus();
-  onSubcatRenameClick(subcat);
-}
-
-/** Kebab → Delete… — closes the menu and runs the existing cascade
- *  delete path (silent when no refs, confirm dialog when refs > 0). */
-function onKebabDelete(subcat: string): void {
-  closeMenus();
-  void onSubcatDeleteClick(subcat);
-}
-
-/** Kebab → Move to group… — open the inline move submenu for this pill. */
-function onKebabMove(axis: string, tag: string): void {
-  moveMenuFor.value = kebabKey(axis, tag);
-}
+/* ── Pill kebab actions — the card emits Rename… / Delete…; the cascade
+ *    dialogs they open live here. ─────────────────────────────────────── */
 
 function onSubcatRenameClick(subcat: string): void {
   // Only meaningful for saved wildcards — new items have no server entity.
@@ -1410,36 +925,6 @@ function nudgeOption(id: string, dir: -1 | 1): void {
 const optQuery = ref("");
 const optTagFilter = ref<string[]>([]);
 const optTagMenuOpen = ref(false);
-/** Viewport coordinates for the teleported filter menu. */
-const optFilterAnchor = ref({ top: 0, left: 0 });
-/** True when the filter menu should grow upward instead. */
-const optFilterDropUp = ref(false);
-
-/** The filter button, kept so the menu can be re-measured against it. */
-let optFilterTriggerEl: HTMLElement | null = null;
-
-function positionFilterMenu(): void {
-  const r = optFilterTriggerEl?.getBoundingClientRect();
-  if (!r) return;
-  // Prefer below, but flip when there is meaningfully more room above — near
-  // the foot of the page a downward menu has nowhere to go, and capping its
-  // height there would leave a 140px sliver.
-  const below = window.innerHeight - r.bottom;
-  const above = r.top;
-  optFilterDropUp.value = below < 260 && above > below;
-  optFilterAnchor.value = {
-    top: optFilterDropUp.value ? r.top - 4 : r.bottom + 4,
-    left: r.left,
-  };
-}
-
-function toggleOptTagMenu(ev: MouseEvent): void {
-  const opening = !optTagMenuOpen.value;
-  optTagMenuOpen.value = opening;
-  if (!opening) return;
-  optFilterTriggerEl = (ev.currentTarget as HTMLElement | null) ?? null;
-  positionFilterMenu();
-}
 
 const optionFilter = computed(() => ({
   query: optQuery.value,
@@ -1472,6 +957,10 @@ function clearOptionFilter(): void {
 }
 
 const bulkAddOpen = ref(false);
+// Bulk add and the AI panel show one at a time (Dumi, 2026-10-22: both
+// open filled the screen); the hidden one keeps what it holds.
+watch(bulkAddOpen, (open) => { if (open) aiDraftOpen.value = false; });
+watch(aiDraftOpen, (open) => { if (open) bulkAddOpen.value = false; });
 const selectedIds = ref<Set<string>>(new Set());
 const bulkNote = ref("");
 
@@ -1623,6 +1112,24 @@ function removeTagFromSelected(tag: string): void {
     o.sub_categories = (o.sub_categories ?? []).filter((s) => s !== tag);
   }
 }
+/**
+ * A weight typed in an option row. Weight 0 or less never picks (probability normalises it
+ * away), so the editor floors at 0.01 and a typo can't silently disable an option; to switch an
+ * option off, use the per-instance toggle on the Context node. The floor waits until the field
+ * is left: while typing, a 0 is only the start of 0.5, and flooring it then rewrote the field to
+ * 0.01, so typing 0.5 saved 0.015.
+ */
+function typeWeight(o: WildcardOption, v: unknown): void {
+  const n = Number(v);
+  if (Number.isFinite(n) && n > 0) o.weight = n;
+}
+function leaveWeight(o: WildcardOption, e: FocusEvent): void {
+  const el = e.target as HTMLInputElement;
+  if (Number(el.value) > 0) return;
+  // Emptied: keep the weight it had. 0 or less: the 0.01 floor.
+  if (el.value !== "") o.weight = 0.01;
+  el.value = String(o.weight);
+}
 function setWeightSelected(weight: number): void {
   bulkNote.value = "";
   // Floor at 0.01 like the per-row weight input — weight 0 never picks.
@@ -1699,6 +1206,84 @@ function isUntouchedBlank(o: WildcardOption): boolean {
     && (o.sub_categories ?? []).length === 0
     && (o.weight === 1 || o.weight === undefined)
     && !o.negative;
+}
+
+/** Make `axis` an `accepts` group, or say why its name can't be one — the
+ *  same check the sub-categories card's kind toggle runs. */
+function promoteToAccepts(axis: string): void {
+  const refusal = acceptsPromotionRefusal(axis);
+  if (refusal) {
+    toast.push({ severity: "warn", ...refusal, life: 6000 });
+    return;
+  }
+  tagGroupKinds.value = { ...tagGroupKinds.value, [axis]: "accepts" };
+}
+
+/** Tag groups from an AI draft, applied just before its options: new tags
+ *  are registered, each tag moves into its group (a tag lives in one group),
+ *  and "accepts" goes through the same name check as the toggle. */
+function commitAiGroups(groups: AiDraftGroup[]): void {
+  for (const g of groups) {
+    const axis = g.name.trim();
+    if (!axis || axis === OTHER_AXIS) continue;
+    const members = g.tags.filter((t) => ensureSubcat(t));
+    const next: Record<string, string[]> = {};
+    for (const [a, ms] of Object.entries(tagGroups.value)) {
+      next[a] = a === axis ? ms : ms.filter((m) => !members.includes(m));
+    }
+    next[axis] = [...(next[axis] ?? []), ...members.filter((m) => !(next[axis] ?? []).includes(m))];
+    tagGroups.value = next;
+    if (g.kind === "accepts" && tagGroupKinds.value[axis] !== "accepts") promoteToAccepts(axis);
+  }
+}
+
+function commitAiDraft(parsed: ParsedBulkOption[]): void {
+  commitBulkAddOptions(parsed);
+  aiDraftOpen.value = false;
+}
+
+/** Apply reviewed AI edits to the draft. Rows that changed or vanished since
+ *  the request are matched by id, so a stale change just doesn't land. An
+ *  option other modules point at isn't removed here: that needs the cascade
+ *  dialog, so it is left for the user to delete by hand. */
+function applyAiEdits(action: AiWildcardEditAction, changes: AiWildcardEditChange[]): void {
+  const byId = new Map(changes.map((c) => [c.option_id, c]));
+  let done = 0;
+  let kept = 0;
+  if (action === "remove") {
+    options.value = options.value.filter((o) => {
+      if (typeof o.id !== "string" || !byId.has(o.id)) return true;
+      if (props.id && cascade.optionRefsTo(o.id).length > 0) { kept += 1; return true; }
+      done += 1;
+      return false;
+    });
+    if (selectedIds.value.size) {
+      const left = new Set(options.value.map((o) => o.id));
+      selectedIds.value = new Set([...selectedIds.value].filter((id) => left.has(id)));
+    }
+  } else {
+    for (const o of options.value) {
+      const c = typeof o.id === "string" ? byId.get(o.id) : undefined;
+      if (!c?.after) continue;
+      if (action === "rewrite" && c.after.value) o.value = c.after.value;
+      else if (action === "reweight" && typeof c.after.weight === "number") o.weight = c.after.weight;
+      else if (action === "retag" && c.after.tags) {
+        const tagSet = new Set(c.after.tags.filter((t) => ensureSubcat(t)).map((t) => t.trim()));
+        o.sub_categories = subCategories.value.filter((s) => tagSet.has(s));
+      } else continue;
+      done += 1;
+    }
+  }
+  const verb = action === "remove" ? "Removed" : "Changed";
+  toast.push({ severity: "success", summary: `${verb} ${done} option${done === 1 ? "" : "s"}`, life: 2500 });
+  if (kept > 0) {
+    toast.push({
+      severity: "warn",
+      summary: `${kept} option${kept === 1 ? " is" : "s are"} used by other modules`,
+      detail: "Delete those by hand so you can see what refers to them.",
+      life: 6000,
+    });
+  }
 }
 
 function commitBulkAddOptions(parsed: ParsedBulkOption[]): void {
@@ -1805,6 +1390,30 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   });
 }
 
+/** The payload as Save stores it. */
+function currentPayload(binding = varBinding.value.trim() || toIdentifier(name.value)): WildcardPayload {
+  // The null option keeps whatever position the user gave it. The engine
+  // locates it by the `is_null` flag, never by index, so pinning it to 0 on
+  // save only served to undo a reorder the user had just performed.
+  // Serialise tag_groups, dropping empty axes (a "+ Group" box the user
+  // created but never filled) + members no longer in the registry. Omit
+  // the key entirely when nothing is grouped, keeping legacy payloads
+  // byte-identical when grouping is unused.
+  const serializedGroups = serializeTagGroups(
+    tagGroups.value, subCategories.value, ui.keepEmptyTagGroups,
+  );
+  const serializedKinds = serializeTagGroupKinds(tagGroupKinds.value, serializedGroups);
+  return {
+    // An emptied negative is stored as an ABSENT key (schema v8 stamps
+    // only when a negative is really there).
+    options: pruneBlankNegatives(options.value),
+    sub_categories: subCategories.value,
+    var_binding: binding,
+    ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
+    ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
+  };
+}
+
 async function save() {
   // Update varBindingError synchronously so the rollup picks it up
   // in the same tick. The validation computed reads this ref.
@@ -1822,26 +1431,7 @@ async function save() {
   setSaveState("saving");
   saving.value = true;
   try {
-    // The null option keeps whatever position the user gave it. The engine
-    // locates it by the `is_null` flag, never by index, so pinning it to 0 on
-    // save only served to undo a reorder the user had just performed.
-    const sortedOptions = options.value;
-    // Serialise tag_groups, dropping empty axes (a "+ Group" box the user
-    // created but never filled) + members no longer in the registry. Omit
-    // the key entirely when nothing is grouped, keeping legacy payloads
-    // byte-identical when grouping is unused.
-    const serializedGroups = serializeTagGroups();
-    const serializedKinds = serializeTagGroupKinds(serializedGroups);
-    const payload: WildcardPayload = {
-      // An emptied negative is stored as an ABSENT key (schema v8 stamps
-      // only when a negative is really there).
-      options: pruneBlankNegatives(sortedOptions),
-      sub_categories: subCategories.value,
-      var_binding: finalBinding,
-      ...(serializedGroups ? { tag_groups: serializedGroups } : {}),
-      ...(serializedKinds ? { tag_group_kinds: serializedKinds } : {}),
-    };
-    const newPayload = payload as unknown as Record<string, unknown>;
+    const newPayload = currentPayload(finalBinding) as unknown as Record<string, unknown>;
     if (isEdit.value && props.id) {
       const prev = await moduleStore.get(props.id);
       const nextHistory = appendSnapshot(
@@ -1863,16 +1453,18 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "wildcard", name: name.value });
     } else {
-      // New mode: moduleStore.create() does not expose the new id on the
-      // returned row in a way that's stable across mock/real backends.
-      // The next time the user opens this item the mount-time push fires.
-      await moduleStore.create({
+      // New mode: the mount-time recent push fires next time the item opens.
+      // A chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "wildcard",
         name: name.value, description: description.value,
         category_id: categoryId.value, tags: tags.value,
         payload: newPayload,
         content_rating: contentRating.value,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -1955,13 +1547,19 @@ const visibleErrors = computed<EditorFieldError[]>(() =>
   showErrors.value ? validationErrors.value : [],
 );
 
-defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups });
+defineExpose({
+  historyEntries, applyRestore, options, subCategories, tagGroups, renameGroup, ungroupAxis,
+});
 </script>
 
 <template>
   <EditorFrame
-    :save-disabled="bulkAddOpen"
-    save-disabled-reason="Finish or cancel the bulk add first — use its own Add / Cancel buttons"
+    :loading="!loaded"
+    loading-label="Loading wildcard"
+    :save-disabled="bulkAddOpen || aiPending"
+    :save-disabled-reason="aiPending
+      ? 'Add or discard the AI draft first, with its own buttons'
+      : 'Finish or cancel the bulk add first — use its own Add / Cancel buttons'"
     :title="isEdit ? 'Edit wildcard' : 'New wildcard'"
     back-route="/wildcards"
     back-label="Wildcards"
@@ -1977,7 +1575,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     @restore="applyRestore"
   >
     <template v-if="isEdit && currentRow" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'wildcard'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'wildcard'" />
       <CommunityRowActions :row="currentRow" kind="module" labeled />
     </template>
     <template v-if="isEdit" #footer-left>
@@ -1999,16 +1597,19 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ref="identityCard"
+        ai-kind="wildcard"
+        :ai-payload="() => ({ var_binding: varBinding, sub_categories: subCategories, options })"
         :name="name"
         :description="description"
         :category-id="categoryId"
         :tags="tags"
         :var-binding="varBinding"
         :var-binding-error="varBindingError"
+        :content-rating="contentRating"
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
-        :content-rating="contentRating"
         @update:tags="(v) => (tags = v)"
         @update:content-rating="(v) => (contentRating = v)"
         @update:var-binding="(v) => (varBinding = v)"
@@ -2016,249 +1617,17 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
     </div>
 
     <div id="editor-section-sub-categories">
-      <Card title="Sub-Categories">
-        <template #actions>
-          <span class="wp-card__hint">Group tags into axes — used to filter the pool</span>
-          <!-- A fully tagged wildcard shows every axis and every pill at once,
-               which pushed the options table — the thing being edited — off
-               screen. `+` expands, `×` collapses; the count keeps the section
-               informative while shut. -->
-          <button
-            type="button"
-            class="subcat-collapse"
-            :class="{ 'subcat-collapse--nudge': !subcatOpen }"
-            :aria-expanded="subcatOpen"
-            :aria-label="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
-            :title="subcatOpen ? 'Collapse sub-categories' : 'Expand sub-categories'"
-            data-test="subcat-collapse"
-            @click="subcatOpen = !subcatOpen"
-          >
-            <i :class="subcatOpen ? 'pi pi-times' : 'pi pi-plus'" aria-hidden="true" />
-          </button>
-        </template>
-        <div v-if="!subcatOpen" class="subcat-collapsed" data-test="subcat-collapsed">
-          {{ subcatSummary }}
-        </div>
-        <!-- Group boxes: one per tag_groups axis + a trailing ungrouped
-             box. Each box owns its pills (⠿ name (count) ⋯) + an inline
-             "+ tag". Adding is contextual per group — no global add bar. -->
-        <div v-else class="subcat-groups" @click="closeMenus">
-          <section
-            v-for="group in subcatGroups"
-            :key="group.axis"
-            class="subcat-group"
-            :class="{ 'subcat-group--drop': dragOverAxis === group.axis && draggedTag !== null }"
-            :style="{ '--group-hue': axisHue(group.axis) }"
-            data-test="subcat-group"
-            @dragover.prevent="onGroupDragOver(group.axis)"
-            @dragleave="onGroupDragLeave(group.axis)"
-            @drop.prevent="onGroupDrop(group.axis)"
-          >
-            <header class="subcat-group__head">
-              <!-- The caret is its own button rather than the whole header:
-                   the header also holds a rename input, and making the row
-                   itself the toggle would fold the group every time you
-                   clicked into the name to edit it. -->
-              <button
-                type="button"
-                class="subcat-group__fold"
-                :aria-expanded="!collapsedAxes.has(group.axis)"
-                :aria-label="collapsedAxes.has(group.axis)
-                  ? `Expand ${group.isOther ? 'ungrouped' : group.axis}`
-                  : `Collapse ${group.isOther ? 'ungrouped' : group.axis}`"
-                :data-test="`subcat-fold-${group.axis}`"
-                @click.stop="toggleAxisCollapsed(group.axis)"
-              ><i
-                :class="collapsedAxes.has(group.axis) ? 'pi pi-chevron-right' : 'pi pi-chevron-down'"
-                aria-hidden="true"
-              /></button>
-              <input
-                v-if="!group.isOther"
-                class="subcat-group__name"
-                :value="group.axis"
-                :aria-label="`Rename group ${group.axis}`"
-                :data-test="`subcat-group-name-${group.axis}`"
-                @change="(e) => onGroupNameChange(group.axis, e)"
-                @keydown.enter.prevent="(e) => (e.target as HTMLInputElement).blur()"
-              />
-              <span v-else class="subcat-group__name subcat-group__name--other">ungrouped</span>
-              <!-- What this group MEANS to the engine. classify (the default)
-                   is today's behaviour: tags describe the option and fold with
-                   AND. accepts makes them alternatives the option offers — an
-                   OR-set, readable as $var.NAME.
-
-                   Shaped as a capsule because that is the grammar of the pills
-                   it governs — it is a property of the axis, not a utility
-                   action like the ungroup button. Always labelled and always
-                   visible: every group states its kind, so the capability is
-                   discoverable by anyone who opens the editor rather than only
-                   by someone who happens to hover the right spot.
-                   Ungrouped tags have no kind, so that box gets no control. -->
-              <button
-                v-if="!group.isOther"
-                type="button"
-                class="subcat-group__kind"
-                :class="{ 'subcat-group__kind--accepts': tagGroupKinds[group.axis] === 'accepts' }"
-                :aria-pressed="tagGroupKinds[group.axis] === 'accepts'"
-                :aria-label="`Group ${group.axis} is ${tagGroupKinds[group.axis] === 'accepts' ? 'an accepts axis' : 'descriptive'}`"
-                :data-test="`group-kind-${group.axis}`"
-                :title="tagGroupKinds[group.axis] === 'accepts'
-                  ? `Accepts axis — an option's tags here are alternatives it offers, and $${varBinding}.${group.axis} reads the one that was rolled. Click to make it descriptive.`
-                  : 'Descriptive — these tags say what an option IS, several true at once. Click to make them alternatives it accepts.'"
-                @click.stop="toggleGroupKind(group.axis)"
-              >{{ tagGroupKinds[group.axis] === 'accepts' ? 'accepts' : 'classify' }}</button>
-              <!-- A folded axis still reports how many tags are inside, so
-                   folding never hides the fact that there is something there. -->
-              <span
-                v-if="collapsedAxes.has(group.axis)"
-                class="subcat-group__count"
-                :data-test="`subcat-count-${group.axis}`"
-              >{{ group.tags.length }}</span>
-              <button
-                v-if="!group.isOther"
-                type="button"
-                class="subcat-group__ungroup"
-                :aria-label="`Disband group ${group.axis}`"
-                :data-test="`subcat-ungroup-${group.axis}`"
-                title="Disband group (tags stay, lose their axis)"
-                @click.stop="ungroupAxis(group.axis)"
-              ><i class="pi pi-link" aria-hidden="true" /></button>
-            </header>
-
-            <div v-if="!collapsedAxes.has(group.axis)" class="subcat-group__pills">
-              <span
-                v-for="tag in group.tags"
-                :key="tag"
-                class="subcat-pill"
-                :class="{ 'subcat-pill--dragging': draggedTag === tag }"
-                :style="chipStyle(tag)"
-                draggable="true"
-                @dragstart="onPillDragStart(tag, $event)"
-                @dragend="onPillDragEnd"
-              >
-                <span class="subcat-pill__grip" aria-hidden="true">⠿</span>
-                <span class="subcat-pill__name">{{ tag }}</span>
-                <span class="subcat-pill__count" :title="`${tagUsageCount(tag)} option(s) use this tag`">{{ tagUsageCount(tag) }}</span>
-                <button
-                  type="button"
-                  class="subcat-pill__kebab"
-                  :aria-label="`Actions for ${tag}`"
-                  :aria-expanded="openKebab === kebabKey(group.axis, tag)"
-                  :data-test="`subcat-kebab-${tag}`"
-                  @click.stop="toggleKebab(group.axis, tag, $event)"
-                >⋯</button>
-
-                <!-- Kebab menu: Rename / Move to group… / Delete. Rename
-                     + Delete route through the existing cascade dialogs. -->
-                <div
-                  v-if="openKebab === kebabKey(group.axis, tag)"
-                  class="subcat-menu"
-                  :class="{ 'subcat-menu--up': kebabDropUp }"
-                  role="menu"
-                  @click.stop
-                >
-                  <button
-                    type="button"
-                    class="subcat-menu__item"
-                    role="menuitem"
-                    data-test="subcat-rename"
-                    @click="onKebabRename(tag)"
-                  ><i class="pi pi-pencil" aria-hidden="true" /> Rename…</button>
-                  <button
-                    type="button"
-                    class="subcat-menu__item"
-                    role="menuitem"
-                    data-test="subcat-move"
-                    :aria-expanded="moveMenuFor === kebabKey(group.axis, tag)"
-                    @click="onKebabMove(group.axis, tag)"
-                  ><i class="pi pi-arrow-right-arrow-left" aria-hidden="true" /> Move to group…</button>
-                  <div
-                    v-if="moveMenuFor === kebabKey(group.axis, tag)"
-                    class="subcat-menu__sub"
-                    role="menu"
-                  >
-                    <button
-                      v-for="dest in moveTargets(group.axis)"
-                      :key="dest.axis"
-                      type="button"
-                      class="subcat-menu__item subcat-menu__item--sub"
-                      role="menuitem"
-                      :data-test="`subcat-move-to-${dest.axis}`"
-                      @click="moveTagToGroup(tag, dest.axis)"
-                    >{{ dest.label }}</button>
-                  </div>
-                  <button
-                    type="button"
-                    class="subcat-menu__item subcat-menu__item--danger"
-                    role="menuitem"
-                    data-test="subcat-delete"
-                    @click="onKebabDelete(tag)"
-                  ><i class="pi pi-trash" aria-hidden="true" /> Delete…</button>
-                </div>
-              </span>
-
-              <!-- Inline "+ tag" for this group. Collapsed to a button;
-                   expands to a validated input. -->
-              <span v-if="addTagAxis === group.axis" class="subcat-addtag">
-                <input
-                  v-model="addTagDraft"
-                  class="subcat-addtag__input"
-                  :class="{ 'subcat-addtag__input--invalid': addTagError }"
-                  :data-test="`group-addtag-input-${group.axis}`"
-                  placeholder="new tag"
-                  spellcheck="false"
-                  autocapitalize="off"
-                  autocomplete="off"
-                  @keydown.enter.prevent="commitAddTag(group.axis)"
-                  @keydown.esc.prevent="cancelAddTag"
-                  @blur="cancelAddTag"
-                />
-              </span>
-              <button
-                v-else
-                type="button"
-                class="subcat-addtag__open"
-                :data-test="`group-addtag-${group.axis}`"
-                @click.stop="openAddTag(group.axis)"
-              ><i class="pi pi-plus" aria-hidden="true" /> tag</button>
-            </div>
-
-            <p
-              v-if="addTagAxis === group.axis && addTagError"
-              class="subcat-addtag__error"
-              :data-test="`group-addtag-error-${group.axis}`"
-            >{{ addTagError }}</p>
-
-            <!-- Accepts-axis coverage advisory (non-blocking). An accepts axis
-                 only yields a value for options that carry one of its tags; an
-                 option with none makes $var.AXIS render empty when it's picked.
-                 Shown only for accepts groups with a gap, so a fully-covered
-                 axis stays silent. -->
-            <p
-              v-if="!group.isOther
-                && tagGroupKinds[group.axis] === 'accepts'
-                && !collapsedAxes.has(group.axis)
-                && axisUncoveredCount(group.axis) > 0"
-              class="subcat-group__axis-note"
-              :data-test="`axis-coverage-${group.axis}`"
-            >
-              <i class="pi pi-info-circle" aria-hidden="true" />
-              <span>{{ axisUncoveredCount(group.axis) }}
-                option{{ axisUncoveredCount(group.axis) === 1 ? "" : "s" }}
-                {{ axisUncoveredCount(group.axis) === 1 ? "carries" : "carry" }} no
-                <b>{{ group.axis }}</b> tag — <code>${{ varBinding }}.{{ group.axis }}</code>
-                is empty when {{ axisUncoveredCount(group.axis) === 1 ? "it's" : "they're" }} picked.</span>
-            </p>
-          </section>
-
-          <button
-            type="button"
-            class="subcat-add-group"
-            data-test="subcat-add-group"
-            @click.stop="addGroup"
-          ><i class="pi pi-plus" aria-hidden="true" /> Group</button>
-        </div>
-      </Card>
+      <WildcardSubcategoriesCard
+        ref="subcatCard"
+        v-model:open="subcatOpen"
+        v-model:sub-categories="subCategories"
+        v-model:tag-groups="tagGroups"
+        v-model:tag-group-kinds="tagGroupKinds"
+        :options="options"
+        :var-binding="varBinding"
+        @rename-tag="onSubcatRenameClick"
+        @delete-tag="(tag: string) => void onSubcatDeleteClick(tag)"
+      />
     </div>
 
     <div id="editor-section-options">
@@ -2268,69 +1637,20 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
              option: they all act on the same list, and splitting them over two
              bars made the header taller than the first option. The filter takes
              the flexible width; the buttons keep their intrinsic size. -->
-        <div v-if="options.length > 8" class="wc-optfilter">
-        <label class="wc-optfilter__search" :class="{ 'wc-optfilter__search--on': optQuery.length > 0 }">
-          <i class="pi pi-search" aria-hidden="true" />
-          <input
-            v-model="optQuery"
-            type="text"
-            :placeholder="`Filter ${options.length} options…`"
-            aria-label="Filter options"
-            spellcheck="false"
-            autocomplete="off"
-            data-test="wc-opt-search"
-          />
-          <button
-            v-if="optQuery"
-            type="button"
-            class="wc-optfilter__clearx"
-            aria-label="Clear text filter"
-            @click="optQuery = ''"
-          ><i class="pi pi-times" aria-hidden="true" /></button>
-        </label>
-
-        <div v-if="subCategories.length > 0" class="wc-optfilter__tagwrap">
-          <button
-            type="button"
-            class="wc-optfilter__tagbtn"
-            :data-on="optTagFilter.length > 0 ? '' : null"
-            :aria-expanded="optTagMenuOpen"
-            data-test="wc-opt-tagfilter"
-            @click.stop="toggleOptTagMenu($event)"
-          >
-            <i class="pi pi-tag" aria-hidden="true" />
-            tags<template v-if="optTagFilter.length"> · {{ optTagFilter.length }}</template>
-            <i class="pi pi-chevron-down" aria-hidden="true" />
-          </button>
-          <TagPickerMenu
-            :open="optTagMenuOpen"
-            :anchor="optFilterAnchor"
-            :drop-up="optFilterDropUp"
-            :groups="subcatGroups"
-            :all-tags="subCategories"
-            :selected="optTagFilter"
-            :tag-style="chipStyle"
-            test-prefix="wc-opt-tagfilter"
-            @toggle="toggleOptTagFilter"
-          />
-        </div>
-
-        <!-- Same count grammar as the sub-category filter panel: a bar for the
-             proportion, tabular numerals for the precision. Idle until a filter
-             is on — "133 of 133" would be reporting a success nobody asked for. -->
-        <span class="wc-optfilter__count" data-test="wc-opt-count">
-          <template v-if="optionFilterActive">
-            <span class="wc-optfilter__bar" :data-zero="visibleOptionRows.length === 0 ? '' : null">
-              <i :style="{ width: Math.round((visibleOptionRows.length / Math.max(1, options.length)) * 100) + '%' }" />
-            </span>
-            <span class="wc-optfilter__n" :data-zero="visibleOptionRows.length === 0 ? '' : null">
-              {{ visibleOptionRows.length }} of {{ options.length }}
-            </span>
-            <button type="button" class="wc-optfilter__clear" data-test="wc-opt-clear" @click="clearOptionFilter">Clear</button>
-          </template>
-          <span v-else class="wc-optfilter__idle">{{ options.length }} options</span>
-        </span>
-        </div>
+        <OptionFilterBar
+          v-if="options.length > 8"
+          v-model:query="optQuery"
+          :total="options.length"
+          :shown="visibleOptionRows.length"
+          :active="optionFilterActive"
+          :all-tags="subCategories"
+          :groups="subcatGroups"
+          :selected-tags="optTagFilter"
+          v-model:menu-open="optTagMenuOpen"
+          :tag-style="chipStyle"
+          @toggle-tag="toggleOptTagFilter"
+          @clear="clearOptionFilter"
+        />
         <Button
           size="sm"
           :variant="bulkMode ? 'secondary' : 'ghost'"
@@ -2343,9 +1663,18 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           size="sm"
           variant="ghost"
           icon="pi-clipboard"
-          data-test="wc-bulk-add"
+          data-test="wc-bulk-add" data-ai-anchor="bulk-add" data-ai-label="Bulk add button"
           @click="bulkAddOpen = !bulkAddOpen"
         >Bulk add</Button>
+        <Button
+          v-if="ai.config.value?.enabled"
+          size="sm"
+          :variant="aiDraftOpen ? 'secondary' : 'ghost'"
+          icon="pi-microchip-ai"
+          data-test="wc-ai-draft" data-ai-anchor="ai-panel-button" data-ai-label="AI button (draft or edit options)"
+          :title="!aiDraftOpen && aiPending ? 'Your AI draft is waiting here' : undefined"
+          @click="aiDraftOpen = !aiDraftOpen"
+        >{{ !aiDraftOpen && aiPending ? "AI · draft" : "AI" }}</Button>
         <Button
           size="sm"
           variant="ghost"
@@ -2354,21 +1683,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
           data-test="wc-add-null"
           @click="addNullOption"
         >Add null</Button>
-        <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" @click="addOption">
+        <Button size="sm" variant="primary" icon="pi-plus" data-test="wc-add-opt" data-ai-anchor="add-option" data-ai-label="Add option button" @click="addOption">
           Add option
         </Button>
       </template>
       <template #subheader>
-      <div v-if="bulkMode && (bulkAddOpen || selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
-        <BulkAddPanel
-          v-if="bulkAddOpen"
-          mode="options"
-          :existing-values="existingOptionValues"
-          :existing-tags="subCategories"
-          @commit-options="commitBulkAddOptions"
-          @cancel="bulkAddOpen = false"
-          @update:pending="(v: boolean) => (bulkPending = v)"
-        />
+      <div v-if="bulkMode && (selectedCount > 0 || bulkNote)" class="wpc-bulk-controls">
         <SelectionToolbar
           v-if="selectedCount > 0"
           :count="selectedCount"
@@ -2396,7 +1716,49 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
         <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
       </div>
       </template>
-      <table class="wp-table wp-options-table">
+      <!-- Not in the sticky subheader: a tall panel there covered the
+           options and the page couldn't scroll past it. Bulk add and the AI
+           panel show one at a time; each keeps what it holds while hidden. -->
+      <div
+        v-if="bulkMode && (bulkAddOpen || bulkPending)"
+        v-show="bulkAddOpen"
+        class="wpc-bulk-controls wpc-ai-controls"
+      >
+        <BulkAddPanel
+          mode="options"
+          :existing-values="existingOptionValues"
+          :existing-tags="subCategories"
+          @commit-options="commitBulkAddOptions"
+          @cancel="bulkAddOpen = false; bulkPending = false"
+          @update:pending="(v: boolean) => (bulkPending = v)"
+        />
+      </div>
+      <!-- Kept (hidden) while it holds a draft: Close used to throw it away. -->
+      <div
+        v-if="ai.config.value?.enabled && (aiDraftOpen || aiPending)"
+        v-show="aiDraftOpen"
+        class="wpc-bulk-controls wpc-ai-controls"
+      >
+        <AiWildcardPanel
+          ref="aiPanel"
+          :module-id="props.id"
+          :name="name"
+          :var-binding="varBinding"
+          :options="options"
+          :selected-ids="selectedIds"
+          :existing-tags="subCategories"
+          :tag-groups="tagGroups"
+          :tag-group-kinds="tagGroupKinds"
+          :description="description"
+          :labels="tags"
+          @commit-groups="commitAiGroups"
+          @commit-options="commitAiDraft"
+          @apply-edits="applyAiEdits"
+          @cancel="aiDraftOpen = false"
+          @update:pending="(v: boolean) => (aiPending = v)"
+        />
+      </div>
+      <table class="wp-table wp-options-table" data-ai-anchor="options" data-ai-label="Options list">
         <thead>
           <tr>
             <th v-if="bulkMode" scope="col" class="opt-col-check">
@@ -2442,20 +1804,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                  would be unclickable, so the strip lives inside the first cell
                  of the row it lands ABOVE. -->
             <td v-if="bulkMode" class="opt-col-check">
-              <button
-                type="button"
-                class="wp-check"
-                role="checkbox"
-                :aria-checked="isSelected(o.id)"
-                :data-checked="isSelected(o.id) ? 'true' : 'false'"
+              <Checkbox
+                :model-value="isSelected(o.id)"
                 :aria-label="`Select option ${i + 1}`"
                 :data-test="`wc-opt-check-${i}`"
-                @click="toggleSelect(o.id)"
-              >
-                <svg v-if="isSelected(o.id)" viewBox="0 0 12 12" fill="none" style="display:block">
-                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
+                @update:model-value="toggleSelect(o.id)"
+              />
             </td>
             <td class="opt-col-grip">
               <!-- The only pointer affordance the value cell's contenteditable
@@ -2465,11 +1819,13 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                    since dropping between two visible rows says nothing about
                    the hidden ones between them. The bulk moves above stay
                    available there — their destination is absolute. -->
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 class="opt-grip"
+                icon="pi-bars"
                 :disabled="optionFilterActive || undefined"
-                :title="optionFilterActive
+                :hint="optionFilterActive
                   ? 'Dragging is off while a filter is active — use Bulk edit ▸ Top / Bottom / Move here'
                   : 'Drag to reorder · Alt+↑/↓ to move one step'"
                 :aria-label="`Reorder ${o.value || 'option'}`"
@@ -2479,25 +1835,17 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                 @dragend="onOptDragEnd"
                 @keydown.alt.up.prevent="nudgeOption(o.id, -1)"
                 @keydown.alt.down.prevent="nudgeOption(o.id, 1)"
-              ><i class="pi pi-bars" aria-hidden="true" /></button>
+              />
             </td>
             <td>
-              <Input
+              <WpNumber commit="input"
                 :model-value="o.weight"
-                type="number"
                 size="sm"
-                min="0.01"
-                step="0.1"
+                :min="0.01"
+                :step="0.1"
                 aria-label="Option weight"
-                @update:model-value="(v) => {
-                  // Clamp to >0 — weight 0 or negative never picks
-                  // (probability normalises away). Editor floors at
-                  // 0.01 so a typo can't silently disable an option.
-                  // To disable an option, use the per-instance toggle
-                  // in the Context node (engine respects that).
-                  const n = Number(v);
-                  o.weight = Number.isFinite(n) && n > 0 ? n : 0.01;
-                }"
+                @update:model-value="(v) => typeWeight(o, v)"
+                @blur="(e: FocusEvent) => leaveWeight(o, e)"
               />
             </td>
             <td>
@@ -2559,98 +1907,29 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
                    tags render as removable chips (coloured by axis) and a
                    chevron opens a grouped checkbox picker. Membership only
                    — no boolean expression here. -->
-              <div v-else class="opt-tags" @click.stop>
-                <!-- Capped chip run, mirroring the canvas OptionRow: a fully
-                     tagged option carries 8+ tags and showing them all made a
-                     single row taller than the rest of the table. `+N` expands
-                     that row on demand. -->
-                <div class="opt-tags__control">
-                  <span
-                    v-for="tag in visibleOptionTags(o)"
-                    :key="tag"
-                    class="opt-tags__chip"
-                    :style="chipStyle(tag)"
-                  >
-                    {{ tag }}
-                    <button
-                      type="button"
-                      class="opt-tags__chip-x"
-                      :aria-label="`Remove ${tag} from option`"
-                      @click.stop="toggleOptionTag(o, tag)"
-                    >×</button>
-                  </span>
-                  <button
-                    v-if="hiddenOptionTagCount(o) > 0 || expandedOptTags.has(o.id)"
-                    type="button"
-                    class="opt-tags__more"
-                    :aria-expanded="expandedOptTags.has(o.id)"
-                    :aria-label="expandedOptTags.has(o.id)
-                      ? 'Show fewer tags'
-                      : `Show ${hiddenOptionTagCount(o)} more tags`"
-                    :data-test="`opt-tags-more-${o.id}`"
-                    @click.stop="toggleOptTagsExpanded(o.id)"
-                    :data-match="!expandedOptTags.has(o.id) && hiddenTagsMatch(o) ? '' : null"
-                    :title="hiddenTagsMatch(o) ? 'More matching tags are folded in here' : undefined"
-                  >{{ expandedOptTags.has(o.id) ? "−" : `+${hiddenOptionTagCount(o)}` }}</button>
-                  <span v-if="!(o.sub_categories ?? []).length" class="opt-tags__placeholder">(none)</span>
-                  <button
-                    type="button"
-                    class="opt-tags__chevron"
-                    :class="{ 'opt-tags__chevron--open': openOptTagPicker === o.id }"
-                    :aria-label="`Edit sub-categories for option`"
-                    :aria-expanded="openOptTagPicker === o.id"
-                    :data-test="`opt-tags-${o.id}`"
-                    @click.stop="toggleOptTagPicker(o.id, $event)"
-                  ><i class="pi pi-chevron-down" aria-hidden="true" /></button>
-                </div>
-
-                <!-- Grouped checkbox picker: one section per axis +
-                     ungrouped. Each toggle gets is-on when selected. -->
-                <TagPickerMenu
-                  :open="openOptTagPicker === o.id"
-                  :anchor="optTagAnchor"
-                  :drop-up="pickerDropUp"
-                  :groups="optionTagGroups"
-                  :all-tags="subCategories"
-                  :selected="o.sub_categories ?? []"
-                  :tag-style="chipStyle"
-                  :test-prefix="`opt-tag-${o.id}`"
-                  empty-text="No sub-categories yet — add some above."
-                  @toggle="(t: string) => toggleOptionTag(o, t)"
-                />
-              </div>
+              <OptionTagsCell
+                v-else
+                :option-id="o.id"
+                :tags="o.sub_categories ?? []"
+                :view="optionTagView(o)"
+                :expanded="expandedOptTags.has(o.id)"
+                :picker-open="openOptTagPicker === o.id"
+                :groups="optionTagGroups"
+                :all-tags="subCategories"
+                :tag-style="chipStyle"
+                @toggle-tag="(t: string) => toggleOptionTag(o, t)"
+                @toggle-expanded="toggleOptTagsExpanded(o.id)"
+                @update:picker-open="(v: boolean) => setOptTagPicker(o.id, v)"
+              />
             </td>
             <td>
-              <div class="opt-prob">
-                <div class="opt-prob__bar">
-                  <div class="opt-prob__fill" :style="{ width: probabilityFor(o) + '%' }" />
-                </div>
-                <span class="opt-prob__value wp-mono">{{ formatProbability(probabilityFor(o)) }}</span>
-              </div>
-              <!-- One fallback per wildcard: setting it here moves the flag
-                   off any other option. The toggle is hover-revealed like
-                   the grip so the resting table looks unchanged. -->
-              <div v-if="!o.is_null" class="wc-fallback-line">
-                <span
-                  v-if="o.fallback"
-                  class="wc-fallback-chip"
-                  :data-test="`wc-opt-fallback-chip-${i}`"
-                  title="Rolls normally, and is also used when constraints or weights leave nothing else to pick."
-                >
-                  <i class="pi pi-shield" aria-hidden="true" />
-                  <span>fallback</span>
-                </span>
-                <button
-                  type="button"
-                  class="wc-fallback-toggle"
-                  :aria-pressed="o.fallback ? 'true' : 'false'"
-                  :data-test="`wc-opt-fallback-${i}`"
-                  :title="o.fallback
-                    ? 'Make this an ordinary option again'
-                    : 'Also use this option when every option is ruled out'"
-                  @click.stop="toggleFallback(o)"
-                >{{ o.fallback ? "unset" : "set as fallback" }}</button>
-              </div>
+              <OptionProbabilityCell
+                :percent="probabilityFor(o)"
+                :is-null="!!o.is_null"
+                :fallback="!!o.fallback"
+                :index="i"
+                @toggle-fallback="toggleFallback(o)"
+              />
             </td>
             <td>
               <Button
@@ -2670,7 +1949,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
             <td :colspan="bulkMode ? 6 : 5" class="wc-optfilter__empty" data-test="wc-opt-noresults">
               <b>No option matches this filter</b>
               All {{ options.length }} are still here — only the view is filtered.
-              <button type="button" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</button>
+              <Button variant="link" size="sm" class="wc-optfilter__clear" @click="clearOptionFilter">Clear filter</Button>
             </td>
           </tr>
         </tbody>
@@ -2692,30 +1971,32 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
          chip. Cascades the rename to any modules referencing this subcat. -->
     <CascadeRenameDialog
       v-if="props.id && subcatRenameTarget"
+      :id="props.id"
       :open="subcatRenameOpen"
       kind="subcategory"
-      :id="props.id"
       :extra="{ subcat_name: subcatRenameTarget }"
       :initial-name="subcatRenameTarget"
       @confirmed="onSubcatRenameConfirmed"
       @cancelled="onSubcatRenameCancelled"
     />
 
-    <!-- ConfirmDialog lives INSIDE EditorFrame so the template has a single
+    <!-- ConfirmModal lives INSIDE EditorFrame so the template has a single
          root vnode. Multi-root templates break the parent RouterView's
          <Transition mode="out-in"> after this component unmounts — the
          transition tracker desyncs and the destination view never paints.
          Dialog still Teleports to body via its internal <Teleport>; the
          source placement here only affects vnode tracking. -->
-    <ConfirmDialog
-      :visible="showConfirm"
-      :title="bulkPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
-      :body="bulkPending
-        ? 'The bulk add box still holds options you have not added. Leaving discards them.'
-        : 'You have unsaved edits. Leaving this page will discard them.'"
+    <ConfirmModal
+      :open="showConfirm"
+      :title="bulkPending || aiPending ? 'Discard un-added options?' : 'Discard unsaved changes?'"
+      :body="aiPending
+        ? 'The AI draft holds options you have not added. Leaving discards them.'
+        : bulkPending
+          ? 'The bulk add box still holds options you have not added. Leaving discards them.'
+          : 'You have unsaved edits. Leaving this page will discard them.'"
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
@@ -2762,6 +2043,7 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   gap: 10px;
   padding: 12px 16px 14px;
 }
+.wpc-ai-controls { border-bottom: 1px solid var(--wp-border); }
 .wpc-bulk-note {
   margin: 0;
   font-size: 12px;
@@ -2774,29 +2056,6 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   padding: var(--wp-space-6);
   color: var(--wp-text-dim);
 }
-.opt-prob {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-}
-.opt-prob__bar {
-  flex: 1;
-  height: 6px;
-  background: var(--wp-bg-3);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.opt-prob__fill {
-  height: 100%;
-  background: var(--wp-accent-gradient);
-}
-.opt-prob__value {
-  width: 32px;
-  text-align: right;
-  font-size: var(--wp-text-xs);
-  color: var(--wp-text-dim);
-}
-
 /* Null option chip — used for the value-column placeholder on a row
  * whose option carries is_null=true. Visually distinct from the
  * RichTextInput pills used by normal option values so users see at a
@@ -2808,48 +2067,12 @@ defineExpose({ historyEntries, applyRestore, options, subCategories, tagGroups }
   padding: 4px 10px;
   background: color-mix(in srgb, var(--wp-text-muted) 12%, transparent);
   border: 1px dashed var(--wp-border);
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-muted);
   font-family: var(--wp-font-mono, monospace);
   font-size: var(--wp-text-sm);
 }
 .wc-null-chip .pi { font-size: 12px; }
-/* Fallback option: rolls normally and also stands in when nothing else is
-   left to pick, so the chip sits under its probability. */
-.wc-fallback-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-.wc-fallback-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 6px;
-  border: 1px solid color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--wp-accent-500) 12%, transparent);
-  color: var(--wp-accent-400, var(--wp-accent-500));
-  font-family: var(--wp-font-mono, monospace);
-  font-size: var(--wp-text-xs, 11px);
-  font-weight: 600;
-}
-.wc-fallback-chip .pi { font-size: 10px; }
-.wc-fallback-toggle {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--wp-text-dim);
-  font-family: var(--wp-font-mono, monospace);
-  font-size: var(--wp-text-xs, 11px);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity .12s, color .12s;
-}
-tr:hover .wc-fallback-toggle,
-.wc-fallback-toggle:focus-visible { opacity: 0.8; }
-.wc-fallback-toggle:hover { opacity: 1; color: var(--wp-accent-500); text-decoration: underline; }
 .wc-opt-row--fallback > td { background: color-mix(in oklab, var(--wp-accent-500) 4%, transparent); }
 .wc-em-dash {
   color: var(--wp-text-dim);
@@ -2863,10 +2086,10 @@ tr:hover .wc-fallback-toggle,
 /* An option holding a ref that points at nothing: red rail on the leading
    cell plus a faint wash, so the row is findable in a long table. */
 .wc-opt-row--broken > td {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 6%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 6%, transparent);
 }
 .wc-opt-row--broken > td:first-child {
-  box-shadow: inset 3px 0 0 var(--wp-danger, #ef4444);
+  box-shadow: inset 3px 0 0 var(--wp-danger);
 }
 .wc-broken-note {
   display: flex;
@@ -2874,438 +2097,7 @@ tr:hover .wc-fallback-toggle,
   gap: var(--wp-space-2);
   margin-top: var(--wp-space-2);
   font-size: var(--wp-text-xs);
-  color: var(--wp-danger, #ef4444);
-}
-
-/* ── Sub-category group boxes (H1) ───────────────────────────────── */
-.subcat-groups {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-4);
-}
-/* Sub-Categories disclosure — `+` / `×` in the card header. */
-.subcat-collapse {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-left: var(--wp-space-3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: transparent;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  font-size: 11px;
-}
-.subcat-collapse:hover { color: var(--wp-text); border-color: var(--wp-accent); }
-/* Accented while collapsed so a first-time user reads it as "there is more
-   here, press me" rather than as a dim decoration. Deliberately a static tint,
-   not an animation — this sits on screen for the whole editing session. */
-.subcat-collapse--nudge {
-  color: var(--wp-accent-text, var(--wp-accent));
-  border-color: color-mix(in oklab, var(--wp-accent) 55%, transparent);
-  background: color-mix(in oklab, var(--wp-accent) 14%, transparent);
-}
-.subcat-collapsed {
-  font-size: var(--wp-text-sm);
-  color: var(--wp-text-muted);
-}
-/* `+N` / `−` disclosure inside an option's tag cell. Dashed so it reads as
-   part of the chip run rather than as another removable tag. */
-.opt-tags__more {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 7px;
-  border: 1px dashed color-mix(in srgb, var(--wp-text-dim) 55%, transparent);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
-  line-height: 1.4;
-  cursor: pointer;
-}
-.opt-tags__more:hover { color: var(--wp-text); border-color: var(--wp-accent); }
-.subcat-group {
-  border: 1px solid var(--wp-border);
-  /* Coloured left accent keyed to the axis hue so each group reads as a
-   * distinct cluster at a glance (#8). Ungrouped (--group-hue = text-dim)
-   * stays neutral. */
-  border-left: 3px solid color-mix(in srgb, var(--group-hue, var(--wp-border)) 60%, var(--wp-border));
-  border-radius: var(--wp-radius);
-  background: var(--wp-bg-2);
-  padding: var(--wp-space-4);
-  transition: border-color 0.12s, background 0.12s;
-}
-/* Highlight a group box while a dragged pill hovers over it (bug #2). */
-.subcat-group--drop {
-  border-color: var(--wp-accent-500);
-  background: color-mix(in srgb, var(--wp-accent-500) 8%, var(--wp-bg-2));
-}
-.subcat-group__fold {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  cursor: pointer;
-}
-.subcat-group__fold:hover { color: var(--wp-text); background: var(--wp-bg-3); }
-.subcat-group__fold .pi { font-size: 9px; }
-.subcat-group__count {
-  font-family: var(--wp-font-mono);
-  font-size: 10px; /* audit-exempt: micro count badge */
-  color: var(--wp-text-dim);
-  opacity: 0.7;
-}
-.subcat-group__head {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  margin-bottom: var(--wp-space-3);
-}
-.subcat-group__name {
-  font-size: var(--wp-text-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: color-mix(in srgb, var(--group-hue, var(--wp-text-dim)) 80%, var(--wp-text));
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm);
-  padding: 3px 6px;
-  min-width: 0;
-  max-width: 220px;
-}
-.subcat-group__name:hover,
-.subcat-group__name:focus-visible {
-  border-color: var(--wp-border);
-  background: var(--wp-bg-1);
-  color: var(--wp-text);
-  outline: none;
-}
-/* A capsule, not an icon button: the pills this control governs are
-   hue-tinted capsules, so borrowing their grammar makes it read as a property
-   of the axis. The earlier icon button borrowed `__ungroup`'s flat grey
-   square, which is the vocabulary of a utility ACTION, and the hover landed as
-   a hard block unrelated to anything around it. */
-.subcat-group__kind {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 var(--wp-space-4);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
-  font-weight: var(--wp-weight-semibold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    color 120ms ease,
-    background-color 120ms ease,
-    border-color 120ms ease;
-}
-/* Always visible, including the default. An earlier version faded the
-   classify state in on hover to keep the header quiet; that optimised for ink
-   over discovery, and a control you only see by accident is one most people
-   never learn exists — fatal for a capability nobody is looking for yet. The
-   dim weight keeps it from competing with the axis name. */
-.subcat-group__kind:hover {
-  color: var(--wp-text-muted);
-  border-color: var(--wp-border-strong);
-}
-/* Promoted: always visible, in the group's own hue and the pills' exact fill
-   recipe, so the axis reads as one thing. Hover deepens the tint that is
-   already there rather than introducing a second colour. */
-.subcat-group__kind--accepts {
-  opacity: 1;
-  color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 78%, var(--wp-text));
-  border-color: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 55%, var(--wp-border));
-  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 17%, var(--wp-bg-1));
-}
-.subcat-group__kind--accepts:hover {
-  background: color-mix(in srgb, var(--group-hue, var(--wp-accent-400)) 28%, var(--wp-bg-1));
-}
-@media (prefers-reduced-motion: reduce) {
-  .subcat-group__kind { transition: none; }
-}
-
-.subcat-group__name--other {
-  font-style: italic;
-  padding-left: 0;
-  cursor: default;
-}
-.subcat-group__ungroup {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  border-radius: var(--wp-radius-sm);
-}
-.subcat-group__ungroup:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
-}
-.subcat-group__axis-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 9px 2px 2px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--wp-warn, #f59e0b);
-}
-.subcat-group__axis-note .pi { font-size: 12px; margin-top: 1px; flex-shrink: 0; }
-.subcat-group__axis-note code {
-  font-family: var(--wp-font-mono, monospace);
-  color: color-mix(in srgb, var(--wp-warn, #f59e0b) 80%, var(--wp-text));
-}
-.subcat-group__axis-note b { color: var(--wp-text); font-weight: 600; }
-
-.subcat-group__pills {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--wp-space-3);
-}
-
-/* Pill: ⠿ name (count) ⋯ — tinted by its axis hue (--chip-hue). */
-.subcat-pill {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 4px 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chip-hue) 17%, var(--wp-bg-1));
-  font-size: var(--wp-text-sm);
-  line-height: 1;
-}
-.subcat-pill[draggable="true"] {
-  cursor: grab;
-}
-.subcat-pill--dragging {
-  opacity: 0.45;
-}
-.subcat-pill__grip {
-  color: var(--wp-text-dim);
-  cursor: grab;
-  font-size: 11px;
-}
-.subcat-pill__name {
-  color: var(--wp-text);
-  font-weight: 500;
-}
-.subcat-pill__count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 17px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chip-hue) 22%, var(--wp-bg-3));
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-xs);
-  font-variant-numeric: tabular-nums;
-}
-.subcat-pill__kebab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  border-radius: 999px;
-  font-size: 14px;
-  line-height: 1;
-}
-.subcat-pill__kebab:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
-}
-
-/* Kebab dropdown menu. */
-.subcat-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 30;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  padding: var(--wp-space-2);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
-}
-/* Flip the kebab menu above its trigger near the page bottom (bug #1). */
-.subcat-menu--up {
-  top: auto;
-  bottom: calc(100% + 4px);
-}
-.subcat-menu__item {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-  text-align: left;
-  border-radius: var(--wp-radius-sm);
-}
-.subcat-menu__item:hover {
-  background: var(--wp-bg-3);
-}
-.subcat-menu__item .pi {
-  font-size: 12px;
-  color: var(--wp-text-dim);
-}
-.subcat-menu__item--sub {
-  padding-left: var(--wp-space-5);
-}
-.subcat-menu__item--danger {
-  color: var(--wp-danger-text, var(--wp-danger));
-}
-.subcat-menu__item--danger .pi {
-  color: inherit;
-}
-.subcat-menu__sub {
-  display: flex;
-  flex-direction: column;
-  margin: 2px 0 2px var(--wp-space-3);
-  padding-left: var(--wp-space-2);
-  border-left: 1px solid var(--wp-border);
-}
-
-/* Inline "+ tag" (per group) + "+ Group". */
-.subcat-addtag__open,
-.subcat-add-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border: 1px dashed var(--wp-border-strong);
-  border-radius: 999px;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-sm);
-}
-.subcat-addtag__open:hover,
-.subcat-add-group:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-accent-500);
-}
-.subcat-add-group {
-  margin-top: var(--wp-space-3);
-  align-self: flex-start;
-}
-.subcat-addtag__input {
-  padding: 3px 10px;
-  width: 130px;
-  border: 1px solid var(--wp-accent-500);
-  border-radius: 999px;
-  background: var(--wp-bg-1);
-  color: var(--wp-text);
-  font-size: var(--wp-text-sm);
-  outline: none;
-}
-.subcat-addtag__input--invalid {
-  border-color: var(--wp-danger);
-}
-.subcat-addtag__error {
-  margin: var(--wp-space-2) 0 0;
-  color: var(--wp-danger-text, var(--wp-danger));
-  font-size: var(--wp-text-xs);
-}
-
-/* ── Per-option grouped multi-select (H2) ────────────────────────── */
-.opt-tags {
-  position: relative;
-}
-.opt-tags__control {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-.opt-tags__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 4px 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--chip-hue) 45%, var(--wp-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chip-hue) 12%, var(--wp-bg-1));
-  color: var(--wp-text);
-  font-size: var(--wp-text-xs);
-  line-height: 1.4;
-}
-.opt-tags__chip-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1;
-}
-.opt-tags__chip-x:hover {
-  color: var(--wp-text);
-  background: var(--wp-bg-3);
-}
-.opt-tags__placeholder {
-  color: var(--wp-text-dim);
-  font-size: var(--wp-text-xs);
-  font-style: italic;
-}
-.opt-tags__chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-1);
-  cursor: pointer;
-  color: var(--wp-text-dim);
-  font-size: 11px;
-}
-.opt-tags__chevron:hover {
-  color: var(--wp-text);
-  border-color: var(--wp-border-strong);
-}
-.opt-tags__chevron--open {
-  color: var(--wp-accent-text);
-  border-color: var(--wp-accent-500);
+  color: var(--wp-danger);
 }
 
 /* Teleported to <body>, so coordinates are viewport-relative and no ancestor
@@ -3314,24 +2106,10 @@ tr:hover .wc-fallback-toggle,
 .opt-col-grip { width: 26px; }
 /* The only pointer affordance the value cell's contenteditable does not
    poison. Hidden until row hover so the resting table is unchanged. */
-.opt-grip {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 22px;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  font-size: 11px;
-  cursor: grab;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
+/* The kit row icon button, shown on row hover only. */
+.opt-grip { cursor: grab; opacity: 0; transition: opacity 0.1s; }
 tr:hover .opt-grip { opacity: 0.7; }
-.opt-grip:hover { opacity: 1; background: var(--wp-bg-3); }
-.opt-grip:focus-visible { opacity: 1; outline: 2px solid var(--wp-accent-500); outline-offset: 1px; }
+.opt-grip:hover, .opt-grip:focus-visible { opacity: 1; }
 .opt-grip:disabled { cursor: not-allowed; }
 tr:hover .opt-grip:disabled { opacity: 0.2; }
 
@@ -3349,127 +2127,7 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   background: color-mix(in oklab, var(--wp-accent-500) 8%, transparent);
 }
 
-/* ── Options filter bar ─────────────────────────────────────────────── */
-/* Sits inside the Card's actions row, so no padding or rule of its own —
-   the header supplies both. `flex: 1` lets the search take the slack while
-   the buttons beside it keep their intrinsic width. */
-.wc-optfilter {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  /* Card's header puts a `.wp-spacer` (flex: 1) between the title and this
-     slot. With a grow factor of 1 the two split the free space evenly and the
-     search box ended up half the width it should be. A far larger factor takes
-     effectively all of the slack while leaving the spacer in place, which is
-     what still separates the title from the controls. */
-  flex: 1000 1 auto;
-  min-width: 0;
-  margin-right: var(--wp-space-4);
-}
-/* The search takes whatever the fixed-size tag button and count leave. There
-   is deliberately no spacer in this block: one used to right-align the count,
-   and it competed with the search for the same free space and took half of
-   it. */
-.wc-optfilter__search { min-width: 90px; }
-.wc-optfilter__search {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-3);
-  flex: 1;
-  min-width: 0;
-  padding: 3px var(--wp-space-4); /* audit-exempt: compact inline search */
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-}
-.wc-optfilter__search--on {
-  border-color: var(--wp-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--wp-accent-500) 20%, transparent);
-}
-.wc-optfilter__search .pi { font-size: 11px; }
-.wc-optfilter__search input {
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--wp-text);
-  font: 12px var(--wp-font-mono);
-}
-.wc-optfilter__clearx {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-dim); font-size: 10px;
-}
-.wc-optfilter__tagwrap { position: relative; }
-.wc-optfilter__tagbtn {
-  display: inline-flex; align-items: center; gap: 5px; /* audit-exempt: icon gap */
-  padding: 4px var(--wp-space-4);
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border-strong);
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-muted);
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wc-optfilter__tagbtn[data-on] {
-  background: color-mix(in oklab, var(--wp-accent-500) 24%, transparent);
-  border-color: var(--wp-accent-500);
-  color: var(--wp-accent-300);
-}
-.wc-optfilter__tagbtn .pi { font-size: 9px; }
-.wc-optfilter__menu {
-  position: absolute; top: calc(100% + 4px); right: 0; z-index: 30;
-  min-width: 170px; max-height: 240px; overflow-y: auto;
-  overscroll-behavior: contain;
-  display: flex; flex-direction: column;
-  padding: var(--wp-space-3);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
-}
-.wc-optfilter__menuitem {
-  display: flex; align-items: center; gap: var(--wp-space-3);
-  padding: 4px var(--wp-space-3);
-  background: none; border: none; border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-muted);
-  font: 11px var(--wp-font-mono);
-  text-align: left; cursor: pointer;
-}
-.wc-optfilter__menuitem:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wc-optfilter__menuitem[data-on] { color: var(--wp-accent-300); }
-.wc-optfilter__box {
-  width: 12px; height: 12px; flex-shrink: 0;
-  display: grid; place-items: center;
-  border: 1px solid var(--wp-border-strong);
-  border-radius: 3px; /* audit-exempt: below the radius scale */
-  font-size: 7px;
-}
-.wc-optfilter__menuitem[data-on] .wc-optfilter__box {
-  background: var(--wp-accent-600); border-color: var(--wp-accent-600); color: #fff;
-}
-.wc-optfilter__count {
-  display: flex; align-items: center; gap: var(--wp-space-3);
-  font-size: 11px; white-space: nowrap;
-}
-.wc-optfilter__bar {
-  width: 44px; height: 3px; border-radius: 2px; /* audit-exempt: hairline meter */
-  background: var(--wp-bg-4); overflow: hidden;
-}
-.wc-optfilter__bar i { display: block; height: 100%; background: var(--wp-success); }
-.wc-optfilter__bar[data-zero] { background: color-mix(in oklab, var(--wp-danger) 35%, transparent); }
-.wc-optfilter__n {
-  font-family: var(--wp-font-mono); font-variant-numeric: tabular-nums;
-  font-weight: 600; color: var(--wp-success);
-}
-.wc-optfilter__n[data-zero] { color: var(--wp-danger); }
-.wc-optfilter__idle { color: var(--wp-text-dim); font-family: var(--wp-font-mono); }
-.wc-optfilter__clear {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-}
+/* Also styled inside OptionFilterBar; this copy serves the no-results row. */
 .wc-optfilter__empty {
   padding: var(--wp-space-6) var(--wp-space-5);
   text-align: center; color: var(--wp-text-dim); font-size: 12px;
@@ -3479,13 +2137,6 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   margin-bottom: var(--wp-space-2);
 }
 .wc-optfilter__empty .wc-optfilter__clear { margin-left: var(--wp-space-3); }
-/* The pill admits that a matching tag is folded inside it, so a row never
-   looks like it matched for no reason. */
-.opt-tags__more[data-match] {
-  background: color-mix(in oklab, var(--wp-accent-500) 26%, transparent);
-  border-color: var(--wp-accent-500);
-  color: var(--wp-accent-300);
-}
 
 .opt-tags__picker {
   position: fixed;
@@ -3498,7 +2149,7 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   background: var(--wp-bg-1);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg);
+  box-shadow: var(--wp-shadow-md);
 }
 /* The cap and the scrolling moved OFF the menu and onto the list inside it, so
    the search box stays pinned while the tags scroll under it.
@@ -3584,7 +2235,7 @@ tr:hover .opt-grip:disabled { opacity: 0.2; }
   height: 15px;
   flex: none;
   border: 1.5px solid color-mix(in srgb, var(--chip-hue) 55%, var(--wp-border-strong));
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   color: var(--chip-hue);
 }
 /* Selected row: tint the whole toggle + bold it + fill the check box so

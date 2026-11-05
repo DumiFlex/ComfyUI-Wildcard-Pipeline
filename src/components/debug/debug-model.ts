@@ -116,7 +116,7 @@ export interface RawRef {
 
 // ── View model ──────────────────────────────────────────────────────────
 
-export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "unknown";
+export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "toggle" | "unknown";
 export type StepStatus = "ok" | "off" | "frame" | "error" | "unknown" | "never";
 export type Severity = "info" | "warning" | "error";
 
@@ -279,6 +279,8 @@ export const WARNING_LABELS: Record<string, string> = {
   constraint_register_failed: "Constraint failed to register",
   constraint_excludes_all_options: "Constraint excluded every option",
   fallback_used: "Fallback used",
+  pinned_option_missing: "Pinned option missing",
+  match_variable_no_match: "No option matches the variable",
   constraint_factor_ignored_on_allow: "Constraint factor ignored (allow)",
   unknown_constraint_mode: "Unknown constraint mode",
   fixed_values_overrides_malformed: "Fixed-values overrides malformed",
@@ -293,6 +295,7 @@ export const OP_LABELS: Record<string, string> = {
   starts_with: "starts with",
   ends_with: "ends with",
   matches: "matches",
+  not_matches: "doesn't match",
   exists: "exists",
   not_exists: "doesn't exist",
   is_set: "is set",
@@ -314,6 +317,7 @@ const KIND_LABELS: Record<Kind, string> = {
   constraint: "constraint",
   injector: "injector",
   model: "model info",
+  toggle: "toggle",
   unknown: "module",
 };
 
@@ -355,6 +359,7 @@ function str(v: unknown): string {
 function kindOf(entry: RawTraceEntry): Kind {
   if (entry.node === "WP_ContextInjector") return "injector";
   if (entry.node === "WP_ModelInfo") return "model";
+  if (entry.node === "WP_Toggles") return "toggle";
   switch (entry.type) {
     case "wildcard": return "wildcard";
     case "fixed_values": return "fixed";
@@ -414,6 +419,7 @@ function warningDetailText(type: string, detail: Record<string, unknown>): strin
     return Number.isFinite(reached) && Number.isFinite(requested) ? `reached ${reached} of ${requested}` : "";
   }
   if (type === "constraint_never_applied") {
+    if (detail.ref_only === true) return "target not drawn this run";
     return detail.target_present === false ? "target not in chain" : "";
   }
   if (type === "unknown_ref") {
@@ -513,9 +519,14 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
   const stepKeyByModuleId = new Map<string, string>();
 
   const never = new Set<string>();
+  // Constraints whose target is only reached through refs that weren't
+  // drawn this run (a recipe picked another recipe): idle, not broken.
+  const idle = new Set<string>();
   for (const w of rawWarnings) {
     const o = asRecord(w);
-    if (o.type === "constraint_never_applied" && str(o.module_id)) never.add(str(o.module_id));
+    if (o.type !== "constraint_never_applied" || !str(o.module_id)) continue;
+    if (asRecord(o.detail).ref_only === true) idle.add(str(o.module_id));
+    else never.add(str(o.module_id));
   }
 
   const steps: TraceStep[] = trace.map((t, i) => {
@@ -528,7 +539,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       overwrite: !!w.overwrite,
       negative: str(w.negative).trim(),
     }));
-    if ((kind === "injector" || kind === "model") && t.binding) {
+    if ((kind === "injector" || kind === "model" || kind === "toggle") && t.binding) {
       writes.push({ variable: t.binding, value: formatValue(t.value), overwrite: false, negative: "" });
     }
     const declared = writes.length
@@ -553,7 +564,8 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     let finalLabel = label;
     if (kind === "constraint" && status === "ok") {
       const ids = [str(t._uid), str(t.id), str(detail?.uid)].filter(Boolean);
-      if (ids.some((x) => never.has(x)) || constraint?.hits === 0) {
+      const isIdle = ids.some((x) => idle.has(x));
+      if (!isIdle && (ids.some((x) => never.has(x)) || constraint?.hits === 0)) {
         finalStatus = "never";
         finalLabel = "never applied";
       }

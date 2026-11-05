@@ -1,4 +1,4 @@
-import { createApp, type App, type Component } from "vue";
+import { createApp, effectScope, type App, type Component, type EffectScope } from "vue";
 
 import { nodeCollapseAnimating } from "../extension/_stashes";
 import { isVueNodes } from "../extension/renderer";
@@ -14,7 +14,17 @@ export interface DomWidgetHost {
   widget: DomWidget;
   element: HTMLElement;
   app: App;
+  /** Tear the widget down: stop its effect scope, run registered cleanups,
+   *  unmount the Vue app. Idempotent. Called automatically when the node is
+   *  removed from its graph (chained onto `node.onRemoved`). */
   unmount: () => void;
+  /** Effect scope owned by this host and stopped on unmount. Glue code that
+   *  creates `reactiveFromGraph` refs or `watch`es outside a component's
+   *  `setup()` must create them inside it (pass `scope` in the options, or
+   *  `host.scope.run(...)`) so their intervals are cleared on removal. */
+  scope: EffectScope;
+  /** Register extra teardown (listeners, observers) to run on unmount. */
+  onCleanup: (fn: () => void) => void;
   getValue: () => string;
   setValue: (v: string) => void;
   /** Trigger a node relayout — runs the canonical 3-step
@@ -81,6 +91,34 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    * instead of leaving a dead band under this box.
    */
   fitContent?: boolean;
+  /**
+   * The glue sizes the node itself: the host still reports its measured
+   * height as the widget's minimum, but never resizes the node (no grid
+   * snap, no computeSize margins). For a node that must be exactly its
+   * content, like WP Note.
+   */
+  ownSize?: boolean;
+  /** The DOM widget's inset inside the node, in px. ComfyUI's default is 10. */
+  margin?: number;
+  /**
+   * Effect scope the glue already ran its reactive setup in (see
+   * {@link buildInScope}). The host adopts it and stops it on unmount.
+   * Omitted → the host creates its own (`host.scope`).
+   */
+  scope?: EffectScope;
+}
+
+/**
+ * Run widget glue inside a fresh effect scope, so every `reactiveFromGraph`
+ * / `watch` it creates outside a component `setup()` is disposed with the
+ * widget. `build` receives the scope to hand to `createDomWidgetHost`.
+ */
+export function buildInScope<T>(build: (scope: EffectScope) => T): T {
+  // Detached: the widget's lifetime is the node's, never an ambient scope's.
+  const scope = effectScope(true);
+  const result = scope.run(() => ({ v: build(scope) }));
+  if (!result) throw new Error("wp: widget scope inactive");
+  return result.v;
 }
 
 /** LiteGraph snaps node size to this grid by default. Mirror it when
@@ -133,6 +171,43 @@ function unregisterFillSync(sync: () => void): void {
   fillSyncs.delete(sync);
 }
 
+/* ── Nodes 2.0 slot adoption ────────────────────────────────────────────
+ *
+ * Nodes 2.0 draws each DOM widget into a slot (`WidgetDOM.vue`) that attaches
+ * `widget.element` once, when the slot mounts. A graph reload that keeps node
+ * ids (undo / redo, reloading the same workflow) builds new nodes and new
+ * widgets but keeps the slots, so they go on showing the OLD element, whose
+ * Vue app was unmounted with its node: every WP node turned blank on Ctrl+Z.
+ * A new host that is still off the page a few frames after it was made finds
+ * the slot holding a stale host for the same node id and widget name and
+ * takes its place. Live hosts are tracked so a slot that belongs to a working
+ * widget is never taken.
+ */
+const liveHosts = new WeakSet<HTMLElement>();
+
+function adoptStaleSlot(node: unknown, widgetName: string, host: HTMLElement): void {
+  if (typeof document === "undefined" || typeof requestAnimationFrame === "undefined") return;
+  if (!isVueNodes()) return;
+  let frames = 0;
+  const tick = (): void => {
+    if (host.isConnected || !liveHosts.has(host) || !isVueNodes()) return;
+    const id = (node as { id?: unknown }).id;
+    if (id == null) return;
+    const card = [...document.querySelectorAll<HTMLElement>("[data-node-id]")]
+      .find((el) => el.getAttribute("data-node-id") === String(id));
+    const stale = card
+      ? [...card.querySelectorAll<HTMLElement>(".wp-widget")]
+        .find((el) => el.dataset.wpWidget === widgetName && !liveHosts.has(el))
+      : undefined;
+    if (stale?.parentElement) {
+      stale.parentElement.replaceChildren(host);
+      return;
+    }
+    if (++frames < 30) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 interface ResizableNode {
   size?: number[];
   computeSize?: () => [number, number] | number[];
@@ -148,6 +223,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
 ): DomWidgetHost {
   const host = document.createElement("div");
   host.classList.add("wp-widget");
+  host.dataset.wpWidget = widgetName;
+  liveHosts.add(host);
   host.style.width = "100%";
   host.style.boxSizing = "border-box";
 
@@ -221,6 +298,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     // Cached number so ComfyUI skips per-frame getComputedStyle (perf hint
     // from LoRA Manager's DOM widget guide).
     getMinHeight: () => minHeight,
+    ...(options.margin !== undefined ? { margin: options.margin } : {}),
     ...(options.fitContent ? { getMaxHeight: () => minHeight } : {}),
   };
 
@@ -259,6 +337,10 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // here — the public API on createDomWidgetHost is still strict in P.
   const app = createApp(component, (options.componentProps ?? {}) as unknown as P);
   app.mount(inner);
+  adoptStaleSlot(node, widgetName, host);
+
+  const scope = options.scope ?? effectScope(true);
+  const cleanups: Array<() => void> = [];
 
   // Observe inner content height. When Vue grows the DOM, bump minHeight (so
   // ComfyUI's getMinHeight callback returns the right value) and grow the node
@@ -289,8 +371,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       // getMinHeight callback AND our own min[1] read below. Keeping
       // it grid-aligned at the source means setSize never has to
       // correct an off-grid value after the fact.
-      const next = snapToGrid(Math.max(baseMin, measured));
+      // An own-size node is exactly its content: LiteGraph grows the node
+      // to this minimum, so a grid-snapped value would leave a gap under it.
+      const next = options.ownSize ? Math.max(baseMin, measured) : snapToGrid(Math.max(baseMin, measured));
       if (next !== minHeight) minHeight = next;
+      if (options.ownSize) return;
 
       const min = resizable.computeSize?.();
       const cur = resizable.size;
@@ -477,7 +562,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   let lastAutoSetWidth = 0;
   let lastAutoSetHeight = 0;
   function requestRelayout(): void {
-    if (relayouting) return;
+    if (relayouting || options.ownSize) return;
     relayouting = true;
     try {
       // See pushSize comment — same reason: skip while the collapse
@@ -528,15 +613,58 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     }
   }
 
+  let unmounted = false;
+  function unmount(): void {
+    if (unmounted) return;
+    unmounted = true;
+    liveHosts.delete(host);
+    // Each step guarded so one failing teardown can't strand the rest.
+    const steps: Array<() => void> = [
+      () => scope.stop(),
+      ...cleanups.splice(0).reverse(),
+      () => resizeObserver?.disconnect(),
+      () => fillDispose?.(),
+      removeWheelShield,
+      () => app.unmount(),
+      restoreOnRemoved,
+    ];
+    for (const step of steps) {
+      try { step(); } catch (err) { console.error("[wp] widget teardown failed", err); }
+    }
+  }
+
+  // Node removal (delete, graph.clear on workflow load / undo) tears the
+  // widget down. Wrap-and-call-original with `this` preserved, so ComfyUI's
+  // own removal (and any other extension's) runs first and unchanged. We
+  // never touch `widget.onRemove` — ComfyUI relies on its `this` binding.
+  const removable = node as unknown as { onRemoved?: (...a: unknown[]) => unknown };
+  const hadOwnOnRemoved = Object.prototype.hasOwnProperty.call(removable, "onRemoved");
+  const origOnRemoved = removable.onRemoved;
+  const onRemovedWrapper = function (this: unknown, ...args: unknown[]): unknown {
+    try {
+      return origOnRemoved?.apply(this, args);
+    } finally {
+      unmount();
+    }
+  };
+  removable.onRemoved = onRemovedWrapper;
+  function restoreOnRemoved(): void {
+    // Only when still ours — someone may have wrapped on top since; their
+    // wrapper keeps calling ours, which is a no-op once unmounted.
+    if (removable.onRemoved !== onRemovedWrapper) return;
+    if (hadOwnOnRemoved) removable.onRemoved = origOnRemoved;
+    else delete removable.onRemoved;
+  }
+
   return {
     widget,
     element: inner,
     app,
-    unmount: () => {
-      resizeObserver?.disconnect();
-      fillDispose?.();
-      removeWheelShield();
-      app.unmount();
+    unmount,
+    scope,
+    onCleanup: (fn) => {
+      if (unmounted) fn();
+      else cleanups.push(fn);
     },
     getValue: () => state,
     setValue: (v) => {
@@ -671,6 +799,11 @@ export interface BundleInstance {
   /** Mirror of `master_internal_chained_by` for the seed-lock
    *  master chain. Same lifecycle rules. */
   master_lock_chained_by?: string | null;
+  /** Set on bundles shipped in an example workflow (`example_workflows/`).
+   *  Only changes the badge: while the bundle has no library entry it shows
+   *  a neutral EXAMPLE chip instead of MISSING. Cleared when it is saved to
+   *  the library. Stored only as `true`. */
+  example?: true;
 }
 
 /** Module kind discriminator — the five kinds the SPA library carries. */
@@ -864,7 +997,7 @@ export interface ModuleEntry {
      * this field — their edits go straight into `payload.values`
      * because there's no library state to preserve.
      */
-    values_overrides?: Array<{ id: string; name: string; value: string }> | null;
+    values_overrides?: Array<{ id: string; name: string; value: string; negative?: string }> | null;
     /**
      * Combine per-instance template override. When set, the engine
      * reads this string in place of `payload.template`. Empty/null =
@@ -872,6 +1005,12 @@ export interface ModuleEntry {
      * library template. Engine reads in `combine_handler.py:64-65`.
      */
     template_override?: string | null;
+    /**
+     * Combine per-instance negative override (schema v8 send-to-negative).
+     * A string replaces `payload.negative` ("" clears it); null/absent =
+     * library default. Engine reads in `combine_handler.py`.
+     */
+    negative_override?: string | null;
     /**
      * Per-instance disable list for derivation rules. Engine skips rules
      * whose `id` matches any entry. Null/absent = all rules active.
@@ -1016,6 +1155,11 @@ export interface ModuleEntry {
    *  for others. effective = frame_enabled[k] ?? base enabled. Only frames that
    *  differ from base are stored. */
   frame_enabled?: Record<string, boolean>;
+  /** Set on rows shipped in an example workflow (`example_workflows/`). Only
+   *  changes the badge: while the row has no library entry it shows a
+   *  neutral EXAMPLE chip (or nothing inside an example bundle, whose header
+   *  carries the chip) instead of MISSING. Stored only as `true`. */
+  example?: true;
 }
 
 export function parseWidgetJson<T>(raw: string, fallback: T): T {

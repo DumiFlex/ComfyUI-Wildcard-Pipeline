@@ -42,6 +42,11 @@ def test_stem_corpus(case):
     ("SD3", "sd3"),
     ("Chroma", "chroma"),
     ("WAN21_T2V", "wan"),
+    ("ZImage", "zimage"),
+    ("ZImagePixelSpace", "zimage"),
+    ("HunyuanImage21", "hunyuan_image"),
+    ("Anima", "anima"),
+    ("Flux2", "flux"),
     ("SomeNewModel", "some_new_model"),
     ("", ""),
 ])

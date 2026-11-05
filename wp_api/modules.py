@@ -1,6 +1,7 @@
 """/wp/api/modules CRUD + snapshot + match + duplicate + favorite endpoints."""
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from aiohttp import web
@@ -204,6 +205,9 @@ async def list_modules(request: web.Request) -> web.Response:
     return json_ok({"items": items, "total": total})
 
 
+_NEW_ID = re.compile(r"[0-9a-f]{8}")
+
+
 async def create_module(request: web.Request) -> web.Response:
     err = validate_body_size(request.content_length)
     if err is not None:
@@ -236,7 +240,21 @@ async def create_module(request: web.Request) -> web.Response:
             err = _validate_payload_for_type(body["type"], body["payload"])
             if err is not None:
                 return json_error(err, status=400)
-            row = ModuleRepository(conn).create(
+            repo = ModuleRepository(conn)
+            # An optional `id` (8 hex) lets the AI chat pre-assign the id of
+            # a module it proposes, so a constraint or ref proposed in the
+            # same answer can already point at it.
+            given = body.get("id")
+            if given is not None:
+                if not isinstance(given, str) or not _NEW_ID.fullmatch(given):
+                    return json_error("id must be 8 lowercase hex characters", status=400)
+                try:
+                    repo.get(given)
+                    return json_error(f"module {given} already exists", status=409)
+                except ModuleNotFound:
+                    pass
+            row = repo.create(
+                id=given,
                 type=body["type"], name=body["name"],
                 description=body.get("description", ""),
                 category_id=body.get("category_id"),
@@ -245,6 +263,10 @@ async def create_module(request: web.Request) -> web.Response:
                 is_favorite=bool(body.get("is_favorite", False)),
                 content_rating=body.get("content_rating", "safe"),
             )
+            if given is not None:
+                # Back at an id it had (Undo on the AI chat's delete card):
+                # the bundles its delete flagged find it again.
+                _unflag_orphaned_in_bundles(conn, given)
     except ValueError as e:
         return json_error(str(e), status=400)
     except sqlite3.IntegrityError as e:
@@ -496,6 +518,29 @@ def _flag_orphaned_in_bundles(conn, module_id: str) -> list[str]:
                 new_children.append(next_child)
             else:
                 new_children.append(child)
+        if rewritten:
+            bundle_repo.update(bundle["id"], children=new_children)
+            affected.append(bundle["id"])
+    return affected
+
+
+def _unflag_orphaned_in_bundles(conn: sqlite3.Connection, module_id: str) -> list[str]:
+    """Undo `_flag_orphaned_in_bundles` for a module that is back."""
+    bundle_repo = BundleRepository(conn)
+    affected: list[str] = []
+    for bundle in bundle_repo.list():
+        children = bundle.get("children") or []
+        if not isinstance(children, list):
+            continue
+        rewritten = False
+        new_children: list[dict] = []
+        for child in children:
+            meta = child.get("meta") if isinstance(child, dict) else None
+            if isinstance(meta, dict) and child.get("id") == module_id and meta.get("orphaned"):
+                meta = {k: v for k, v in meta.items() if k not in ("orphaned", "orphaned_at")}
+                child = {**child, "meta": meta}
+                rewritten = True
+            new_children.append(child)
         if rewritten:
             bundle_repo.update(bundle["id"], children=new_children)
             affected.append(bundle["id"])

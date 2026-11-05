@@ -30,6 +30,13 @@ import BundleHeader from "../context/bundles/BundleHeader.vue";
 import MockModuleCard, { type MockModule, type ModRuntimeState } from "./MockModuleCard.vue";
 import type { BundleInstance } from "../../widgets/_shared";
 import { getCollapseMode } from "../../extension/settings";
+import { COLOUR_PRESETS } from "@/kit/colour-presets";
+
+// The row and bundle frame styles (context-widget.css) ship in the
+// ContextWidget chunk, which loads only once a WP Context node exists. On an
+// empty canvas the mockup had no bundle frame or child indent. Loading that
+// chunk here injects the same sheet, once, exactly as a real node would.
+void import("../context/ContextWidget.vue");
 
 interface MockBundle {
   key: string;
@@ -71,7 +78,7 @@ const topItems: TopItem[] = [
     bundle: {
       key: "b_subject",
       name: "Subject phrase",
-      color: "#06b6d4",
+      color: COLOUR_PRESETS[2] ?? "",
       libraryDrifted: true,
     },
     children: [
@@ -449,45 +456,6 @@ function viewForBundle(key: string) {
   opacity: 0.6;
 }
 .wp-pg-mockup .wp-drag-handle:active { cursor: grabbing; }
-.wp-pg-mockup .wp-drag-handle__grip { display: block; }
-.wp-pg-mockup .wp-collapse-btn {
-  background: transparent;
-  border: none;
-  color: var(--wp-text-dim, var(--wp-text3));
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.wp-pg-mockup .wp-collapse-btn .pi { font-size: 10px; }
-.wp-pg-mockup .wp-collapse-btn:hover { color: var(--wp-text); }
-.wp-pg-mockup .wp-toggle {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.wp-pg-mockup .wp-toggle input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.wp-pg-mockup .wp-toggle-mark {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid var(--wp-border2);
-  background: var(--wp-bg2);
-}
-.wp-pg-mockup .wp-toggle input:checked + .wp-toggle-mark {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
 .wp-pg-mockup .wp-row-type-icon {
   width: 16px;
   height: 16px;
@@ -505,7 +473,7 @@ function viewForBundle(key: string) {
   text-transform: lowercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
 }
 .wp-pg-mockup .wp-kind-chip--wildcard {
@@ -575,7 +543,7 @@ function viewForBundle(key: string) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
 }
 .wp-pg-mockup .wp-mod-badge--mod {
   background: color-mix(in oklab, var(--wp-status-modified) 18%, transparent);
@@ -597,7 +565,7 @@ function viewForBundle(key: string) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: var(--wp-chip-pad);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
 }
 .wp-pg-mockup .wp-conflict-badge--info {
@@ -605,9 +573,8 @@ function viewForBundle(key: string) {
   color: var(--wp-accent);
 }
 /* Action-button cluster — mirrors ContextWidget's `.wp-mod-actions`
- * row so the trio reads with the same density as canvas. Base
- * button styling comes from row-primitives.css (`.wp-btn--icon-sm`
- * and variants), already loaded globally via ContextWidget. */
+ * row so the trio reads with the same density as canvas. The buttons
+ * are the shared WpIconButton, the same as the real rows. */
 .wp-pg-mockup .wp-mod-actions {
   display: flex;
   gap: 1px;

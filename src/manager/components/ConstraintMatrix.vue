@@ -7,13 +7,14 @@
  *     axis tags above the grid.
  *   - Uniform cells (icon + factor for boost/reduce, dot for neutral,
  *     × for exclude) — no compact / wide variants.
- *   - Click cell → CellRulePopover (teleported to body) with four state
- *     buttons, stepper factor input, reset, and outside-click / Escape
- *     to close. State picks and factor edits keep the popover open.
+ *   - Click cell → CellRulePopover in the shared Popover (anchored to
+ *     the cell) with five state buttons and a factor input; a click
+ *     outside or Escape closes it. State picks and factor edits keep the
+ *     popover open.
  *   - Collapsible MatrixLegend below the grid.
  *
- * Single popover lives in a body portal so it never picks up the cell's
- * hover / clipping context — same fix the canvas grid applies.
+ * One Popover for the grid, teleported to the body, so it never picks up
+ * the cell's hover / clipping context — same as the canvas grid.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type {
@@ -23,6 +24,7 @@ import type {
 } from "../api/types";
 import CellRulePopover from "../../components/context/editors/constraint/CellRulePopover.vue";
 import MatrixLegend from "../../components/context/editors/constraint/MatrixLegend.vue";
+import Popover from "@/kit/Popover.vue";
 import {
   groupHue as tagHue,
   groupLabel,
@@ -211,8 +213,7 @@ function cellAriaLabel(row: string, col: string): string {
 interface PopoverPos {
   row: string;
   col: string;
-  left: number;
-  top: number;
+  el: HTMLElement;
 }
 const popover = ref<PopoverPos | null>(null);
 
@@ -220,25 +221,7 @@ function isOpenAt(row: string, col: string): boolean {
   return popover.value?.row === row && popover.value?.col === col;
 }
 
-function rectForCell(row: string, col: string): { left: number; top: number } | null {
-  const sel = `[data-test="cell-${cssEscape(row)}-${cssEscape(col)}"]`;
-  const el = document.querySelector<HTMLElement>(sel);
-  if (!el) return null;
-  const r = el.getBoundingClientRect();
-  const POP_W = 260;
-  const left = Math.min(
-    window.innerWidth - POP_W - 12,
-    Math.max(12, r.left + r.width / 2 - POP_W / 2),
-  );
-  const top = r.bottom + 8;
-  return { left, top };
-}
-function cssEscape(s: string): string {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(s);
-  return s.replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`);
-}
-
-function openPopover(row: string, col: string, ev: MouseEvent): void {
+function openPopover(row: string, col: string, ev: Event): void {
   ev.stopPropagation();
   // Read-only recovery view (deleted source/target): cells are inert.
   if (props.readonly) return;
@@ -246,23 +229,11 @@ function openPopover(row: string, col: string, ev: MouseEvent): void {
     popover.value = null;
     return;
   }
-  const pos = rectForCell(row, col) ?? { left: 12, top: 12 };
-  popover.value = { row, col, left: pos.left, top: pos.top };
+  popover.value = { row, col, el: ev.currentTarget as HTMLElement };
 }
 
 function closePopover(): void {
   popover.value = null;
-}
-
-function reanchorPopover(): void {
-  const cur = popover.value;
-  if (!cur) return;
-  const pos = rectForCell(cur.row, cur.col);
-  if (!pos) {
-    closePopover();
-    return;
-  }
-  popover.value = { ...cur, left: pos.left, top: pos.top };
 }
 
 const popoverCell = computed<ConstraintCell | null>(() => {
@@ -293,34 +264,11 @@ function onPopoverFactor(value: number): void {
   writeCell(popover.value.row, popover.value.col, { mode: cur.mode, factor: value });
 }
 
-function onDocumentMousedown(ev: MouseEvent): void {
-  if (!popover.value) return;
-  const target = ev.target as HTMLElement | null;
-  if (!target) return;
-  if (target.closest(".pop")) return;             // inside the popover
-  if (target.closest(".wp-mx-cell")) return;      // a matrix cell
-  closePopover();
-}
-function onDocumentKeydown(ev: KeyboardEvent): void {
-  if (ev.key === "Escape" && popover.value) {
-    ev.preventDefault();
-    closePopover();
-  }
-}
-
 onMounted(() => {
-  window.addEventListener("mousedown", onDocumentMousedown);
-  window.addEventListener("keydown", onDocumentKeydown);
-  window.addEventListener("scroll", reanchorPopover, true);
-  window.addEventListener("resize", reanchorPopover);
   window.addEventListener("resize", measureBands);
   void nextTick(measureBands);
 });
 onBeforeUnmount(() => {
-  window.removeEventListener("mousedown", onDocumentMousedown);
-  window.removeEventListener("keydown", onDocumentKeydown);
-  window.removeEventListener("scroll", reanchorPopover, true);
-  window.removeEventListener("resize", reanchorPopover);
   window.removeEventListener("resize", measureBands);
 });
 
@@ -450,9 +398,11 @@ defineExpose({ cellAt });
                   :aria-label="cellAriaLabel(tag, c.tag)"
                   role="button"
                   tabindex="0"
+                  :aria-expanded="isOpenAt(tag, c.tag)"
+                  aria-haspopup="dialog"
                   @click="openPopover(tag, c.tag, $event)"
-                  @keydown.enter.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
-                  @keydown.space.prevent="openPopover(tag, c.tag, $event as unknown as MouseEvent)"
+                  @keydown.enter.prevent="openPopover(tag, c.tag, $event)"
+                  @keydown.space.prevent="openPopover(tag, c.tag, $event)"
                 >
                   <span class="glyph">{{ isImpliedOut(tag, c.tag) ? "×" : MODE_ICON[cellAt(tag, c.tag).mode] }}</span>
                   <span
@@ -482,22 +432,14 @@ defineExpose({ cellAt });
 
     <MatrixLegend :show-accepts="hasAcceptsAxis" />
 
-    <!-- Popover teleports to body so its hover state stays isolated
-         from the source cell + any table-level clipping. -->
-    <Teleport to="body">
-      <div
-        v-if="popover && popoverCell"
-        class="wp-mx-pop-anchor"
-        data-test="cell-rule-popover"
-        :style="{
-          position: 'fixed',
-          left: popover.left + 'px',
-          top: popover.top + 'px',
-          width: '260px',
-          zIndex: 9999,
-        }"
-        @mousedown.stop
-      >
+    <Popover
+      :open="popover !== null && popoverCell !== null"
+      :anchor="popover?.el"
+      placement="bottom"
+      :label="popover ? `Rule for ${popover.row} to ${popover.col}` : undefined"
+      @update:open="(v) => { if (!v) closePopover(); }"
+    >
+      <div v-if="popover && popoverCell" data-test="cell-rule-popover">
         <CellRulePopover
           :state="toState(popoverCell.mode)"
           :factor="popoverCell.factor"
@@ -509,7 +451,7 @@ defineExpose({ cellAt });
           @close="closePopover"
         />
       </div>
-    </Teleport>
+    </Popover>
   </section>
 </template>
 
@@ -537,7 +479,7 @@ defineExpose({ cellAt });
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .wp-mx-axis--src {
   color: var(--wp-constraint-source-text);
@@ -554,9 +496,9 @@ defineExpose({ cellAt });
 /* ── Grid frame — scrolls on BOTH axes; headers + corner freeze ── */
 .wp-mx-grid {
   display: inline-block;
-  background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
+  background: var(--wp-bg-deep, var(--wp-bg-1));
   border: 1px solid var(--wp-border);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   /* No padding on the SCROLL container: position:sticky pins headers at the
    * padding edge while overflow still renders scrolling cells INSIDE the
    * padding, so any padding leaves a bleed strip of scrolled cells on the
@@ -580,7 +522,7 @@ defineExpose({ cellAt });
 .wp-mx-grid thead th,
 .wp-mx-grid tbody th {
   position: sticky;
-  background: var(--wp-bg-deep, var(--wp-bg-1, #0e1015));
+  background: var(--wp-bg-deep, var(--wp-bg-1));
 }
 .wp-mx-grid thead th { top: 0; z-index: 2; }
 .wp-mx-grid tbody th { left: 0; z-index: 1; }
@@ -600,7 +542,7 @@ defineExpose({ cellAt });
   min-height: 36px;
   height: 100%;
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px;
   line-height: 1.3;
@@ -623,7 +565,7 @@ defineExpose({ cellAt });
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-radius: 4px 4px 0 0;
+  border-radius: min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px)) 0 0;
   color: color-mix(in srgb, var(--ax) 82%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 15%, var(--wp-bg-1));
   border-bottom: 2px solid color-mix(in srgb, var(--ax) 55%, transparent);
@@ -632,7 +574,7 @@ defineExpose({ cellAt });
    band keeps its own group hue (so it never collides with an amber group); the
    mark is a distinct glyph. Meaning lives in the tooltip + the legend row. */
 .wp-mx-axis-mark {
-  color: var(--wp-axis, #fbbf24);
+  color: var(--wp-axis);
   font-size: 9px;
   margin-left: 5px;
   vertical-align: baseline;
@@ -653,7 +595,7 @@ defineExpose({ cellAt });
   min-height: 28px;
   padding: 3px 2px;
   font: 700 10px var(--wp-font-sans, sans-serif);
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px));
   color: color-mix(in srgb, var(--ax) 72%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 9%, var(--wp-bg-1));
 }
@@ -685,11 +627,11 @@ defineExpose({ cellAt });
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px)) 0;
   color: color-mix(in srgb, var(--ax) 80%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 16%, var(--wp-bg-1));
   border-left: 3px solid var(--ax);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--wp-bg) 55%, transparent);
+  box-shadow: var(--wp-shadow-sm);
 }
 
 /* Row tag chip — one per source sub-category, left accent in the axis hue. */
@@ -702,7 +644,7 @@ defineExpose({ cellAt });
   padding: 0 10px;
   font: 700 10px var(--wp-font-sans, sans-serif);
   text-align: left;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 min(4px, var(--wp-radius-cap, 999px)) min(4px, var(--wp-radius-cap, 999px)) 0;
   color: color-mix(in srgb, var(--ax) 76%, var(--wp-text));
   background: color-mix(in srgb, var(--ax) 10%, var(--wp-bg-1));
   border-left: 2px solid color-mix(in srgb, var(--ax) 48%, transparent);
@@ -751,7 +693,7 @@ defineExpose({ cellAt });
   font-family: var(--wp-font-mono, monospace);
   font-size: 12px;
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   cursor: pointer;
   user-select: none;
   transition: transform 0.08s, box-shadow 0.1s, background 0.1s;
@@ -763,39 +705,38 @@ defineExpose({ cellAt });
               0 2px 6px color-mix(in srgb, var(--wp-text) 20%, transparent);
 }
 .wp-mx-cell.open {
-  box-shadow: 0 0 0 2px var(--wp-accent, #c4b5fd),
-              0 4px 12px color-mix(in srgb, var(--wp-text) 25%, transparent);
+  box-shadow: 0 0 0 2px var(--wp-accent), var(--wp-shadow-md);
 }
 .wp-mx-cell.s-neutral {
   background: color-mix(in srgb, var(--wp-text) 5%, transparent);
-  color: var(--wp-text-dim, var(--wp-text-muted, #595c66));
+  color: var(--wp-text-dim, var(--wp-text-muted));
   border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
 }
 .wp-mx-cell.s-exclude {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent);
+  background: color-mix(in srgb, var(--wp-danger) 22%, transparent);
   color: var(--wp-danger);
-  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-danger) 45%, transparent);
 }
 .wp-mx-cell.s-boost {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent);
+  background: color-mix(in srgb, var(--wp-success) 22%, transparent);
   color: var(--wp-success);
-  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-success) 45%, transparent);
 }
 .wp-mx-cell.s-reduce {
-  background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent);
+  background: color-mix(in srgb, var(--wp-warn) 22%, transparent);
   color: var(--wp-warn);
-  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-warn) 45%, transparent);
 }
 .wp-mx-cell.s-only {
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent);
-  color: var(--wp-info, #3b82f6);
-  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 45%, transparent);
+  background: color-mix(in srgb, var(--wp-info) 22%, transparent);
+  color: var(--wp-info);
+  border: 1px solid color-mix(in srgb, var(--wp-info) 45%, transparent);
 }
 /* A neutral cell in a row that has an Only rule: shut out at runtime. Faint
  * danger hue + dashed border so it reads as "implied", not authored. */
 .wp-mx-cell.s-neutral.implied-out {
-  color: color-mix(in srgb, var(--wp-danger, #ef4444) 60%, var(--wp-text-dim, #595c66));
-  border-color: color-mix(in srgb, var(--wp-danger, #ef4444) 30%, transparent);
+  color: color-mix(in srgb, var(--wp-danger) 60%, var(--wp-text-dim));
+  border-color: color-mix(in srgb, var(--wp-danger) 30%, transparent);
 }
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
@@ -816,24 +757,24 @@ defineExpose({ cellAt });
   box-shadow: none;
 }
 .wp-mx--readonly .wp-mx-cell.s-boost {
-  background: color-mix(in srgb, var(--wp-success, #22c55e) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-success, #22c55e) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-success) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-success) 70%, var(--wp-text-dim));
 }
 .wp-mx--readonly .wp-mx-cell.s-reduce {
-  background: color-mix(in srgb, var(--wp-warn, #f97316) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-warn, #f97316) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-warn) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-warn) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-warn) 70%, var(--wp-text-dim));
 }
 .wp-mx--readonly .wp-mx-cell.s-exclude {
-  background: color-mix(in srgb, var(--wp-danger, #ef4444) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-danger, #ef4444) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-danger) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-danger) 70%, var(--wp-text-dim));
 }
 .wp-mx--readonly .wp-mx-cell.s-only {
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 18%, transparent);
-  color: color-mix(in srgb, var(--wp-info, #3b82f6) 70%, var(--wp-text-dim));
+  background: color-mix(in srgb, var(--wp-info) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-info) 18%, transparent);
+  color: color-mix(in srgb, var(--wp-info) 70%, var(--wp-text-dim));
 }
 .wp-mx-readonly-hint {
   margin: 8px 0 0;

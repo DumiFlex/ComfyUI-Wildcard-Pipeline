@@ -23,7 +23,9 @@ vi.mock("../api/client", () => {
         build: vi.fn(),
         commit: vi.fn(),
         undo: vi.fn(),
+        wildcardFolders: vi.fn().mockResolvedValue({ folders: [] }),
       },
+      ai: { config: vi.fn().mockRejectedValue(new Error("off")) },
     },
     ApiError,
   };
@@ -34,8 +36,11 @@ import ImportExport from "../views/ImportExport.vue";
 import ConflictModal from "../import-export/ConflictModal.vue";
 import ImportPicker from "../import-export/ImportPicker.vue";
 import { useResolveWarnings } from "../composables/useResolveWarnings";
-import { useToast } from "../composables/useToast";
-import type { ModuleRow } from "../api/types";
+import { useToast } from "@/kit/useToast";
+import type { AiConfig, ModuleRow } from "../api/types";
+import PackConverter from "../import-export/PackConverter.vue";
+import { _resetAiConfigForTests } from "../composables/useAiConfig";
+import { _resetAiChatForTests, useAiChat } from "../composables/useAiChat";
 import type { CommitPayload, CommitOk } from "../import-export/commit";
 import type { PerItemIssue } from "../import-export/conflict-types";
 
@@ -99,6 +104,8 @@ function mkWildcardEntity(id: string, options: Array<{ value: string; weight?: n
     tags: [],
     payload_hash: "0".repeat(64),
     options,
+    // parsePayload shape-checks the nested payload, as the server does.
+    payload: { options: options.map((o, i) => ({ id: `opt${i}`, weight: 1, ...o })) },
   };
 }
 
@@ -903,5 +910,31 @@ describe("ImportExport.vue — commit orchestrator", () => {
     const conPayload = conAdd!.entity.payload as { source_wildcard_id?: string };
     expect(conPayload.source_wildcard_id).toBe(newWildcardId);
     wrap.unmount();
+  });
+
+  it("offers the assistant after a wildcard pack import", async () => {
+    _resetAiConfigForTests();
+    _resetAiChatForTests();
+    (api as unknown as { ai: { config: ReturnType<typeof vi.fn> } }).ai.config
+      .mockResolvedValueOnce({ enabled: true, model: "m" } as unknown as AiConfig);
+    apiM.importExport.commit.mockResolvedValue({ ok: true, undo_entry_id: "u" } satisfies CommitOk);
+    const wrap = mountView();
+    await flushPromises();
+    await wrap.find('[data-test="io-tab-packs"]').trigger("click");
+    await flushPromises();
+    wrap.findComponent(PackConverter).vm.$emit(
+      "payload-ready", mkPayload({ wildcards: [mkWildcardEntity("11111111")] }), 0, []);
+    await flushPromises();
+    await wrap.find('[data-test="import-picker-continue"]').trigger("click");
+    await flushPromises();
+    expect(apiM.importExport.commit).toHaveBeenCalledTimes(1);
+    const offer = wrap.get('[data-test="io-ai-upgrade"]');
+    expect(offer.text()).toContain("Imported 1 wildcard.");
+    await wrap.get('[data-test="io-ai-upgrade-go"]').trigger("click");
+    const chat = useAiChat();
+    expect(chat.open.value).toBe(true);
+    expect(chat.queued.value).toContain('"wc_11111111"');
+    expect(wrap.find('[data-test="io-ai-upgrade"]').exists()).toBe(false);
+    _resetAiConfigForTests();
   });
 });

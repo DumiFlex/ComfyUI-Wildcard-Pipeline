@@ -16,13 +16,14 @@
  */
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import Button from "../components/ui/Button.vue";
-import { useToast } from "../composables/useToast";
+import Button from "@/kit/Button.vue";
+import Skeleton from "@/kit/Skeleton.vue";
+import { useToast } from "@/kit/useToast";
 import { api, ApiError, type ExportBuildRequest } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType, TemplateRow } from "../api/types";
 import PickerSection from "./PickerSection.vue";
 import PickerRow from "./PickerRow.vue";
-import PickerSearch from "./PickerSearch.vue";
+import SearchInput from "@/kit/SearchInput.vue";
 import { bundleSubtitle, moduleSubtitle, templateSubtitle } from "./picker-subtitle";
 import { kindIcon } from "../../components/shared/kind-icons";
 import type { DepRef } from "./PickerRow.vue";
@@ -124,12 +125,16 @@ async function loadLibrary() {
 
 onMounted(loadLibrary);
 
+/** First load only: a refetch keeps the sections it has. */
+const libraryLoading = computed<boolean>(() =>
+  loading.value && !modules.value.length && !bundles.value.length && !templates.value.length);
+
 // Let the parent ImportExport view re-run our library fetch from its
 // shared Refresh button. ExportTab keeps its OWN modules/bundles/
 // categories/templates refs (the export listing renders from them), so
 // the parent's loadLibrary — which only refills the import-side refs —
 // can't refresh this tab. Exposing loadLibrary lets Refresh reload both.
-defineExpose({ loadLibrary });
+defineExpose({ loadLibrary, noteSummary });
 
 // ---------- Selection state ----------
 
@@ -416,6 +421,19 @@ const allSelectedIds = computed<Set<string>>(() => {
   }
   return s;
 });
+
+/** What the picker holds, for the AI chat's page note (the parent view
+ *  registers the note): the count and the first few picked items. */
+function noteSummary(): string {
+  const picked = [...allSelectedIds.value].slice(0, 20).map((id) => {
+    const row = libraryRowById.value.get(id);
+    return row ? `${row.name} (${row.type}, ${id})` : id;
+  });
+  const bits = [`${totalSelected.value} of ${totalRowsCount.value} items picked for export`];
+  if (rowQuery.value.trim()) bits.push(`filter "${rowQuery.value.trim()}"`);
+  if (picked.length) bits.push(`picked: ${picked.join(", ")}${totalSelected.value > picked.length ? ", …" : ""}`);
+  return bits.join("; ");
+}
 
 /**
  * Outgoing refs from `id` that aren't currently selected. Only surfaced
@@ -740,41 +758,54 @@ function presetFavoritesOnly(): void {
       aria-label="Quick selection presets"
     >
       <span class="wp-export-presets__label">Quick select</span>
-      <button
-        class="wp-preset-btn"
+      <Button
+        size="sm"
+        icon="pi-database"
         data-test="preset-full"
-        type="button"
         @click="presetFullLibrary"
-      ><i class="pi pi-database" /> Full library</button>
-      <button
-        class="wp-preset-btn"
+      >Full library</Button>
+      <Button
+        size="sm"
+        icon="pi-star-fill"
         data-test="preset-favorites"
-        type="button"
         @click="presetFavoritesOnly"
-      ><i class="pi pi-star-fill" /> Favorites</button>
+      >Favorites</Button>
       <span class="wp-export-presets__sep" aria-hidden="true"></span>
       <!-- Per-kind presets: clear everything, select only this kind. Disabled
            when the library has none of that kind. -->
       <!-- Kind presets carry their canonical kind glyph, matching Full library
            and Favorites (which already had icons) and the section headers. -->
-      <button
+      <Button
         v-for="b in BUCKETS"
         :key="b.key"
-        class="wp-preset-btn"
+        size="sm"
+        :icon="kindIcon(b.key).replace(/^pi /, '')"
         :data-test="`preset-kind-${b.key}`"
-        type="button"
         :disabled="idsForBucket(b.key).length === 0"
         @click="presetKindOnly(b.key)"
-      ><i :class="kindIcon(b.key)" aria-hidden="true" /> {{ b.title }}</button>
+      >{{ b.title }}</Button>
     </div>
 
-    <PickerSearch
+    <SearchInput
       v-model="rowQuery"
+      class="wp-export-tab__search"
+      placeholder="Search by name, $variable or id…"
       aria-label="Search library entities"
       data-test="export-tab-search"
     />
 
-    <div class="wp-export-tab__sections">
+    <!-- The library is still loading: the section heads' shape, not seven
+         heads that all say 0. -->
+    <div v-if="libraryLoading" class="wp-export-tab__sections" data-test="export-tab-skeleton">
+      <Skeleton
+        v-for="(b, i) in BUCKETS"
+        :key="b.key"
+        shape="block"
+        height="40px"
+        :label="i === 0 ? 'Loading library' : undefined"
+      />
+    </div>
+    <div v-else class="wp-export-tab__sections">
       <PickerSection
         v-for="bucket in BUCKETS"
         :key="bucket.key"
@@ -905,8 +936,7 @@ function presetFavoritesOnly(): void {
   text-transform: uppercase;
   font-weight: 600;
 }
-/* `.wp-preset-btn` itself is a shared atom in tokens.css — used by the
- * export presets bar AND the import picker's mirror. */
+/* The presets are kit Buttons (small, secondary), as on the import picker. */
 
 .wp-export-tab__sections {
   display: flex;
@@ -914,7 +944,7 @@ function presetFavoritesOnly(): void {
   gap: 6px;
 }
 
-/* Cross-bucket search box now lives in PickerSearch.vue (shared with Import). */
+/* The cross-bucket search box is the shared SearchInput (also on Import). */
 
 .wp-export-tab__empty {
   font-size: var(--wp-text-sm);
@@ -944,4 +974,5 @@ function presetFavoritesOnly(): void {
   color: var(--wp-text);
   font-weight: 600;
 }
+.wp-export-tab__search { margin-bottom: 6px; }
 </style>

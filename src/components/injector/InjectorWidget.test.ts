@@ -595,7 +595,7 @@ describe("InjectorWidget — template-row cap (max 5)", () => {
     });
     const btn = w.find<HTMLButtonElement>('[data-test="inj-add-general"]');
     expect(btn.element.disabled).toBe(true);
-    expect(btn.attributes("title")).toContain("Maximum 5 template rows");
+    expect(btn.text()).toContain("Template rows full (5 max)");
   });
 
   it("'Add template row' button is enabled when below the cap", async () => {
@@ -647,7 +647,7 @@ describe("InjectorWidget — collapse-connections button", () => {
     expect(btn.exists()).toBe(true);
     expect(btn.find(".pi-arrows-v").exists()).toBe(true);
     expect(btn.text()).toBe("merge wires");
-    expect(btn.classes()).not.toContain("is-active");
+    expect(btn.attributes("aria-pressed")).toBe("false");
   });
 
   it("flips icon + label + active class when connectionsCollapsed is true", () => {
@@ -657,7 +657,7 @@ describe("InjectorWidget — collapse-connections button", () => {
     const btn = w.find('[data-test="inj-toolbar-collapse-conns"]');
     expect(btn.find(".pi-arrows-alt").exists()).toBe(true);
     expect(btn.text()).toBe("expand wires");
-    expect(btn.classes()).toContain("is-active");
+    expect(btn.attributes("aria-pressed")).toBe("true");
   });
 
   it("emits toggle-connections-collapse on click", async () => {

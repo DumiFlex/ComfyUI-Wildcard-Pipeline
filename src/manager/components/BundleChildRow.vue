@@ -9,6 +9,8 @@
  * state lives here.
  */
 import { computed } from "vue";
+import DragHandle from "@/kit/DragHandle.vue";
+import Button from "@/kit/Button.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
 
 interface Props {
@@ -43,12 +45,12 @@ interface KindMeta {
  *  `kindIcon()` map so every surface (Context widget, picker, assembler,
  *  bundle editor) renders the same glyph for a given kind. */
 const KIND_META: Record<string, KindMeta> = {
-  wildcard:     { label: "Wildcard",   color: "var(--wp-kind-wildcard, #34d399)" },
-  fixed_values: { label: "Fixed",      color: "var(--wp-kind-fixed, #22d3ee)" },
-  combine:      { label: "Combine",    color: "var(--wp-kind-combine, #fbbf24)" },
-  derivation:   { label: "Derivation", color: "var(--wp-kind-derivation, #a78bfa)" },
-  constraint:   { label: "Constraint", color: "var(--wp-kind-constraint, #f87171)" },
-  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default, #6366f1)" },
+  wildcard:     { label: "Wildcard",   color: "var(--wp-kind-wildcard)" },
+  fixed_values: { label: "Fixed",      color: "var(--wp-kind-fixed)" },
+  combine:      { label: "Combine",    color: "var(--wp-kind-combine)" },
+  derivation:   { label: "Derivation", color: "var(--wp-kind-derivation)" },
+  constraint:   { label: "Constraint", color: "var(--wp-kind-constraint)" },
+  bundle:       { label: "Bundle",     color: "var(--wp-bundle-default)" },
 };
 
 const kind = computed(() => String(props.child.type ?? "module"));
@@ -60,7 +62,7 @@ const isBundleRef = computed(() => kind.value === "bundle");
  *  reference before it surprises them at insert time. */
 const isMissingRef = computed(() => isBundleRef.value && props.child._missing_ref === true);
 const meta = computed<KindMeta>(
-  () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), color: "#8b949e" },
+  () => KIND_META[kind.value] ?? { label: kind.value.toUpperCase(), color: "var(--wp-text-dim)" },
 );
 // Tier-2 nesting: bundle children are stored as REFERENCES (the API
 // expands them inline on read), not as frozen snapshots like other
@@ -105,7 +107,7 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
     :data-missing="isMissingRef ? 'true' : null"
     :data-test="`bundle-child-${idx}`"
     :title="isMissingRef ? `Referenced bundle ${child.id} no longer exists — remove or pick a replacement` : undefined"
-    :style="{ '--row-kind': isMissingRef ? 'var(--wp-danger, #ef4444)' : rowTint }"
+    :style="{ '--row-kind': isMissingRef ? 'var(--wp-danger)' : rowTint }"
     draggable="true"
     @dragstart="(e) => emit('drag-start', e)"
     @dragover="(e) => emit('drag-over', e)"
@@ -113,27 +115,21 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
     @drop="(e) => emit('drop', e)"
     @dragend="emit('drag-end')"
   >
-    <button
-      type="button"
-      class="wp-bchild__handle"
-      :aria-label="`Drag to reorder ${displayName}`"
-      :title="`Drag to reorder ${displayName}`"
-      :data-test="`bundle-child-handle-${idx}`"
-    >
-      <i class="pi pi-bars" aria-hidden="true" />
-    </button>
+    <!-- The row is the drag source; the grip only shows where to grab. -->
+    <span class="wp-bchild__handle" :data-test="`bundle-child-handle-${idx}`">
+      <DragHandle size="md" :title="`Drag to reorder ${displayName}`" />
+    </span>
 
-    <button
-      type="button"
-      class="wp-bchild__toggle"
+    <Button
+      variant="ghost"
+      size="sm"
+      class="wp-bchild__btn"
+      :icon="enabled ? 'pi-eye' : 'pi-eye-slash'"
       :aria-label="enabled ? `Disable ${displayName}` : `Enable ${displayName}`"
       :title="enabled ? `Disable ${displayName}` : `Enable ${displayName}`"
-      :aria-pressed="enabled"
       data-test="bundle-child-toggle"
       @click="emit('toggle')"
-    >
-      <i :class="enabled ? 'pi pi-eye' : 'pi pi-eye-slash'" />
-    </button>
+    />
 
     <div
       class="wp-bchild__kindicon"
@@ -161,26 +157,8 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
     </div>
 
     <div class="wp-bchild__acts">
-      <button
-        type="button"
-        class="wp-bchild__act"
-        aria-label="Duplicate child"
-        title="Duplicate"
-        data-test="bundle-child-duplicate"
-        @click="emit('duplicate')"
-      >
-        <i class="pi pi-clone" />
-      </button>
-      <button
-        type="button"
-        class="wp-bchild__act wp-bchild__act--danger"
-        aria-label="Remove child"
-        title="Remove"
-        data-test="bundle-child-remove"
-        @click="emit('remove')"
-      >
-        <i class="pi pi-times" />
-      </button>
+      <Button variant="ghost" size="sm" class="wp-bchild__btn" icon="pi-clone" aria-label="Duplicate child" title="Duplicate" data-test="bundle-child-duplicate" @click="emit('duplicate')" />
+      <Button variant="ghost" size="sm" class="wp-bchild__btn wp-bchild__btn--danger" icon="pi-times" aria-label="Remove child" title="Remove" data-test="bundle-child-remove" @click="emit('remove')" />
     </div>
   </div>
 </template>
@@ -207,10 +185,10 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
  * "red-tinted bundle". The badge picks up the same danger tint via the
  * --row-kind cascade through `.wp-bchild__frozen[data-edited]`. */
 .wp-bchild[data-missing="true"] {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 8%, var(--wp-bg-2));
+  background: color-mix(in oklab, var(--wp-danger) 8%, var(--wp-bg-2));
 }
 .wp-bchild[data-missing="true"]:hover {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 14%, var(--wp-bg-2));
+  background: color-mix(in oklab, var(--wp-danger) 14%, var(--wp-bg-2));
 }
 .wp-bchild[data-selected="true"] {
   background: color-mix(in oklab, var(--row-kind) 12%, var(--wp-bg-2));
@@ -218,29 +196,10 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
 }
 .wp-bchild:hover { background: var(--wp-bg-3); }
 
-.wp-bchild__handle, .wp-bchild__toggle, .wp-bchild__act {
-  display: flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--wp-radius-sm);
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  padding: 0;
-  font-size: var(--wp-text-xs);
-}
-.wp-bchild__handle { cursor: grab; }
+.wp-bchild__handle { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; color: var(--wp-text-dim); cursor: grab; }
 .wp-bchild__handle:active { cursor: grabbing; }
-.wp-bchild__toggle:hover, .wp-bchild__act:hover {
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  border-color: var(--wp-border);
-}
-.wp-bchild__act--danger:hover {
-  background: color-mix(in oklab, var(--wp-danger, #ef4444) 16%, transparent);
-  color: var(--wp-danger-text);
-  border-color: color-mix(in oklab, var(--wp-danger, #ef4444) 30%, transparent);
-}
+.wp-bchild__btn { color: var(--wp-text-dim); }
+.wp-bchild__btn--danger:hover { color: var(--wp-danger-text, var(--wp-danger)); }
 
 .wp-bchild__kindicon {
   width: 28px; height: 22px;
@@ -283,7 +242,7 @@ const badgeAccent = computed(() => isBundleRef.value || props.edited);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 1px var(--wp-space-3);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: var(--wp-bg);
   border: 1px solid var(--wp-border);
   color: var(--wp-text-dim);

@@ -94,6 +94,14 @@ describe("CleanerWidget", () => {
     expect(w.find('[data-test="cleaner-blocklist-btn"]').text()).toContain("3");
   });
 
+  it("a wired blocklist input turns the rule on and shows on the button", () => {
+    const w = mount(CleanerWidget, { props: { ...makeProps(), blocklistWired: true } });
+    expect(w.find('[data-test="cleaner-blocklist-btn"]').text()).toContain("0 entries + input");
+    expect(w.find('[data-test="cleaner-rule-blocklist"]').classes()).toContain("is-on");
+    const off = mount(CleanerWidget, { props: makeProps() });
+    expect(off.find('[data-test="cleaner-rule-blocklist"]').classes()).not.toContain("is-on");
+  });
+
   it("clicking blocklist button emits open-blocklist", async () => {
     const w = mount(CleanerWidget, { props: makeProps() });
     await w.find('[data-test="cleaner-blocklist-btn"]').trigger("click");

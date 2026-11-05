@@ -17,19 +17,20 @@ function makeRow(over: Partial<RowType> = {}): RowType {
 describe("InjectorRow — binding + type chip", () => {
   it("renders the binding input with the row's binding value", () => {
     const w = mount(InjectorRow, { props: { row: makeRow() } });
-    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"] input');
     expect(input.element.value).toBe("seed_phrase");
   });
 
-  it("shows warn-color placeholder + wrap class when binding is empty", () => {
-    // C.1a: empty state moved from the <input> class to the .wp-vbind-wrap
-    // parent so the border + prefix + placeholder all react. Placeholder
-    // text changed to $variable_name semantics (user types it, system
-    // doesn't generate it).
+  it("tones the binding field warn when the binding is empty", () => {
+    // The empty state sits on the prefixed field's group (kit `tone="warn"`)
+    // so its border and `$` prefix both react. Placeholder text keeps the
+    // $variable_name semantics (user types it, system doesn't generate it).
     const w = mount(InjectorRow, { props: { row: makeRow({ binding: "" }) } });
-    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"] input');
     expect(input.attributes("placeholder")).toBe("variable_name");
-    expect(w.find(".wp-vbind-wrap--empty").exists()).toBe(true);
+    expect(w.find('[data-test="inj-row-binding"]').attributes("data-tone")).toBe("warn");
+    const bound = mount(InjectorRow, { props: { row: makeRow() } });
+    expect(bound.find('[data-test="inj-row-binding"]').attributes("data-tone")).toBeUndefined();
   });
 
   it("shows the type chip from the valueType prop (lowercase)", () => {
@@ -40,7 +41,7 @@ describe("InjectorRow — binding + type chip", () => {
 
   it("emits update with new binding when the input changes", async () => {
     const w = mount(InjectorRow, { props: { row: makeRow() } });
-    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"]');
+    const input = w.find<HTMLInputElement>('[data-test="inj-row-binding"] input');
     await input.setValue("renamed");
     const updates = w.emitted("update")!;
     const last = updates[updates.length - 1][0] as Partial<RowType>;
@@ -51,31 +52,31 @@ describe("InjectorRow — binding + type chip", () => {
 describe("InjectorRow — enabled checkbox", () => {
   it("renders checked when row.enabled is true", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ enabled: true }) } });
-    expect(w.find<HTMLInputElement>('[data-test="inj-row-enabled"]').element.checked).toBe(true);
+    expect(w.get('[data-test="inj-row-enabled"]').attributes("aria-checked")).toBe("true");
   });
 
   it("renders unchecked when row.enabled is false", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ enabled: false }) } });
-    expect(w.find<HTMLInputElement>('[data-test="inj-row-enabled"]').element.checked).toBe(false);
+    expect(w.get('[data-test="inj-row-enabled"]').attributes("aria-checked")).toBe("false");
   });
 
-  it("emits update with toggled enabled flag on change", async () => {
+  it("emits update with toggled enabled flag on click", async () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ enabled: true }) } });
-    await w.find<HTMLInputElement>('[data-test="inj-row-enabled"]').setValue(false);
+    await w.get('[data-test="inj-row-enabled"]').trigger("click");
     const last = w.emitted("update")![0][0] as Partial<RowType>;
     expect(last.enabled).toBe(false);
   });
 });
 
 describe("InjectorRow — internal flag", () => {
-  it("internal-flag button inactive class when row.internal is false", () => {
+  it("internal-flag button is not pressed when row.internal is false", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ internal: false }) } });
-    expect(w.find('[data-test="inj-row-internal"]').classes()).not.toContain("is-active");
+    expect(w.find('[data-test="inj-row-internal"]').attributes("aria-pressed")).toBe("false");
   });
 
-  it("internal-flag button active class when row.internal is true", () => {
+  it("internal-flag button is pressed when row.internal is true", () => {
     const w = mount(InjectorRow, { props: { row: makeRow({ internal: true }) } });
-    expect(w.find('[data-test="inj-row-internal"]').classes()).toContain("is-active");
+    expect(w.find('[data-test="inj-row-internal"]').attributes("aria-pressed")).toBe("true");
   });
 
   it("clicking internal-flag emits update with toggled internal", async () => {
@@ -333,7 +334,7 @@ describe("InjectorRow — general (template) row", () => {
 
   it("renders the binding input inline (template moved to the edit modal)", () => {
     const w = mount(InjectorRow, { props: { row: generalRow() } });
-    expect(w.find<HTMLInputElement>('[data-test="inj-row-binding"]').element.value).toBe("combo");
+    expect(w.find<HTMLInputElement>('[data-test="inj-row-binding"] input').element.value).toBe("combo");
   });
 
   it("no longer renders an inline template editor — that lives in the modal", () => {
@@ -351,7 +352,7 @@ describe("InjectorRow — general (template) row", () => {
 
   it("trash button reads as Delete (not Disconnect) for a general row", () => {
     const w = mount(InjectorRow, { props: { row: generalRow() } });
-    expect(w.find('[data-test="inj-row-remove"]').attributes("title")).toBe(
+    expect(w.find('[data-test="inj-row-remove"]').attributes("aria-label")).toBe(
       "Delete this template row",
     );
   });

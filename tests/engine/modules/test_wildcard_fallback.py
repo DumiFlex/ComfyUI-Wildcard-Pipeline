@@ -164,6 +164,22 @@ def test_multi_pick_uses_the_fallback_once():
     assert str(out["shoes"]) == "shoes"
 
 
+def test_multi_pick_with_only_the_null_live_uses_the_fallback():
+    # The null option is never in a multi-pick pool, so a live null does not
+    # keep the pick alive: the fallback stands in, once.
+    payload = {"var_binding": "shoes", "options": [
+        {"id": "t1", "value": "sneakers", "weight": 0},
+        {"id": "fb", "value": "shoes", "weight": 0, "fallback": True},
+        {"id": "none", "value": "", "is_null": True, "weight": 1},
+    ]}
+    ctx = _ctx()
+    out = WildcardHandler.resolve(
+        payload, {"variable_binding": "shoes", "pick_min": 2, "pick_max": 2}, ctx,
+    )
+    assert out["shoes"].items == ["shoes"]
+    assert [w["type"] for w in ctx["__wp_warnings__"]] == ["fallback_used"]
+
+
 def test_independent_multi_pick_does_not_repeat_the_fallback():
     out = PipelineEngine().run(
         _chain(_shoes(), target_instance={
@@ -226,6 +242,20 @@ def test_nested_multi_pick_uses_the_fallback_once():
     ctx = _nested_ctx()
     rctx = build_resolve_ctx(ctx, surface="wildcard")
     assert resolve_text(f"{{2$$, $$@{{{_TGT}}}}}", rctx) == "plain"
+
+
+def test_nested_multi_pick_keeps_excluded_options_out():
+    # Only "blue" is excluded: a multi-pick used to read its weight 0 as 1.
+    for seed in range(50):
+        ctx = _nested_ctx(fallback=False)
+        ctx["__wp_rng__"] = random.Random(seed)
+        ctx["__wp_catalog__"][_TGT]["options"].append(
+            {"id": "ok", "value": "green", "weight": 1, "sub_categories": ["good"]})
+        ctx["__wp_catalog__"][_TGT]["options"].append(
+            {"id": "ok2", "value": "white", "weight": 1, "sub_categories": ["good"]})
+        rctx = build_resolve_ctx(ctx, surface="wildcard")
+        out = resolve_text(f"{{2$$, $$@{{{_TGT}}}}}", rctx)
+        assert set(out.split(", ")) == {"green", "white"}, out
 
 
 @pytest.mark.parametrize("bad, msg", [

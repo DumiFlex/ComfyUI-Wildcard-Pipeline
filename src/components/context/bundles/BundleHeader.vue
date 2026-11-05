@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
+import Checkbox from "@/kit/Checkbox.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import DragHandle from "@/kit/DragHandle.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -54,8 +57,15 @@ const props = withDefaults(
      *  Surfaces a MISSING badge so the user knows "Save changes to
      *  library" will need to fork a new entry. */
     libraryMissing?: boolean;
+    /** True when the bundle came with an example workflow (`example: true`).
+     *  While it is library-missing it shows a neutral EXAMPLE chip in place
+     *  of MISSING: nothing is wrong, Save to library keeps it. */
+    example?: boolean;
+    /** A sub-bundle. An example sub-bundle shows no chip: its top bundle's
+     *  chip already says the whole group came with the workflow. */
+    nested?: boolean;
   }>(),
-  { color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
+  { example: false, nested: false, color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
 );
 
 const emit = defineEmits<{
@@ -82,6 +92,9 @@ const frameColor = computed(() =>
 const missingTitle =
   "No live library entry for this bundle under its recorded id. "
   + "Right-click → Push to library: re-link it to a matching entry, or save it as a new one.";
+
+const exampleTitle =
+  "From an example workflow, not in your library. Right-click → Push to library to keep it, with its rows.";
 
 const summary = computed(() => {
   const word = props.childCount === 1 ? "mod" : "mods";
@@ -115,51 +128,33 @@ const summary = computed(() => {
     @contextmenu.stop.prevent="(ev) => emit('contextmenu', ev)"
   >
     <!-- Drag handle — uses the shared `.wp-drag-handle` class from
-         row-primitives.css, same 6×12 SVG grip ModuleRow + InjectorRow
-         render. Per-state hover/active behavior comes from shared CSS;
+         row-primitives.css around the kit's DragHandle grip, as ModuleRow
+         + InjectorRow do. Per-state hover/active behavior comes from shared CSS;
          bundle-specific opacity-fade-on-header-hover stays in scoped. -->
-    <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder bundle">
-      <svg
-        class="wp-drag-handle__grip"
-        viewBox="0 0 6 12"
-        width="6"
-        height="12"
-        fill="currentColor"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <circle cx="1.5" cy="2" r="1" />
-        <circle cx="4.5" cy="2" r="1" />
-        <circle cx="1.5" cy="6" r="1" />
-        <circle cx="4.5" cy="6" r="1" />
-        <circle cx="1.5" cy="10" r="1" />
-        <circle cx="4.5" cy="10" r="1" />
-      </svg>
+    <span class="wp-drag-handle" aria-hidden="true">
+      <DragHandle title="Drag to reorder bundle" />
     </span>
-    <button
-      type="button"
+    <!-- Caret stays pi-caret-down — parent .wp-bundle--collapsed
+         rotates -90deg via CSS for the transition (Phase B.1). -->
+    <WpIconButton
+      variant="bare"
+      icon="pi-caret-down"
       class="wp-bundle-collapse"
       draggable="false"
-      :aria-label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
-      :title="instance.collapsed ? 'Expand' : 'Collapse'"
+      :label="instance.collapsed ? 'Expand bundle' : 'Collapse bundle'"
+      :hint="instance.collapsed ? 'Expand' : 'Collapse'"
       @click.stop="emit('toggle-collapse')"
-    >
-      <!-- Caret stays pi-caret-down — parent .wp-bundle--collapsed
-           rotates -90deg via CSS for the transition (Phase B.1). -->
-      <i
-        class="pi pi-caret-down"
-        aria-hidden="true"
-      ></i>
-    </button>
-    <label class="wp-bundle-enabled" draggable="false" :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'">
-      <input
-        type="checkbox"
-        :checked="instance.enabled"
-        :aria-label="`enable bundle ${name}`"
-        @change="(ev) => emit('toggle-enabled', (ev.target as HTMLInputElement).checked)"
-      />
-      <span class="wp-bundle-enabled-mark"></span>
-    </label>
+    />
+    <Checkbox
+      class="wp-bundle-enabled"
+      size="sm"
+      draggable="false"
+      data-test="bundle-enabled"
+      :title="instance.enabled ? 'Disable bundle (cascades to children)' : 'Enable bundle'"
+      :model-value="instance.enabled"
+      :aria-label="`enable bundle ${name}`"
+      @update:model-value="(next) => emit('toggle-enabled', next)"
+    />
     <span class="wp-row-type-icon wp-bundle-icon" aria-hidden="true">
       <i class="pi pi-box"></i>
     </span>
@@ -182,7 +177,9 @@ const summary = computed(() => {
            was deleted, re-imported under a new id, or arrived in a shared
            workflow — and Push to library now offers Re-link for the last two,
            which "deleted" steered users away from. -->
-      <template v-if="libraryMissing">
+      <span v-if="libraryMissing && example && !nested" class="wp-mod-badge wp-mod-badge--example"
+        data-test="bundle-example" :title="exampleTitle">example</span>
+      <template v-else-if="libraryMissing && !example">
         <span class="wp-mod-dot wp-mod-dot--missing"
           :title="missingTitle"
           aria-hidden="true"></span>
@@ -224,48 +221,45 @@ const summary = computed(() => {
          (1px), breaking the "bundle = row at larger scope" mental
          model. -->
     <div class="wp-mod-actions" draggable="false">
-      <button
-        v-if="lockState !== null"
-        type="button"
-        class="wp-btn--icon-sm wp-btn--warn wp-bundle-action"
-        :class="{
-          'is-locked': lockState === 'all',
-          'is-partial': lockState === 'partial',
-        }"
+      <WpIconButton v-if="lockState !== null"
+       
+        icon="pi-lock"
+        tone="warn"
+        class="wp-bundle-action"
+        :pressed="lockState === 'all' ? true : lockState === 'partial' ? 'mixed' : false"
         draggable="false"
-        :title="lockState === 'all'
+        :label="`toggle seed lock on all lockable children of ${name}`"
+        :hint="lockState === 'all'
           ? 'Unlock seeds on all lockable children'
           : lockState === 'partial'
             ? 'Lock seeds on all lockable children (some are already locked)'
             : 'Lock seeds on all lockable children — freezes each at its current roll'"
-        :aria-label="`toggle seed lock on all lockable children of ${name}`"
         @click.stop="emit('toggle-lock')"
-      ><i class="pi pi-lock" aria-hidden="true" /></button>
-      <button
-        v-if="internalState !== null"
-        type="button"
-        class="wp-btn--icon-sm wp-btn--accent wp-bundle-action"
-        :class="{
-          'is-active': internalState === 'all',
-          'is-partial': internalState === 'partial',
-        }"
+      />
+      <WpIconButton v-if="internalState !== null"
+       
+        icon="pi-globe"
+        tone="accent"
+        class="wp-bundle-action"
+        :pressed="internalState === 'all' ? true : internalState === 'partial' ? 'mixed' : false"
         draggable="false"
-        :title="internalState === 'all'
+        :label="`toggle internal on all children of ${name}`"
+        :hint="internalState === 'all'
           ? 'Clear internal on all children'
           : internalState === 'partial'
             ? 'Mark all children internal (some are already)'
             : 'Mark all children internal — hides them from PromptAssembler'"
-        :aria-label="`toggle internal on all children of ${name}`"
         @click.stop="emit('toggle-internal')"
-      ><i class="pi pi-globe" aria-hidden="true" /></button>
-      <button
-        type="button"
-        class="wp-btn--icon-sm wp-btn--danger wp-bundle-action"
+      />
+      <WpIconButton
+        icon="pi-trash"
+        tone="danger"
+        class="wp-bundle-action"
         draggable="false"
-        title="Remove bundle (right-click for more)"
-        :aria-label="`remove bundle ${name}`"
+        :label="`remove bundle ${name}`"
+        hint="Remove bundle (right-click for more)"
         @click.stop="emit('remove')"
-      ><i class="pi pi-trash" aria-hidden="true" /></button>
+      />
     </div>
   </div>
 </template>
@@ -277,7 +271,6 @@ const summary = computed(() => {
  * unscoped means the PlaygroundMockup (settings preview) can render
  * a real-looking bundle header without us replicating the rules in
  * another file. */
-@import "../../shared/theme.css";
 @import "../../shared/row-primitives.css";
 
 .wp-bundle-header {
@@ -318,7 +311,7 @@ const summary = computed(() => {
   );
 }
 /* Drag handle base styles come from shared row-primitives.css
- * (`.wp-drag-handle` + `.wp-drag-handle__grip`). Bundle-specific
+ * (`.wp-drag-handle` around the kit DragHandle). Bundle-specific
  * tweak: hover-on-header reveal (the row-level grip stays subtle
  * until the user looks at the row). */
 .wp-bundle-header:hover .wp-drag-handle {
@@ -326,44 +319,8 @@ const summary = computed(() => {
   color: var(--wp-text2);
 }
 
-/* Collapse caret — mirror `.wp-collapse-btn` from ContextWidget
- * exactly. 14px-wide button, 10px caret glyph. */
-.wp-bundle-collapse {
-  background: none;
-  border: none;
-  color: var(--wp-text3);
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  flex-shrink: 0;
-}
-.wp-bundle-collapse .pi { font-size: 10px; }
-.wp-bundle-collapse:hover { color: var(--wp-text); }
-.wp-bundle-enabled { display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
-.wp-bundle-enabled input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-.wp-bundle-enabled-mark {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid var(--wp-border2, var(--wp-border));
-  background: var(--wp-bg2);
-  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover);
-}
-.wp-bundle-enabled input:checked + .wp-bundle-enabled-mark {
-  background: var(--b);
-  border-color: var(--b);
-}
+/* The on/off box is Checkbox; checked, it takes the bundle colour. */
+.wp-bundle-enabled { --check-on: var(--b); }
 /* Bundle icon base from shared .wp-row-type-icon (16×16 inline-flex).
  * Bundle-specific override: color from bundle frame token, font-size
  * 12 for visual parity with ModuleRow's .wp-row-type-icon density.
@@ -383,7 +340,7 @@ const summary = computed(() => {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 3px 5px;
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--b) 28%, transparent);
   color: var(--b);
   flex-shrink: 0;
@@ -396,22 +353,6 @@ const summary = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Master-toggle partial state: bundle has SOME but not all children
- * with the flag on. Reads as "in between" — half-strength accent/warn
- * tint + dashed border. Click resolves the partial state by lighting
- * everyone up; second click clears all. */
-.wp-btn--icon-sm.is-partial {
-  border-style: dashed !important;
-  opacity: 0.75;
-}
-.wp-btn--icon-sm.wp-btn--accent.is-partial {
-  color: var(--wp-accent);
-  background: color-mix(in srgb, var(--wp-accent) 7%, transparent);
-}
-.wp-btn--icon-sm.wp-btn--warn.is-partial {
-  color: var(--wp-warn);
-  background: color-mix(in srgb, var(--wp-warn) 7%, transparent);
-}
 /* Child-count / drift summary. Was 10px in --wp-text-dim (#666 on the dark
  * theme), which sat right at the edge of legibility against the bundle frame
  * tint — the one piece of information telling you how big a collapsed bundle
@@ -422,29 +363,20 @@ const summary = computed(() => {
   color: var(--wp-text-muted, var(--wp-text2));
   flex-shrink: 0;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in oklab, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
   white-space: nowrap;
 }
-/* Bundle action button — base size + shape from shared
- * .wp-btn--icon-sm. Bundle-specific tweak: bg + border tinted with
- * the bundle frame color so the action reads as belonging to THIS
- * bundle (instead of looking like a generic row-level icon button).
- * Hover bumps the bundle-color tint; shared `.wp-btn--danger:hover`
- * adds the red icon + red-tinted border without overriding the
- * bundle's bg — same hover behavior every other danger button gets.
- *
- * Selector chains `.wp-btn--icon-sm.wp-bundle-action` (instead of bare
- * `.wp-bundle-action`) so override specificity beats the shared
- * `.wp-btn--icon-sm:hover` base rule. Without the chain, both rules
- * tie at 0,0,2,0 and source order decides — fine when this block was
- * `<style scoped>` (scoper attribute bumped us to 0,0,3,0) but the
- * scope flip for PlaygroundMockup parity collapsed that margin. */
-.wp-btn--icon-sm.wp-bundle-action {
+/* Bundle action button: WpIconButton tinted with the bundle frame colour
+ * so the action reads as belonging to THIS bundle. The attribute chain
+ * outranks the button's own scoped rest + pressed rules (a pressed bundle
+ * action keeps the bundle tint and only its icon turns the tone); the
+ * "some children" (mixed) state keeps its own dashed half tint. */
+.wp-icon-btn.wp-bundle-action[data-tone][data-variant]:not([aria-pressed="mixed"]) {
   background: color-mix(in srgb, var(--b) 18%, transparent);
   border-color: var(--b);
 }
-.wp-btn--icon-sm.wp-bundle-action:hover {
+.wp-icon-btn.wp-bundle-action[data-tone][data-variant]:not([aria-pressed="mixed"]):hover:not(:disabled) {
   background: color-mix(in srgb, var(--b) 32%, transparent);
 }
 </style>

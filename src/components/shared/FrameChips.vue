@@ -21,6 +21,9 @@
  * actually good at (lock all, paste a series, out-of-range locks).
  */
 import { computed } from "vue";
+import Icon from "@/kit/Icon.vue";
+import ListRow from "@/kit/ListRow.vue";
+import Chip from "@/kit/Chip.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -173,28 +176,27 @@ const hint = computed(() => {
 
 <template>
   <div class="wp-fchips">
-    <button
-      type="button"
+    <ListRow
+      size="sm"
       class="wp-fchips__head"
       :aria-expanded="!collapsed"
       :data-test="`${uiId}-toggle`"
       :title="collapsed ? 'Show frames' : 'Hide frames'"
       @click="collapsed = !collapsed"
     >
-      <svg
-        class="wp-fchips__caret"
-        :class="{ 'wp-fchips__caret--collapsed': collapsed }"
-        width="9" height="9" viewBox="0 0 24 24"
-        fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
-        aria-hidden="true"
-      ><path d="M6 9l6 6 6-6" /></svg>
+      <template #start>
+        <Icon
+          name="chevron-down"
+          :size="9"
+          class="wp-fchips__caret"
+          :class="{ 'wp-fchips__caret--collapsed': collapsed }"
+        />
+      </template>
       <span class="wp-fchips__label">{{ label }}</span>
-      <span
-        v-if="summary"
-        class="wp-fchips__summary"
-        :data-test="`${uiId}-summary`"
-      >{{ summary }}</span>
-    </button>
+      <template v-if="summary" #end>
+        <span class="wp-fchips__summary" :data-test="`${uiId}-summary`">{{ summary }}</span>
+      </template>
+    </ListRow>
 
     <template v-if="!collapsed">
       <!-- `overflow-y: auto` + a bounded height is what makes a 100-frame loop
@@ -206,9 +208,9 @@ const hint = computed(() => {
         :aria-label="label"
         :data-test="`${uiId}-grid`"
       >
-        <button
+        <Chip
           v-if="showBase"
-          type="button"
+          as="button"
           class="wp-fchips__chip"
           :class="{ 'wp-fchips__chip--active': current === null }"
           :data-test="`${testId}-base`"
@@ -216,12 +218,12 @@ const hint = computed(() => {
           :aria-checked="current === null"
           title="Edit the values every frame inherits"
           @click="emit('select', null)"
-        >base</button>
+        >base</Chip>
 
-        <button
+        <Chip
           v-for="i in frames"
           :key="i"
-          type="button"
+          as="button"
           class="wp-fchips__chip"
           :class="{
             'wp-fchips__chip--active': selectable && current === i,
@@ -236,7 +238,7 @@ const hint = computed(() => {
           :data-bypassed="bypassedSet.has(i) ? 'true' : undefined"
           :title="chipTitle(i)"
           @click="onChipClick(i, $event)"
-        >#{{ i + 1 }}</button>
+        >#{{ i + 1 }}</Chip>
       </div>
       <p class="wp-fchips__hint" :data-test="`${uiId}-hint`">{{ hint }}</p>
     </template>
@@ -244,51 +246,34 @@ const hint = computed(() => {
 </template>
 
 <style scoped>
-/* No `@import "./theme.css"` here on purpose.
- *
- * theme.css declares its tokens on `:root`, so one copy anywhere in the
- * document serves everything — and this component only ever renders inside
- * ContextLoopWidget or SeedListWidget, both of which already import it.
- * Importing it again inlines the whole 521-line sheet into this shared chunk:
- * a third copy of the same tokens, and 10.7 KB gzipped for a grid of buttons.
- *
- * Every declaration below carries a literal fallback anyway, so the component
- * still renders standalone if it is ever used somewhere unthemed. */
+/* Tokens come from theme.css, loaded once from the boot chunk (see its
+ * header). Every declaration below carries a literal fallback anyway, so the
+ * component still renders standalone if it is ever used somewhere unthemed. */
 
 .wp-fchips { display: flex; flex-direction: column; gap: 4px; }
 
-.wp-fchips__head {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  padding: 0;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
-}
-.wp-fchips__head:hover { color: var(--wp-text-muted, #aeb1bb); }
+/* A kit ListRow (sm): caret, the label, the summary at the end. */
+/* 20 px tall so the fold is easy to hit (it was 15). */
+.wp-fchips__head { gap: 5px; min-height: 20px; padding: 0; color: var(--wp-text-dim, var(--wp-text-muted)); }
+.wp-fchips__head:hover:not(:disabled) { background: none; color: var(--wp-text-muted); }
 .wp-fchips__caret { flex: none; transition: transform var(--wp-motion-hover, 120ms) ease; }
 .wp-fchips__caret--collapsed { transform: rotate(-90deg); }
 .wp-fchips__label {
-  font: 600 9px var(--wp-font-sans, sans-serif);
+  font: 600 10px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 /* Kept visible while collapsed — hiding the grid must not also hide the fact
  * that frames are locked or bypassed. */
 .wp-fchips__summary {
-  margin-left: auto;
   font: 600 8px var(--wp-font-sans, sans-serif);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 2px 6px;
-  border-radius: 3px;
-  color: var(--wp-accent-text, var(--wp-text, #e6e7ea));
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
+  color: var(--wp-accent-text, var(--wp-text));
   background: rgba(99, 102, 241, 0.14);
-  border: 1px solid color-mix(in srgb, var(--wp-accent, #c4b5fd) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent);
 }
 
 /* auto-fill keeps a uniform cell width so 15+ chips WRAP instead of
@@ -310,36 +295,39 @@ const hint = computed(() => {
 .wp-fchips__grid::-webkit-scrollbar-track { background: transparent; }
 .wp-fchips__grid::-webkit-scrollbar-thumb {
   background: var(--wp-scrollbar-thumb, rgba(255, 255, 255, 0.28));
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
 }
 
-.wp-fchips__chip {
+/* Kit Chips (as buttons) drawn as the grid's small square cells. */
+.wp-chip.wp-fchips__chip {
+  justify-content: center;
+  height: auto;
   /* Not `flex: 1` — the grid owns the track sizing, and a flex hint here
    * fights it. */
   position: relative;
   padding: 4px 6px;
   text-align: center;
-  background: var(--wp-bg-deep, var(--wp-bg, #0e1015));
-  border: 1px solid var(--wp-border, #353841);
-  border-radius: 3px;
-  color: var(--wp-text-muted, #aeb1bb);
+  background: var(--wp-bg-deep, var(--wp-bg));
+  border: 1px solid var(--wp-border);
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
+  color: var(--wp-text-muted);
   font: 600 10px var(--wp-font-sans, sans-serif);
   cursor: pointer;
 }
-.wp-fchips__chip:hover { color: var(--wp-text, #e6e7ea); border-color: var(--wp-border-strong, #4a4d55); }
-.wp-fchips__chip--active {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 18%, transparent);
-  border-color: var(--wp-accent, #c4b5fd);
-  color: var(--wp-accent, #c4b5fd);
+.wp-chip.wp-fchips__chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
+.wp-chip.wp-fchips__chip--active {
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  border-color: var(--wp-accent);
+  color: var(--wp-accent);
 }
 /* Bypassed — interrupted (dashed) border + dimmed, so it reads at a glance.
  * Composes with --active (dashed overrides the solid). */
-.wp-fchips__chip--bypassed {
+.wp-chip.wp-fchips__chip--bypassed {
   border-style: dashed;
-  border-color: var(--wp-border-strong, #4a4d55);
+  border-color: var(--wp-border-strong);
   opacity: 0.5;
 }
-.wp-fchips__chip--bypassed:hover { opacity: 0.8; }
+.wp-chip.wp-fchips__chip--bypassed:hover { opacity: 0.8; }
 /* Locked — a corner dot. At ~20px tall a padlock glyph would be mud; the dot
  * only has to say "something is pinned here" and the tooltip carries the
  * value. Every chip is position:relative, so toggling never reflows the grid. */
@@ -350,8 +338,8 @@ const hint = computed(() => {
   right: 2px;
   width: 4px;
   height: 4px;
-  border-radius: 50%;
-  background: var(--wp-accent, #c4b5fd);
+  border-radius: 50%; /* round: lock dot */
+  background: var(--wp-accent);
 }
 /* A bypassed frame keeps its lock, and the dot must survive the dim — else
  * unlocking it later looks like it did nothing. */
@@ -360,6 +348,6 @@ const hint = computed(() => {
 .wp-fchips__hint {
   margin: 1px 0 0;
   font: 400 9px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-dim, var(--wp-text-muted, #8a8d99));
+  color: var(--wp-text-dim, var(--wp-text-muted));
 }
 </style>

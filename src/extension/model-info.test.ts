@@ -207,3 +207,45 @@ describe("parseModelInfoConfig (mirrors engine parse_config)", () => {
     expect(problemRows).toEqual([0, 2]);
   });
 });
+
+describe("preview chain seeds", () => {
+  it("gives each step its seed: null for a model step, the Context's own seed widget", () => {
+    const { g, ctx } = graph();
+    (ctx.widgets ?? []).push({ name: "seed", value: 777 });
+    const asm: LiteNodeLike = {
+      id: 5, type: "WP_PromptAssembler", graph: g,
+      inputs: [{ name: "context", link: 13 }],
+    };
+    const links = (g as unknown as { links: Record<number, unknown> }).links;
+    links[13] = { id: 13, origin_id: 4, origin_slot: 0, target_id: 5, target_slot: 0 };
+    (ctx.outputs ?? [])[0].links = [13];
+    (g as unknown as { _nodes: LiteNodeLike[] })._nodes.push(asm);
+    const seeds: (number | null)[] = [];
+    const steps = collectUpstreamChain(g, asm, { modelSteps: true, seeds });
+    expect(steps).toHaveLength(2);
+    expect(seeds).toEqual([null, 777]);
+  });
+
+  it("follows a wired seed input to the Int node feeding it", () => {
+    const { g, ctx } = graph();
+    (ctx.widgets ?? []).push({ name: "seed", value: 777 });
+    const int: LiteNodeLike = {
+      id: 6, type: "PrimitiveInt", graph: g,
+      widgets: [{ name: "value", value: 42 }, { name: "control_after_generate", value: "fixed" }],
+      outputs: [{ name: "INT", links: [14], type: "INT" }],
+    };
+    (ctx.inputs ?? []).push({ name: "seed", link: 14, type: "INT" });
+    const asm: LiteNodeLike = {
+      id: 5, type: "WP_PromptAssembler", graph: g,
+      inputs: [{ name: "context", link: 13 }],
+    };
+    const links = (g as unknown as { links: Record<number, unknown> }).links;
+    links[13] = { id: 13, origin_id: 4, origin_slot: 0, target_id: 5, target_slot: 0 };
+    links[14] = { id: 14, origin_id: 6, origin_slot: 0, target_id: 4, target_slot: 1 };
+    (ctx.outputs ?? [])[0].links = [13];
+    (g as unknown as { _nodes: LiteNodeLike[] })._nodes.push(asm, int);
+    const seeds: (number | null)[] = [];
+    collectUpstreamChain(g, asm, { modelSteps: true, seeds });
+    expect(seeds).toEqual([null, 42]);
+  });
+});

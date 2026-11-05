@@ -5,10 +5,12 @@
  * own view (wildcard options vs. how often each came up, a constraint's
  * reach and hits, a combine's template and outputs, …).
  */
-import { computed, onBeforeUnmount, onMounted } from "vue";
-import Button from "../ui/Button.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import Button from "@/kit/Button.vue";
+import DataTable, { type DataColumn, type DataSort } from "@/kit/DataTable.vue";
 import { KIND_META } from "./kinds";
-import type { Distribution, Inspect } from "../../utils/inspect";
+import type { Distribution, Inspect, WildcardOptionRow } from "../../utils/inspect";
 import type { StackItemView, StackKind } from "../../utils/scenario";
 
 const props = defineProps<{
@@ -40,6 +42,22 @@ function drift(weightPct: number, pickPct: number | null): "up" | "down" | null 
   if (weightPct - pickPct >= DRIFT_POINTS) return "down";
   return null;
 }
+
+/** The option table: value, the weight / picked bars, then both shares
+ *  (sortable; the picked column only once a run made picks). */
+const optionSort = ref<DataSort | null>(null);
+const optionColumns = computed<DataColumn<WildcardOptionRow>[]>(() => {
+  const d = props.data;
+  const picks = d?.kind === "wildcard" && d.totalPicks !== null;
+  return [
+    { key: "value", label: "Option", class: "wp-tri__val" },
+    { key: "bars", label: "Weight and picks", hideLabel: true, class: "wp-tri__bars", width: "100px" },
+    { key: "weightPct", label: "Weight", sortable: true, firstDir: "desc", align: "right", mono: true, class: "wp-tri__num" },
+    ...(picks
+      ? [{ key: "pickPct", label: "Picked", sortable: true, firstDir: "desc" as const, align: "right" as const, mono: true, class: "wp-tri__num" }]
+      : []),
+  ];
+});
 
 const dists = computed<Distribution[]>(() => {
   const d = props.data;
@@ -75,7 +93,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           <h3>{{ view.name }}</h3>
         </div>
         <Button v-if="!view.missing" variant="ghost" size="sm" icon="pi-pencil" data-test="inspector-edit" @click="emit('edit')">Edit</Button>
-        <Button variant="ghost" size="sm" icon="pi-times" aria-label="Close inspector" data-test="inspector-close" @click="emit('close')" />
+        <Button variant="ghost" icon="times" size="sm" aria-label="Close inspector" data-test="inspector-close" @click="emit('close')" />
       </header>
 
       <p v-if="view.missing" class="wp-tri__note">This item was deleted from the library, so the run skips it.</p>
@@ -91,30 +109,32 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         <p v-if="data.neverPicked" class="wp-tri__warn" data-test="inspect-never">
           {{ data.neverPicked }} option{{ data.neverPicked === 1 ? " was" : "s were" }} never picked. Try more seeds, or check a constraint isn't excluding {{ data.neverPicked === 1 ? "it" : "them" }}.
         </p>
-        <table class="wp-tri__table">
-          <thead>
-            <tr><th>Option</th><th aria-hidden="true" /><th class="wp-tri__num" title="Share of the total weight">Weight</th><th v-if="data.totalPicks !== null" class="wp-tri__num" title="Share of the picks this run made">Picked</th></tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="o in data.options"
-              :key="o.id"
-              :data-never="o.picks === 0 && o.weight > 0 ? 'true' : 'false'"
-              data-test="inspect-option"
-            >
-              <td class="wp-tri__val">
-                <span v-if="o.isNull" class="wp-tri__dim">(nothing)</span>
-                <template v-else>{{ o.value || "(empty)" }}</template>
-              </td>
-              <td class="wp-tri__bars" aria-hidden="true">
-                <span class="wp-tri__track"><span class="wp-tri__fill" :style="{ width: `${o.weightPct}%` }" /></span>
-                <span v-if="o.pickPct !== null" class="wp-tri__track"><span class="wp-tri__fill wp-tri__fill--pick" :style="{ width: `${o.pickPct}%` }" /></span>
-              </td>
-              <td class="wp-tri__num">{{ o.weightPct }}%</td>
-              <td v-if="data.totalPicks !== null" class="wp-tri__num" :data-drift="drift(o.weightPct, o.pickPct) ?? undefined">{{ o.pickPct }}%</td>
-            </tr>
-          </tbody>
-        </table>
+        <DataTable
+          v-model:sort="optionSort"
+          class="wp-tri__table"
+          :columns="optionColumns"
+          :rows="data.options"
+          row-key="id"
+          :row-attrs="(o: WildcardOptionRow) => ({ 'data-test': 'inspect-option', 'data-never': o.picks === 0 && o.weight > 0 ? 'true' : 'false' })"
+          :sticky-head="false"
+          size="sm"
+          aria-label="Options"
+        >
+          <template #cell-value="{ row: o }">
+            <span v-if="o.isNull" class="wp-tri__dim">(nothing)</span>
+            <template v-else>{{ o.value || "(empty)" }}</template>
+          </template>
+          <template #cell-bars="{ row: o }">
+            <span class="wp-tri__track" aria-hidden="true"><span class="wp-tri__fill" :style="{ width: `${o.weightPct}%` }" /></span>
+            <span v-if="o.pickPct !== null" class="wp-tri__track" aria-hidden="true"><span class="wp-tri__fill wp-tri__fill--pick" :style="{ width: `${o.pickPct}%` }" /></span>
+          </template>
+          <template #head-weightPct><span title="Share of the total weight">Weight</span></template>
+          <template #cell-weightPct="{ row: o }">{{ o.weightPct }}%</template>
+          <template #head-pickPct><span title="Share of the picks this run made">Picked</span></template>
+          <template #cell-pickPct="{ row: o }">
+            <span class="wp-tri__pick" :data-drift="drift(o.weightPct, o.pickPct) ?? undefined">{{ o.pickPct }}%</span>
+          </template>
+        </DataTable>
         <p v-if="data.totalPicks !== null" class="wp-tri__foot">
           Picks include this wildcard's <code>@{}</code> uses anywhere in the stack. Constraints and seed count move the picked share away from the weights.
         </p>
@@ -142,7 +162,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
       <!-- Combine: the template, what it reads, the outputs it produced. -->
       <section v-else-if="data?.kind === 'combine'" class="wp-tri__sec" data-test="inspect-combine">
         <h4>Template <span v-if="data.output" class="wp-tri__var">→ ${{ data.output }}</span></h4>
-        <pre class="wp-tri__tpl">{{ data.template || "(empty)" }}</pre>
+        <CodeBlock class="wp-tri__tpl" :code="data.template || '(empty)'" title="Template" default-wrap />
         <p v-if="data.fixed" class="wp-tri__warn">Plain text with no <code>$variables</code>, <code>@{}</code> references or choices, so it's the same on every run.</p>
         <p v-else-if="data.reads.length" class="wp-tri__reads">
           Reads <code v-for="r in data.reads" :key="r">${{ r }}</code>
@@ -243,32 +263,23 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .wp-tri__foot { margin: 0; font-size: var(--wp-text-xs); color: var(--wp-text-dim); line-height: var(--wp-line-xs); }
 .wp-tri__dim { color: var(--wp-text-dim); }
 .wp-tri code { font-family: var(--wp-font-mono); color: var(--wp-accent-text); }
-.wp-tri__table { width: 100%; border-collapse: collapse; }
-.wp-tri__table th {
-  text-align: left; font-size: var(--wp-text-xs); font-weight: var(--wp-weight-medium); color: var(--wp-text-dim);
-  padding: 0 var(--wp-space-3) var(--wp-space-2); border-bottom: 1px solid var(--wp-border);
-}
-.wp-tri__table td { padding: var(--wp-space-2) var(--wp-space-3); border-bottom: 1px solid var(--wp-border); vertical-align: top; }
-.wp-tri__table tr[data-never="true"] .wp-tri__val { color: var(--wp-warn); }
+.wp-tri__table :deep(tr[data-never="true"] .wp-tri__val) { color: var(--wp-warn); }
+.wp-tri__table :deep(td) { vertical-align: top; }
+.wp-tri__table :deep(.wp-tri__num) { width: 56px; font-size: var(--wp-text-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .wp-tri__val { word-break: break-word; }
 .wp-tri__num { width: 56px; text-align: right; font-variant-numeric: tabular-nums; font-family: var(--wp-font-mono); font-size: var(--wp-text-xs); white-space: nowrap; }
-.wp-tri__table th.wp-tri__num { text-align: right; }
-.wp-tri__num[data-drift="up"] { color: var(--wp-success); }
-.wp-tri__num[data-drift="down"] { color: var(--wp-warn); }
+.wp-tri__pick[data-drift="up"] { color: var(--wp-success); }
+.wp-tri__pick[data-drift="down"] { color: var(--wp-warn); }
 /* Weight share (grey) over picked share (kind colour). */
-.wp-tri__bars { width: 88px; vertical-align: middle; }
+.wp-tri__table :deep(td.wp-tri__bars) { vertical-align: middle; }
 .wp-tri__bars .wp-tri__track + .wp-tri__track { margin-top: 2px; }
-.wp-tri__track { display: block; width: 88px; height: 4px; border-radius: 2px; background: var(--wp-bg-3); overflow: hidden; flex: none; }
+.wp-tri__track { display: block; width: 88px; height: 4px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: var(--wp-bg-3); overflow: hidden; flex: none; }
 .wp-tri__fill { display: block; height: 100%; background: var(--wp-text-dim); }
 .wp-tri__fill--pick { background: var(--kc); }
 .wp-tri__facts { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: var(--wp-space-2) var(--wp-space-5); }
 .wp-tri__facts dt { color: var(--wp-text-dim); font-size: var(--wp-text-xs); padding-top: 1px; }
 .wp-tri__facts dd { margin: 0; word-break: break-word; }
-.wp-tri__tpl {
-  margin: 0; padding: var(--wp-space-4) var(--wp-space-5); white-space: pre-wrap; word-break: break-word;
-  background: var(--wp-bg-2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius-sm);
-  font: var(--wp-text-sm)/1.5 var(--wp-font-mono); color: var(--wp-text);
-}
+
 .wp-tri__reads { margin: 0; display: flex; flex-wrap: wrap; gap: var(--wp-space-3); align-items: baseline; font-size: var(--wp-text-xs); color: var(--wp-text-dim); }
 .wp-tri__rules, .wp-tri__children { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--wp-space-2); }
 .wp-tri__rules li { display: flex; flex-direction: column; gap: var(--wp-space-1); padding: var(--wp-space-3) var(--wp-space-4); background: var(--wp-bg-2); border-radius: var(--wp-radius-sm); }

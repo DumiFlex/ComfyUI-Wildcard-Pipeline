@@ -8,10 +8,16 @@
  * row so the assembler can persist the load identity for round-trip
  * "Update existing" saves.
  */
+import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
+import WpSelect from "@/kit/WpSelect.vue";
 import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import Skeleton from "@/kit/Skeleton.vue";
+import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
+import ListRow from "@/kit/ListRow.vue";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: []; pick: [TemplateRow] }>();
@@ -22,8 +28,7 @@ const loading = ref(false);
 const loadError = ref<string | null>(null);
 
 const searchTerm = ref("");
-const searchFocused = ref(false);
-const searchInput = ref<HTMLInputElement | null>(null);
+const searchInput = ref<InstanceType<typeof SearchInput> | null>(null);
 const favoritesOnly = ref(false);
 const selectedCategoryId = ref<string | null>(null);
 const selectedTags = ref<Set<string>>(new Set());
@@ -123,8 +128,8 @@ function pick(row: TemplateRow) {
 </script>
 
 <template>
-  <ModalShell :visible="open" @close="emit('close')">
-    <div class="wp-ltm" role="dialog" aria-modal="true" aria-labelledby="wp-ltm-title" @click.stop>
+  <ModalShell :visible="open" labelledby="wp-ltm-title" @close="emit('close')">
+    <div class="wp-ltm" @click.stop>
       <header class="wp-ltm__head">
         <div class="wp-ltm__head-text">
           <div class="wp-ltm__eyebrow">Load template from library</div>
@@ -133,53 +138,43 @@ function pick(row: TemplateRow) {
             <span class="wp-ltm__title-detail">· {{ rows.length }} {{ rows.length === 1 ? "template" : "templates" }}</span>
           </div>
         </div>
-        <button type="button" class="wp-ltm__close" aria-label="Close" data-test="load-tpl-close" @click="emit('close')">
-          <i class="pi pi-times" aria-hidden="true" />
-        </button>
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="load-tpl-close" @click="emit('close')" />
       </header>
 
       <div class="wp-ltm__toolbar">
-        <div class="wp-ltm__search" :class="{ 'is-focused': searchFocused }">
-          <i class="pi pi-search wp-ltm__search-icon" aria-hidden="true" />
-          <input
-            ref="searchInput"
-            v-model="searchTerm"
-            type="text"
-            placeholder="Search templates by name or text…"
-            aria-label="Search templates"
-            data-test="load-tpl-search"
-            @focus="searchFocused = true"
-            @blur="searchFocused = false"
-          />
-          <span v-if="searchTerm" class="wp-ltm__search-clear" @click="searchTerm = ''">
-            <i class="pi pi-times" aria-hidden="true" />
-          </span>
-        </div>
+        <SearchInput
+          ref="searchInput"
+          v-model="searchTerm"
+          class="wp-ltm__search"
+          size="sm"
+          placeholder="Search templates by name or text…"
+          aria-label="Search templates"
+          data-test="load-tpl-search"
+        />
 
-        <button
-          type="button"
-          class="wp-ltm__icon-btn"
-          :class="{ 'wp-ltm__icon-btn--active': favoritesOnly }"
-          :title="favoritesOnly ? 'Showing favorites only · click to clear' : 'Show favorites only'"
+        <Button
+          size="sm"
+          variant="outline"
+          :icon="favoritesOnly ? 'pi-star-fill' : 'pi-star'"
+          :pressed="favoritesOnly"
+          :aria-label="favoritesOnly ? 'Showing favorites only, click to clear' : 'Show favorites only'"
           data-test="load-tpl-favorites"
           @click="favoritesOnly = !favoritesOnly"
-        >
-          <i :class="['pi', favoritesOnly ? 'pi-star-fill' : 'pi-star']" aria-hidden="true" />
-        </button>
+        />
 
         <div class="wp-ltm__filters-pop">
-          <button
-            type="button"
-            class="wp-ltm__icon-btn"
-            :class="{ 'wp-ltm__icon-btn--active': activePopoverCount > 0 || filtersOpen }"
-            :title="filtersOpen ? 'Close filters' : 'More filters'"
+          <Button
+            size="sm"
+            variant="outline"
+            icon="pi-filter"
+            :pressed="activePopoverCount > 0 || filtersOpen"
             :aria-expanded="filtersOpen"
+            aria-label="Filters"
+            :hint="filtersOpen ? 'Close filters' : 'More filters'"
             data-test="load-tpl-filter-trigger"
             @click="filtersOpen = !filtersOpen"
-          >
-            <i class="pi pi-filter" aria-hidden="true" />
-            <span v-if="activePopoverCount > 0" class="wp-ltm__filter-badge">{{ activePopoverCount }}</span>
-          </button>
+          />
+          <span v-if="activePopoverCount > 0" class="wp-ltm__filter-badge">{{ activePopoverCount }}</span>
 
           <Transition name="wp-pop">
             <div v-if="filtersOpen" class="wp-ltm__pop">
@@ -188,33 +183,34 @@ function pick(row: TemplateRow) {
               </div>
               <div v-if="usedCategories.length" class="wp-ltm__pop-section">
                 <div class="wp-ltm__pop-label">CATEGORY</div>
-                <select
+                <WpSelect
                   class="wp-ltm__cat-select"
-                  :value="selectedCategoryId ?? ''"
+                  :model-value="selectedCategoryId ?? ''"
+                  :options="[{ value: '', label: 'All categories' }, ...usedCategories.map((c) => ({ value: c.id, label: c.name }))]"
                   aria-label="Filter by category"
                   data-test="load-tpl-filter-category"
-                  @change="selectedCategoryId = ($event.target as HTMLSelectElement).value || null"
-                >
-                  <option value="">All categories</option>
-                  <option v-for="c in usedCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                </select>
+                  @update:model-value="(v) => selectedCategoryId = String(v) || null"
+                />
               </div>
               <div v-if="availableTags.length" class="wp-ltm__pop-section">
                 <div class="wp-ltm__pop-label">TAGS <span class="wp-ltm__pop-hint">click to AND-narrow</span></div>
                 <div class="wp-ltm__filter-tags">
-                  <button
+                  <Chip
                     v-for="tag in availableTags"
                     :key="tag"
-                    type="button"
                     class="wp-ltm__tag-chip"
-                    :class="{ 'wp-ltm__tag-chip--active': selectedTags.has(tag) }"
+                    :pressed="selectedTags.has(tag)"
                     @click="toggleTag(tag)"
-                  >{{ tag }}</button>
+                  >{{ tag }}</Chip>
                 </div>
               </div>
-              <button v-if="hasActiveFilter" type="button" class="wp-ltm__pop-clear" @click="clearAllFilters">
-                <i class="pi pi-filter-slash" aria-hidden="true" /> Clear all filters
-              </button>
+              <Button
+                v-if="hasActiveFilter"
+                size="sm"
+                variant="ghost"
+                icon="pi-filter-slash"
+                @click="clearAllFilters"
+              >Clear all filters</Button>
             </div>
           </Transition>
         </div>
@@ -223,13 +219,20 @@ function pick(row: TemplateRow) {
       <div v-if="filtersOpen" class="wp-ltm__pop-shield" @click="filtersOpen = false" />
 
       <div class="wp-ltm__body">
-        <div v-if="loading" class="wp-ltm__state" aria-busy="true">
-          <i class="pi pi-spin pi-spinner" aria-hidden="true" /> Loading templates…
-        </div>
+        <!-- First load only: a reopen keeps the rows it has and refreshes
+             them quietly. -->
+        <Skeleton
+          v-if="loading && !rows.length"
+          shape="row"
+          icon="square"
+          :lines="5"
+          label="Loading templates"
+          class="wp-ltm__skel"
+        />
         <div v-else-if="loadError" class="wp-ltm__state wp-ltm__state--error">
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />
           {{ loadError }}
-          <button type="button" class="wp-ltm__retry" @click="reload">Retry</button>
+          <Button size="sm" @click="reload">Retry</Button>
         </div>
         <div v-else-if="filtered.length === 0" class="wp-ltm__state">
           <i class="pi pi-inbox" aria-hidden="true" />
@@ -237,16 +240,15 @@ function pick(row: TemplateRow) {
         </div>
 
         <template v-else>
-          <button
+          <ListRow
             v-for="row in filtered"
             :key="row.id"
-            type="button"
             class="wp-ltm__row"
             data-test="load-tpl-row"
             :data-testid="`load-tpl-row-${row.id}`"
             @click="pick(row)"
           >
-            <span class="wp-ltm__row-icon"><i class="pi pi-file-edit" aria-hidden="true" /></span>
+            <template #start><span class="wp-ltm__row-icon"><i class="pi pi-file-edit" aria-hidden="true" /></span></template>
             <span class="wp-ltm__row-main">
               <span class="wp-ltm__row-name">
                 {{ row.name }}
@@ -260,27 +262,25 @@ function pick(row: TemplateRow) {
                 :title="row.negative_template"
               >neg: {{ row.negative_template }}</span>
             </span>
-            <span v-if="row.category_id && categoryNameById.get(row.category_id)" class="wp-ltm__row-cat">
-              {{ categoryNameById.get(row.category_id) }}
-            </span>
-          </button>
+            <template v-if="row.category_id && categoryNameById.get(row.category_id)" #end>
+              <span class="wp-ltm__row-cat">{{ categoryNameById.get(row.category_id) }}</span>
+            </template>
+          </ListRow>
         </template>
       </div>
 
       <footer class="wp-ltm__foot">
         <span class="wp-ltm__hint">Click a template to load it into the assembler.</span>
         <span class="wp-ltm__foot-spacer" />
-        <button type="button" class="wp-ltm__btn" data-test="load-tpl-cancel" @click="emit('close')">Cancel</button>
+        <Button size="sm" data-test="load-tpl-cancel" @click="emit('close')">Cancel</Button>
       </footer>
     </div>
   </ModalShell>
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-ltm {
-  background: var(--wp-bg-2, #15151f);
+  background: var(--wp-bg-2);
   border: 1px solid var(--wp-border-strong, var(--wp-border));
   border-radius: var(--wp-radius-lg, 12px);
   box-shadow: var(--wp-shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.55));
@@ -321,15 +321,6 @@ function pick(row: TemplateRow) {
 }
 .wp-ltm__title { font-size: 14px; font-weight: 600; color: var(--wp-text); margin-top: 1px; }
 .wp-ltm__title-detail { font-size: 11.5px; color: var(--wp-text-dim); margin-left: 6px; font-weight: 400; }
-.wp-ltm__close {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid transparent; border-radius: 6px;
-  color: var(--wp-text-muted); cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
-}
-.wp-ltm__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-ltm__close .pi { font-size: 11px; }
 
 /* Toolbar */
 .wp-ltm__toolbar {
@@ -339,50 +330,13 @@ function pick(row: TemplateRow) {
   gap: 6px;
   border-bottom: 1px solid var(--wp-border);
 }
-.wp-ltm__search {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  display: flex; align-items: center;
-  padding: 0 8px;
-  gap: 6px;
-  transition: border-color var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease;
-}
-.wp-ltm__search.is-focused { border-color: var(--wp-accent-500, var(--wp-accent)); background: var(--wp-bg-2); }
-.wp-ltm__search-icon { font-size: 11px; color: var(--wp-text-dim); flex-shrink: 0; }
-.wp-ltm__search input {
-  flex: 1;
-  background: transparent; border: none; outline: none;
-  color: var(--wp-text); font-size: 12px; font-family: inherit;
-}
-.wp-ltm__search input::placeholder { color: var(--wp-text-dim); }
-.wp-ltm__search-clear { cursor: pointer; color: var(--wp-text-dim); font-size: 10px; padding: 2px; }
-.wp-ltm__search-clear:hover { color: var(--wp-text); }
+.wp-ltm__search { flex: 1; }
 
-.wp-ltm__icon-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  position: relative;
-  width: 28px; height: 28px;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  border-radius: 6px;
-  color: var(--wp-text3, var(--wp-text-dim));
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
-}
-.wp-ltm__icon-btn:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
-.wp-ltm__icon-btn--active { background: var(--wp-accent); border-color: var(--wp-accent); color: #fff; }
-.wp-ltm__icon-btn .pi { font-size: 12px; }
 .wp-ltm__filter-badge {
   position: absolute; top: -4px; right: -4px;
   min-width: 14px; height: 14px; padding: 0 3px;
-  border-radius: 7px;
-  background: var(--wp-amber, #ffd400); color: #000;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
+  background: var(--wp-amber); color: color-mix(in srgb, var(--wp-amber) 15%, black);
   font-family: var(--wp-font-mono, monospace);
   font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
   pointer-events: none;
@@ -407,44 +361,30 @@ function pick(row: TemplateRow) {
 }
 .wp-ltm__pop-hint { font-weight: 400; letter-spacing: 0; font-style: italic; }
 .wp-ltm__pop-empty { font-size: 11px; color: var(--wp-text-dim); padding: 2px 0; }
-.wp-ltm__cat-select {
-  width: 100%;
-  background: var(--wp-bg, #0e1015);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm, 6px);
-  color: var(--wp-text);
-  font-family: inherit; font-size: 11px;
-  padding: 5px 8px;
-  cursor: pointer; outline: none;
-}
-.wp-ltm__cat-select:focus { border-color: var(--wp-accent); }
+.wp-ltm__cat-select { width: 100%; height: 28px; }
 .wp-ltm__filter-tags { display: flex; flex-wrap: wrap; gap: 4px; max-height: 180px; overflow-y: auto; }
-.wp-ltm__tag-chip {
-  display: inline-flex; align-items: center;
-  background: transparent;
+/* The kit Chip toggles, in the picker's own outline look: transparent when
+ * off, the accent tint when on. Tags read in mono. */
+.wp-chip.wp-ltm__tag-chip {
+  height: auto;
+  gap: 4px;
+  padding: 2px 8px;
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: min(9px, var(--wp-radius-cap, 999px));
+  background: transparent;
   color: var(--wp-text3, var(--wp-text-dim));
   font-family: var(--wp-font-mono, monospace);
-  font-size: 10px; font-weight: 600;
-  padding: 2px 8px; cursor: pointer;
-  transition: background var(--wp-motion-quick), color var(--wp-motion-quick), border-color var(--wp-motion-quick);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
-.wp-ltm__tag-chip:hover { color: var(--wp-text); border-color: var(--wp-border-strong); }
-.wp-ltm__tag-chip--active {
+.wp-chip.wp-ltm__tag-chip:hover { color: var(--wp-text); border-color: var(--wp-border2, var(--wp-border-strong)); }
+.wp-chip.wp-ltm__tag-chip[aria-pressed="true"] {
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
-  border-color: var(--wp-accent); color: var(--wp-accent);
+  border-color: var(--wp-accent);
+  color: var(--wp-accent);
 }
-.wp-ltm__pop-clear {
-  background: none;
-  border: 1px dashed var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius-sm, 6px);
-  color: var(--wp-text2, var(--wp-text-muted));
-  cursor: pointer; font-family: var(--wp-font-mono, monospace); font-size: 10px;
-  padding: 5px 8px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-}
-.wp-ltm__pop-clear:hover { color: var(--wp-accent); border-color: var(--wp-accent); }
+.wp-chip.wp-ltm__tag-chip[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--wp-accent) 28%, transparent); }
 .wp-ltm__pop-shield { position: absolute; inset: 0; z-index: 5; }
 .wp-pop-enter-active, .wp-pop-leave-active {
   transition: opacity var(--wp-motion-quick), transform var(--wp-motion-quick);
@@ -454,33 +394,22 @@ function pick(row: TemplateRow) {
 
 /* Body / rows */
 .wp-ltm__body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px 8px; }
+.wp-ltm__skel { padding: 0 8px; }
 .wp-ltm__state {
   padding: 36px 16px; text-align: center;
   color: var(--wp-text-muted); font-size: 12.5px;
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 .wp-ltm__state .pi { font-size: 18px; color: var(--wp-text-dim); }
-.wp-ltm__state--error { color: var(--wp-danger, #fca5a5); }
-.wp-ltm__retry {
-  margin-top: 4px; height: 28px; padding: 0 12px;
-  background: var(--wp-bg-3); border: 1px solid var(--wp-border); border-radius: 6px;
-  color: var(--wp-text); font-size: 12px; font-family: inherit; cursor: pointer;
-}
-.wp-ltm__retry:hover { background: var(--wp-bg-4); }
+.wp-ltm__state--error { color: var(--wp-danger); }
 
+/* A kit ListRow: the template icon in front, name + previews, category at the end. */
 .wp-ltm__row {
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
-  align-items: center;
   gap: 10px;
-  width: 100%;
   padding: 8px;
-  background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   color: var(--wp-text);
-  cursor: pointer;
-  text-align: left;
   transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
 }
 .wp-ltm__row:hover { background: var(--wp-bg-3); border-color: var(--wp-border); }
@@ -492,7 +421,7 @@ function pick(row: TemplateRow) {
 .wp-ltm__row-icon {
   width: 24px; height: 24px;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-accent) 14%, transparent);
   color: var(--wp-accent);
   flex-shrink: 0;
@@ -504,7 +433,7 @@ function pick(row: TemplateRow) {
   display: inline-flex; align-items: center; gap: 6px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.wp-ltm__row-fav { font-size: 9px; color: var(--wp-amber, #ffd400); }
+.wp-ltm__row-fav { font-size: 9px; color: var(--wp-amber); }
 .wp-ltm__row-preview {
   font-family: var(--wp-font-mono, monospace);
   font-size: 11px;
@@ -517,7 +446,7 @@ function pick(row: TemplateRow) {
   color: var(--wp-text-dim);
   background: var(--wp-bg-2, var(--wp-bg));
   border: 1px solid var(--wp-border);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   padding: 1px 8px;
   white-space: nowrap;
   flex-shrink: 0;
@@ -532,12 +461,4 @@ function pick(row: TemplateRow) {
   color: var(--wp-text-dim); font-size: 11px;
 }
 .wp-ltm__foot-spacer { flex: 1; }
-.wp-ltm__btn {
-  height: 30px; padding: 0 13px;
-  border-radius: 6px; border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3); color: var(--wp-text);
-  font-size: 12px; font-weight: 500; font-family: inherit; cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-ltm__btn:hover { background: var(--wp-bg-4); border-color: var(--wp-border-strong); }
 </style>

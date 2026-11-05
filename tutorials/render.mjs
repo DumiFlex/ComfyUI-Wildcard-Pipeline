@@ -1,0 +1,222 @@
+#!/usr/bin/env node
+/**
+ * Turns a recorded tutorial take into the finished video.
+ *
+ *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>]
+ *
+ * The attempt folder is the take's folder in Watchwright's data folder
+ * (runs/<run>/<test>/attempt-N, with video-p1.webm and files/cues.json). It writes:
+ *
+ * - <name>.mp4: H.264 + AAC, 30 fps, the page load cut off, fast-forward parts sped up, the voice
+ *   lines (voice/cache/<id>.wav from voice/speak.py) at their cues, chapters inside the file;
+ * - <name>.srt: the narration as subtitles (YouTube, Discord and players take it);
+ * - <name>.chapters.txt: the chapter list for a YouTube description (from the test's steps).
+ *
+ * The voice is lined up through the sync marks the take flashes (a magenta square in the top-right
+ * corner at the start, with each line and after each sped-up part, tutorial.ts); they are painted out. Needs a full ffmpeg (libx264, aac) on PATH or --ffmpeg;
+ * Playwright's own ffmpeg can't do this.
+ */
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const argv = process.argv.slice(2);
+const opt = (name, dflt) => {
+  const i = argv.indexOf(`--${name}`);
+  return i >= 0 ? argv[i + 1] : dflt;
+};
+const attempt = argv.find((a, i) => !a.startsWith("--") && !argv[i - 1]?.startsWith("--"));
+if (!attempt) {
+  console.error("usage: node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file>]");
+  process.exit(1);
+}
+const FFMPEG = opt("ffmpeg", "ffmpeg");
+const FPS = 30;
+
+const result = JSON.parse(readFileSync(path.join(attempt, "result.json"), "utf8"));
+const take = JSON.parse(readFileSync(path.join(attempt, "files", "cues.json"), "utf8"));
+const video = ["video-p1.webm", "video.webm"].map((f) => path.join(attempt, f)).find((f) => existsSync(f));
+if (!video) throw new Error(`No video in ${attempt}. Was the take recorded with video on?`);
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const name = opt("name", `${result.test.id}-${slug(result.test.title)}`);
+const out = path.resolve(opt("out", path.join(HERE, "out")));
+mkdirSync(out, { recursive: true });
+
+// ---- line the take's clock up with the video ------------------------------------------------------
+
+/** Every time (s) the sync mark comes up in the top-right corner, and the colour under it. */
+function findMarks() {
+  const r = spawnSync(
+    FFMPEG,
+    ["-hide_banner", "-i", video, "-vf", "crop=8:8:iw-12:4,scale=1:1,showinfo", "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+    { maxBuffer: 1 << 28 },
+  );
+  if (r.status !== 0) throw new Error(`ffmpeg couldn't read the video: ${String(r.stderr).slice(-400)}`);
+  const times = [...String(r.stderr).matchAll(/pts_time:\s*([\d.]+)/g)].map((m) => Number(m[1]));
+  const px = r.stdout;
+  const found = [];
+  let on = false;
+  let under = null;
+  for (let i = 0; i < times.length; i++) {
+    const [red, green, blue] = [px[i * 3], px[i * 3 + 1], px[i * 3 + 2]];
+    const lit = red > 200 && green < 90 && blue > 200;
+    if (lit && !on) found.push(times[i]);
+    if (!lit && under === null && times[i] > 0.5) under = [red, green, blue];
+    on = lit;
+  }
+  return { found, under: under ?? [24, 24, 27] };
+}
+
+const { found, under } = findMarks();
+if (!found.length) console.warn("No sync mark found; assuming the video starts with the take's clock.");
+// Pair each mark the take flashed with the one seen in the video, nearest to where it should be. The
+// recorder's clock drifts from the page's under load, so the voice is lined up between pairs.
+const pairs = [];
+{
+  let offset = found.length ? found[0] - (take.marks?.[0] ?? take.mark) / 1000 : 0;
+  let next = 0;
+  for (const ms of take.marks ?? [take.mark]) {
+    const want = ms / 1000 + offset;
+    let best = -1;
+    for (let i = next; i < found.length && found[i] < want + 3; i++) {
+      if (Math.abs(found[i] - want) < 3 && (best < 0 || Math.abs(found[i] - want) < Math.abs(found[best] - want))) best = i;
+    }
+    if (best < 0) continue;
+    pairs.push([ms / 1000, found[best]]);
+    offset = found[best] - ms / 1000;
+    next = best + 1;
+  }
+}
+if (take.marks && pairs.length < take.marks.length) console.warn(`${take.marks.length - pairs.length} of ${take.marks.length} sync mark(s) not found in the video.`);
+const drift = pairs.length > 1 ? pairs[pairs.length - 1][1] - pairs[0][1] - (pairs[pairs.length - 1][0] - pairs[0][0]) : 0;
+if (pairs.length > 1) console.log(`sync: ${pairs.length} mark(s), the video's clock is ${drift.toFixed(2)} s off the take's by the end`);
+/** Video seconds for a take time in ms. */
+function vt(ms) {
+  const s = ms / 1000;
+  if (!pairs.length) return s;
+  if (s <= pairs[0][0]) return s + pairs[0][1] - pairs[0][0];
+  for (let i = 1; i < pairs.length; i++) {
+    const [s0, v0] = pairs[i - 1];
+    const [s1, v1] = pairs[i];
+    if (s <= s1) return v0 + ((s - s0) * (v1 - v0)) / (s1 - s0);
+  }
+  const [sl, vl] = pairs[pairs.length - 1];
+  return s + vl - sl;
+}
+
+// A take that opens a page first starts after that load, not on the page the last take left.
+const opening = (take.fast ?? []).find((f) => f.speed === 0 && f.from - take.start < 3000 && f.to > take.start);
+const start = vt(opening ? opening.to : take.start);
+const end = vt(take.ended);
+// The parts to keep, with their speed: the fast-forward ranges sped up, the rest as recorded.
+const parts = [];
+let at = start;
+// A sped-up part starts only once every caption shown at its start has ended, or the caption (drawn
+// in the page) would flash past. Takes recorded since fastForward waits for the voice never overlap.
+const cueEnd = (ms) => Math.max(ms, ...(take.cues ?? []).filter((c) => c.at <= ms && c.at + c.ms + 500 > ms).map((c) => c.at + c.ms + 500));
+for (const f of [...(take.fast ?? [])].sort((a, b) => a.from - b.from)) {
+  const a = Math.max(vt(cueEnd(f.from)), at);
+  const b = Math.min(vt(f.to), end);
+  if (b - a < 1) continue;
+  if (a > at) parts.push({ a: at, b: a, speed: 1 });
+  // Speed 0 cuts the part out (a page load): nothing is pushed, so ft() maps it to the cut point.
+  if (f.speed > 0) parts.push({ a, b, speed: f.speed });
+  at = b;
+}
+if (end > at) parts.push({ a: at, b: end, speed: 1 });
+
+/** Final-video seconds for a video time. */
+function ft(t) {
+  let acc = 0;
+  for (const p of parts) {
+    if (t <= p.a) return acc;
+    if (t < p.b) return acc + (t - p.a) / p.speed;
+    acc += (p.b - p.a) / p.speed;
+  }
+  return acc;
+}
+const total = ft(end);
+
+// ---- voice, subtitles, chapters -------------------------------------------------------------------
+
+const voiced = take.cues.filter((c) => existsSync(path.join(HERE, "voice", "cache", `${c.id}.wav`)));
+if (voiced.length < take.cues.length) console.warn(`${take.cues.length - voiced.length} line(s) have no voice file; run voice/speak.py.`);
+
+const stamp = (s, sep = ",") => {
+  const ms = Math.max(0, Math.round(s * 1000));
+  const p = (n, w = 2) => String(n).padStart(w, "0");
+  return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)}${sep}${p(ms % 1000, 3)}`;
+};
+const srt = take.cues
+  .map((c, i) => {
+    const a = ft(vt(c.at));
+    const next = take.cues[i + 1];
+    const b = Math.min(ft(vt(c.at + c.ms + 300)), next ? ft(vt(next.at)) - 0.05 : total);
+    return `${i + 1}\n${stamp(a)} --> ${stamp(b)}\n${c.text}\n`;
+  })
+  .join("\n");
+writeFileSync(path.join(out, `${name}.srt`), srt);
+
+const t0 = take.t0;
+const chapters = (result.steps ?? [])
+  .filter((s) => s.depth === 0)
+  .map((s) => ({ title: s.title, at: Math.max(0, ft(vt(Date.parse(s.startedAt) - t0))) }));
+if (chapters.length) chapters[0].at = 0;
+const ytStamp = (s) => {
+  const v = Math.floor(s);
+  return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, "0")}`;
+};
+writeFileSync(path.join(out, `${name}.chapters.txt`), chapters.map((c) => `${ytStamp(c.at)} ${c.title}`).join("\n") + "\n");
+const meta = [";FFMETADATA1", `title=${result.test.title}`];
+chapters.forEach((c, i) => {
+  const b = chapters[i + 1]?.at ?? total;
+  meta.push("[CHAPTER]", "TIMEBASE=1/1000", `START=${Math.round(c.at * 1000)}`, `END=${Math.round(b * 1000)}`, `title=${c.title}`);
+});
+const metaFile = path.join(out, `${name}.ffmeta`);
+writeFileSync(metaFile, meta.join("\n") + "\n");
+
+// ---- the ffmpeg graph -----------------------------------------------------------------------------
+
+const inputs = ["-i", video];
+const graph = [];
+// Paint the sync marks out with the colour under them.
+const hex = under.map((c) => c.toString(16).padStart(2, "0")).join("");
+const paint = found.map((t) => `between(t,${(t - 0.1).toFixed(3)},${(t + 0.7).toFixed(3)})`).join("+");
+// The recorder writes a frame only when the page changes (gaps of seconds), and `trim` ends a part at
+// its last frame, so make it constant frame rate first or every still stretch at a cut drops out.
+graph.push(`[0:v]fps=${FPS},${paint ? `drawbox=x=iw-20:y=0:w=20:h=20:color=0x${hex}:t=fill:enable='${paint}',` : ""}split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
+parts.forEach((p, i) => {
+  graph.push(`[s${i}]trim=start=${p.a.toFixed(3)}:end=${p.b.toFixed(3)},setpts=(PTS-STARTPTS)/${p.speed}[v${i}]`);
+});
+graph.push(`${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0,fps=${FPS},format=yuv420p[vout]`);
+voiced.forEach((c, i) => {
+  inputs.push("-i", path.join(HERE, "voice", "cache", `${c.id}.wav`));
+  const delay = Math.round(ft(vt(c.at)) * 1000);
+  graph.push(`[${i + 1}:a]aresample=48000,adelay=${delay}|${delay}[a${i}]`);
+});
+// Silence the length of the video under the voice, so the audio track covers it all.
+graph.push(`anullsrc=r=48000:cl=stereo,atrim=0:${total.toFixed(3)}[bed]`);
+graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`);
+
+const mp4 = path.join(out, `${name}.mp4`);
+const args = [
+  "-hide_banner", "-y",
+  ...inputs,
+  "-i", metaFile,
+  "-filter_complex", graph.join(";"),
+  "-map", "[vout]", "-map", "[aout]",
+  "-map_metadata", String(voiced.length + 1), "-map_chapters", String(voiced.length + 1),
+  "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+  "-c:a", "aac", "-b:a", "160k",
+  "-movflags", "+faststart",
+  mp4,
+];
+console.log(`rendering ${name}: ${total.toFixed(1)} s, ${voiced.length} voice line(s), ${parts.length} part(s), ${chapters.length} chapter(s)`);
+const r = spawnSync(FFMPEG, args, { stdio: ["ignore", "inherit", "pipe"] });
+if (r.status !== 0) {
+  console.error(String(r.stderr).slice(-2000));
+  process.exit(1);
+}
+console.log(`wrote ${mp4}`);

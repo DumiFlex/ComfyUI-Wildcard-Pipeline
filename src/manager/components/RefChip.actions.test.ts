@@ -69,4 +69,29 @@ describe("RefChip — info card actions", () => {
     expect(document.querySelector("[data-test='refchip-hover']")).toBeTruthy();
     wrap.unmount();
   });
+
+  it("steps aside when the chip is clicked, so the panel the click opens shows", async () => {
+    const wrap = mountRef();
+    await openCard(wrap);
+    expect(document.querySelector("[data-test='refchip-hover']")).toBeTruthy();
+    await wrap.find(".wp-refchip").trigger("click");
+    vi.advanceTimersByTime(400);
+    await wrap.vm.$nextTick();
+    expect(document.querySelector("[data-test='refchip-hover']")).toBeNull();
+    expect(wrap.emitted("click")).toHaveLength(1);
+    wrap.unmount();
+  });
+
+  it("closes on Escape and on a press outside the card and its chip", async () => {
+    const wrap = mountRef();
+    await openCard(wrap);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await wrap.vm.$nextTick();
+    expect(document.querySelector("[data-test='refchip-hover']")).toBeNull();
+    await openCard(wrap);
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    await wrap.vm.$nextTick();
+    expect(document.querySelector("[data-test='refchip-hover']")).toBeNull();
+    wrap.unmount();
+  });
 });

@@ -116,4 +116,21 @@ describe("Wildcards.vue", () => {
     expect(html).toContain("wp-syntax-pill--dp");
     expect(html).toContain("wp-syntax-pill--in");
   });
+
+  it("filter panel shows tag chip skeletons, not 'No tags', while the list loads", async () => {
+    apiMod.list.mockReturnValue(new Promise(() => {}));
+    const wrap = mountView();
+    await flushPromises();
+    await wrap.get('button[aria-label="Filters"]').trigger("click");
+    expect(wrap.text()).not.toContain("No tags in this collection.");
+    expect(wrap.find('.wp-filter-panel [data-shape="chip"]').exists()).toBe(true);
+  });
+
+  it("filter panel says 'No tags' once an untagged list has loaded", async () => {
+    apiMod.list.mockResolvedValue({ items: [], total: 0 });
+    const wrap = mountView();
+    await flushPromises();
+    await wrap.get('button[aria-label="Filters"]').trigger("click");
+    expect(wrap.text()).toContain("No tags in this collection.");
+  });
 });

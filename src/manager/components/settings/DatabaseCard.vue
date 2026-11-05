@@ -8,14 +8,16 @@
  * lives beside this card on the Library & data section.
  */
 import { computed, onMounted, ref } from "vue";
-import Button from "../ui/Button.vue";
-import Card from "../ui/Card.vue";
-import Icon from "../ui/Icon.vue";
+import Button from "@/kit/Button.vue";
+import Card from "@/kit/Card.vue";
+import Icon from "@/kit/Icon.vue";
 import MaintenanceOpModal from "./MaintenanceOpModal.vue";
-import ConfirmDialog from "../../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { useDatabaseStore } from "../../stores/databaseStore";
 import { useSystemStore } from "../../stores/systemStore";
 import type { MaintenanceOp, MaintenanceResult } from "../../api/types";
+import Skeleton from "@/kit/Skeleton.vue";
+import DescriptionList, { type DescriptionItem } from "@/kit/DescriptionList.vue";
 
 interface OpSpec {
   op: MaintenanceOp;
@@ -117,6 +119,30 @@ const totalRows = computed(() =>
   store.info ? Object.values(store.info.counts).reduce((n, c) => n + (Number(c) || 0), 0) : 0,
 );
 
+const fileRows = computed<DescriptionItem[]>(() => {
+  const info = store.info;
+  if (!info) return [];
+  return [
+    { label: "Path", value: info.path, mono: true, copy: true },
+    { label: "Source", key: "source", value: info.source },
+    { label: "Size", value: formatBytes(info.size_bytes) },
+    { label: "Last modified", value: formatDate(info.mtime_iso) },
+  ];
+});
+
+const schemaRows = computed<DescriptionItem[]>(() => {
+  const info = store.info;
+  if (!info) return [];
+  return [
+    { label: "Migration version", value: `v${info.migration.current_version}` },
+    { label: "Journal mode", value: info.pragma.journal_mode },
+    { label: "Foreign keys", value: info.pragma.foreign_keys ? "on" : "off" },
+    { label: "Page size", value: `${info.pragma.page_size} B` },
+    { label: "Page count", value: info.pragma.page_count },
+    { label: "Free pages", value: info.pragma.freelist_count },
+  ];
+});
+
 function formatDate(iso: string): string {
   if (!iso) return "—";
   try {
@@ -151,9 +177,14 @@ onMounted(() => {
       <Button variant="link" @click="refresh">Retry</Button>
     </div>
 
-    <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__loading">
-      <Icon name="spin pi-spinner" />
-      <span>Loading database info…</span>
+    <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__stats">
+      <Skeleton
+        v-for="i in 4"
+        :key="i"
+        shape="block"
+        height="56px"
+        :label="i === 1 ? 'Loading database info' : undefined"
+      />
     </div>
 
     <div v-else-if="store.info">
@@ -170,18 +201,15 @@ onMounted(() => {
         <summary>File, row counts and schema</summary>
         <section class="wp-db__section">
           <h3 class="wp-db__section-title">File</h3>
-          <dl class="wp-db__rows">
-            <div class="wp-db__row"><dt>Path</dt><dd class="wp-mono">{{ store.info.path }}</dd></div>
-            <div class="wp-db__row"><dt>Source</dt><dd><span class="wp-db__chip">{{ store.info.source }}</span></dd></div>
-            <div class="wp-db__row"><dt>Size</dt><dd>{{ formatBytes(store.info.size_bytes) }}</dd></div>
-            <div class="wp-db__row"><dt>Last modified</dt><dd>{{ formatDate(store.info.mtime_iso) }}</dd></div>
-          </dl>
+          <DescriptionList :items="fileRows" data-test="database-file">
+            <template #value-source="{ item }"><span class="wp-db__chip">{{ item.value }}</span></template>
+          </DescriptionList>
         </section>
 
         <section class="wp-db__section">
           <h3 class="wp-db__section-title">Row counts</h3>
           <dl class="wp-db__rows wp-db__rows--grid">
-            <div class="wp-db__row" v-for="[kind, n] in Object.entries(store.info.counts)" :key="kind">
+            <div v-for="[kind, n] in Object.entries(store.info.counts)" :key="kind" class="wp-db__row">
               <dt>{{ kind }}</dt><dd>{{ n }}</dd>
             </div>
           </dl>
@@ -189,14 +217,7 @@ onMounted(() => {
 
         <section class="wp-db__section">
           <h3 class="wp-db__section-title">Schema</h3>
-          <dl class="wp-db__rows">
-            <div class="wp-db__row"><dt>Migration version</dt><dd>v{{ store.info.migration.current_version }}</dd></div>
-            <div class="wp-db__row"><dt>Journal mode</dt><dd>{{ store.info.pragma.journal_mode }}</dd></div>
-            <div class="wp-db__row"><dt>Foreign keys</dt><dd>{{ store.info.pragma.foreign_keys ? "on" : "off" }}</dd></div>
-            <div class="wp-db__row"><dt>Page size</dt><dd>{{ store.info.pragma.page_size }} B</dd></div>
-            <div class="wp-db__row"><dt>Page count</dt><dd>{{ store.info.pragma.page_count }}</dd></div>
-            <div class="wp-db__row"><dt>Free pages</dt><dd>{{ store.info.pragma.freelist_count }}</dd></div>
-          </dl>
+          <DescriptionList :items="schemaRows" data-test="database-schema" />
         </section>
       </details>
 
@@ -249,12 +270,12 @@ onMounted(() => {
       @update:open="(v) => { if (!v) closeModal(); }"
     />
 
-    <ConfirmDialog
-      :visible="restartConfirmOpen"
+    <ConfirmModal
+      :open="restartConfirmOpen"
       title="Restart ComfyUI?"
       body="This kicks the running ComfyUI process. Any in-flight workflows and queued prompts will be interrupted. The page will reload automatically once the server is back."
       confirm-label="Restart"
-      variant="danger"
+      tone="danger"
       @confirm="onRestartConfirmed"
       @cancel="onRestartCancelled"
     />
@@ -277,7 +298,8 @@ onMounted(() => {
 }
 .wp-db__stat b { display: block; font-size: 15px; color: var(--wp-text); overflow-wrap: anywhere; }
 .wp-db__stat span { font-size: 11.5px; color: var(--wp-text-dim); }
-@media (max-width: 720px) { .wp-db__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Page area narrower than 520px (usePageWidth; the chat can take the rest). */
+.wp-content[data-lt~="520"] .wp-db__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wp-db__details {
   border-top: 1px solid var(--wp-border);
   padding: var(--wp-space-4) 0;
@@ -302,22 +324,15 @@ onMounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.wp-db__rows {
-  display: flex; flex-direction: column;
-  gap: var(--wp-space-3);
-  margin: 0;
-}
-.wp-db__rows .wp-db__row {
-  display: flex; align-items: baseline;
-  gap: var(--wp-space-5);
-}
 .wp-db__rows--grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--wp-space-3);
+  margin: 0;
 }
 .wp-db__rows--grid .wp-db__row {
   display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--wp-space-5);
   padding: var(--wp-space-3) var(--wp-space-4);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius-sm);
@@ -326,24 +341,19 @@ onMounted(() => {
 .wp-db__row dt {
   color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);
-  flex: 0 0 160px;
   white-space: nowrap;
 }
 .wp-db__row dd {
   margin: 0;
   font-size: var(--wp-text-sm);
   color: var(--wp-text);
-  flex: 1; min-width: 0;
-  word-break: break-all;
 }
-.wp-db__rows--grid .wp-db__row dt { flex: 0 1 auto; }
-.wp-db__rows--grid .wp-db__row dd { flex: 0 1 auto; word-break: normal; }
 .wp-db__chip {
   display: inline-block; padding: 2px 8px;
   background: color-mix(in oklab, var(--wp-accent-500) 18%, transparent);
   color: var(--wp-accent-text);
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 30%, transparent);
-  border-radius: 999px;
+  border-radius: var(--wp-radius-cap, 999px);
   font-size: var(--wp-text-xs);
   font-family: var(--wp-font-mono);
 }
@@ -360,7 +370,7 @@ onMounted(() => {
   display: inline-flex; align-items: center; gap: var(--wp-space-3);
 }
 .wp-db__op-desc { color: var(--wp-text-dim); font-size: var(--wp-text-xs); margin: 0; }
-.wp-db__error, .wp-db__loading {
+.wp-db__error {
   display: flex; align-items: center; gap: var(--wp-space-4);
   padding: var(--wp-space-4); color: var(--wp-text-muted);
   font-size: var(--wp-text-sm);

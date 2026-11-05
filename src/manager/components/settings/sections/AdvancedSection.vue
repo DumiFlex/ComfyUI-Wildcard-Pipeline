@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Button from "../../ui/Button.vue";
-import SettingGroup from "../SettingGroup.vue";
+import { useRouter } from "vue-router";
+import Button from "@/kit/Button.vue";
+import SettingGroup from "@/kit/SettingGroup.vue";
 import SettingRow from "../SettingRow.vue";
 import BrowserPrefsCard from "../BrowserPrefsCard.vue";
-import { useToast } from "../../../composables/useToast";
+import { useToast } from "@/kit/useToast";
+import { KIT_SITE } from "../../../config/links";
 import {
   SettingsFileError,
   applySettingsFile,
@@ -14,6 +16,7 @@ import {
 } from "../../../utils/settings-transfer";
 
 const toast = useToast();
+const router = useRouter();
 const exporting = ref(false);
 const importing = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -87,6 +90,21 @@ async function onFile(e: Event): Promise<void> {
       >
       <Button variant="secondary" icon="pi-upload" :loading="importing" data-test="settings-import" @click="fileInput?.click()">
         Import…
+      </Button>
+    </SettingRow>
+  </SettingGroup>
+
+  <SettingGroup title="For contributors">
+    <SettingRow
+      label="Component kit"
+      hint="Every shared control with when to use it, on the kit site in every palette and look; the pieces only the extension has are on its own page. Check them before building a new one."
+      setting-key="component-kit"
+    >
+      <a class="wp-btn wp-btn--secondary wp-btn--md" :href="KIT_SITE" target="_blank" rel="noopener" data-test="settings-open-kit-site">
+        <i class="pi pi-external-link" aria-hidden="true" /> Kit site
+      </a>
+      <Button variant="secondary" icon="pi-th-large" data-test="settings-open-kit" @click="router.push({ name: 'kit' })">
+        App pieces
       </Button>
     </SettingRow>
   </SettingGroup>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import Checkbox from "@/kit/Checkbox.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "../composables/useToast";
+import { useToast } from "@/kit/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
@@ -10,17 +12,18 @@ import ModuleListView from "../components/ModuleListView.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
-import Button from "../components/ui/Button.vue";
-import Select from "../components/ui/Select.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import EmptyState from "@/kit/EmptyState.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useBundleStore } from "../stores/bundleStore";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "@/kit/Chip.vue";
 import { categoryFilterOptions } from "../utils/category-options";
 import { validateBundle } from "../utils/validateModule";
 import type { BundleRow, CategoryRow } from "../api/types";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
 import { useCascadeStore } from "../cascade/cascade-store";
@@ -40,7 +43,7 @@ const cascade = useCascadeStore();
 // Cascade-confirm state for bundle-with-refs delete. Mirrors the
 // Wildcards.vue grammar — when a bundle has tier-2 parents the
 // CascadeConfirmDialog shows the impact list; no-refs path still
-// goes through the plain ConfirmDialog.
+// goes through the plain ConfirmModal.
 const cascadeDialogOpen = ref(false);
 const cascadeDialogTarget = ref<BundleRow | null>(null);
 
@@ -91,15 +94,6 @@ function edit(row: BundleRow) {
     params: { id: row.id },
     query: { returnTo: encodeURIComponent(route.fullPath) },
   });
-}
-
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
 }
 
 async function fav(row: BundleRow) {
@@ -240,7 +234,7 @@ const KIND_ICON: Record<string, string> = {
 function frameColor(row: BundleRow): string {
   return row.color && row.color.length
     ? row.color
-    : "var(--wp-bundle-default, #334155)";
+    : "var(--wp-bundle-default)";
 }
 </script>
 
@@ -277,6 +271,7 @@ function frameColor(row: BundleRow): string {
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-box"
         headline="No bundles yet"
         body="Bundles group modules together for reuse. Create your first to package modules into a unit."
@@ -304,60 +299,54 @@ function frameColor(row: BundleRow): string {
         </div>
         <div class="wp-field">
           <label class="wp-field__label">Favorites</label>
-          <button
-            type="button"
-            class="wp-input"
-            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
-            @click="filter.favorites = !filter.favorites; emitFetch()"
-          >
-            <span class="wp-check" :data-checked="filter.favorites ? 'true' : 'false'" aria-hidden="true">
-              <svg v-if="filter.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
-                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span>Favorites only</span>
-          </button>
+          <Checkbox
+            field
+            :model-value="!!filter.favorites"
+            label="Favorites only"
+            data-test="favorites-filter"
+            @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+          />
         </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
             Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
           </label>
-          <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
+          <Skeleton v-if="store.loading && !store.items.length" shape="chip" :lines="6" height="24px" label="Loading tags" />
+          <div v-else-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
           <div v-else class="wp-tags-row">
-            <button
+            <Chip
               v-for="t in allTags" :key="t"
-              type="button"
-              class="wp-tag-chip"
-              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              :pressed="(filter.tags ?? []).includes(t)"
+              size="sm"
               @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
-            >
-              {{ t }}
-            </button>
+            >{{ t }}</Chip>
           </div>
         </div>
       </div>
     </template>
 
     <template #favorite="{ row }">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         class="wp-row-fav-btn"
+        :icon="row.is_favorite ? 'pi-star-fill' : 'pi-star'"
         :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-pressed="row.is_favorite"
         :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
         @click.stop="fav(row)"
-      >
-        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-      </button>
+      />
     </template>
 
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -370,12 +359,12 @@ function frameColor(row: BundleRow): string {
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td>
@@ -392,7 +381,7 @@ function frameColor(row: BundleRow): string {
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'bundle'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'bundle'" compact />
       <CommunityRowActions :row="row" kind="bundle" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
     </template>
@@ -419,9 +408,10 @@ function frameColor(row: BundleRow): string {
             <span class="wp-dim wp-bundle-child__kind">{{ c.type }}</span>
           </li>
         </ul>
-        <button
+        <Button
           v-if="childCount(row) > CHILD_PREVIEW_LIMIT"
-          type="button"
+          variant="link"
+          size="sm"
           class="wp-bundle-children__more"
           :data-test="`bundle-children-toggle-${row.id}`"
           @click="toggleFullChildList(row)"
@@ -429,25 +419,25 @@ function frameColor(row: BundleRow): string {
           {{ showingAll(row)
             ? "Show fewer"
             : `Show all ${childCount(row)}` }}
-        </button>
+        </Button>
       </template>
     </template>
   </ModuleListView>
 
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the bundle library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />
   <CascadeConfirmDialog
     v-if="cascadeDialogTarget"
+    :id="cascadeDialogTarget.id"
     :open="cascadeDialogOpen"
     kind="bundle"
-    :id="cascadeDialogTarget.id"
     action="delete"
     @confirmed="onBundleCascadeConfirmed"
     @cancelled="onBundleCascadeCancelled"
@@ -459,11 +449,6 @@ function frameColor(row: BundleRow): string {
 .wp-route-root { display: contents; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
-.wp-tag-chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
 .wp-bundle-swatch {
   display: inline-block;
   width: 18px;
@@ -498,17 +483,9 @@ function frameColor(row: BundleRow): string {
   font-size: var(--wp-text-xs);
   margin-bottom: var(--wp-space-2);
 }
-/* "Show all N" / "Show fewer" toggle — text affordance, not a Button, so it
- * reads as list scaffolding rather than a row action. */
-.wp-bundle-children__more {
-  margin-top: var(--wp-space-2);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  font-size: var(--wp-text-xs);
-  font-weight: 600;
-  color: var(--wp-accent-text, var(--wp-accent));
-}
-.wp-bundle-children__more:hover { text-decoration: underline; }
+/* "Show all N" / "Show fewer": a link button, so it reads as list
+ * scaffolding rather than a row action. */
+.wp-bundle-children__more { margin-top: var(--wp-space-2); }
+/* The favourite star: the kit ghost button, the star in the warn colour when on. */
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 </style>

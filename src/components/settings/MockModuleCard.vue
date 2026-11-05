@@ -19,6 +19,9 @@
  */
 import { computed } from "vue";
 import { kindIcon } from "../shared/kind-icons";
+import Checkbox from "@/kit/Checkbox.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import DragHandle from "@/kit/DragHandle.vue";
 
 export interface SummaryToken { isVar: boolean; text: string; }
 
@@ -90,25 +93,22 @@ const states = computed(() => props.module.states ?? {});
   >
     <div class="wp-module-header">
       <span class="wp-drag-handle" aria-hidden="true">
-        <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
-          <circle cx="1.5" cy="2" r="1" />
-          <circle cx="4.5" cy="2" r="1" />
-          <circle cx="1.5" cy="6" r="1" />
-          <circle cx="4.5" cy="6" r="1" />
-          <circle cx="1.5" cy="10" r="1" />
-          <circle cx="4.5" cy="10" r="1" />
-        </svg>
+        <DragHandle />
       </span>
-      <button
+      <WpIconButton
+        variant="bare"
         class="wp-collapse-btn"
-        type="button"
-        :title="state.collapsed ? 'Expand' : 'Collapse'"
+        :icon="state.collapsed ? 'pi-caret-right' : 'pi-caret-down'"
+        :label="state.collapsed ? 'Expand' : 'Collapse'"
         @click="emit('toggle-collapse')"
-      ><i :class="['pi', state.collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true"></i></button>
-      <label class="wp-toggle" :title="state.enabled ? 'Disable' : 'Enable'">
-        <input type="checkbox" :checked="state.enabled" @change="emit('toggle-enabled')" />
-        <span class="wp-toggle-mark"></span>
-      </label>
+      />
+      <Checkbox
+        size="sm"
+        :title="state.enabled ? 'Disable' : 'Enable'"
+        :aria-label="`enable ${module.name}`"
+        :model-value="state.enabled"
+        @update:model-value="emit('toggle-enabled')"
+      />
       <span class="wp-row-type-icon" aria-hidden="true">
         <i :class="kindIcon(module.kind)"></i>
       </span>
@@ -133,27 +133,23 @@ const states = computed(() => props.module.states ?? {});
         </template>
       </span>
       <div class="wp-mod-actions">
-        <button
-          v-if="module.lockable"
-          type="button"
-          class="wp-btn--icon-sm wp-btn--warn"
-          :class="{ 'is-locked': state.locked }"
-          :title="state.locked ? 'Unlock seed' : 'Lock seed'"
+        <WpIconButton v-if="module.lockable"
+         
+          icon="pi-lock"
+          tone="warn"
+          :pressed="state.locked"
+          :label="state.locked ? 'Unlock seed' : 'Lock seed'"
           @click="emit('toggle-lock')"
-        ><i class="pi pi-lock" aria-hidden="true"></i></button>
-        <button
-          v-if="module.internalable"
-          type="button"
-          class="wp-btn--icon-sm wp-btn--accent"
-          :class="{ 'is-active': state.internal }"
-          :title="state.internal ? 'Unmark internal' : 'Mark internal'"
+        />
+        <WpIconButton v-if="module.internalable"
+         
+          icon="pi-globe"
+          tone="accent"
+          :pressed="state.internal"
+          :label="state.internal ? 'Unmark internal' : 'Mark internal'"
           @click="emit('toggle-internal')"
-        ><i class="pi pi-globe" aria-hidden="true"></i></button>
-        <button
-          type="button"
-          class="wp-btn--icon-sm wp-btn--danger"
-          title="Remove module"
-        ><i class="pi pi-trash" aria-hidden="true"></i></button>
+        />
+        <WpIconButton icon="pi-trash" tone="danger" label="Remove module" />
       </div>
     </div>
     <div class="wp-collapse-row" :data-collapsed="state.collapsed ? 'true' : 'false'">

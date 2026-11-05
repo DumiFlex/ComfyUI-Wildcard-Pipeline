@@ -1,0 +1,36 @@
+{
+  "node": "WP_VarToFloat",
+  "image": "images/docs/wp-var-to-float.png",
+  "pins": [
+    {
+      "group": "controls",
+      "term": "context (in)",
+      "x": 0.3137,
+      "y": 0.1668
+    },
+    {
+      "group": "controls",
+      "term": "var_name",
+      "x": 0.3166,
+      "y": 0.253
+    },
+    {
+      "group": "controls",
+      "term": "index",
+      "x": 0.3137,
+      "y": 0.3427
+    },
+    {
+      "group": "controls",
+      "term": "default",
+      "x": 0.3137,
+      "y": 0.3901
+    },
+    {
+      "group": "controls",
+      "term": "value (out)",
+      "x": 0.6309,
+      "y": 0.1668
+    }
+  ]
+}

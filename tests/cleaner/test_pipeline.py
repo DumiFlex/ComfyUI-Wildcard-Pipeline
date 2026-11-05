@@ -184,5 +184,5 @@ def test_node_negative_is_a_text_box():
     # Box order on the node: prompt, negative, then the rules panel. The
     # frontend lays out required inputs before optional ones, so the rules
     # widget is optional too.
-    assert [i.name for i in schema.inputs] == ["prompt", "negative", "wp_cleaner"]
+    assert [i.name for i in schema.inputs] == ["prompt", "negative", "blocklist", "wp_cleaner"]
     assert all(i.optional for i in schema.inputs[1:])

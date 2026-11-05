@@ -1,0 +1,669 @@
+"""The chat's library-management tools: categories, tags and deleting.
+
+Mixed into `chat.Library`. Like every change tool they only build a
+proposal card; the browser applies it through the user's normal endpoints.
+Deleting is behind Settings › AI assistant › "Let the assistant delete
+items" (`Library.allow_delete`), and Undo on a delete card creates the
+items again at the same ids. See `/pr-drafts/ai-permissions-phase8.md`.
+"""
+from __future__ import annotations
+
+import copy
+import difflib
+import json
+import re
+from typing import Any
+
+from engine.ai import describe as ai_describe
+from engine.ai import ratings as ai_ratings
+
+#: Per delete card.
+MAX_DELETE_ITEMS = 10
+MAX_DELETE_CATEGORIES = 10
+MAX_DELETE_TAGS = 20
+#: Creates or renames per card.
+MAX_RENAMES = 20
+#: Items one tag rename may touch.
+MAX_TAG_ITEMS = 200
+
+#: Items one bulk update may touch.
+MAX_BULK = 100
+#: Category icons: PrimeIcons ids without "pi-", the ones the Categories
+#: page offers (the kit's `icon-catalog.ts`, in @dumiflex/wp-kit;
+#: `src/manager/__tests__/category-icons.test.ts` keeps the two the same).
+CATEGORY_ICONS = (
+    "user", "users", "heart", "star", "eye", "face-smile", "crown", "id-card", "palette",
+    "pencil", "sliders-h", "camera", "image", "sparkles", "sun", "moon", "home", "building",
+    "map", "map-marker", "globe", "compass", "car", "cloud", "box", "folder", "book", "tag",
+    "tags", "list", "sitemap", "objects-column", "bolt", "flag", "bell", "shield", "lock",
+    "wrench", "filter", "info-circle",
+)
+#: Color words a model may use instead of a hex code.
+COLOR_WORDS = {
+    "red": "#ef4444", "orange": "#f97316", "amber": "#f59e0b", "yellow": "#eab308",
+    "lime": "#84cc16", "green": "#22c55e", "teal": "#14b8a6", "cyan": "#06b6d4",
+    "sky": "#0ea5e9", "blue": "#3b82f6", "indigo": "#6366f1", "violet": "#8b5cf6",
+    "purple": "#a855f7", "pink": "#ec4899", "rose": "#f43f5e", "gray": "#6b7280",
+    "grey": "#6b7280", "brown": "#92400e", "white": "#e5e7eb", "black": "#111827",
+}
+
+#: An icon and a color for a new category the model gave none, by what the
+#: name means: the first rule with a word that starts a word of the name
+#: (Dumi, 2026-10-22: new categories came with no icon or color though the
+#: Categories page has both).
+_STYLE_RULES = (
+    (("eye",), "eye", "#38bdf8"),
+    (("expression", "emotion", "mood", "face"), "face-smile", "#fbbf24"),
+    (("group", "couple", "people", "crowd"), "users", "#a78bfa"),
+    (("character", "person", "subject", "girl", "boy", "woman", "man", "body", "hair",
+      "skin", "species", "race", "role"), "user", "#a78bfa"),
+    (("outfit", "cloth", "wear", "fashion", "costume", "shirt", "dress", "shoe"), "star",
+     "#f472b6"),
+    (("accessor", "jewel", "hat", "crown", "royal"), "crown", "#eab308"),
+    (("love", "romance", "relationship"), "heart", "#f43f5e"),
+    (("style", "art", "aesthetic", "color", "colour", "palette", "medium"), "palette",
+     "#e879f9"),
+    (("quality", "detail", "effect", "magic"), "sparkles", "#c084fc"),
+    (("camera", "shot", "angle", "lens", "composition", "framing", "view"), "camera",
+     "#94a3b8"),
+    (("light", "time", "day", "season"), "sun", "#f59e0b"),
+    (("night", "dark"), "moon", "#6366f1"),
+    (("photo", "image", "picture"), "image", "#60a5fa"),
+    (("weather", "sky", "climate"), "cloud", "#7dd3fc"),
+    (("city", "urban", "building", "architecture"), "building", "#9ca3af"),
+    (("home", "room", "interior", "house"), "home", "#fb923c"),
+    (("world", "country", "culture", "nation"), "globe", "#2dd4bf"),
+    (("place", "location", "setting", "scene", "background", "environment", "landscape",
+      "nature"), "map-marker", "#34d399"),
+    (("vehicle", "car", "transport"), "car", "#ef4444"),
+    (("pose", "action", "activity", "motion", "movement"), "bolt", "#f97316"),
+    (("nsfw", "adult", "explicit", "private"), "lock", "#dc2626"),
+    (("negative", "safety", "guard"), "shield", "#64748b"),
+    (("prompt", "template", "text", "story", "lore"), "book", "#a3e635"),
+    (("tag", "label"), "tags", "#22d3ee"),
+    (("tool", "utility", "util", "misc"), "wrench", "#94a3b8"),
+)
+#: Colors for a name no rule knows, picked so siblings differ.
+_PALETTE = ("#a78bfa", "#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#22d3ee", "#fb923c",
+            "#a3e635", "#f87171", "#818cf8", "#2dd4bf", "#e879f9")
+
+
+def default_style(name: str, taken: set[str] | None = None) -> dict[str, str]:
+    """An icon and a color for a new category from what its name means;
+    for a name no rule knows, `folder` and the first palette color no other
+    category has (by the name's hash when all are taken)."""
+    words = re.findall(r"[a-z]+", name.lower())
+    for keys, icon, color in _STYLE_RULES:
+        if any(w.startswith(k) for w in words for k in keys):
+            return {"color": color, "icon": icon}
+    used = {c.lower() for c in taken or set()}
+    free = [c for c in _PALETTE if c not in used]
+    color = free[0] if free else _PALETTE[sum(map(ord, name)) % len(_PALETTE)]
+    return {"color": color, "icon": "folder"}
+
+
+DELETE_OFF = ("deleting is turned off: the user allows it in Settings › AI assistant › "
+              "Permissions. Tell them; don't try another way")
+
+
+def _chips(rows: list[dict[str, Any]]) -> str:
+    return ", ".join(f"[[{r['id']}#{str(r.get('name') or '').strip()}]]" for r in rows[:8])
+
+
+def _short(text: Any, n: int) -> str:
+    s = text.strip() if isinstance(text, str) else ""
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def _color(raw: Any) -> str | None:
+    """A category color as the Categories page stores it (#rrggbb), from a
+    hex code or a color word; None when there is none, ValueError when it
+    isn't one."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    text = _short(raw, 20).lower()
+    if text in COLOR_WORDS:
+        return COLOR_WORDS[text]
+    hexes = text.lstrip("#")
+    if len(hexes) == 3 and all(c in "0123456789abcdef" for c in hexes):
+        hexes = "".join(c * 2 for c in hexes)
+    if len(hexes) == 6 and all(c in "0123456789abcdef" for c in hexes):
+        return "#" + hexes
+    raise ValueError(f"{text!r} isn't a color: give #rrggbb or one of "
+                     + ", ".join(sorted(COLOR_WORDS)))
+
+
+def _icon(raw: Any) -> str | None:
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    name = _short(raw, 30).lower().removeprefix("pi pi-").removeprefix("pi-")
+    if name not in CATEGORY_ICONS:
+        raise ValueError(f"no category icon {name!r}; icons: {', '.join(CATEGORY_ICONS)}")
+    return name
+
+
+def bulk_key(item_id: str, body: dict[str, Any], new_cat: str = "") -> tuple[str, str]:
+    """One item's change on an update_many card, to spot the same change on
+    a second card (a move into a new category counts by its name)."""
+    new = new_cat.strip().lower() if "category_id" in body else ""
+    return item_id, json.dumps({**body, "_new": new}, sort_keys=True, default=str)
+
+
+class _Colors:
+    """The colors categories have, for picking a new one's."""
+
+    category_rows: dict[str, dict[str, Any]]
+
+    def _taken_colors(self, styles: list[dict[str, Any]] | None = None) -> set[str]:
+        out = {str(c.get("color")) for c in self.category_rows.values() if c.get("color")}
+        return out | {str(st["color"]) for st in styles or [] if st.get("color")}
+
+
+#: A message asking to delete something.
+_DELETE_ASK = re.compile(r"\b(?:delete|remove|get rid of|erase|trash)\b", re.I)
+#: Words that make a delete ask cover items the user didn't name one by one
+#: ("delete everything tagged wip", "remove the duplicates", "delete them").
+_DELETE_BULK = re.compile(r"\b(?:all|every\w*|each|tagged|unused|empty|duplicates?|cop(?:y|ies)|"
+                          r"these|those|them|both|any|rest|others?|selected|unapplied)\b", re.I)
+#: Kinds of item a delete ask names.
+_ITEM_WORDS = re.compile(r"\b(?:wildcards?|bundles?|templates?|combines?|derivations?|"
+                         r"constraints?|fixed[ -]values?|items?|modules?|presets?|rules?)\b",
+                         re.I)
+_GROUP_WORDS = re.compile(r"\b(?:categor(?:y|ies)|tags?)\b", re.I)
+
+
+def delete_scope(text: str) -> dict[str, Any]:
+    """What a user message lets a delete card target: {} when it asks no
+    delete. ``bulk``: it may cover items not named one by one; ``groups``:
+    it names categories or tags and no kind of item, so no item is meant
+    (bench L8: "Delete the Old stuff category, and the Weapons and Weather
+    ones" deleted the Weather and Weapon wildcards)."""
+    if not text or not _DELETE_ASK.search(text):
+        return {}
+    return {"asked": text.strip()[:200],
+            # "remove" is often an edit ("remove the fur options"); these never are.
+            "delete": bool(re.search(r"\b(?:delete|erase|trash)\b", text, re.I)),
+            "bulk": bool(_DELETE_BULK.search(text)),
+            "groups": bool(_GROUP_WORDS.search(text)) and not _ITEM_WORDS.search(text)}
+
+
+#: A message asking to fix a misspelt tag.
+_TYPO_ASK = re.compile(r"\b(?:typos?|misspel\w*|spell\w*|fix\w*|correct\w*|wrong\w*|"
+                       r"by mistake)\b", re.I)
+
+
+def typo_of(tag: str, tags: list[str], asked: str) -> str | None:
+    """The tag a removed `tag` is a typo of, when the user asked for a typo
+    fix: one library tag (or word of the message) spelt nearly the same.
+    Bench L5 / L1: "fixed typo charcter → character", and the card only
+    removed #charcter."""
+    if not asked or not _TYPO_ASK.search(asked):
+        return None
+    low = tag.lower()
+    pool = [t.lower() for t in tags if t.lower() != low]
+    close = difflib.get_close_matches(low, pool, n=2, cutoff=0.8)
+    if not close:
+        words = {w for w in re.findall(r"[a-z][a-z0-9_-]{2,}", asked.lower()) if w != low}
+        close = difflib.get_close_matches(low, sorted(words), n=2, cutoff=0.8)
+    return close[0] if len(close) == 1 else None
+
+
+class ManageTools(_Colors):
+    """Needs `modules`, `bundles`, `templates`, `category_rows`, `get`,
+    `_find`, `_used_by`, `_kind`, `not_found` and `tags` from Library."""
+
+    modules: dict[str, dict[str, Any]]
+    bundles: dict[str, dict[str, Any]]
+    templates: dict[str, dict[str, Any]]
+    category_rows: dict[str, dict[str, Any]]
+    tags: list[str]
+    allow_delete: bool
+    #: `delete_scope` of the user's message; {} leaves deletes unchecked.
+    delete_scope: dict[str, Any]
+    named: set[str] | None
+    proposed_categories: dict[str, tuple[str, str]]
+    bulk_cards: dict[tuple[str, str], str]
+
+    def _rows(self) -> list[tuple[str, dict[str, Any]]]:
+        return [*(("module", r) for r in self.modules.values()),
+                *(("bundle", r) for r in self.bundles.values()),
+                *(("template", r) for r in self.templates.values())]
+
+    def _saved_rows(self) -> list[tuple[str, dict[str, Any]]]:
+        return [(k, r) for k, r in self._rows() if not r.get("_proposed")]
+
+    def _category_by_name(self, raw: Any) -> dict[str, Any] | None:
+        low = _short(raw, 60).lower()
+        if not low:
+            return None
+        for c in self.category_rows.values():
+            if c["id"] == low or str(c.get("name") or "").lower() == low:
+                return c
+        return None
+
+    def _tag(self, raw: Any) -> str | None:
+        """The library tag `raw` names, as stored (tags are lower case)."""
+        key = _short(raw, ai_describe.MAX_TAG_LEN + 1).lstrip("#").lower()
+        for t in self.tags:
+            if t.lower() == key:
+                return t
+        return None
+
+    def _tag_members(self, tag: str) -> list[dict[str, Any]]:
+        return [{"kind": k, "id": r["id"], "tags": list(r.get("tags") or [])}
+                for k, r in self._saved_rows() if tag in (r.get("tags") or [])]
+
+    # ── categories ───────────────────────────────────────────────────────
+
+    def edit_categories(self, args: dict[str, Any]) -> dict[str, Any]:
+        creates: list[str] = []
+        notes: list[str] = []
+        #: Creates an unapplied card already makes: name -> pid.
+        already: dict[str, str] = {}
+        seen: set[str] = set()
+        #: Colors and icons to set: on a new category by name, on one that
+        #: exists by id with what it had (for Undo).
+        styles: list[dict[str, Any]] = []
+
+        def style(target: dict[str, Any], x: dict[str, Any],
+                  had: dict[str, Any] | None = None) -> None:
+            color, icon = _color(x.get("color")), _icon(x.get("icon"))
+            if had is not None:
+                color = color if color and color != had.get("color") else None
+                icon = icon if icon and icon != had.get("icon") else None
+            if color or icon:
+                styles.append({**target, **({"color": color} if color else {}),
+                               **({"icon": icon} if icon else {}),
+                               **({"before": {"color": had.get("color"), "icon": had.get("icon")}}
+                                  if had is not None else {})})
+
+        for raw in _got if isinstance(_got := args.get("create"), list) else []:
+            x = raw if isinstance(raw, dict) else {"name": raw}
+            name = _short(x.get("name"), 40).strip(" .")
+            if not name or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            if self._category_by_name(name):
+                notes.append(f"{name} exists already")
+                continue
+            on_card = (getattr(self, "proposed_categories", None) or {}).get(name.lower())
+            if on_card:
+                # Re-test on b793872: the 9B proposed "Lighting" five times in
+                # one answer and never moved anything into it.
+                already[on_card[1]] = on_card[0]
+                continue
+            if not any(ch.isalnum() for ch in name):
+                notes.append(f"{name!r} needs a letter or digit")
+                continue
+            creates.append(name)
+            # The model's color and icon, else ones that fit the name.
+            fill = default_style(name, self._taken_colors(styles))
+            style({"name": name}, {"color": x.get("color") or fill["color"],
+                                   "icon": x.get("icon") or fill["icon"]})
+        renames: list[dict[str, Any]] = []
+        for x in _got if isinstance(_got := args.get("rename"), list) else []:
+            if not isinstance(x, dict):
+                continue
+            cat = self._category_by_name(x.get("from"))
+            to = _short(x.get("to"), 40).strip(" .")
+            if cat is None:
+                notes.append(f"no category {_short(x.get('from'), 40)!r}")
+                continue
+            style({"id": cat["id"], "name": cat["name"]}, x, cat)
+            if not to or to == cat["name"]:
+                continue
+            other = self._category_by_name(to)
+            if other is not None and other["id"] != cat["id"]:
+                notes.append(f"a category named {to} exists; move its items with update_info "
+                             f"instead")
+                continue
+            renames.append({"id": cat["id"], "from": cat["name"], "to": to})
+        if len(creates) + len(renames) > MAX_RENAMES:
+            raise ValueError(f"at most {MAX_RENAMES} creates and renames per call; split it")
+        if not creates and not renames and not styles and already:
+            names = ", ".join(f"{n} (card {p})" for n, p in list(already.items())[:5])
+            raise ValueError(f"a card already creates {names}; don't propose it again. To "
+                             "file items there, call update_many with that category name "
+                             "now (it works before the card is applied); otherwise answer")
+        notes += [f"{n} is already on card {p}" for n, p in already.items()]
+        if not creates and not renames and not styles:
+            raise ValueError("that changes nothing" + (f" ({'; '.join(notes)})" if notes else ""))
+        looks = {st["name"].lower(): st for st in styles}
+
+        def look(name: str) -> str:
+            st = looks.get(name.lower())
+            if not st:
+                return ""
+            bits = [b for b in (st.get("color"), st.get("icon") and f"icon {st['icon']}") if b]
+            return f" ({', '.join(bits)})"
+        preview = [f"New category: {n}{look(n)}" for n in creates]
+        preview += [f"Rename {r['from']} → {r['to']}" for r in renames]
+        preview += [f"{st['name']}: {look(st['name'])[2:-1]}" for st in styles if "id" in st]
+        bits = []
+        if creates:
+            bits.append(f"{len(creates)} new")
+        if renames:
+            bits.append(f"{len(renames)} renamed")
+        restyled = sum(1 for st in styles if "id" in st)
+        if restyled:
+            bits.append(f"{restyled} restyled")
+        out = {
+            "title": "Create categories" if not renames and not restyled else "Edit categories",
+            "summary": ", ".join(bits),
+            "preview": preview,
+            "warnings": notes[:5],
+            "op": {"op": "categories", "kind": "categories", "create": creates,
+                   "rename": renames, **({"styles": styles} if styles else {})},
+        }
+        if not renames and not restyled:
+            out["risk"] = "low"
+        return out
+
+    # ── duplicates ───────────────────────────────────────────────────────
+
+    def find_duplicates(self, args: dict[str, Any]) -> str:
+        """Items that share a name (same kind), and items whose content is the
+        same under different names, each set marked identical or not."""
+        want = str(args.get("type") or "").strip().lower().replace(" ", "_")
+        rows = [r for _k, r in self._saved_rows()
+                if not want or self._kind(r) == want]  # type: ignore[attr-defined]
+
+        def body(r: dict[str, Any]) -> str:
+            core = {k: r.get(k) for k in ("payload", "children", "template_string")
+                    if r.get(k) is not None}
+            return json.dumps(core, sort_keys=True, default=str)
+
+        by_name: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        by_body: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for r in rows:
+            kind = self._kind(r)  # type: ignore[attr-defined]
+            name = " ".join(str(r.get("name") or "").lower().split())
+            by_name.setdefault((kind, name), []).append(r)
+            by_body.setdefault((kind, body(r)), []).append(r)
+        lines: list[str] = []
+        named_ids: set[frozenset[str]] = set()
+        for (kind, _n), group in by_name.items():
+            if len(group) < 2:
+                continue
+            named_ids.add(frozenset(r["id"] for r in group))
+            same = len({body(r) for r in group}) == 1
+            chips = _chips(group)
+            what = "identical content" if same else "content differs"
+            lines.append(f"- same name, {kind}, {what}: {chips}")
+        for (kind, _b), group in by_body.items():
+            ids = frozenset(r["id"] for r in group)
+            if len(group) < 2 or ids in named_ids:
+                continue
+            chips = _chips(group)
+            lines.append(f"- same content, different names, {kind}: {chips}")
+        if not lines:
+            return "no duplicates" + (f" among {want}s" if want else "")
+        total = len(lines)
+        head = f"{total} set{'s' if total != 1 else ''} of duplicates"
+        tail = "\n- … more (give a type to narrow it)" if total > 30 else ""
+        return (head + " (read them before merging; delete_items removes the extras, and "
+                "constraints or bundles pointing at a removed one need repointing):\n"
+                + "\n".join(lines[:30]) + tail)
+
+    # ── many items at once ───────────────────────────────────────────────
+
+    def update_many(self, args: dict[str, Any]) -> dict[str, Any]:
+        """One card that moves many items into a category (or out of one),
+        adds or removes library tags on them, or sets their rating."""
+        raw = _got if isinstance(_got := args.get("ids"), list) else []
+        if not raw:
+            raise ValueError("give ids: the items to change")
+        if len(raw) > MAX_BULK:
+            raise ValueError(f"at most {MAX_BULK} items per call; split it")
+        category = args.get("category")
+        cid: str | None = None
+        new_cat = ""
+        clear = isinstance(category, str) and category.strip().lower() in ("", "none")
+        if isinstance(category, str) and not clear:
+            cid, new_cat = self._category(category)  # type: ignore[attr-defined]
+        adds = [t for t in (_short(t, ai_describe.MAX_TAG_LEN).lstrip("#").lower()
+                            for t in args.get("tags_add") or [] if isinstance(t, str)) if t]
+        rms = {t.lstrip("#").lower() for t in args.get("tags_remove") or []
+               if isinstance(t, str)}
+        rating = args.get("rating") if args.get("rating") in ("safe", "nsfw") else None
+        notes: list[str] = []
+        if rms and not adds:
+            for t in sorted(rms):
+                fixed = typo_of(t, self.tags, getattr(self, "user_text", "") or "")
+                if fixed:
+                    adds.append(fixed)
+                    notes.append(f"Adds #{fixed}: #{t} is a typo of it")
+        if category is None and not adds and not rms and not rating:
+            raise ValueError("say what to change: category, tags_add, tags_remove or rating"
+                             + "".join(f"; {n}" for n in notes))
+        items: list[dict[str, Any]] = []
+        missing: list[str] = []
+        #: Items an earlier update_many card of this answer already changes
+        #: this way: their card's pid.
+        on_card: dict[str, str] = {}
+        seen: set[str] = set()
+        held: list[str] = []
+        said = getattr(self, "user_text", "") or ""
+        cards = getattr(self, "bulk_cards", None) or {}
+        for value in raw:
+            row = self._find(value)  # type: ignore[attr-defined]
+            if row is None or row.get("_proposed"):
+                missing.append(_short(value, 30))
+                continue
+            if row["id"] in seen:
+                continue
+            seen.add(row["id"])
+            kind = ("bundle" if row["id"] in self.bundles else
+                    "template" if row["id"] in self.templates else "module")
+            body: dict[str, Any] = {}
+            tags = [t for t in row.get("tags") or [] if isinstance(t, str)]
+            was = row.get("content_rating") or "safe"
+            # An NSFW item lowered to safe, or #nsfw taken off, only when the
+            # user's words ask (bench Z15, L5).
+            item_rating, kept_rms, notes = ai_ratings.keep_nsfw(
+                was, tags, rating, sorted(rms), said)
+            held += [n for n in notes if n not in held]
+            item_rms = set(kept_rms)
+            if adds or item_rms:
+                now = [t for t in tags if t.lower() not in item_rms]
+                now += [a for a in adds if a not in {t.lower() for t in now}]
+                if now != tags:
+                    body["tags"] = now
+            if category is not None and (clear or cid or new_cat):
+                if (None if clear else cid) != row.get("category_id") or new_cat:
+                    body["category_id"] = None if clear else cid
+            if item_rating and kind != "template" and item_rating != was:
+                body["content_rating"] = item_rating
+            if not body:
+                continue
+            pid = cards.get(bulk_key(row["id"], body, new_cat))
+            if pid:
+                # Re-test on 367a6a5 (9B): "Change 9 items: Logic & Rules
+                # (new)" and then the same move for 8 of them.
+                on_card[str(row.get("name") or row["id"])] = pid
+                continue
+            items.append({"kind": kind, "id": row["id"], "name": row.get("name") or row["id"],
+                          "body": body,
+                          # Goes into the category the card creates first.
+                          **({"to_new": True} if new_cat and "category_id" in body else {}),
+                          "before": {k: (row.get(k) if k != "content_rating"
+                                         else row.get(k) or "safe") for k in body}})
+        if not items and on_card:
+            raise ValueError(f"card {', '.join(sorted(set(on_card.values())))} already makes "
+                             "this change to " + ", ".join(list(on_card)[:8])
+                             + "; don't propose it again: answer now")
+        if not items:
+            raise ValueError("that changes nothing" + (
+                f" (not found: {', '.join(missing[:8])})" if missing else "")
+                + (f" ({held[0]})" if held else ""))
+        what = []
+        if category is not None:
+            what.append("no category" if clear else f"category {category.strip()}"
+                        + (" (new)" if new_cat else ""))
+        if adds:
+            what.append(" ".join(f"+#{a}" for a in adds))
+        if rms:
+            what.append(" ".join(f"−#{t}" for t in sorted(rms)))
+        if rating:
+            what.append(f"rating {rating}")
+        n = len(items)
+        return {
+            "title": f"Change {n} item{'s' if n != 1 else ''}: {'; '.join(what)}",
+            "summary": f"{n} item{'s' if n != 1 else ''}",
+            "preview": [str(it["name"]) for it in items[:40]]
+            + ([f"… and {n - 40} more"] if n > 40 else []),
+            "warnings": notes + ([f"Not found: {', '.join(missing[:8])}"] if missing else [])
+            + held,
+            "op": {"op": "bulk", "kind": "bulk", "items": items, "new_category": new_cat},
+        }
+
+    # ── tags ─────────────────────────────────────────────────────────────
+
+    def edit_tags(self, args: dict[str, Any]) -> dict[str, Any]:
+        renames: list[dict[str, Any]] = []
+        notes: list[str] = []
+        touched = 0
+        done: set[str] = set()
+        for x in _got if isinstance(_got := args.get("rename"), list) else []:
+            if not isinstance(x, dict):
+                continue
+            tag = self._tag(x.get("from"))
+            to = _short(x.get("to"), ai_describe.MAX_TAG_LEN).lstrip("#").strip().lower()
+            if tag is None:
+                notes.append(f"no library tag #{_short(x.get('from'), 30).lstrip('#')}")
+                continue
+            if not to or to == tag or tag in done:
+                continue
+            done.add(tag)
+            members = self._tag_members(tag)
+            touched += len(members)
+            renames.append({"from": tag, "to": to, "merge": self._tag(to) is not None,
+                            "members": members})
+        if len(renames) > MAX_RENAMES:
+            raise ValueError(f"at most {MAX_RENAMES} renames per call; split it")
+        if touched > MAX_TAG_ITEMS:
+            raise ValueError(f"that touches {touched} items; at most {MAX_TAG_ITEMS} per call, "
+                             "split it")
+        if not renames:
+            raise ValueError("that changes nothing" + (f" ({'; '.join(notes)})" if notes else ""))
+        preview = [f"#{r['from']} → #{r['to']}" + (" (merge)" if r["merge"] else "")
+                   + f", {len(r['members'])} item{'s' if len(r['members']) != 1 else ''}"
+                   for r in renames]
+        return {
+            "title": ("Rename and merge tags" if any(r["merge"] for r in renames)
+                      else "Rename tags"),
+            "summary": f"{touched} item{'s' if touched != 1 else ''}",
+            "preview": preview,
+            "warnings": notes[:5],
+            "op": {"op": "tags", "kind": "tags", "rename": renames},
+        }
+
+    # ── delete ───────────────────────────────────────────────────────────
+
+    def _check_delete(self, row: dict[str, Any]) -> None:
+        """Refuse deleting an item the user's delete ask doesn't cover. On
+        the 2026-10-26 bench the 9B, told to delete a Hairstyle wildcard
+        that didn't exist, proposed deleting Hair colour (W23), and Bench
+        character for a missing Bench scene (B7)."""
+        scope = self.delete_scope
+        if not scope or self.named is None:
+            return
+        chip = f"[[{row['id']}#{str(row.get('name') or '').strip()}]]"
+        kind = self._kind(row).replace("_", " ")  # type: ignore[attr-defined]
+        if scope.get("groups"):
+            raise ValueError(
+                f"the user asked to delete categories or tags, not items: {chip} is a {kind}. "
+                "Delete the category or tag with that name (categories / tags), or ask which "
+                "they mean")
+        if row["id"] in self.named or scope.get("bulk"):
+            return
+        raise ValueError(
+            f"the user didn't name {chip}; they asked: \"{scope.get('asked')}\". If no item has "
+            "the name they gave, tell them so plainly (you may ask whether they mean a close "
+            "one by name); never delete a different item instead")
+
+    def delete_items(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self.allow_delete:
+            raise ValueError(DELETE_OFF)
+
+        def _list(key: str) -> list[Any]:
+            v = args.get(key)
+            return v if isinstance(v, list) else []
+
+        raw_items, raw_cats, raw_tags = _list("items"), _list("categories"), _list("tags")
+        if len(raw_items) > MAX_DELETE_ITEMS:
+            raise ValueError(f"delete at most {MAX_DELETE_ITEMS} items per call; split it")
+        if len(raw_cats) > MAX_DELETE_CATEGORIES:
+            raise ValueError(f"delete at most {MAX_DELETE_CATEGORIES} categories per call")
+        if len(raw_tags) > MAX_DELETE_TAGS:
+            raise ValueError(f"delete at most {MAX_DELETE_TAGS} tags per call")
+        items: list[dict[str, Any]] = []
+        preview: list[str] = []
+        warnings: list[str] = []
+        gone: set[str] = set()
+        for raw in raw_items:
+            row = self._find(raw)  # type: ignore[attr-defined]
+            if row is None:
+                raise ValueError(self.not_found(raw))  # type: ignore[attr-defined]
+            if row.get("_proposed"):
+                raise ValueError(f"{row.get('name')} is only a proposal card; it isn't in the "
+                                 "library, so there is nothing to delete. Tell the user to "
+                                 "dismiss that card instead")
+            if row["id"] in gone:
+                continue
+            self._check_delete(row)
+            gone.add(row["id"])
+            kind = ("bundle" if row["id"] in self.bundles else
+                    "template" if row["id"] in self.templates else "module")
+            stored = {k: v for k, v in copy.deepcopy(row).items() if not k.startswith("_")}
+            items.append({"kind": kind, "type": self._kind(row),  # type: ignore[attr-defined]
+                          "id": row["id"], "name": row.get("name"), "row": stored})
+            preview.append(f"Delete {self._kind(row).replace('_', ' ')} "  # type: ignore
+                           f"{row.get('name')}")
+            if kind == "module":
+                users = self._used_by(row["id"])  # type: ignore[attr-defined]
+                if users:
+                    warnings.append(f"{row.get('name')} is used by " + ", ".join(users[:5])
+                                    + (" and more" if len(users) > 5 else ""))
+        cats: list[dict[str, Any]] = []
+        for raw in raw_cats:
+            cat = self._category_by_name(raw)
+            if cat is None:
+                raise ValueError(f"no category {_short(raw, 40)!r}")
+            if any(c["id"] == cat["id"] for c in cats):
+                continue
+            members = [{"kind": k, "id": r["id"]} for k, r in self._saved_rows()
+                       if r.get("category_id") == cat["id"] and r["id"] not in gone]
+            cats.append({**{k: cat.get(k) for k in ("id", "name", "color", "icon",
+                                                     "sort_order")}, "members": members})
+            preview.append(f"Delete category {cat['name']}")
+            if members:
+                warnings.append(f"{len(members)} item{'s' if len(members) != 1 else ''} "
+                                f"lose{'' if len(members) != 1 else 's'} the category "
+                                f"{cat['name']}")
+        tags: list[dict[str, Any]] = []
+        for raw in raw_tags:
+            tag = self._tag(raw)
+            if tag is None:
+                raise ValueError(f"no library tag #{_short(raw, 30).lstrip('#')}")
+            if any(t["tag"] == tag for t in tags):
+                continue
+            members = [m for m in self._tag_members(tag) if m["id"] not in gone]
+            tags.append({"tag": tag, "members": members})
+            preview.append(f"Delete tag #{tag} from {len(members)} "
+                           f"item{'s' if len(members) != 1 else ''}")
+        if not items and not cats and not tags:
+            raise ValueError("name the items, categories or tags to delete")
+        count = len(items) + len(cats) + len(tags)
+        return {
+            "title": (f"Delete {items[0]['name']}" if count == 1 and items
+                      else f"Delete {count} things"),
+            "summary": ", ".join(b for b in (
+                f"{len(items)} item{'s' if len(items) != 1 else ''}" if items else "",
+                f"{len(cats)} categor{'ies' if len(cats) != 1 else 'y'}" if cats else "",
+                f"{len(tags)} tag{'s' if len(tags) != 1 else ''}" if tags else "") if b),
+            "preview": preview,
+            "warnings": warnings[:8],
+            "op": {"op": "delete", "kind": "delete", "items": items, "categories": cats,
+                   "tags": tags},
+        }

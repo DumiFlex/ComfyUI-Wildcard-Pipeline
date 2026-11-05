@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import Checkbox from "@/kit/Checkbox.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 import { computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useToast } from "../composables/useToast";
+import { useToast } from "@/kit/useToast";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
 import { useBulkActions } from "../composables/useBulkActions";
@@ -11,12 +13,13 @@ import SendToTestRunner from "../components/SendToTestRunner.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import ValidityIcon from "../components/ValidityIcon.vue";
 import { validateModule } from "../utils/validateModule";
-import Button from "../components/ui/Button.vue";
-import Select from "../components/ui/Select.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
+import Button from "@/kit/Button.vue";
+import Select from "@/kit/Select.vue";
+import EmptyState from "@/kit/EmptyState.vue";
+import Skeleton from "@/kit/Skeleton.vue";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "@/kit/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
 import type {
   CategoryRow,
@@ -28,7 +31,7 @@ import type {
   DerivationRule,
   ModuleRow,
 } from "../api/types";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { useDeleteConfirm } from "../composables/useDeleteConfirm";
 import { clauseActions, isConditionGroup, matchWord } from "../../extension/derivation-conditions";
 import { VALUE_DISABLED_OPS } from "../../components/context/editors/_shared/derivation-ops";
@@ -95,15 +98,6 @@ function edit(row: ModuleRow) {
     params: { id: row.id },
     query: { returnTo: encodeURIComponent(route.fullPath) },
   });
-}
-
-async function copyId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    toast.push({ severity: "info", summary: "ID copied", detail: id, life: 1500 });
-  } catch {
-    toast.push({ severity: "error", summary: "Copy failed", life: 2000 });
-  }
 }
 
 async function dup(row: ModuleRow) {
@@ -221,6 +215,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
   >
     <template #empty>
       <EmptyState
+        size="page"
         icon="pi-arrow-right-arrow-left"
         headline="No derivations yet"
         body="Derivations branch logic on conditions to produce values. Create one to add conditional flow."
@@ -248,60 +243,54 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
         </div>
         <div class="wp-field">
           <label class="wp-field__label">Favorites</label>
-          <button
-            type="button"
-            class="wp-input"
-            style="display:flex;align-items:center;gap:8px;justify-content:flex-start;"
-            @click="filter.favorites = !filter.favorites; emitFetch()"
-          >
-            <span class="wp-check" :data-checked="filter.favorites ? 'true' : 'false'" aria-hidden="true">
-              <svg v-if="filter.favorites" viewBox="0 0 12 12" fill="none" style="display:block">
-                <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            <span>Favorites only</span>
-          </button>
+          <Checkbox
+            field
+            :model-value="!!filter.favorites"
+            label="Favorites only"
+            data-test="favorites-filter"
+            @update:model-value="(v) => { filter.favorites = v; emitFetch(); }"
+          />
         </div>
         <div class="wp-field wp-field--full">
           <label class="wp-field__label">
             Tags{{ filter.tags?.length ? ` (${filter.tags.length})` : "" }}
           </label>
-          <div v-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
+          <Skeleton v-if="store.loading && !store.items.length" shape="chip" :lines="6" height="24px" label="Loading tags" />
+          <div v-else-if="!allTags.length" class="wp-dim wp-tags-empty">No tags in this collection.</div>
           <div v-else class="wp-tags-row">
-            <button
+            <Chip
               v-for="t in allTags" :key="t"
-              type="button"
-              class="wp-tag-chip"
-              :data-active="(filter.tags ?? []).includes(t) ? 'true' : 'false'"
+              :pressed="(filter.tags ?? []).includes(t)"
+              size="sm"
               @click="filter.tags = toggleTag(t, filter.tags); emitFetch()"
-            >
-              {{ t }}
-            </button>
+            >{{ t }}</Chip>
           </div>
         </div>
       </div>
     </template>
 
     <template #favorite="{ row }">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         class="wp-row-fav-btn"
+        :icon="row.is_favorite ? 'pi-star-fill' : 'pi-star'"
         :data-on="row.is_favorite ? 'true' : 'false'"
+        :aria-pressed="row.is_favorite"
         :aria-label="row.is_favorite ? 'Unfavorite' : 'Favorite'"
         @click.stop="fav(row)"
-      >
-        <i :class="row.is_favorite ? 'pi pi-star-fill' : 'pi pi-star'" />
-      </button>
+      />
     </template>
 
     <template #name="{ row }">
       <div class="wp-row-name">
         <span class="wp-row-name__text" @click="edit(row)">{{ row.name }}</span>
-        <span
+        <CopyButton
           class="wp-id"
-          :title="`Click to copy ${row.id}`"
-          @click.stop="copyId(row.id)"
-        >{{ row.id }}</span>
+          :text="row.id"
+          :label="`Copy ID ${row.id}`"
+          @click.stop
+        >{{ row.id }}</CopyButton>
       </div>
     </template>
 
@@ -313,12 +302,12 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 
     <template #columns="{ row }">
       <td>
-        <CategoryChip
+        <Chip
           v-if="row.category_id && categoryById.get(row.category_id)"
-          :name="categoryById.get(row.category_id)!.name"
+         
           :color="categoryById.get(row.category_id)!.color"
           :icon="categoryById.get(row.category_id)!.icon"
-        />
+        >{{ categoryById.get(row.category_id)!.name }}</Chip>
         <span v-else class="wp-dim">—</span>
       </td>
       <td><span class="wp-mono">{{ ruleCount(row) }}</span></td>
@@ -327,7 +316,7 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 
     <template #actions="{ row }">
       <Button variant="ghost" size="sm" icon="pi-pencil" aria-label="Edit" @click="edit(row)" />
-      <SendToTestRunner :kind="'derivation'" :id="row.id" compact />
+      <SendToTestRunner :id="row.id" :kind="'derivation'" compact />
       <Button variant="ghost" size="sm" icon="pi-clone" aria-label="Duplicate" @click="dup(row)" />
       <CommunityRowActions :row="row" kind="module" />
       <Button variant="ghost" size="sm" icon="pi-trash" aria-label="Delete" @click="del(row)" />
@@ -374,12 +363,12 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
     </template>
   </ModuleListView>
 
-  <ConfirmDialog
-    :visible="delConfirm.visible.value"
+  <ConfirmModal
+    :open="delConfirm.visible.value"
     :title="`Delete \&quot;${delConfirm.pending.value?.name ?? ''}\&quot;?`"
     body="This permanently removes the library entry."
     confirm-label="Delete"
-    variant="danger"
+    tone="danger"
     @confirm="delConfirm.confirm(performDelete)"
     @cancel="delConfirm.cancel"
   />
@@ -390,11 +379,6 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
 .wp-route-root { display: contents; }
 .wp-tags-row { display: flex; flex-wrap: wrap; gap: var(--wp-space-3); }
 .wp-tags-empty { font-size: var(--wp-text-sm); }
-.wp-tag-chip[data-active="true"] {
-  background: color-mix(in oklab, var(--wp-accent-500) 22%, transparent);
-  border-color: color-mix(in oklab, var(--wp-accent-500) 45%, transparent);
-  color: var(--wp-accent-text);
-}
 
 .wp-rules-snippet {
   max-width: 720px;
@@ -408,4 +392,6 @@ function actView(a: DerivationAction | undefined): { verb: string; target: strin
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
+/* The favourite star: the kit ghost button, the star in the warn colour when on. */
+.wp-row-fav-btn[data-on="true"] { color: var(--wp-warn); }
 </style>

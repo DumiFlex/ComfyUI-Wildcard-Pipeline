@@ -59,18 +59,21 @@ class WPPromptAssembler(io.ComfyNode):
                 ),
                 # Send-to-negative. Declared AFTER `template` so a workflow
                 # saved before it existed still maps its one widget value to
-                # the template; the missing value takes this default.
+                # the template; the missing value takes this default, which
+                # also starts every new Assembler with the slot. Negatives
+                # are opt-in: without `$negatives` the box is just its text
+                # (older workflows get the slot added on load, `withSlot`).
                 io.String.Input(
                     "negative_template",
                     multiline=True,
-                    default="",
+                    default="$negatives",
                     optional=True,
                     placeholder="$negatives",
                     tooltip=(
                         "Your negative prompt. $negatives is where the "
                         "negatives of the variables the prompt used go. "
-                        "Empty = just those words; without $negatives they "
-                        "are added at the end."
+                        "Without $negatives the negative is only what you "
+                        "write here; empty = no negative."
                     ),
                     # Same editor and same STRING socket as `template`.
                     extra_dict={"widgetType": "WP_TEMPLATE_EDITOR"},
@@ -86,7 +89,7 @@ class WPPromptAssembler(io.ComfyNode):
         )
 
     @classmethod
-    def execute(cls, context, template, negative_template=""):
+    def execute(cls, context, template, negative_template=negatives.NEGATIVES_SLOT):
         # Build the render context from the socket payload. `context.context`
         # holds user-named vars including those flagged internal (the
         # PIPELINE_CONTEXT socket now propagates internal vars across
@@ -116,7 +119,10 @@ class WPPromptAssembler(io.ComfyNode):
         reads: list = []
         resolved = resolve_variables(template, resolve_ctx, reads=reads)
         negative = assemble_negative(
-            render_ctx, reads, negative_template or "",
+            render_ctx, reads,
+            # A prompt that leaves the optional input out (API JSON from
+            # before negatives) gets the collected words, as it always did.
+            negative_template if isinstance(negative_template, str) else negatives.NEGATIVES_SLOT,
             lambda text: resolve_variables_raw(text, resolve_ctx),
         )
         return io.NodeOutput(resolved, negative)

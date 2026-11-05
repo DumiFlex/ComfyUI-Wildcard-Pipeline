@@ -4,7 +4,7 @@
  * Lists each rule state with a cell sample + plain-language
  * description of its runtime effect. Collapsed by default.
  */
-import { ref } from "vue";
+import Disclosure from "@/kit/Disclosure.vue";
 
 defineProps<{
   /** Show the accepts-axis row — only when this matrix actually has one, so the
@@ -12,26 +12,17 @@ defineProps<{
   showAccepts?: boolean;
 }>();
 
-const expanded = ref(false);
-
-function toggle(): void {
-  expanded.value = !expanded.value;
-}
 </script>
 
 <template>
-  <div class="legend">
-    <button
-      type="button"
-      class="legend-toggle"
-      :class="{ open: expanded }"
-      :aria-expanded="expanded"
-      @click="toggle"
-    >
-      <span>? Legend</span>
-      <span class="chev" aria-hidden="true">▾</span>
-    </button>
-    <div v-if="expanded" class="legend-body">
+  <Disclosure
+    class="legend"
+    label="Legend"
+    size="sm"
+    lazy
+    :trigger-attrs="{ 'data-test': 'legend-toggle' }"
+  >
+    <div class="legend-body">
       <div class="legend-row">
         <span class="legend-sample s-neutral"><span class="glyph">·</span></span>
         <span class="legend-name n-neutral">Neutral</span>
@@ -55,7 +46,7 @@ function toggle(): void {
       <div class="legend-row">
         <span class="legend-sample s-only"><span class="glyph">✓</span></span>
         <span class="legend-name n-only">Only</span>
-        <span class="legend-desc">Links picks. When the source sub-cat is picked, only target values with a rule in this row can be picked; everything else in the row is excluded.</span>
+        <span class="legend-desc">Makes the row a guest list. When the source picks this, the target can only pick options the row says something about: the ones set to Only, plus any you boosted or reduced (they keep those odds). Everything else is off.</span>
       </div>
       <div v-if="showAccepts" class="legend-row">
         <span class="legend-sample s-axis"><i class="pi pi-sync glyph" aria-hidden="true" /></span>
@@ -63,55 +54,33 @@ function toggle(): void {
         <span class="legend-desc">This group rolls one tag per pick and is readable as <code>$var.NAME</code>. Marked <i class="pi pi-sync" aria-hidden="true" /> on its band.</span>
       </div>
     </div>
-  </div>
+  </Disclosure>
 </template>
 
 <style scoped>
 .legend { margin-top: 14px; }
 .legend-sample.s-only {
-  color: var(--wp-info, #3b82f6);
-  background: color-mix(in srgb, var(--wp-info, #3b82f6) 22%, transparent);
-  border: 1px solid color-mix(in srgb, var(--wp-info, #3b82f6) 45%, transparent);
+  color: var(--wp-info);
+  background: color-mix(in srgb, var(--wp-info) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wp-info) 45%, transparent);
 }
-.legend-name.n-only { color: var(--wp-info, #3b82f6); }
+.legend-name.n-only { color: var(--wp-info); }
 .legend-sample.s-axis {
-  color: var(--wp-axis, #fbbf24);
-  background: color-mix(in srgb, var(--wp-axis, #fbbf24) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wp-axis, #fbbf24) 40%, transparent);
+  color: var(--wp-axis);
+  background: color-mix(in srgb, var(--wp-axis) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wp-axis) 40%, transparent);
 }
-.legend-name.n-axis { color: var(--wp-axis, #fbbf24); }
+.legend-name.n-axis { color: var(--wp-axis); }
 .legend-desc code {
   font-family: var(--wp-font-mono, monospace);
-  color: var(--wp-text-muted, #a1a1ad);
+  color: var(--wp-text-muted);
 }
-.legend-desc .pi-sync { color: var(--wp-axis, #fbbf24); font-size: 10px; }
-.legend-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--wp-border, #2a2d35);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--wp-text) 2%, transparent);
-  color: var(--wp-text-muted, #8a8d99);
-  font: 600 10px var(--wp-font-sans, sans-serif);
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.legend-toggle:hover {
-  background: color-mix(in srgb, var(--wp-accent, #c4b5fd) 8%, transparent);
-  color: var(--wp-accent-text, #c4b5fd);
-  border-color: var(--wp-border-strong, #4a4d55);
-}
-.legend-toggle .chev { transition: transform 0.15s; display: inline-block; }
-.legend-toggle.open .chev { transform: rotate(180deg); }
+.legend-desc .pi-sync { color: var(--wp-axis); font-size: 10px; }
 
 .legend-body {
-  margin-top: 10px;
-  background: var(--wp-bg2, #1a1d24);
-  border: 1px solid var(--wp-border, #2a2d35);
-  border-radius: 6px;
+  background: var(--wp-bg-2);
+  border: 1px solid var(--wp-border);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   padding: 12px 14px;
 }
 .legend-row {
@@ -130,17 +99,17 @@ function toggle(): void {
   gap: 4px;
   width: 64px;
   height: 32px;
-  border-radius: 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
   font: 600 12px var(--wp-font-mono, monospace);
 }
 .legend-sample.s-neutral {
   background: color-mix(in srgb, var(--wp-text) 4%, transparent);
-  color: var(--wp-text-dim, #595c66);
+  color: var(--wp-text-dim);
   border: 1px dashed color-mix(in srgb, var(--wp-text) 10%, transparent);
 }
-.legend-sample.s-exclude { background: color-mix(in srgb, var(--wp-danger, #ef4444) 22%, transparent); color: var(--wp-danger); border: 1px solid color-mix(in srgb, var(--wp-danger, #ef4444) 45%, transparent); }
-.legend-sample.s-boost { background: color-mix(in srgb, var(--wp-success, #22c55e) 22%, transparent); color: var(--wp-success); border: 1px solid color-mix(in srgb, var(--wp-success, #22c55e) 45%, transparent); }
-.legend-sample.s-reduce { background: color-mix(in srgb, var(--wp-warn, #f97316) 22%, transparent); color: var(--wp-warn); border: 1px solid color-mix(in srgb, var(--wp-warn, #f97316) 45%, transparent); }
+.legend-sample.s-exclude { background: color-mix(in srgb, var(--wp-danger) 22%, transparent); color: var(--wp-danger); border: 1px solid color-mix(in srgb, var(--wp-danger) 45%, transparent); }
+.legend-sample.s-boost { background: color-mix(in srgb, var(--wp-success) 22%, transparent); color: var(--wp-success); border: 1px solid color-mix(in srgb, var(--wp-success) 45%, transparent); }
+.legend-sample.s-reduce { background: color-mix(in srgb, var(--wp-warn) 22%, transparent); color: var(--wp-warn); border: 1px solid color-mix(in srgb, var(--wp-warn) 45%, transparent); }
 .glyph { font-size: 14px; line-height: 1; }
 .factor { font-size: 11px; font-weight: 700; }
 .legend-name {
@@ -154,7 +123,7 @@ function toggle(): void {
 .legend-name.n-reduce { color: var(--wp-warn); }
 .legend-desc {
   font: 11px var(--wp-font-sans, sans-serif);
-  color: var(--wp-text-muted, #8a8d99);
+  color: var(--wp-text-muted);
   line-height: 1.45;
 }
 </style>

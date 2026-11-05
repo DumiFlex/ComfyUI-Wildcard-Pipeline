@@ -68,7 +68,8 @@ def test_create_backup_is_consistent_under_wal(db):
     assert entry["size"] == path.stat().st_size > 0
     assert _rows(path) == ["original", "in-wal"]
     # No temp file left behind.
-    assert [p.name for p in bk.backups_dir(db).iterdir()] == [entry["name"]]
+    assert sorted(p.name for p in bk.backups_dir(db).iterdir()) == [
+        bk.LEGACY_PINS_MARKER, entry["name"]]
 
 
 def test_create_backup_rejects_unknown_reason(db):
@@ -110,6 +111,8 @@ def test_list_is_newest_first_and_ignores_strangers(db):
         "size": 1,
         "created_at": "2026-02-01T12:00:00Z",
         "reason": "pre-migration",
+        "pinned": False,
+        "note": None,
     }
 
 
@@ -119,23 +122,126 @@ def test_list_without_dir_is_empty(tmp_path):
 
 # ── prune ────────────────────────────────────────────────────────────
 
-def test_prune_keeps_newest_automatic_and_all_manual(db):
+def _pins_settled(db_path) -> None:
+    """Backups dir as it is after the one-time legacy pin pass."""
+    d = bk.backups_dir(db_path)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / bk.LEGACY_PINS_MARKER).touch()
+
+
+def test_prune_keeps_newest_of_every_reason(db):
+    _pins_settled(db)
     for day in range(1, 6):
         _touch_backup(db, f"wildcard-pipeline-202601{day:02d}-000000-daily.db")
+    _touch_backup(db, "wildcard-pipeline-20260106-000000-manual.db")
     _touch_backup(db, "wildcard-pipeline-20251201-000000-manual.db")
     _touch_backup(db, "wildcard-pipeline-20251202-000000-pre-restore.db")
     removed = bk.prune(db, 2)
     assert sorted(removed) == [
+        "wildcard-pipeline-20251201-000000-manual.db",
         "wildcard-pipeline-20251202-000000-pre-restore.db",
         "wildcard-pipeline-20260101-000000-daily.db",
         "wildcard-pipeline-20260102-000000-daily.db",
         "wildcard-pipeline-20260103-000000-daily.db",
+        "wildcard-pipeline-20260104-000000-daily.db",
     ]
     assert [e["name"] for e in bk.list_backups(db)] == [
+        "wildcard-pipeline-20260106-000000-manual.db",
         "wildcard-pipeline-20260105-000000-daily.db",
-        "wildcard-pipeline-20260104-000000-daily.db",
-        "wildcard-pipeline-20251201-000000-manual.db",
     ]
+
+
+def test_pinned_backups_are_kept_and_not_counted(db):
+    _pins_settled(db)
+    for day in range(1, 5):
+        _touch_backup(db, f"wildcard-pipeline-202601{day:02d}-000000-daily.db")
+    old = "wildcard-pipeline-20260101-000000-daily.db"
+    assert bk.set_pinned(db, old, True)["pinned"] is True
+    removed = bk.prune(db, 2)
+    assert sorted(removed) == ["wildcard-pipeline-20260102-000000-daily.db"]
+    assert [(e["name"], e["pinned"]) for e in bk.list_backups(db)] == [
+        ("wildcard-pipeline-20260104-000000-daily.db", False),
+        ("wildcard-pipeline-20260103-000000-daily.db", False),
+        (old, True),
+    ]
+    # Unpinning doesn't delete on its own; the next prune does.
+    assert bk.set_pinned(db, old, False)["pinned"] is False
+    assert old in [e["name"] for e in bk.list_backups(db)]
+    assert bk.prune(db, 2) == [old]
+
+
+def test_set_pinned_unknown_name(db):
+    with pytest.raises(bk.BackupNotFound):
+        bk.set_pinned(db, "wildcard-pipeline-20260101-000000-manual.db", True)
+    with pytest.raises(bk.BackupNotFound):
+        bk.set_pinned(db, "../wildcard-pipeline.db", True)
+
+
+def test_legacy_manual_backups_are_pinned_once(db):
+    _touch_backup(db, "wildcard-pipeline-20251201-000000-manual.db")
+    _touch_backup(db, "wildcard-pipeline-20251202-000000-manual.db")
+    _touch_backup(db, "wildcard-pipeline-20251203-000000-daily.db")
+    assert {e["name"]: e["pinned"] for e in bk.list_backups(db)} == {
+        "wildcard-pipeline-20251201-000000-manual.db": True,
+        "wildcard-pipeline-20251202-000000-manual.db": True,
+        "wildcard-pipeline-20251203-000000-daily.db": False,
+    }
+    assert bk.prune(db, 1) == []
+    # Once done, a later manual backup is an ordinary one.
+    fresh = bk.create_backup(db, "manual")
+    assert fresh["pinned"] is False
+    assert bk.prune(db, 1) == ["wildcard-pipeline-20251203-000000-daily.db"]
+
+
+def test_first_backup_writes_the_legacy_marker(db):
+    e = bk.create_backup(db, "manual")
+    assert e["pinned"] is False
+    assert (bk.backups_dir(db) / bk.LEGACY_PINS_MARKER).exists()
+
+
+def test_prune_spares_the_backup_staged_for_restore(db, sidecar):
+    _pins_settled(db)
+    for day in range(1, 4):
+        _touch_backup(db, f"wildcard-pipeline-202601{day:02d}-000000-daily.db")
+    staged = "wildcard-pipeline-20260101-000000-daily.db"
+    bk.stage_restore(db, staged)
+    assert bk.prune(db, 1) == ["wildcard-pipeline-20260102-000000-daily.db"]
+    assert staged in [e["name"] for e in bk.list_backups(db)]
+
+
+def test_delete_and_prune_drop_pin_markers(db):
+    _pins_settled(db)
+    name = "wildcard-pipeline-20260101-000000-daily.db"
+    _touch_backup(db, name)
+    bk.set_pinned(db, name, True)
+    bk.delete_backup(db, name)
+    d = bk.backups_dir(db)
+    assert not (d / (name + bk.PIN_SUFFIX)).exists()
+    (d / ("wildcard-pipeline-20260102-000000-daily.db" + bk.PIN_SUFFIX)).touch()
+    bk.prune(db, 5)
+    assert list(d.glob("*" + bk.PIN_SUFFIX)) == []
+
+
+def test_manual_backup_note_is_cleaned_and_listed(db):
+    e = bk.create_backup(db, "manual", note="  before the\noutfit   rework ")
+    assert e["note"] == "before the outfit rework"
+    assert bk.list_backups(db)[0]["note"] == "before the outfit rework"
+    long = bk.create_backup(db, "manual", note="x" * 200)
+    assert long["note"] == "x" * bk.NOTE_MAX_LEN
+    blank = bk.create_backup(db, "manual", note="   ")
+    assert blank["note"] is None
+    assert not (bk.backups_dir(db) / (blank["name"] + bk.NOTE_SUFFIX)).exists()
+
+
+def test_note_goes_with_its_backup(db):
+    _pins_settled(db)
+    e = bk.create_backup(db, "manual", note="keep me")
+    d = bk.backups_dir(db)
+    bk.delete_backup(db, e["name"])
+    assert not (d / (e["name"] + bk.NOTE_SUFFIX)).exists()
+    (d / ("wildcard-pipeline-20200101-000000-manual.db" + bk.NOTE_SUFFIX)).write_text("orphan")
+    bk.prune(db, 5)
+    assert list(d.glob("*" + bk.NOTE_SUFFIX)) == []
 
 
 # ── delete ───────────────────────────────────────────────────────────

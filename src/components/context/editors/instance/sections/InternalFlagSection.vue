@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import Button from "@/kit/Button.vue";
+import { vToggleRow } from "@/kit/toggle-row";
 
 const props = defineProps<{
   library: boolean;
@@ -14,8 +17,7 @@ const emit = defineEmits<{
 const hasOverride = computed(() => props.modelValue !== null);
 const effective = computed(() => (props.modelValue !== null ? props.modelValue : props.library));
 
-function onToggle(ev: Event): void {
-  const v = (ev.target as HTMLInputElement).checked;
+function onToggle(v: boolean): void {
   emit("update:modelValue", v);
 }
 
@@ -29,26 +31,25 @@ function onClickReset(): void {
     <div class="wp-instance-section-head">
       <span class="wp-instance-section-title">Internal flag</span>
       <span v-if="hasOverride" class="wp-instance-section-modified">modified</span>
-      <button
+      <Button
         v-if="hasOverride"
-        type="button"
-        class="wp-instance-section-reset"
+        size="sm"
+        variant="ghost"
+        icon="pi-replay"
         data-test="if-reset"
         @click="onClickReset"
-      >
-        <i class="pi pi-replay" /> reset
-      </button>
+      >Reset</Button>
     </div>
     <div class="wp-instance-section-body">
-      <label class="wp-instance-toggle">
-        <input
-          type="checkbox"
+      <div v-toggle-row class="wp-instance-toggle">
+        <Checkbox
           data-test="if-toggle"
-          :checked="effective"
-          @change="onToggle"
+          :model-value="effective"
+          aria-label="Internal binding (engine-only)"
+          @update:model-value="onToggle"
         />
-        <span>Internal binding (engine-only)</span>
-      </label>
+        <span aria-hidden="true">Internal binding (engine-only)</span>
+      </div>
     </div>
   </section>
 </template>
@@ -73,21 +74,11 @@ function onClickReset(): void {
 }
 .wp-instance-section-modified {
   background: rgba(251, 146, 60, 0.18);
-  color: var(--wp-status-modified, #fb923c);
+  color: var(--wp-status-modified);
   padding: 1px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   font: 600 9px/1 var(--wp-font-sans);
   text-transform: uppercase;
-}
-.wp-instance-section-reset {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text-muted);
-  padding: 2px 6px;
-  font: 9px/1 var(--wp-font-sans);
-  cursor: pointer;
-  border-radius: 3px;
 }
 .wp-instance-section-body {
   display: flex;

@@ -24,6 +24,8 @@ dev = [
     "pytest-asyncio>=0.23",
     # ComfyUI ships PyYAML; the wildcard file importer reads .yaml packs with it.
     "pyyaml>=6.0",
+    # ComfyUI ships Pillow; chat images are checked and re-encoded with it.
+    "pillow>=10.0",
     "ruff>=0.5",
 ]
 
@@ -39,18 +41,21 @@ DisplayName = "Wildcard Pipeline"
 # Max 400×400 per the Registry spec. SVG so it scales without the
 # Manager refetching at higher DPI.
 Icon = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/favicon.svg"
-# Wide promotional banner — 21:9 spec. Our SVG is 1400×600 (≈2.33:1)
-# which renders crisp on the registry listing card. Local file at
-# public/images/comfy-banner.svg, served by GitHub raw so the
-# Registry resolves a stable URL between releases.
-Banner = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/comfy-banner.svg"
+# Card banner (7:3, the Manager card's aspect). The new ComfyUI Manager
+# shows it about 275 px wide, so it carries the logo and a node-graph
+# shape and no text: the card prints the name under it. The text-heavy
+# public/images/comfy-banner.svg stays for places that show it large.
+# Served from main by GitHub raw, so it changes when main does.
+Banner = "https://raw.githubusercontent.com/DumiFlex/ComfyUI-Wildcard-Pipeline/main/public/images/comfy-card-banner.svg"
 
-# ComfyUI version floor. The pack uses the V3 io.* schema (custom
-# types via @comfytype, ComfyTypeIO subclasses, NodeOutput / io.Schema
-# class-based handlers) — landed in ComfyUI ≥0.3.36 per the
-# release notes. Pin to that floor so the Manager warns users on
-# older runtimes instead of installing then crashing at import.
-requires-comfyui = ">=0.3.36"
+# ComfyUI version floor: the oldest ComfyUI that has every V3 API the
+# nodes use. The newest one is `io.Schema(accept_all_inputs=...)`
+# (WP Context Injector), added in ComfyUI 0.11.0; io.Schema is a
+# dataclass, so ComfyUI 0.3.48-0.10 stops registering our nodes there
+# (only the four listed before it load), and anything older has no
+# comfy_api.latest at all. The Manager reads this to warn before
+# installing on an older ComfyUI.
+requires-comfyui = ">=0.11.0"
 
 # Force-include built artifacts that are gitignored so the publish
 # action's "everything git tracks" default would otherwise drop them.
@@ -68,18 +73,29 @@ extend-exclude = ["js", "web", "node_modules"]
 select = ["E", "F", "I", "UP", "B"]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+# The example packs are data written as code: long option strings, and `O`
+# reads as "option" there.
+"scripts/example_workflows/*" = ["E501", "E742"]
+
 [tool.pyright]
 # conftest.py prepends the project root to sys.path; mirror that for Pyright
 # so `from engine.template import ...` resolves in tests and editor.
 extraPaths = ["."]
-include = ["engine", "wp_nodes", "tests", "conftest.py"]
+include = ["engine", "wp_nodes", "wp_api", "tests", "conftest.py"]
 exclude = ["node_modules", "js", "web", ".venv", "**/__pycache__"]
+# CI runs `pyright engine wp_nodes wp_api` (see .github/workflows/ci.yml).
+# ComfyUI and torch aren't installed there; their imports stay unresolved.
+reportMissingImports = "none"
+# The code reads untrusted JSON as `x.get(k) if isinstance(x.get(k), dict)
+# else {}`, which is safe but which Pyright can't narrow (a second `.get`
+# call). These four rules flag that idiom hundreds of times and nothing else
+# of note; every other basic-mode rule is on.
+reportOptionalMemberAccess = "none"
+reportOptionalSubscript = "none"
+reportOptionalIterable = "none"
+reportOptionalOperand = "none"
 
-# Dispatch-pattern handlers (engine.handlers.handle_*) share a uniform
-# signature `(module, ctx, rng) -> Context`; handlers that don't consume
-# randomness still accept rng for parity. Suppress the unused-param warning
-# at the project level instead of decorating every handler.
-reportUnusedParameter = "none"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -102,12 +118,10 @@ build-backend = "setuptools.build_meta"
 source = ["engine", "wp_api"]
 omit = [
     "engine/db/migrations_sql/*",
-    "engine/handlers.py",
-    "engine/template.py",
-    "engine/pipeline.py",
-    "engine/context.py",
 ]
 
 [tool.coverage.report]
-fail_under = 80
+# CI runs pytest with --cov, so this gates every PR. Anchored a few points
+# under the measured baseline (90.6% on 2026-10-17); ratchet up, never down.
+fail_under = 88
 show_missing = true

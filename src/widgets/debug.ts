@@ -138,7 +138,7 @@ export function create(node: DebugNode, inputName: string) {
     // active tab changes; we expose the current value here.
     minWidth: () => dynamicMinWidth,
   });
-  attachThemeDetector(host.widget.element, app);
+  host.onCleanup(attachThemeDetector(host.widget.element, app));
   const orig = node.onExecuted;
   node.onExecuted = function (output) {
     orig?.call(this, output);

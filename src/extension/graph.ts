@@ -18,6 +18,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
+import { TOGGLES_NODE, staticToggleValues, togglesPreviewModules } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
@@ -179,6 +180,12 @@ function widgetValue(node: LiteNodeLike, name: string): string {
   return typeof w?.value === "string" ? w.value : "";
 }
 
+/** A Context Loop whose `values` text input is wired writes
+ *  `$<iteration_var_name>_value` (its line for the frame) too. */
+function loopValuesWired(node: LiteNodeLike): boolean {
+  return node.inputs?.find((i) => i.name === "values")?.link != null;
+}
+
 /** Numeric widget read — `widgetValue` is string-only (returns "" for Int /
  *  Float / combo widgets), so a numeric widget like the Loop's `seed`/`count`
  *  must be read here. Coerces the raw value; NaN when absent/unparseable. */
@@ -187,6 +194,22 @@ function widgetNumber(node: LiteNodeLike, name: string): number {
   return typeof w?.value === "number" ? w.value : Number(w?.value);
 }
 
+
+/** A Context's seed as the run will see it: its own `seed` widget, or, when
+ *  the seed input is wired (an Int / seed node feeding several Contexts),
+ *  the number widget of the node at the other end. NaN when unreadable. */
+function contextSeed(node: LiteNodeLike, graph: LiteGraphLike): number {
+  const slot = node.inputs?.find((x) => x.name === "seed");
+  if (slot?.link != null) {
+    const link = graph.links[slot.link];
+    const origin = link ? graph.getNodeById(link.origin_id) : null;
+    const w = origin?.widgets?.find((x) => x.name === "value" || x.name === "seed")
+      ?? origin?.widgets?.find((x) => typeof x.value === "number");
+    const v = typeof w?.value === "number" ? w.value : Number(w?.value);
+    return Number.isFinite(v) ? v : NaN;
+  }
+  return widgetNumber(node, "seed");
+}
 
 function isSubgraphNode(n: LiteNodeLike): boolean {
   if (typeof n.isSubgraphNode === "function") {
@@ -641,6 +664,10 @@ export function collectUpstreamInjectorBindings(
       for (const v of MODEL_VARS) out.add(v);
       continue;
     }
+    if (n.type === TOGGLES_NODE && !isSkippedMode(n)) {
+      for (const v of Object.keys(staticToggleValues(n))) out.add(v);
+      continue;
+    }
     if (n.type !== "WP_ContextInjector") continue;
     if (isSkippedMode(n)) continue;
     const inj = parseCached<{
@@ -683,6 +710,10 @@ export function collectUpstreamInjectorNegatives(
     if (n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
       // A write replaces the variable's negatives; Model Info sets none.
       for (const v of MODEL_VARS) out[v] = null;
+      continue;
+    }
+    if (n.type === TOGGLES_NODE && !isSkippedMode(n)) {
+      for (const v of Object.keys(staticToggleValues(n))) out[v] = null;
       continue;
     }
     if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
@@ -750,8 +781,9 @@ export function collectUpstreamWildcardUuids(
  * Walk upstream from `node` and return the module list of every chain
  * `WP_Context`, ordered upstream-first → downstream-last. Used by the
  * assembler preview to POST the chain to `/wp/api/preview/resolve` —
- * the engine then runs each step's PipelineEngine with a stable seed
- * so the preview matches what the user gets at queue time.
+ * the engine then runs each step's PipelineEngine on that step's own
+ * seed (`opts.seeds`) so the preview matches what the user gets at
+ * queue time.
  *
  * Skips non-Context nodes (boundary proxies and the assembler itself).
  * The returned arrays are the raw module dicts straight from each
@@ -764,8 +796,11 @@ export function collectUpstreamChain(
   /** `modelSteps`: also emit a one-module step per WP_ModelInfo node carrying
    *  its known values, so a server preview's derivations can branch on
    *  `$model_variant`. Off by default: other callers zip steps with the
-   *  chain's Context nodes by index. */
-  opts: { modelSteps?: boolean } = {},
+   *  chain's Context nodes by index.
+   *  `seeds`: filled with one entry per returned step, the Context's own
+   *  `seed` widget (null for a model / toggles step, or a seed it can't
+   *  read), so the preview rolls each step on the seed the run will use. */
+  opts: { modelSteps?: boolean; seeds?: (number | null)[] } = {},
 ): unknown[][] {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
@@ -787,6 +822,12 @@ export function collectUpstreamChain(
   for (const n of upstreamFirst) {
     if (opts.modelSteps && n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
       out.push(modelInfoPreviewModules(n));
+      opts.seeds?.push(null);
+      continue;
+    }
+    if (opts.modelSteps && n.type === TOGGLES_NODE && !isSkippedMode(n)) {
+      out.push(togglesPreviewModules(n));
+      opts.seeds?.push(null);
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -795,6 +836,8 @@ export function collectUpstreamChain(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
+    const seed = contextSeed(n, graphOf(n, rootGraph));
+    opts.seeds?.push(Number.isSafeInteger(seed) ? seed : null);
     // Apply the bundle gate before posting to `/wp/api/preview/resolve`.
     // The server runs each step as a flat module list — it doesn't see
     // bundles[] — so we mask `enabled=false` on any child whose
@@ -893,6 +936,13 @@ export function collectUpstreamKinds(
       }
       continue;
     }
+    if (n.type === TOGGLES_NODE) {
+      for (const v of Object.keys(staticToggleValues(n))) {
+        kinds[v] = "toggle";
+        flagInternal(v, true);
+      }
+      continue;
+    }
     if (n.type === "WP_ContextLoop") {
       // Loop head stamps `$<iteration_var_name>` + `$<name>_total`.
       // Tag them with the `loop` kind so the assembler chip shows the
@@ -911,6 +961,10 @@ export function collectUpstreamKinds(
       kinds[totalName] = "loop";
       flagInternal(baseName, cfg.iteration_internal === true);
       flagInternal(totalName, cfg.total_internal === true);
+      if (loopValuesWired(n)) {
+        kinds[`${baseName}_value`] = "loop";
+        flagInternal(`${baseName}_value`, false);
+      }
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -1077,6 +1131,7 @@ export function collectUpstreamProducers(
     const title = typeof n.title === "string" ? n.title.trim() : "";
     if (title) return title;
     if (n.type === MODEL_INFO_NODE) return "Model Info";
+    if (n.type === TOGGLES_NODE) return "Toggles";
     return n.type === "WP_ContextInjector" ? "Context Injector" : "Context Loop";
   };
 
@@ -1157,6 +1212,11 @@ export function collectUpstreamProducers(
       continue;
     }
 
+    if (n.type === TOGGLES_NODE) {
+      for (const v of Object.keys(staticToggleValues(n))) write(v, { kind: "toggle", nodeId, nodeLabel, internal: true });
+      continue;
+    }
+
     if (n.type === "WP_ContextLoop") {
       const raw = widgetValue(n, "wp_context_loop_config");
       const cfg = parseCached<{
@@ -1171,6 +1231,7 @@ export function collectUpstreamProducers(
       write(`${baseName}_total`, {
         kind: "loop", nodeId, nodeLabel, internal: cfg.total_internal === true,
       });
+      if (loopValuesWired(n)) write(`${baseName}_value`, { kind: "loop", nodeId, nodeLabel, internal: false });
       continue;
     }
 
@@ -1365,6 +1426,7 @@ function chainParts(chain: LiteNodeLike[]): unknown[] {
     if (n.type === MODEL_INFO_NODE) {
       parts.push(JSON.stringify(staticModelValues(n)), [...internalModelVars(n)].join(","));
     }
+    if (n.type === TOGGLES_NODE) parts.push(widgetValue(n, "wp_toggles"));
   }
   return parts;
 }
@@ -1497,6 +1559,13 @@ function resolveChainStatic(
       }
       continue;
     }
+    if (n.type === TOGGLES_NODE) {
+      for (const [k, v] of Object.entries(staticToggleValues(n))) {
+        ctx[k] = v;
+        internalKeys.add(k);
+      }
+      continue;
+    }
     if (n.type === "WP_ContextLoop") {
       // Loop stamps `$<iteration_var_name>` + `$<name>_total` into the
       // per-iteration context. Static walker doesn't know the iteration
@@ -1519,6 +1588,11 @@ function resolveChainStatic(
       else internalKeys.delete(baseName);
       if (cfg.total_internal === true) internalKeys.add(totalName);
       else internalKeys.delete(totalName);
+      if (loopValuesWired(n)) {
+        // The wired text is only known at run time.
+        ctx[`${baseName}_value`] = "";
+        internalKeys.delete(`${baseName}_value`);
+      }
       continue;
     }
     if (n.type !== "WP_Context") continue;
@@ -1664,11 +1738,17 @@ function writeBindings(
         if (matchVar) {
           const raw = ctx[matchVar];
           const wanted = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+          // Only options this use can pick (category filter + toggles), so a
+          // toggled-off option never matches and a toggled-off fallback is
+          // never used — as the engine does.
+          const pool = options.filter((o) =>
+            isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike),
+          );
           chosen = (wanted
-            ? options.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
+            ? pool.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
             : undefined)
-            ?? options.find((o) => (o as { fallback?: boolean }).fallback === true)
-            ?? options[0];
+            ?? pool.find((o) => !o.is_null && (o as { fallback?: boolean }).fallback === true)
+            ?? pool[0] ?? options[0];
         }
         ctx[binding] = expandValue(String(chosen.value ?? ""), ctx, catalog, 0);
       } else {
@@ -1780,8 +1860,10 @@ function matchDerivationCondition(
   if (op === "equals") return actual === value;
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);
-  if (op === "matches") {
-    try { return new RegExp(value).test(actual); } catch { return false; }
+  if (op === "not_contains") return !actual.includes(value);
+  if (op === "matches" || op === "not_matches") {
+    // A broken pattern fires neither (mirrors engine derivation_handler).
+    try { return new RegExp(value).test(actual) === (op === "matches"); } catch { return false; }
   }
   return false;
 }
@@ -2236,4 +2318,93 @@ export function findWildcardHomesElsewhere(
   if (holders.length === 0) return [];
   const codenames = assignCodenames(contextIds);
   return holders.map((n) => codenames.get(String(n.id)) ?? baseCodename(n.id));
+}
+
+/** A variable this canvas sets at run time, for the manager's AI
+ *  (`extension/canvas-facts.ts`). */
+export interface CanvasVar {
+  name: string;
+  source: "injector" | "loop" | "model" | "toggle";
+  about: string;
+}
+
+/**
+ * Every run-time variable the canvas sets outside the library: enabled
+ * WP_ContextInjector rows, each WP_ContextLoop's (renamable) iteration
+ * variables and WP_ModelInfo's. Graph-wide, subgraphs included; bypassed
+ * and muted nodes are left out. Names only, plus a short "about" (the
+ * row's slot label, the loop's frame count): never the values, which can
+ * be anything the user wired in.
+ */
+export function collectCanvasVars(rootGraph: LiteGraphLike): CanvasVar[] {
+  const out: CanvasVar[] = [];
+  const add = (name: string, source: CanvasVar["source"], about: string): void => {
+    const n = name.trim();
+    if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(n) && !n.startsWith("__") && !out.some((v) => v.name === n)) {
+      out.push({ name: n, source, about });
+    }
+  };
+  for (const { node: n } of walkAllNodes(rootGraph)) {
+    if (isSkippedMode(n)) continue;
+    if (n.type === "WP_ContextInjector") {
+      const inj = parseCached<{
+        rows?: Array<{ binding?: string; enabled?: boolean; kind?: string; slot_label?: string }>;
+      }>(widgetValue(n, "wp_rows"), { rows: [] });
+      for (const row of inj.rows ?? []) {
+        if (row.enabled !== true) continue;
+        const from = row.kind === "general" ? "a template row" : `from ${row.slot_label?.trim() || "a wired socket"}`;
+        add(row.binding ?? "", "injector", from);
+      }
+    } else if (n.type === "WP_ContextLoop") {
+      const raw = widgetValue(n, "wp_context_loop_config");
+      const cfg = parseCached<{ iteration_var_name?: string }>(typeof raw === "string" ? raw : "", {});
+      const base = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
+      const count = n.widgets?.find((w) => w.name === "count")?.value;
+      const frames = typeof count === "number" ? `, ${count} frames` : "";
+      add(base, "loop", `frame number 1 to N${frames}`);
+      add(`${base}_total`, "loop", `number of frames${frames}`);
+      if (loopValuesWired(n)) add(`${base}_value`, "loop", "this frame's line from the values input");
+    } else if (n.type === MODEL_INFO_NODE) {
+      for (const v of MODEL_VARS) add(v, "model", "");
+    } else if (n.type === TOGGLES_NODE) {
+      for (const [v, val] of Object.entries(staticToggleValues(n))) add(v, "toggle", `toggle, now ${val || "nothing picked"}`);
+    }
+  }
+  return out.slice(0, 40);
+}
+
+/** Library ids the canvas uses and variables its Assemblers read. */
+export interface CanvasLibraryUse {
+  ids: string[];
+  reads: string[];
+}
+
+const LIBRARY_REF_RE = /@\{([0-9a-f]{8})/g;
+const VAR_READ_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
+
+/**
+ * What the library's health page can't see from the library alone: which
+ * library items sit on this canvas (each WP_Context's module ids, its
+ * bundles' library ids and every `@{uuid}` inside its copies) and which
+ * variables the canvas's WP_PromptAssembler templates read. Bypassed and
+ * muted nodes count too: they are still on the canvas, just switched off.
+ * Ids and names only, never values.
+ */
+export function collectCanvasLibraryUse(rootGraph: LiteGraphLike): CanvasLibraryUse {
+  const ids = new Set<string>();
+  const reads = new Set<string>();
+  for (const { node: n } of walkAllNodes(rootGraph)) {
+    if (n.type === "WP_Context") {
+      const raw = widgetValue(n, "wp_modules");
+      const v = parseCached<ContextWidgetValue>(raw, { version: 1, modules: [] });
+      for (const m of v.modules ?? []) if (typeof m.id === "string") ids.add(m.id);
+      for (const b of v.bundles ?? []) if (typeof b.library_id === "string") ids.add(b.library_id);
+      for (const match of raw.matchAll(LIBRARY_REF_RE)) ids.add(match[1]);
+    } else if (n.type === "WP_PromptAssembler") {
+      const text = `${widgetValue(n, "template")} ${widgetValue(n, "negative_template")}`;
+      for (const match of text.matchAll(VAR_READ_RE)) reads.add(match[1]);
+      for (const match of text.matchAll(LIBRARY_REF_RE)) ids.add(match[1]);
+    }
+  }
+  return { ids: [...ids], reads: [...reads] };
 }

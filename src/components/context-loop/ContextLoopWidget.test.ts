@@ -9,13 +9,22 @@ import { deriveLoopSeeds } from "../shared/seed-derive";
 describe("ContextLoopWidget", () => {
   it("renders defaults — hash chip active, both switches off, internal toggles on", () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
-    expect(w.find('[data-test="loop-strategy-hash_index"]').classes()).toContain("wp-loop__chip--active");
-    expect(w.find('[data-test="loop-strategy-sequential"]').classes()).not.toContain("wp-loop__chip--active");
-    expect(w.find('[data-test="loop-override-toggle"]').classes()).not.toContain("wp-loop__switch--on");
-    expect(w.find('[data-test="loop-bypass-toggle"]').classes()).not.toContain("wp-loop__switch--on");
+    expect(w.find('[data-test="loop-strategy-hash_index"]').attributes("aria-checked")).toBe("true");
+    expect(w.find('[data-test="loop-strategy-sequential"]').attributes("aria-checked")).toBe("false");
+    expect(w.find('[data-test="loop-override-toggle"]').attributes("aria-checked")).toBe("false");
+    expect(w.find('[data-test="loop-bypass-toggle"]').attributes("aria-checked")).toBe("false");
     // Both internal toggles default to ON.
-    expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
-    expect(w.find('[data-test="loop-total-internal"]').classes()).toContain("wp-loop__pi-btn--on");
+    expect(w.find('[data-test="loop-iteration-internal"]').attributes("aria-pressed")).toBe("true");
+    expect(w.find('[data-test="loop-total-internal"]').attributes("aria-pressed")).toBe("true");
+  });
+
+  it("says the values input sets the frames once it is wired", async () => {
+    const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
+    expect(w.find('[data-test="loop-values-note"]').exists()).toBe(false);
+    await w.setProps({ valuesWired: true });
+    expect(w.find('[data-test="loop-values-note"]').text()).toContain("$iteration_value");
+    await w.setProps({ valuesCount: 5 });
+    expect(w.find('[data-test="loop-values-note"]').text()).toContain("5 on the last run");
   });
 
   it("emits new strategy on chip click", async () => {
@@ -52,7 +61,7 @@ describe("ContextLoopWidget", () => {
 
   it("emits iteration_var_name update on text input", async () => {
     const w = mount(ContextLoopWidget, { props: { modelValue: emptyContextLoopConfig() } });
-    const input = w.find<HTMLInputElement>('[data-test="loop-iteration-var"]');
+    const input = w.find<HTMLInputElement>('[data-test="loop-iteration-var"] input');
     input.element.value = "idx";
     await input.trigger("input");
     const emitted = w.emitted("update:modelValue")?.[0]?.[0] as { iteration_var_name: string };
@@ -89,7 +98,7 @@ describe("ContextLoopWidget", () => {
     const w = mount(ContextLoopWidget, {
       props: { modelValue: { ...emptyContextLoopConfig(), iteration_internal: true } },
     });
-    expect(w.find('[data-test="loop-iteration-internal"]').classes()).toContain("wp-loop__pi-btn--on");
+    expect(w.find('[data-test="loop-iteration-internal"]').attributes("aria-pressed")).toBe("true");
   });
 });
 

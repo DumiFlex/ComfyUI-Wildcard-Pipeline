@@ -37,25 +37,114 @@ interface ModeInterceptedNode {
 /** Install (or reuse) a property-descriptor intercept on `node.mode`
  *  so writes from ComfyUI's mute/bypass shortcuts fire `cb` SYNCHRONOUSLY
  *  instead of waiting for the next 400ms poll. Pattern lifted from
- *  ComfyUI-Lora-Manager (web/comfyui/lora_loader.js:123). */
+ *  ComfyUI-Lora-Manager (web/comfyui/lora_loader.js:123).
+ *
+ *  The intercept WRAPS whatever `mode` already is rather than replacing it.
+ *  The frontend instruments `mode` itself (`LGraphNodeProperties`, installed
+ *  in the node constructor): its setter fires `node:property:changed`, which
+ *  is the only way Nodes 2.0 learns a node was bypassed. Swapping in a plain
+ *  value slot swallowed that event, so our nodes never got the purple tint
+ *  or the "Bypassed" tag there (the legacy canvas reads `node.mode` at paint
+ *  time and never noticed). Reads and writes go through the host's accessor
+ *  when there is one; a plain data property falls back to our own slot. */
 function watchNodeMode(node: ConnectableNode, cb: () => void): () => void {
   const target = node as ConnectableNode & ModeInterceptedNode;
   let slot = target[MODE_INTERCEPT];
   if (!slot) {
-    slot = { value: typeof target.mode === "number" ? target.mode : 0, subs: new Set() };
-    target[MODE_INTERCEPT] = slot;
+    const host = findDescriptor(target, "mode");
+    const hostGet = host?.get;
+    const hostSet = host?.set;
+    const own = { value: typeof target.mode === "number" ? target.mode : 0, subs: new Set<() => void>() };
+    slot = own;
+    target[MODE_INTERCEPT] = own;
+    const read = (self: unknown): number => (hostGet ? hostGet.call(self) as number : own.value);
     Object.defineProperty(target, "mode", {
       configurable: true,
-      get() { return slot!.value; },
+      enumerable: host?.enumerable ?? true,
+      get() { return read(this); },
       set(next: number) {
-        const prev = slot!.value;
-        slot!.value = next;
-        if (prev !== next) for (const s of slot!.subs) s();
+        const prev = read(this);
+        if (hostSet) hostSet.call(this, next);
+        else own.value = next;
+        if (prev !== read(this)) for (const s of own.subs) s();
       },
     });
   }
-  slot.subs.add(cb);
-  return () => { slot!.subs.delete(cb); };
+  const subs = slot.subs;
+  subs.add(cb);
+  return () => { subs.delete(cb); };
+}
+
+/**
+ * Instant notice when any of a changing set of nodes changes mode: the nodes
+ * a WP Mode Relay watches, a WP Node Group's members. `reactiveFromGraph`
+ * hears its own node's mode at once but other nodes' only on its poll (400 ms,
+ * and longer on a still canvas), so a chain of relays and groups added that
+ * up hop by hop. Call `sync()` after the set may have changed (wires); the
+ * returned `stop()` drops every subscription.
+ */
+export function watchModes(nodes: () => readonly object[], cb: () => void): { sync(): void; stop(): void } {
+  const subs = new Map<object, () => void>();
+  const sync = (): void => {
+    const now = new Set(nodes());
+    for (const [n, off] of subs) {
+      if (!now.has(n)) { off(); subs.delete(n); }
+    }
+    for (const n of now) {
+      if (!subs.has(n)) subs.set(n, watchNodeMode(n as ConnectableNode, cb));
+    }
+  };
+  sync();
+  return {
+    sync,
+    stop: () => { for (const off of subs.values()) off(); subs.clear(); },
+  };
+}
+
+/** `key`'s descriptor on `obj` or the nearest prototype that defines it. */
+function findDescriptor(obj: object, key: string): PropertyDescriptor | undefined {
+  for (let o: object | null = obj; o; o = Object.getPrototypeOf(o) as object | null) {
+    const d = Object.getOwnPropertyDescriptor(o, key);
+    if (d) return d;
+  }
+  return undefined;
+}
+
+/** One `onConnectionsChange` wrapper per node, fanning out to a subscriber
+ *  set. Wrapping per call and restoring the captured original on dispose is
+ *  not LIFO-safe: disposing an earlier subscriber would drop a later one's
+ *  wrapper. Here subscribers come and go in any order; the wrapper is only
+ *  uninstalled when the last one leaves AND it is still the installed
+ *  handler (another extension may have wrapped on top — then it stays as an
+ *  inert pass-through to the original). */
+interface ConnectionsSlot {
+  orig: ConnectableNode["onConnectionsChange"];
+  wrapper: (...args: unknown[]) => void;
+  subs: Set<() => void>;
+}
+const connectionSlots = new WeakMap<object, ConnectionsSlot>();
+
+export function watchConnections(node: ConnectableNode, cb: () => void): () => void {
+  let slot = connectionSlots.get(node);
+  if (!slot) {
+    const subs = new Set<() => void>();
+    const orig = node.onConnectionsChange;
+    const wrapper = function (this: unknown, ...args: unknown[]): void {
+      orig?.apply(this, args);
+      for (const s of [...subs]) s();
+    };
+    slot = { orig, wrapper, subs };
+    connectionSlots.set(node, slot);
+    node.onConnectionsChange = wrapper;
+  }
+  const mine = slot;
+  mine.subs.add(cb);
+  return () => {
+    mine.subs.delete(cb);
+    if (mine.subs.size > 0 || connectionSlots.get(node) !== mine) return;
+    connectionSlots.delete(node);
+    if (node.onConnectionsChange === mine.wrapper) node.onConnectionsChange = mine.orig;
+  };
 }
 
 /** Opacity our own widgets use for a muted/bypassed node (`--skipped`). */
@@ -178,11 +267,7 @@ export function reactiveFromGraph<T>(
     if (!equals(state.value, next)) state.value = next;
   }
 
-  const orig = node.onConnectionsChange;
-  node.onConnectionsChange = function (...args: unknown[]) {
-    orig?.apply(this, args);
-    refresh();
-  };
+  const unwatchConnections = watchConnections(node, refresh);
 
   // Mode-change intercept — instant detection of mute/bypass toggles
   // (ComfyUI assigns `node.mode = 2|4` directly, no event fires).
@@ -238,7 +323,7 @@ export function reactiveFromGraph<T>(
     stopPoll();
     unsubscribe();
     unwatchMode();
-    node.onConnectionsChange = orig;
+    unwatchConnections();
   });
 
   return state;

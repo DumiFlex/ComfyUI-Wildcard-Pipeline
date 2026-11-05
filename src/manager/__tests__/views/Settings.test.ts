@@ -29,6 +29,7 @@ beforeEach(() => {
     checking: ref(false),
     rateLimitedUntil: ref(null),
     history: ref([]),
+    historyLoading: ref(false),
     loadHistory: vi.fn(),
     checkNow,
   } as ReturnType<typeof releaseCheck.useReleaseCheck>);
@@ -47,9 +48,8 @@ describe("Settings › General › Updates", () => {
     const wrap = await mountSettings();
     const ui = useUiStore();
     const spy = vi.spyOn(ui, "setCheckOnLaunch");
-    // The Toggle's clickable control is an inner <button role="switch">;
-    // the data-test attribute falls through to the outer <label>.
-    await wrap.get('[data-test="settings-check-on-launch"]').get("button").trigger("click");
+    // The data-test falls through to the Toggle's role="switch" root.
+    await wrap.get('[data-test="settings-check-on-launch"]').trigger("click");
     expect(spy).toHaveBeenCalledWith(false);
   });
 
@@ -63,5 +63,23 @@ describe("Settings › General › Updates", () => {
   it("shows an update-available status line", async () => {
     const wrap = await mountSettings();
     expect(wrap.get('[data-test="settings-update-status"]').text()).toContain("2.10.0");
+  });
+});
+
+describe("Settings › About", () => {
+  it("shows the version and a support link for each way to donate", async () => {
+    const router = await settingsRouter("about");
+    const wrap = mount(Settings, {
+      props: { section: "about" },
+      global: { plugins: [router], stubs: { Icon: true } },
+    });
+    expect(wrap.text()).toContain("2.9.0");
+    const links = wrap.findAll('[data-test="settings-support"] a');
+    expect(links.map((a) => a.attributes("href"))).toEqual([
+      "https://github.com/sponsors/DumiFlex",
+      "https://buymeacoffee.com/dumiflex",
+      "https://paypal.me/DumiFlex",
+    ]);
+    for (const a of links) expect(a.attributes("rel")).toBe("noopener");
   });
 });

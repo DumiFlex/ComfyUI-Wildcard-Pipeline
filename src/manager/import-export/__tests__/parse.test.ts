@@ -119,7 +119,7 @@ describe("parsePayload", () => {
     const v0 = {
       schema_version: 0,
       bundles: [],
-      wildcards: [{ type: "wildcard", name: "x", description: "", tags: [], payload_hash: "abc" }],
+      wildcards: [{ type: "wildcard", name: "x", description: "", tags: [], payload_hash: "abc", payload: { options: [] } }],
       fixed_values: [], combines: [], derivations: [], constraints: [], categories: [],
     };
     const result = parsePayload(JSON.stringify(v0));
@@ -145,6 +145,7 @@ describe("parsePayload", () => {
       description: "",
       tags: ["palette"],
       payload_hash: "abc123",
+      payload: { options: [] },
       snapshot_fingerprint: "deadbeef",  // wrong; real fingerprint differs
     };
     const payload = { schema_version: 1, ...EMPTY_BUCKETS, wildcards: [m] };
@@ -163,6 +164,7 @@ describe("parsePayload", () => {
       description: "",
       tags: [],
       payload_hash: "abc",
+      payload: { values: [] },
       snapshot_fingerprint: "deadbeef",  // wrong
     };
     const payload = { schema_version: 1, ...EMPTY_BUCKETS, fixed_values: [m] };
@@ -189,7 +191,7 @@ describe("parsePayload", () => {
 
   it("does not warn when no snapshot_fingerprint is stamped (legacy payload)", () => {
     const m = {
-      type: "wildcard", name: "x", description: "", tags: [], payload_hash: "abc",
+      type: "wildcard", name: "x", description: "", tags: [], payload_hash: "abc", payload: { options: [] },
       // no snapshot_fingerprint stamped — treat as legacy, no warning
     };
     const payload = { schema_version: 1, ...EMPTY_BUCKETS, wildcards: [m] };
@@ -205,6 +207,7 @@ describe("parsePayload", () => {
       description: "",
       tags: ["a"],
       payload_hash: "abc",
+      payload: { options: [] },
     };
     const correctFp = moduleFingerprint(m);
     const stamped = { ...m, snapshot_fingerprint: correctFp };

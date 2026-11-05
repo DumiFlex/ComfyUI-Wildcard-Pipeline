@@ -27,6 +27,7 @@ function stubRelease(over: Record<string, unknown> = {}) {
       { version: "2.12.0", body: "The big one.\n\n- **Nodes 2.0.** yes", url: "https://x/12", publishedAt: "2026-08-03T00:00:00Z" },
       { version: "2.11.0", body: "Older.\n\n- **Held modules.** yes", url: "https://x/11", publishedAt: "2026-07-24T00:00:00Z" },
     ]),
+    historyLoading: ref(false),
     loadHistory: vi.fn(),
     checkNow: vi.fn(),
     ...over,
@@ -115,6 +116,24 @@ describe("WhatsNew — earlier releases", () => {
     const href = w.find('[data-test="whats-new-github"]').attributes("href");
     expect(href).toMatch(/\/releases$/);
     expect(href).not.toContain("/tag/");
+  });
+});
+
+describe("WhatsNew — loading", () => {
+  // With no cached notes the page used to say "No release notes loaded yet…
+  // if you are offline" while it was in fact fetching them.
+  it("shows a skeleton, not the offline text, while the history loads", async () => {
+    stubRelease({ history: ref([]), latestVersion: ref(null), releaseBody: ref(null), historyLoading: ref(true) });
+    const w = await mountPage();
+    expect(w.find('[data-test="whats-new-skeleton"]').exists()).toBe(true);
+    expect(w.find('[data-test="whats-new-empty"]').exists()).toBe(false);
+  });
+
+  it("shows the offline text once the load has finished empty", async () => {
+    stubRelease({ history: ref([]), latestVersion: ref(null), releaseBody: ref(null), historyLoading: ref(false) });
+    const w = await mountPage();
+    expect(w.find('[data-test="whats-new-skeleton"]').exists()).toBe(false);
+    expect(w.find('[data-test="whats-new-empty"]').exists()).toBe(true);
   });
 });
 

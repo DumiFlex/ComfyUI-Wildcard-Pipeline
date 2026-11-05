@@ -10,6 +10,7 @@
  *  4. Rule matrix (ConstraintMatrix)
  *  5. Exceptions table
  */
+import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
 import type { SaveState, EditorFieldError } from "../components/EditorFrame.types";
@@ -17,24 +18,32 @@ import { useRouter } from "vue-router";
 import EditorFrame from "../components/EditorFrame.vue";
 import SendToTestRunner from "../components/SendToTestRunner.vue";
 import IdentityCard from "../components/IdentityCard.vue";
-import Card from "../components/ui/Card.vue";
-import Button from "../components/ui/Button.vue";
+import { usePanelAction, viaPanel } from "../composables/usePanelAction";
+import Card from "@/kit/Card.vue";
+import Button from "@/kit/Button.vue";
 import CommunityRowActions from "../components/CommunityRowActions.vue";
 import DraftBanner from "../components/DraftBanner.vue";
-import Input from "../components/ui/Input.vue";
-import Select from "../components/ui/Select.vue";
-import Checkbox from "../components/ui/Checkbox.vue";
-import ListFilter from "../components/ui/ListFilter.vue";
+import Select from "@/kit/Select.vue";
+import Checkbox from "@/kit/Checkbox.vue";
+import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
+import ListFilter from "@/kit/ListFilter.vue";
 import { constraintExceptionHaystack } from "../utils/listFilter";
 import BulkDeleteToolbar from "../components/BulkDeleteToolbar.vue";
+import AiConstraintPanel from "../components/ai/AiConstraintPanel.vue";
+import ConstraintPreview from "../components/ConstraintPreview.vue";
+import { mergeAiRules, type PreviewWildcard } from "../utils/constraint-preview";
+import { useAiConfig } from "../composables/useAiConfig";
 import { useBulkSelection } from "../composables/useBulkSelection";
 import RichTextPreview from "../components/RichTextPreview.vue";
 import ConstraintMatrixGrid from "../components/ConstraintMatrix.vue";
-import ConfirmDialog from "../../components/shared/ConfirmDialog.vue";
-import { useToast } from "../composables/useToast";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
+import { useToast } from "@/kit/useToast";
 import { useUnsavedGuard } from "../composables/useUnsavedGuard";
 import { useEditorShortcuts } from "../composables/useEditorShortcuts";
 import { useEditorDraft } from "../composables/useEditorDraft";
+import {
+  registerOpenEditor, draftCreateId, draftSaved, type StagedDraft,
+} from "../composables/useOpenEditor";
 import { useReturnTo } from "../composables/useReturnTo";
 import { useModuleStore } from "../stores/moduleStore";
 import { useCategoryStore } from "../stores/categoryStore";
@@ -45,7 +54,7 @@ import { useCascadeApply } from "../cascade/useCascadeApply";
 import { tokenizeRefString, resolveWildcardChip } from "../cascade/resolveChip";
 import type { LibraryFixture } from "../cascade/reverse-dep-index";
 import CascadeConfirmDialog from "../cascade/CascadeConfirmDialog.vue";
-import PillCountBadge from "../cascade/PillCountBadge.vue";
+import Chip from "@/kit/Chip.vue";
 import ConstraintReattachSection from "../../components/context/editors/constraint/sections/ConstraintReattachSection.vue";
 import { walkRemap } from "../../components/context/bundles/uuid-remap";
 import { buildWildcardRefData } from "../utils/library-suggestions";
@@ -62,6 +71,8 @@ import type {
   ConstraintCell,
   ConstraintException,
   ConstraintMatrix,
+  AiConstraintCellDraft,
+  AiConstraintExceptionDraft,
   ConstraintMode,
   ConstraintPayload,
   ModuleHistoryEntry,
@@ -107,7 +118,7 @@ async function onEntityDeleteClick(): Promise<void> {
 
 function onCascadeDialogConfirmed(result: { undo_entry_id: string; affected_count: number }): void {
   cascadeDialogOpen.value = false;
-  moduleStore.remove(props.id!);
+  moduleStore.removeLocal(props.id!);
   const undoId = result.undo_entry_id;
   const count = result.affected_count;
   toast.push({
@@ -176,6 +187,9 @@ function setSaveState(next: SaveState, ttl?: number): void {
   }
 }
 const isEdit = computed(() => !!props.id);
+/** False until an existing item has loaded: the frame draws its skeleton
+ *  instead of an empty form (and holds Save) meanwhile. */
+const loaded = ref(!props.id);
 const historyEntries = ref<ModuleHistoryEntry[]>([]);
 
 // Unsaved-changes guard
@@ -197,9 +211,46 @@ function snapshot(): string {
   });
 }
 
+const ai = useAiConfig();
+const aiOpen = ref(false);
+const previewOpen = ref(true);
+/** The AI panel holds rules the user hasn't applied yet. */
+const aiPending = ref(false);
+
 const { showConfirm, dirty, onConfirmLeave, onCancelLeave } = useUnsavedGuard(
-  () => snapshot() !== baseline.value,
+  () => aiPending.value || snapshot() !== baseline.value,
+  () => draft.discard()
 );
+
+// The chat reads and edits this item's info here; an existing item's payload
+// stays on Save. A new item takes the payload of a draft the chat staged.
+const fillFromChat = registerOpenEditor({
+  id: props.id, type: "constraint", dirty: () => dirty.value,
+  rebase: () => { baseline.value = snapshot(); },
+  name, description, tags, categoryId, contentRating,
+  ...(props.id ? {} : {
+    setPayload: (p: Record<string, unknown>) => loadPayload(p as Partial<ConstraintPayload>),
+  }),
+});
+// The chat's `use_panel`: Describe, or ask the Draft with AI panel.
+const identityCard = ref<InstanceType<typeof IdentityCard> | null>(null);
+const aiPanelRef = ref<InstanceType<typeof AiConstraintPanel> | null>(null);
+usePanelAction({ id: () => props.id, identity: identityCard, panels: {
+  draft: async (text) => {
+    if (!sourceWildcardId.value || !targetWildcardId.value) {
+      return "couldn't: pick the source and target wildcards first";
+    }
+    if (refMissing.value) return "couldn't: the source or target wildcard is missing; fix it first";
+    return viaPanel(aiOpen, aiPanelRef)(text);
+  },
+} });
+/** The chat's draft this new constraint was opened with (Save creates it at
+ *  the id the card reserved and marks the card applied). */
+let chatDraft: StagedDraft | null = null;
+/** Wildcard ids a chat draft names that weren't in the library when it
+ *  opened: wildcards other cards propose. They read "not created yet"
+ *  (not "missing"), and Save waits for them. */
+const pendingWildcardIds = ref<string[]>([]);
 
 const draft = useEditorDraft({
   kind: "constraint",
@@ -860,6 +911,36 @@ function normalizeTargetSelect(raw: unknown): LibTargetSelect {
   return { mode: "all" };
 }
 
+/** Load a stored payload into the editor (saved row, history entry or chat
+ *  draft). Ids, matrix, exceptions and reach are kept as given even when a
+ *  wildcard isn't in the library (deleted, or a chat card not applied yet). */
+function loadPayload(p: Partial<ConstraintPayload>): void {
+  sourceWildcardId.value = p.source_wildcard_id ?? null;
+  targetWildcardId.value = p.target_wildcard_id ?? null;
+  sourceWildcardName.value = p.source_wildcard_name ?? null;
+  targetWildcardName.value = p.target_wildcard_name ?? null;
+  matrix.value = normalizeMatrix(p.matrix);
+  exceptions.value = normalizeExceptions(p.exceptions);
+  targetSelect.value = normalizeTargetSelect(p.target_select);
+  rehydrateExceptionsFromIds();
+}
+
+const PENDING_NOTE = "Not created yet: apply its card first";
+function missingMessage(pending: boolean): string {
+  return pending ? PENDING_NOTE : "Not in the library: pick another wildcard";
+}
+
+/** A chat-draft wildcard id that isn't in the library yet. */
+function isPendingWildcard(id: string | null): boolean {
+  return !!id && pendingWildcardIds.value.includes(id) && isDangling(id);
+}
+const pendingSource = computed(() => isPendingWildcard(sourceWildcardId.value));
+const pendingTarget = computed(() => isPendingWildcard(targetWildcardId.value));
+/** Every missing side is one a chat card will create: no reattach banner
+ *  (nothing was deleted), just the "not created yet" notes. */
+const onlyPendingMissing = computed(() =>
+  (!danglingSource.value || pendingSource.value) && (!danglingTarget.value || pendingTarget.value));
+
 onMounted(async () => {
   await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
   if (props.id) {
@@ -870,19 +951,11 @@ onMounted(async () => {
       categoryId.value = row.category_id;
       tags.value = row.tags;
       contentRating.value = row.content_rating ?? "safe";
-      const p = row.payload as Partial<ConstraintPayload>;
-      sourceWildcardId.value = p.source_wildcard_id ?? null;
-      targetWildcardId.value = p.target_wildcard_id ?? null;
-      sourceWildcardName.value = p.source_wildcard_name ?? null;
-      targetWildcardName.value = p.target_wildcard_name ?? null;
-      matrix.value = normalizeMatrix(p.matrix);
-      exceptions.value = normalizeExceptions(p.exceptions);
-      targetSelect.value = normalizeTargetSelect(p.target_select);
-      // Refresh exception value-strings from source_id / target_id in case
-      // an upstream wildcard's option value was renamed since this
+      // Also refreshes exception value-strings from source_id / target_id in
+      // case an upstream wildcard's option value was renamed since this
       // constraint was last opened. Re-anchor baseline below so this
       // doesn't flag the editor as dirty.
-      rehydrateExceptionsFromIds();
+      loadPayload(row.payload as Partial<ConstraintPayload>);
       historyEntries.value = readHistory(row.payload);
       recent.push({ id: props.id, kind: "constraint", name: name.value });
     } catch {
@@ -890,11 +963,50 @@ onMounted(async () => {
       router.replace("/constraints");
     }
   }
+  loaded.value = true;
   baseline.value = snapshot();
+  // "Open in editor" on a chat card: the proposed constraint, unsaved.
+  if (!props.id) {
+    chatDraft = fillFromChat();
+    if (chatDraft) {
+      pendingWildcardIds.value = [sourceWildcardId.value, targetWildcardId.value]
+        .filter((id): id is string => !!id && isDangling(id));
+    }
+    chatDraftNote(chatDraft);
+  }
 });
+
+function chatDraftNote(d: StagedDraft | null): void {
+  if (!d) return;
+  const waiting = pendingWildcardIds.value.length;
+  const parts = ["Check it and Save to keep it."];
+  if (d.newCategory) {
+    parts.push(`It suggested a new category, "${d.newCategory}": create it from the Category picker if you want it.`);
+  }
+  if (waiting) {
+    parts.push(`Its ${waiting === 1 ? "wildcard isn't" : "wildcards aren't"} created yet: apply ${waiting === 1 ? "its card" : "their cards"} in the chat first.`);
+  }
+  toast.push({ severity: "info", summary: "From the assistant", detail: parts.join(" ") });
+}
 
 function onMatrixUpdate(next: ConstraintMatrix) {
   matrix.value = next;
+}
+
+/** Write the AI's ticked rules in: a tag pair sets its matrix cell, an
+ *  option pair replaces the exception that pair already had (the engine
+ *  keeps only one per pair) or is appended. */
+function applyAiRules(cells: AiConstraintCellDraft[], excs: AiConstraintExceptionDraft[]): void {
+  const next = mergeAiRules(matrix.value, exceptions.value, cells, excs);
+  matrix.value = next.matrix;
+  exceptions.value = next.exceptions;
+  const n = cells.length + excs.length;
+  toast.push({
+    severity: "success",
+    summary: `Applied ${n} rule${n === 1 ? "" : "s"}`,
+    detail: "Check the matrix and exceptions, then Save.",
+    life: 3000,
+  });
 }
 
 function addException() {
@@ -1018,10 +1130,10 @@ function setExceptionMode(idx: number, mode: ConstraintMode) {
   ex.factor = MODE_DEFAULT_FACTOR[mode] ?? 1;
 }
 
-const REACH_MODES: Array<{ key: LibReachMode; label: string }> = [
-  { key: "first", label: "first" },
-  { key: "next", label: "next N" },
-  { key: "all", label: "all" },
+const REACH_MODES: SegmentedOption<LibReachMode>[] = [
+  { value: "first", label: "first" },
+  { value: "next", label: "next N" },
+  { value: "all", label: "all" },
 ];
 
 /** Switch reach mode. Entering `next` seeds `count` from the current
@@ -1032,19 +1144,10 @@ function setReachMode(mode: LibReachMode): void {
   targetSelect.value = mode === "next" ? { mode: "next", count: reachCount.value } : { mode };
 }
 
-function onReachCountInput(ev: Event): void {
-  const raw = Number((ev.target as HTMLInputElement).value);
-  const n = Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+/** Typed or stepped next-N count; whole numbers, at least 1. */
+function setReachCount(v: number | null): void {
+  const n = v !== null && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
   targetSelect.value = { mode: "next", count: n };
-}
-
-/** Step the next-N reach count by ±1, clamped to >= 1. Backs the up/down
- *  stepper chevrons so the control matches the exceptions factor Input
- *  (which has stacked steppers). Reuses the same min-1 clamp as the typed
- *  path above. */
-function bumpReach(direction: 1 | -1): void {
-  const n = reachCount.value + direction;
-  targetSelect.value = { mode: "next", count: n >= 1 ? n : 1 };
 }
 
 function applyRestore(entry: ModuleHistoryEntry): void {
@@ -1052,15 +1155,7 @@ function applyRestore(entry: ModuleHistoryEntry): void {
   description.value = entry.description ?? "";
   categoryId.value = entry.category_id ?? null;
   tags.value = entry.tags ? [...entry.tags] : [];
-  const p = (entry.payload ?? {}) as Partial<ConstraintPayload>;
-  sourceWildcardId.value = p.source_wildcard_id ?? null;
-  targetWildcardId.value = p.target_wildcard_id ?? null;
-  sourceWildcardName.value = p.source_wildcard_name ?? null;
-  targetWildcardName.value = p.target_wildcard_name ?? null;
-  matrix.value = normalizeMatrix(p.matrix);
-  exceptions.value = normalizeExceptions(p.exceptions);
-  targetSelect.value = normalizeTargetSelect(p.target_select);
-  rehydrateExceptionsFromIds();
+  loadPayload((entry.payload ?? {}) as Partial<ConstraintPayload>);
   toast.push({
     severity: "info",
     summary: "Version restored",
@@ -1070,6 +1165,22 @@ function applyRestore(entry: ModuleHistoryEntry): void {
 }
 
 async function save() {
+  // A new constraint can't point at a wildcard that doesn't exist yet (a
+  // chat card not applied): refuse, rather than create a broken one.
+  if (!isEdit.value && (danglingSource.value || danglingTarget.value)) {
+    // Its card may have been applied since the library was loaded.
+    try { await moduleStore.fetchCatalog(); } catch { /* keep the cached library */ }
+  }
+  if (!isEdit.value && (danglingSource.value || danglingTarget.value)) {
+    showErrors.value = true;
+    toast.push({
+      severity: "warn",
+      summary: "Wildcard not created yet",
+      detail: "This constraint's source or target wildcard doesn't exist yet. Apply its card in the chat first, then Save.",
+      life: 5000,
+    });
+    return;
+  }
   if (validationErrors.value.length > 0) {
     showErrors.value = true;
     return;
@@ -1122,9 +1233,9 @@ async function save() {
       historyEntries.value = nextHistory;
       recent.push({ id: props.id, kind: "constraint", name: name.value });
     } else {
-      // New mode: the new row id is not surfaced here; mount-time push fires
-      // next time the user opens this item.
-      await moduleStore.create({
+      // New mode: a chat draft is created at the id its card reserved.
+      const created = await moduleStore.create({
+        ...draftCreateId(chatDraft),
         type: "constraint",
         name: name.value,
         description: description.value,
@@ -1133,6 +1244,8 @@ async function save() {
         content_rating: contentRating.value,
         payload: newPayload,
       });
+      draftSaved(chatDraft, created?.id);
+      chatDraft = null;
     }
     draft.discard();
     setSaveState("saved", 1500);
@@ -1181,6 +1294,13 @@ const validationErrors = computed<EditorFieldError[]>(() => {
   if (!targetWildcardId.value) {
     out.push({ field: "editor-section-wildcards", label: "Target wildcard", message: "Required" });
   }
+  // New mode only: an edit may keep a stranded ref (read-only recovery).
+  if (!props.id && danglingSource.value) {
+    out.push({ field: "editor-section-wildcards", label: "Source wildcard", message: missingMessage(pendingSource.value) });
+  }
+  if (!props.id && danglingTarget.value) {
+    out.push({ field: "editor-section-wildcards", label: "Target wildcard", message: missingMessage(pendingTarget.value) });
+  }
   return out;
 });
 
@@ -1193,6 +1313,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 
 <template>
   <EditorFrame
+    :loading="!loaded"
+    loading-label="Loading constraint"
     :title="isEdit ? 'Edit constraint' : 'New constraint'"
     back-route="/constraints"
     back-label="Constraints"
@@ -1208,9 +1330,9 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     @restore="applyRestore"
   >
     <template v-if="isEdit" #header-extra>
-      <SendToTestRunner v-if="props.id" :kind="'constraint'" :id="props.id" />
+      <SendToTestRunner v-if="props.id" :id="props.id" :kind="'constraint'" />
       <span v-if="cascadeRefs.length > 0" class="wp-editor-used-by">
-        used by <PillCountBadge :count="cascadeRefs.length" />
+        used by <Chip tone="warn" size="xs">{{ cascadeRefs.length }}</Chip>
       </span>
       <CommunityRowActions
         v-if="currentRow"
@@ -1238,21 +1360,24 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
     </template>
     <div id="editor-section-identity">
       <IdentityCard
+        ref="identityCard"
+        ai-kind="constraint"
+        :ai-payload="() => ({ source_wildcard_id: sourceWildcardId, target_wildcard_id: targetWildcardId, source_wildcard_name: resolvedSourceName, target_wildcard_name: resolvedTargetName, matrix, exceptions })"
         :name="name"
         :description="description"
         :category-id="categoryId"
         :tags="tags"
+        :content-rating="contentRating"
         @update:name="(v) => (name = v)"
         @update:description="(v) => (description = v)"
         @update:category-id="(v) => (categoryId = v)"
-        :content-rating="contentRating"
         @update:tags="(v) => (tags = v)"
         @update:content-rating="(v) => (contentRating = v)"
       />
     </div>
 
     <ConstraintReattachSection
-      v-if="hasDangling"
+      v-if="hasDangling && !onlyPendingMissing"
       :dangling-source="danglingSource"
       :dangling-target="danglingTarget"
       :source-uuid="sourceWildcardId ?? ''"
@@ -1298,7 +1423,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             <i class="pi pi-lock cn-locked__icon" aria-hidden="true" />
             <span class="cn-locked__body">
               <span class="cn-locked__name">{{ resolvedSourceName || "—" }}</span>
-              <span v-if="danglingSource" class="cn-locked__sub">{{ sourceShortId }} · missing</span>
+              <span v-if="pendingSource" class="cn-locked__sub" data-test="source-pending">{{ sourceWildcardId }} · {{ PENDING_NOTE }}</span>
+              <span v-else-if="danglingSource" class="cn-locked__sub">{{ sourceShortId }} · missing</span>
             </span>
           </div>
           <Select
@@ -1324,7 +1450,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             <i class="pi pi-lock cn-locked__icon" aria-hidden="true" />
             <span class="cn-locked__body">
               <span class="cn-locked__name">{{ resolvedTargetName || "—" }}</span>
-              <span v-if="danglingTarget" class="cn-locked__sub">{{ targetShortId }} · missing</span>
+              <span v-if="pendingTarget" class="cn-locked__sub" data-test="target-pending">{{ targetWildcardId }} · {{ PENDING_NOTE }}</span>
+              <span v-else-if="danglingTarget" class="cn-locked__sub">{{ targetShortId }} · missing</span>
             </span>
           </div>
           <Select
@@ -1355,47 +1482,27 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
            exist at library-authoring time, so it's offered on the
            instance modal (TargetReachSection), not here. -->
       <div class="cn-reach">
-        <div class="cn-reach-seg" role="group" aria-label="Target reach mode">
-          <button
-            v-for="m in REACH_MODES"
-            :key="m.key"
-            type="button"
-            class="cn-reach-btn"
-            :class="{ active: targetSelect.mode === m.key }"
-            :aria-pressed="targetSelect.mode === m.key"
-            :data-test="`cn-reach-mode-${m.key}`"
-            @click="setReachMode(m.key)"
-          >{{ m.label }}</button>
-          <span v-if="targetSelect.mode === 'next'" class="cn-reach-step">
-            <input
-              class="cn-reach-step__field"
-              type="number"
-              min="1"
-              step="1"
-              :value="reachCount"
-              aria-label="Number of downstream targets"
-              data-test="cn-reach-count"
-              @input="onReachCountInput"
-            />
-            <!-- Stacked stepper chevrons — mirrors the exceptions factor
-                 Input's spinner so both numeric controls feel the same. -->
-            <span class="cn-reach-step__spin" aria-hidden="true">
-              <button
-                type="button"
-                class="cn-reach-step__btn"
-                tabindex="-1"
-                aria-label="Increase target count"
-                @click="bumpReach(1)"
-              ><i class="pi pi-chevron-up" /></button>
-              <button
-                type="button"
-                class="cn-reach-step__btn"
-                tabindex="-1"
-                aria-label="Decrease target count"
-                @click="bumpReach(-1)"
-              ><i class="pi pi-chevron-down" /></button>
-            </span>
-          </span>
+        <div class="cn-reach-row">
+        <WpSegmented
+          :model-value="targetSelect.mode"
+          :options="REACH_MODES"
+          aria-label="Target reach mode"
+          test-prefix="cn-reach-mode"
+          @update:model-value="setReachMode"
+        />
+        <WpNumber
+          v-if="targetSelect.mode === 'next'"
+          class="cn-reach-step"
+          size="md"
+          commit="input"
+          :model-value="reachCount"
+          :min="1"
+          aria-label="Number of downstream targets"
+          up-label="Increase target count"
+          down-label="Decrease target count"
+          data-test="cn-reach-count"
+          @update:model-value="setReachCount"
+        />
         </div>
         <span class="cn-reach-hint" data-test="cn-reach-hint">
           <template v-if="targetSelect.mode === 'all'">Re-weights every downstream target instance.</template>
@@ -1419,8 +1526,36 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         >
           <i class="pi pi-lock" aria-hidden="true" /> Read-only
         </span>
-        <span v-else class="wp-card__hint">Click a cell to edit rule + factor</span>
+        <template v-else>
+          <span class="wp-card__hint">Click a cell to edit rule + factor</span>
+          <Button
+            v-if="ai.config.value?.enabled && sourceWildcardId && targetWildcardId"
+            size="sm"
+            :variant="aiOpen ? 'secondary' : 'ghost'"
+            icon="pi-microchip-ai"
+            data-test="cn-ai"
+            @click="aiOpen = !aiOpen"
+          >AI</Button>
+        </template>
       </template>
+      <AiConstraintPanel
+        v-if="aiOpen && ai.config.value?.enabled && sourceWildcardId && targetWildcardId && !refMissing"
+        ref="aiPanelRef"
+        :source-wildcard-id="sourceWildcardId"
+        :target-wildcard-id="targetWildcardId"
+        :source-name="sourceWildcard?.name ?? ''"
+        :target-name="targetWildcard?.name ?? ''"
+        :matrix="matrix"
+        :exceptions="exceptions"
+        :source-payload="sourceWildcard?.payload as PreviewWildcard"
+        :target-payload="targetWildcard?.payload as PreviewWildcard"
+        :name="name"
+        :description="description"
+        :labels="tags"
+        @apply="applyAiRules"
+        @close="aiOpen = false"
+        @update:pending="(v: boolean) => (aiPending = v)"
+      />
       <div
         v-if="!sourceWildcardId || !targetWildcardId"
         class="wp-empty-card"
@@ -1437,7 +1572,11 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
         <!-- With the keys-fallback filling the axes for a stranded ref, this
              branch only fires when the reconstructed axes are ALSO empty —
              i.e. a deleted wildcard whose constraint has no saved rules. -->
-        <template v-if="refMissing">
+        <template v-if="refMissing && onlyPendingMissing">
+          The source or target wildcard isn't created yet — apply its card in
+          the chat to edit the matrix here.
+        </template>
+        <template v-else-if="refMissing">
           The source or target wildcard was deleted and this constraint has no
           saved rules — reattach a live wildcard to restore the matrix.
         </template>
@@ -1579,20 +1718,12 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             :style="{ '--cn-mode-var': `var(${modeMeta(ex.mode).cssVar})` }"
           >
             <td v-if="exBulkActive" class="cn-ex-col-check">
-              <button
-                type="button"
-                class="wp-check"
-                role="checkbox"
-                :aria-checked="exBulkIsSelected(exUid(ex))"
-                :data-checked="exBulkIsSelected(exUid(ex)) ? 'true' : 'false'"
+              <Checkbox
+                :model-value="exBulkIsSelected(exUid(ex))"
                 :aria-label="`Select exception ${idx + 1}`"
                 :data-test="`cn-ex-check-${idx}`"
-                @click="exBulkToggle(exUid(ex))"
-              >
-                <svg v-if="exBulkIsSelected(exUid(ex))" viewBox="0 0 12 12" fill="none" style="display:block">
-                  <path d="M3 6.2l2.2 2.2L9 4.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </button>
+                @update:model-value="exBulkToggle(exUid(ex))"
+              />
             </td>
             <td>
               <Select
@@ -1683,10 +1814,10 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
               </Select>
             </td>
             <td>
-              <Input
-                v-if="ex.mode === 'boost' || ex.mode === 'reduce'"
+              <WpNumber v-if="ex.mode === 'boost' || ex.mode === 'reduce'"
+                class="cn-ex-factor"
+                commit="input"
                 :model-value="ex.factor"
-                type="number"
                 size="sm"
                 aria-label="Exception factor"
                 @update:model-value="(v) => (ex.factor = Number(v) || 0)"
@@ -1710,7 +1841,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             <td :colspan="exBulkActive ? 6 : 5" class="cn-ex-noresults" data-test="cn-ex-noresults">
               <b>No exception matches this filter</b>
               All {{ exceptions.length }} are still here — only the view is filtered.
-              <button type="button" class="cn-ex-clearlink" @click="exQuery = ''">Clear filter</button>
+              <Button variant="link" size="sm" class="cn-ex-clearlink" @click="exQuery = ''">Clear filter</Button>
             </td>
           </tr>
         </tbody>
@@ -1723,32 +1854,58 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
       </p>
     </Card>
     </div>
+
+    <div v-if="sourceWildcard && targetWildcard" id="editor-section-preview">
+    <Card title="Preview">
+      <template #actions>
+        <span class="wp-card__hint">Chance of each target option, per source option</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          :icon="previewOpen ? 'pi-angle-up' : 'pi-angle-down'"
+          data-test="cn-preview-toggle"
+          @click="previewOpen = !previewOpen"
+        >{{ previewOpen ? "Hide" : "Show" }}</Button>
+      </template>
+      <ConstraintPreview
+        v-if="previewOpen"
+        :source="sourceWildcard.payload as PreviewWildcard"
+        :target="targetWildcard.payload as PreviewWildcard"
+        :matrix="matrix"
+        :exceptions="exceptions"
+      />
+      <p v-else class="wp-card__hint">
+        See how likely each target option is for every source option, with the matrix and
+        exceptions above applied. Other constraints, filters and toggles are left out.
+      </p>
+    </Card>
+    </div>
     <!-- CascadeConfirmDialog: shown when entity has downstream refs. -->
     <CascadeConfirmDialog
       v-if="isEdit && props.id"
+      :id="props.id"
       :open="cascadeDialogOpen"
       kind="constraint"
-      :id="props.id"
       action="delete"
       @confirmed="onCascadeDialogConfirmed"
       @cancelled="cascadeDialogOpen = false"
     />
-    <!-- ConfirmDialog inside EditorFrame to keep template single-root;
+    <!-- ConfirmModal inside EditorFrame to keep template single-root;
          see WildcardEditor for the multi-root Transition explanation. -->
-    <ConfirmDialog
-      :visible="showConfirm"
+    <ConfirmModal
+      :open="showConfirm"
       title="Discard unsaved changes?"
       body="You have unsaved edits. Leaving this page will discard them."
       confirm-label="Discard & leave"
       cancel-label="Stay"
-      variant="danger"
+      tone="danger"
       @confirm="onConfirmLeave"
       @cancel="onCancelLeave"
     />
     <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
          from the community before any network/install side effect. -->
-    <ConfirmDialog
-      :visible="downloadConfirmOpen"
+    <ConfirmModal
+      :open="downloadConfirmOpen"
       title="Download dependencies"
       :body="downloadConfirmBody"
       confirm-label="Download & install"
@@ -1847,6 +2004,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 .cn-locked--danger .cn-locked__icon { color: var(--wp-danger); }
 .cn-col-mode { width: 150px; }
 .cn-col-factor { width: 120px; }
+/* The number box takes its input's default width (~150 px) unless told; fill the cell. */
+.cn-ex-factor { width: 100%; }
 .cn-col-trash { width: 40px; }
 .cn-dash { font-size: var(--wp-text-xs); }
 
@@ -1868,7 +2027,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   color: var(--wp-text-muted);
   border-bottom: 1px solid var(--wp-border);
 }
-.cn-only-note__glyph { color: var(--wp-info, #3b82f6); margin-right: 4px; }
+.cn-only-note__glyph { color: var(--wp-info); margin-right: 4px; }
 /* Read-only (stranded) value cells: clip long text to one line to match the
  * editable Selects rather than wrapping into tall rows. */
 .cn-ex-table td.wp-mono {
@@ -1902,12 +2061,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   text-align: center; color: var(--wp-text-dim); font-size: 12px;
 }
 .cn-ex-noresults b { display: block; color: var(--wp-text); margin-bottom: 4px; }
-.cn-ex-clearlink {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--wp-text-muted); font: 11px var(--wp-font-sans);
-  text-decoration: underline;
-  margin-left: var(--wp-space-3);
-}
+.cn-ex-clearlink { margin-left: var(--wp-space-3); }
 
 /* Mode chip — icon glyph + label, tinted by --cn-mode-var. Editable +
  * read-only share the base; the read-only modifier mutes it to the same
@@ -1922,7 +2076,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   align-items: center;
   gap: 5px;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: var(--wp-text-xs);
   font-weight: 600;
   white-space: nowrap;
@@ -1950,78 +2104,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
   gap: var(--wp-space-3);
   align-items: flex-start;
 }
-.cn-reach-seg {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius, 6px);
-  overflow: hidden;
-}
-.cn-reach-btn {
-  padding: 6px 14px;
-  border: 0;
-  border-right: 1px solid var(--wp-border);
-  background: transparent;
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-  font-weight: 500;
-  cursor: pointer;
-}
-.cn-reach-btn:last-of-type { border-right: 0; }
-.cn-reach-btn:hover {
-  color: var(--wp-text);
-  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
-}
-.cn-reach-btn.active {
-  background: var(--wp-accent);
-  color: #fff;
-}
-.cn-reach-step {
-  display: inline-flex;
-  align-items: stretch;
-  border-left: 1px solid var(--wp-border);
-}
-.cn-reach-step__field {
-  width: 44px;
-  background: transparent;
-  border: 0;
-  padding: 0 8px;
-  font-size: var(--wp-text-sm);
-  color: var(--wp-text);
-  text-align: center;
-  -moz-appearance: textfield;
-}
-.cn-reach-step__field::-webkit-outer-spin-button,
-.cn-reach-step__field::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.cn-reach-step__field:focus { outline: none; }
-/* Stacked up/down stepper — native spin buttons hidden above so these
- * don't double up. Mirrors the exceptions factor Input's spinner. */
-.cn-reach-step__spin {
-  display: flex;
-  flex-direction: column;
-  width: 18px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--wp-border);
-}
-.cn-reach-step__btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--wp-text-dim);
-  cursor: pointer;
-  line-height: 0;
-}
-.cn-reach-step__btn + .cn-reach-step__btn { border-top: 1px solid var(--wp-border); }
-.cn-reach-step__btn .pi { font-size: 8px; }
-.cn-reach-step__btn:hover {
-  color: var(--wp-text);
-  background: color-mix(in srgb, var(--wp-text) 8%, transparent);
-}
+.cn-reach-row { display: flex; align-items: center; gap: var(--wp-space-3); }
+.cn-reach-step { width: 72px; }
 .cn-reach-hint {
   font-size: var(--wp-text-xs);
   color: var(--wp-text-dim);

@@ -18,12 +18,13 @@ emitted.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
 from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng as _derive_module_rng
+from engine.modules._seed import instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
 from engine.syntax.resolve import pick_k_unique
@@ -477,6 +478,27 @@ def _record_axes(
         decl[binding] = list(_accepts_axes(payload))
 
 
+def _warn_pinned_missing(ctx: dict[str, Any] | None, pinned_id: Any) -> None:
+    """A ``pinned`` instance whose option the library no longer has rolls
+    normally; say so (a sweep frame relies on the pin, so a deleted option
+    would otherwise turn its grid into random frames without a word)."""
+    if ctx is None or not isinstance(ctx.get("__wp_warnings__"), list):
+        return
+    ctx["__wp_warnings__"].append({
+        "type": "pinned_option_missing",
+        "severity": "warn",
+        "module_id": ctx.get("__wp_current_module_id__") or "",
+        "source_field": "",
+        "position": 0,
+        "token_index": None,
+        "detail": {"option_id": "" if pinned_id is None else str(pinned_id)},
+        "message": (
+            f"pinned option {pinned_id!r} is no longer in this wildcard; "
+            "rolled normally"
+        ),
+    })
+
+
 def _match_variable_option(
     ctx: Any, options: list[dict[str, Any]], var_name: str,
 ) -> tuple[dict[str, Any] | None, str]:
@@ -624,7 +646,7 @@ def _file_negatives(
     the multi-pick index (None for a single pick)."""
     if not isinstance(ctx, dict):
         return
-    rng = negatives.neg_rng(seed, binding)
+    rng = negatives.neg_rng(seed, instance_key(ctx, binding))
     entries: list[dict[str, Any]] = []
     for opt, ref_negs, slot in picks:
         own = negatives.clean_negative(opt.get("negative"))
@@ -894,6 +916,25 @@ class WildcardHandler(ModuleHandler):
 
         options: list[dict[str, Any]] = list(payload.get("options", []))
 
+        # `category_filter` narrows the option pool to entries whose tag
+        # set (`sub_categories`) satisfies a boolean expression; the node's
+        # option toggles (`enabled_options`) narrow it further (comments at
+        # the roll below). Computed up front so `match_variable` matches only
+        # what this use can pick, and its fallback only when it is enabled.
+        category_filter = instance.get("category_filter")
+        exclude_null = bool(instance.get("exclude_null", False))
+        pool = options
+        if (isinstance(category_filter, str) and category_filter.strip()) or exclude_null:
+            pool = cls._apply_pool_filter(
+                pool,
+                category_filter if isinstance(category_filter, str) else "",
+                exclude_null=exclude_null,
+            )
+        enabled = instance.get("enabled_options")
+        if enabled is not None:
+            allowed = set(enabled)
+            pool = [o for o in pool if o.get("id") in allowed]
+
         # `pinned` mode short-circuits the RNG: always pick the option
         # whose id matches `pinned_option_id`. Falls through to random
         # (with a warning) if the pinned id can't be found — handles
@@ -906,13 +947,15 @@ class WildcardHandler(ModuleHandler):
         if mode == "pinned":
             pinned_id = instance.get("pinned_option_id")
             pinned = next((o for o in options if o.get("id") == pinned_id), None)
+            if pinned is None:
+                _warn_pinned_missing(ctx, pinned_id)
         # `match_variable`: take the option whose text equals another
         # variable's value (case-insensitive), e.g. `$model_variant` from WP
         # Model Info, so this wildcard's pick can drive constraints. No match →
         # the fallback option if one is flagged, else a normal roll + warning.
         match_var = instance.get("match_variable")
         if pinned is None and isinstance(match_var, str) and match_var.strip():
-            pinned, pin_mode = _match_variable_option(ctx, options, match_var.strip())
+            pinned, pin_mode = _match_variable_option(ctx, pool, match_var.strip())
         if pinned is not None:
             # A pinned option still rolls its axes: pinning fixes WHICH
             # option fires, not which of the shoes it accepts. Roll BEFORE
@@ -923,7 +966,8 @@ class WildcardHandler(ModuleHandler):
             pinned_rolled = _roll_axes(
                 _axis_menus(payload, pinned.get("sub_categories")),
                 _derive_module_rng(
-                    int(ctx.get("__wp_node_seed__", 0) or 0), f"{binding}::axes",
+                    int(ctx.get("__wp_node_seed__", 0) or 0),
+                    f"{instance_key(ctx, binding)}::axes",
                 ),
             )
             # Track the pinned pick the same way as a random pick —
@@ -937,7 +981,10 @@ class WildcardHandler(ModuleHandler):
                 if pin_mode != "pinned":
                     detail["match_variable"] = match_var.strip()
             value = str(pinned.get("value", ""))
-            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
+            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
+                int(ctx.get("__wp_node_seed__", 0) or 0),
+                f"{instance_key(ctx, binding)}/{pinned.get('id')}",
+            ))
             with negatives.collecting(resolve_ctx) as col:
                 out_value = resolve_text(value, resolve_ctx) if value else ""
             _file_negatives(
@@ -957,19 +1004,7 @@ class WildcardHandler(ModuleHandler):
         # to it). Untagged non-null options bypass the expression unless
         # a bare tag term excludes them (spec §3.4). See the shared
         # matcher in engine/syntax/subcat_filter.py.
-        category_filter = instance.get("category_filter")
-        exclude_null = bool(instance.get("exclude_null", False))
-        if (isinstance(category_filter, str) and category_filter.strip()) or exclude_null:
-            options = cls._apply_pool_filter(
-                options,
-                category_filter if isinstance(category_filter, str) else "",
-                exclude_null=exclude_null,
-            )
-
-        enabled = instance.get("enabled_options")
-        if enabled is not None:
-            allowed = set(enabled)
-            options = [o for o in options if o.get("id") in allowed]
+        options = pool
 
         # Schema v9 fallback: the flagged option stays in the draw pool and
         # is also taken when weights + constraints leave nothing to pick. Found
@@ -1048,6 +1083,10 @@ class WildcardHandler(ModuleHandler):
             options, any_constraint_applied = apply_constraints_for_target(
                 options, my_id, constraints, picks, ctx["__wp_warnings__"],
                 hits=hits, firing_uid=firing_uid,
+                firing_origin=(
+                    ctx.get("__wp_current_module_bundle_origin__")
+                    if isinstance(ctx, dict) else None
+                ),
                 applied_out=applied_constraints,
                 # TARGET-side accepts axes: a target option's tags in one of
                 # these groups are alternatives the option offers, so the fold
@@ -1073,7 +1112,7 @@ class WildcardHandler(ModuleHandler):
         # Effective seed selection:
         #   - locked_seed when present → reproducible per-instance
         #   - chain seed (`__wp_node_seed__`) otherwise
-        # Both paths feed the SAME `_derive_module_rng(seed, binding)`,
+        # Both paths feed the SAME `_derive_module_rng(seed, instance key)`,
         # so locking with `locked_seed = chain_seed` reproduces the
         # unlocked pick exactly. This is the contract the lock UX
         # relies on: the user sees a roll, locks it, captures the
@@ -1101,7 +1140,10 @@ class WildcardHandler(ModuleHandler):
                 locked_seed = None
         else:
             effective_seed = chain_seed
-        rng = _derive_module_rng(effective_seed, binding)
+        # The warnings write above already needs a dict here.
+        ctx = cast("dict[str, Any]", ctx)
+        ikey = instance_key(ctx, binding)
+        rng = _derive_module_rng(effective_seed, ikey)
 
         # SP2a multi-select: a count range other than (1, 1) picks N options
         # without replacement and binds a ListVar. The null option is never in
@@ -1113,14 +1155,27 @@ class WildcardHandler(ModuleHandler):
         lo = max(0, min(raw_min, raw_max))
         hi = max(lo, raw_max)
         if not (lo == 1 and hi == 1):
-            pool = [o for o in options if not o.get("is_null")]
-            weights = [max(0.0, float(o.get("weight", 1))) for o in pool]
+            # Only live options (weight > 0 after overrides + constraints) can
+            # be drawn, so the count is capped at those: a weight-0 option is
+            # disabled or shut out and never fills a slot. The null option is
+            # not in this pool, so a pool with no live non-null option is dead
+            # here and takes the fallback even when the null is still live.
+            pool = [o for o in options
+                    if not o.get("is_null") and _weight(o) > 0]
+            weights = [_weight(o) for o in pool]
             pool_n = len(pool)
             independent = bool(instance.get("pick_independent", False))
+            if not pool and fallback is not None and not use_fallback:
+                use_fallback = True
+                ctx["__wp_warnings__"].append(fallback_warning(
+                    my_id or "", fallback, constrained=any_constraint_applied,
+                ))
+                if detail is not None:
+                    detail["fallback"] = True
             if use_fallback:
                 # One fallback, never repeated: it stands in for the whole
                 # pick, so a `2-3` range doesn't render "hair, hair".
-                picks = [fallback] if hi > 0 else []
+                picks = [fallback] if hi > 0 and fallback is not None else []
             elif independent:
                 # SP2c: independent multi-pick draws WITH replacement (repeats
                 # allowed), mirroring the inline `~` flag — so the count is the
@@ -1144,6 +1199,10 @@ class WildcardHandler(ModuleHandler):
             try:
                 multi_ctx = build_resolve_ctx(ctx, surface="wildcard")
                 for slot, opt in enumerate(picks):
+                    # Each pick's text rolls on its own stream.
+                    multi_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
+                        effective_seed, f"{ikey}/{slot}:{opt.get('id')}",
+                    ))
                     with negatives.collecting(multi_ctx) as col:
                         items.append(resolve_text(str(opt.get("value", "")), multi_ctx))
                     neg_picks.append((opt, col.ref_negatives, slot))
@@ -1174,7 +1233,9 @@ class WildcardHandler(ModuleHandler):
                 if independent:
                     detail["independent"] = True
             _record_axes(ctx, binding, rolled_list, payload)
-            return {binding: ListVar(items, sep)}
+            # A ListVar renders as text wherever a value is read.
+            bound: dict[str, Any] = {binding: ListVar(items, sep)}
+            return bound
 
         # The fallback is taken without a draw, so no rng is consumed where
         # the pre-v9 path returned empty.
@@ -1237,7 +1298,10 @@ class WildcardHandler(ModuleHandler):
         saved_rng = ctx.get("__wp_rng__")
         ctx["__wp_rng__"] = rng
         try:
-            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard")
+            resolve_ctx = build_resolve_ctx(
+                ctx, surface="wildcard",
+                stream=stream_key(effective_seed, f"{ikey}/{chosen.get('id')}"),
+            )
             # SP3 nested-pick reach: THIS wildcard is the carrier of any
             # `@{T}` ref inside `value`. Stamp (its per-instance uid, the
             # chosen option's id) on the resolve frame so a constraint on

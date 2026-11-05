@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
-import ModalShell from "../shared/ModalShell.vue";
+import ModalShell from "@/kit/ModalShell.vue";
+import Textarea from "@/kit/Textarea.vue";
+import Input from "@/kit/Input.vue";
+import WpSelect from "@/kit/WpSelect.vue";
 import { pushToast } from "../shared/toast-store";
+import Button from "@/kit/Button.vue";
+import CodeBlock from "@/kit/CodeBlock.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -95,22 +100,21 @@ async function submit(mode: "update" | "new") {
 </script>
 
 <template>
-  <ModalShell :visible="open" @close="emit('close')">
-    <div class="wp-stm" role="dialog" aria-modal="true" aria-labelledby="wp-stm-title" @click.stop>
+  <ModalShell :visible="open" labelledby="wp-stm-title" @close="emit('close')">
+    <div class="wp-stm" @click.stop>
       <header class="wp-stm__head">
         <h3 id="wp-stm-title" class="wp-stm__title">Save template</h3>
-        <button type="button" class="wp-stm__close" aria-label="Close" data-test="save-tpl-close" @click="emit('close')">
-          <i class="pi pi-times" aria-hidden="true" />
-        </button>
+        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="save-tpl-close" @click="emit('close')" />
       </header>
 
       <div class="wp-stm__body">
         <div class="wp-stm-field">
           <label class="wp-stm-field__label" for="wp-stm-name">Name</label>
-          <input
+          <Input
             id="wp-stm-name"
             v-model="name"
-            type="text"
+            size="sm"
+           
             class="wp-stm-input"
             data-test="save-tpl-name"
             placeholder="e.g. cinematic portrait"
@@ -124,33 +128,33 @@ async function submit(mode: "update" | "new") {
 
         <div class="wp-stm-field">
           <label class="wp-stm-field__label" for="wp-stm-desc">Description</label>
-          <textarea
+          <Textarea
             id="wp-stm-desc"
             v-model="description"
             class="wp-stm-input wp-stm-input--multi"
-            rows="2"
+            :rows="2"
           />
         </div>
 
         <div class="wp-stm-row">
           <div class="wp-stm-field wp-stm-field--grow">
             <label class="wp-stm-field__label" for="wp-stm-cat">Category</label>
-            <select
+            <WpSelect
               id="wp-stm-cat"
-              v-model="categoryId"
-              class="wp-stm-input wp-stm-select"
+              class="wp-stm-select"
+              :model-value="categoryId ?? ''"
+              :options="[{ value: '', label: 'Uncategorized' }, ...categories.map((c) => ({ value: c.id, label: c.name }))]"
               data-test="save-tpl-category"
-            >
-              <option :value="null">Uncategorized</option>
-              <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+              @update:model-value="(v) => categoryId = String(v) || null"
+            />
           </div>
           <div class="wp-stm-field wp-stm-field--grow">
             <label class="wp-stm-field__label" for="wp-stm-tags">Tags (comma-separated)</label>
-            <input
+            <Input
               id="wp-stm-tags"
               v-model="tagsText"
-              type="text"
+              size="sm"
+             
               class="wp-stm-input"
               placeholder="e.g. style, portrait"
             />
@@ -159,57 +163,59 @@ async function submit(mode: "update" | "new") {
 
         <div class="wp-stm-field">
           <label class="wp-stm-field__label">Template preview</label>
-          <pre class="wp-stm-preview" data-test="save-tpl-preview">{{ templateString || "(empty)" }}</pre>
+          <CodeBlock class="wp-stm-preview" :code="templateString || '(empty)'" bare default-wrap size="sm" max-height="110px" data-test="save-tpl-preview" />
         </div>
 
         <div v-if="negativeTemplate" class="wp-stm-field">
           <label class="wp-stm-field__label wp-stm-field__label--neg">Negative template</label>
-          <pre
+          <CodeBlock
             class="wp-stm-preview wp-stm-preview--neg"
+            :code="negativeTemplate"
+            bare
+            default-wrap
+            size="sm"
+            max-height="110px"
             data-test="save-tpl-neg-preview"
-          >{{ negativeTemplate }}</pre>
+          />
         </div>
 
         <p v-if="errorMsg" class="wp-stm-error" data-test="save-tpl-error">{{ errorMsg }}</p>
       </div>
 
       <footer class="wp-stm__foot">
-        <button type="button" class="wp-stm-btn" data-test="save-tpl-cancel" @click="emit('close')">Cancel</button>
+        <Button size="sm" data-test="save-tpl-cancel" @click="emit('close')">Cancel</Button>
         <span class="wp-stm-spacer" />
-        <button
+        <Button
           v-if="updateTargetId"
-          type="button"
-          class="wp-stm-btn"
+          size="sm"
           :disabled="!canSubmit"
           data-test="save-tpl-save-new"
           @click="submit('new')"
-        >Save as new entry</button>
-        <button
-          type="button"
-          class="wp-stm-btn wp-stm-btn--primary"
+        >Save as new entry</Button>
+        <Button
+          size="sm"
+          variant="primary"
           :disabled="!canSubmit"
           data-test="save-tpl-submit"
           @click="submit(updateTargetId ? 'update' : 'new')"
-        >{{ updateTargetId ? "Update existing" : "Save" }}</button>
+        >{{ updateTargetId ? "Update existing" : "Save" }}</Button>
       </footer>
     </div>
   </ModalShell>
 </template>
 
 <style scoped>
-@import "../shared/theme.css";
-
 .wp-stm {
   width: min(560px, 100%);
   max-height: calc(100vh - 40px);
-  background: var(--wp-bg-1, #0b0b12);
-  border: 1px solid var(--wp-border-strong, var(--wp-border, #2a2a3a));
+  background: var(--wp-bg-1);
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
   border-radius: var(--wp-radius-lg, 12px);
   box-shadow: var(--wp-shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.55));
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: var(--wp-text, #e7e7ee);
+  color: var(--wp-text);
   font-family: var(--wp-font-sans, sans-serif);
 }
 .wp-stm__head {
@@ -217,7 +223,7 @@ async function submit(mode: "update" | "new") {
   align-items: center;
   justify-content: space-between;
   padding: 13px 16px;
-  border-bottom: 1px solid var(--wp-border, #2a2a3a);
+  border-bottom: 1px solid var(--wp-border);
   background: var(--wp-brand-gradient, transparent);
   position: relative;
 }
@@ -225,23 +231,11 @@ async function submit(mode: "update" | "new") {
   content: "";
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--wp-bg, #0b0b12) 85%, transparent);
+  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
   pointer-events: none;
 }
 .wp-stm__head > * { position: relative; z-index: 1; }
 .wp-stm__title { margin: 0; font-size: 14px; font-weight: 600; }
-.wp-stm__close {
-  width: 28px; height: 28px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--wp-text-muted);
-  cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, color var(--wp-motion-quick) ease;
-}
-.wp-stm__close:hover { background: var(--wp-bg-3); color: var(--wp-text); }
-.wp-stm__close .pi { font-size: 11px; }
 
 .wp-stm__body {
   flex: 1;
@@ -262,36 +256,11 @@ async function submit(mode: "update" | "new") {
   text-transform: uppercase;
   color: var(--wp-text-dim);
 }
-.wp-stm-input {
-  width: 100%;
-  background: var(--wp-bg-2, #15151f);
-  color: var(--wp-text, #e7e7ee);
-  border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: inherit;
-}
-.wp-stm-input:focus { outline: 1px solid var(--wp-accent-500, var(--wp-accent)); }
-.wp-stm-input--multi { resize: vertical; overscroll-behavior: contain; min-height: 46px; }
-.wp-stm-select { cursor: pointer; }
-.wp-stm-preview {
-  margin: 0;
-  padding: 8px 10px;
-  background: var(--wp-bg-2, #15151f);
-  border: 1px solid var(--wp-border, #2a2a3a);
-  border-radius: 6px;
-  font-family: var(--wp-font-mono, monospace);
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-y: auto;
-  max-height: 110px;
-  color: var(--wp-text-muted, #a1a1ad);
-}
-.wp-stm-preview--neg {
-  border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border, #2a2a3a));
-}
+/* The kit Textarea draws the box; the description box is two lines tall. */
+.wp-stm-input--multi { overscroll-behavior: contain; min-height: 46px; }
+.wp-stm-select { width: 100%; height: 32px; font-size: 13px; }
+
+.wp-stm-preview--neg { border-color: color-mix(in srgb, var(--wp-danger) 40%, var(--wp-border)); }
 .wp-stm-field__label--neg { color: var(--wp-danger); }
 .wp-stm-note {
   display: flex;
@@ -300,7 +269,7 @@ async function submit(mode: "update" | "new") {
   padding: 7px 10px;
   background: color-mix(in srgb, var(--wp-accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--wp-accent) 35%, transparent);
-  border-radius: 6px;
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
   font-size: 11.5px;
   color: var(--wp-accent-text, var(--wp-text));
 }
@@ -308,7 +277,7 @@ async function submit(mode: "update" | "new") {
 .wp-stm-error {
   margin: 0;
   font-size: 11.5px;
-  color: var(--wp-danger, #f87171);
+  color: var(--wp-danger);
 }
 
 .wp-stm__foot {
@@ -316,29 +285,8 @@ async function submit(mode: "update" | "new") {
   align-items: center;
   gap: 8px;
   padding: 11px 16px;
-  border-top: 1px solid var(--wp-border, #2a2a3a);
+  border-top: 1px solid var(--wp-border);
   background: var(--wp-bg-1);
 }
 .wp-stm-spacer { flex: 1; }
-.wp-stm-btn {
-  height: 30px;
-  padding: 0 13px;
-  border-radius: 6px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-bg-3);
-  color: var(--wp-text);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease;
-}
-.wp-stm-btn:hover:not(:disabled) { background: var(--wp-bg-4); border-color: var(--wp-border-strong); }
-.wp-stm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.wp-stm-btn--primary {
-  background: var(--wp-accent-600, var(--wp-accent));
-  border-color: var(--wp-accent-500, var(--wp-accent));
-  color: #fff;
-}
-.wp-stm-btn--primary:hover:not(:disabled) { background: var(--wp-accent-500, var(--wp-accent)); }
 </style>

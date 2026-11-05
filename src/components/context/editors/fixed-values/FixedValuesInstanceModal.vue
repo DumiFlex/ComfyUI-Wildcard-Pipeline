@@ -1,15 +1,15 @@
 <script setup lang="ts">
+import Kbd from "@/kit/Kbd.vue";
 import { computed } from "vue";
-import { saveChordLabel } from "../../../shared/platform-keys";
 import type { ModuleEntry } from "../../../../widgets/_shared";
 import IdentitySection from "./sections/IdentitySection.vue";
 import ValuesSection from "./sections/ValuesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
+import Button from "@/kit/Button.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
-const saveChord = saveChordLabel();
 const props = withDefaults(
   defineProps<{
     module: ModuleEntry;
@@ -64,13 +64,7 @@ function onSpaClick(): void {
         </div>
         <div class="wp-fvm__sub">Library entry · static $var → value pairs</div>
       </div>
-      <button
-        type="button"
-        class="wp-fvm__close"
-        aria-label="Close"
-        data-test="fvm-close"
-        @click="emit('cancel')"
-      ><i class="pi pi-times" aria-hidden="true" /></button>
+      <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="fvm-close" @click="emit('cancel')" />
     </header>
 
     <IdentitySection :module="module" @update="onUpdate" />
@@ -91,29 +85,26 @@ function onSpaClick(): void {
         <i class="pi pi-external-link" aria-hidden="true" />
         Edit library entry in SPA
       </a>
-      <button
+      <Button
         v-if="isLibraryTracked"
-        type="button"
-        class="wp-fvm__btn wp-fvm__btn--quiet"
+        size="sm"
+        variant="ghost"
+        icon="pi-replay"
         data-test="fvm-clear-all"
         title="Clear all instance overrides"
         @click="emit('clear-all-overrides')"
-      >
-        <i class="pi pi-replay" aria-hidden="true" />
-        Reset overrides
-      </button>
+      >Reset overrides</Button>
       <span class="wp-fvm__hint">
-        <kbd>Esc</kbd> cancel · <kbd>{{ saveChord }}</kbd> save
+        <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
       </span>
-      <button
+      <Button
         v-if="canSaveToLibrary"
-        type="button"
-        class="wp-fvm__btn"
+        size="sm"
         data-test="fvm-save-lib"
         @click="emit('save-to-library')"
-      >Save to library</button>
-      <button type="button" class="wp-fvm__btn" data-test="fvm-cancel" @click="emit('cancel')">Cancel</button>
-      <button type="button" class="wp-fvm__btn wp-fvm__btn--primary" data-test="fvm-save" @click="emit('save')">Save</button>
+      >Save to library</Button>
+      <Button size="sm" data-test="fvm-cancel" @click="emit('cancel')">Cancel</Button>
+      <Button size="sm" variant="primary" data-test="fvm-save" @click="emit('save')">Save</Button>
     </footer>
     </div>
   </div>
@@ -164,48 +155,4 @@ function onSpaClick(): void {
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }
-.wp-fvm__hint kbd {
-  font: 9px var(--wp-font-mono);
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  padding: 1px 4px;
-  border-radius: 2px;
-  color: var(--wp-text-muted, var(--wp-text2));
-}
-.wp-fvm__btn {
-  padding: 5px 12px;
-  border: 1px solid var(--wp-border);
-  border-radius: 3px;
-  background: transparent;
-  color: var(--wp-text-muted, var(--wp-text2));
-  font: 11px var(--wp-font-sans);
-  cursor: pointer;
-}
-.wp-fvm__btn--primary {
-  border-color: var(--wp-accent);
-  background: var(--wp-accent);
-  color: white;
-}
-.wp-fvm__btn:hover {
-  border-color: var(--wp-border-strong, var(--wp-border2));
-  color: var(--wp-text);
-}
-.wp-fvm__btn--primary:hover {
-  border-color: var(--wp-accent2, var(--wp-accent));
-  background: var(--wp-accent2, var(--wp-accent));
-  color: white;
-}
-.wp-fvm__btn--quiet {
-  border-color: transparent;
-  color: var(--wp-text-dim, var(--wp-text3));
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-}
-.wp-fvm__btn--quiet:hover {
-  border-color: var(--wp-border);
-  color: var(--wp-text-muted, var(--wp-text2));
-}
-.wp-fvm__btn--quiet .pi { font-size: 10px; }
 </style>

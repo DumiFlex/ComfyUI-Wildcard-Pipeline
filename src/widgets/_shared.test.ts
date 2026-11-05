@@ -184,3 +184,66 @@ describe("createDomWidgetHost — fillHost under the Vue renderer", () => {
     host.unmount();
   });
 });
+
+describe("createDomWidgetHost — Nodes 2.0 slot kept across a graph reload", () => {
+  // Nodes 2.0's WidgetDOM slot attaches `widget.element` once, on mount. A
+  // reload that keeps node ids (undo / redo) builds new widgets but keeps the
+  // slots, which went on showing the old, unmounted host: blank WP nodes on
+  // Ctrl+Z. The new host takes the stale one's place.
+  const Stub = { render: () => null };
+  function hostNode(id: string) {
+    return {
+      id,
+      size: [300, 100] as [number, number],
+      addDOMWidget(name: string, type: string, el: HTMLElement, opts?: Record<string, unknown>) {
+        return { element: el, options: opts, name, type };
+      },
+    };
+  }
+
+  afterEach(() => {
+    const lg = (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph;
+    if (lg) delete lg.vueNodesMode;
+    document.body.innerHTML = "";
+  });
+
+  it("swaps a new host into the slot still holding the old one", async () => {
+    (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph = { vueNodesMode: true };
+    const card = document.createElement("div");
+    card.setAttribute("data-node-id", "7");
+    const slot = document.createElement("div");
+    card.appendChild(slot);
+    document.body.appendChild(card);
+
+    // The node before the reload: its host is in the slot, then torn down.
+    const before = createDomWidgetHost(hostNode("7"), "wp_note", Stub);
+    const oldHost = before.widget.element;
+    slot.appendChild(oldHost);
+    before.unmount();
+
+    // The rebuilt node: its host is off the page until it adopts the slot.
+    const after = createDomWidgetHost(hostNode("7"), "wp_note", Stub);
+    const newHost = after.widget.element;
+    expect(newHost.isConnected).toBe(false);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(newHost.parentElement).toBe(slot);
+    expect(oldHost.isConnected).toBe(false);
+  });
+
+  it("never takes a slot that a live widget holds", async () => {
+    (globalThis as { LiteGraph?: Record<string, unknown> }).LiteGraph = { vueNodesMode: true };
+    const card = document.createElement("div");
+    card.setAttribute("data-node-id", "8");
+    const slot = document.createElement("div");
+    card.appendChild(slot);
+    document.body.appendChild(card);
+    const live = createDomWidgetHost(hostNode("8"), "wp_note", Stub);
+    slot.appendChild(live.widget.element);
+    const other = createDomWidgetHost(hostNode("8"), "wp_note", Stub);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(live.widget.element.parentElement).toBe(slot);
+    expect(other.widget.element.isConnected).toBe(false);
+    live.unmount();
+    other.unmount();
+  });
+});

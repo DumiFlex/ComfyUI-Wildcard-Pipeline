@@ -16,7 +16,8 @@
  * A nested group that loses its last member asks its parent to drop it.
  */
 import { computed } from "vue";
-import Button from "./ui/Button.vue";
+import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
 import DerivationConditionTest from "./DerivationConditionTest.vue";
 import type { VarProducerLike } from "./RefChip.vue";
 import type {
@@ -173,14 +174,15 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
         v-if="i > 0 && isConditionGroup(child)"
         class="dvc-join"
       >
-        <button
-          type="button"
+        <Chip
+          as="button"
           class="dvc-match"
+          :color="group.match === 'any' ? 'var(--wp-info)' : 'var(--wp-kind-derivation)'"
           :data-match="group.match"
           :title="matchTitle"
           :data-test="`cond-match-${childTestId(i)}`"
           @click="flipAt(i)"
-        >{{ matchWord(group.match) }}</button>
+        >{{ matchWord(group.match) }}</Chip>
       </div>
 
       <DerivationConditionEditor
@@ -208,14 +210,15 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
         @update:model-value="(v) => setChild(i, v)"
       >
         <template v-if="i > 0" #lead>
-          <button
-            type="button"
+          <Chip
+            as="button"
             class="dvc-match"
+            :color="group.match === 'any' ? 'var(--wp-info)' : 'var(--wp-kind-derivation)'"
             :data-match="group.match"
             :title="matchTitle"
             :data-test="`cond-match-${childTestId(i)}`"
             @click="flipAt(i)"
-          >{{ matchWord(group.match) }}</button>
+          >{{ matchWord(group.match) }}</Chip>
         </template>
         <template v-if="canRemove" #actions>
           <Button
@@ -261,9 +264,9 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
 .dvc-group--nested {
   margin-left: 68px; /* audit-exempt: 60px label col + 8px gap, aligns with the inputs */
   padding: var(--wp-space-3) var(--wp-space-4);
-  border: 1px dashed color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 35%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--wp-kind-derivation) 35%, transparent);
   border-radius: var(--wp-radius-sm);
-  background: color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 4%, transparent);
+  background: color-mix(in oklab, var(--wp-kind-derivation) 4%, transparent);
 }
 .dvc-group__head {
   display: flex;
@@ -285,24 +288,13 @@ const canRemove = computed(() => props.depth > 0 || group.value.conditions.lengt
 }
 /* AND / OR connector. Clicking flips just this one; the members regroup (see
    flipConnector) so every connector left in a group still reads the same. */
+/* The AND / OR connector: a kit chip in the derivation (all) or info (any) colour. */
 .dvc-match {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-size: 10px; /* audit-exempt: micro connector pill, matches branch tags */
   font-weight: 700;
   letter-spacing: 0.06em;
-  padding: 2px 7px; /* audit-exempt: compact pill */
-  border-radius: var(--wp-radius-sm);
-  border: 1px solid transparent;
-  cursor: pointer;
-  background: color-mix(in oklab, var(--wp-kind-derivation, #fbbf24) 20%, transparent);
-  color: var(--wp-kind-derivation, #fbbf24);
 }
-.dvc-match[data-match="any"] {
-  background: color-mix(in oklab, var(--wp-info, #60a5fa) 20%, transparent);
-  color: var(--wp-info, #60a5fa);
-}
-.dvc-match:hover { border-color: currentColor; }
-.dvc-match:focus-visible { outline: none; box-shadow: var(--wp-focus-ring); }
 .dvc-add {
   display: flex;
   gap: var(--wp-space-2);

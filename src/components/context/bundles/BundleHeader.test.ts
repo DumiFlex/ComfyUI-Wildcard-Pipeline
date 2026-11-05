@@ -91,12 +91,11 @@ describe("BundleHeader", () => {
     expect(w.emitted("toggle-collapse")).toBeTruthy();
   });
 
-  it("emits toggle-enabled with new state on checkbox change", async () => {
+  it("emits toggle-enabled with new state on checkbox click", async () => {
     const w = mount(BundleHeader, {
       props: { instance: instance({ enabled: true }), name: "x", childCount: 0 },
     });
-    const input = w.find('input[type="checkbox"]');
-    await input.setValue(false);
+    await w.get('[data-test="bundle-enabled"]').trigger("click");
     const events = w.emitted("toggle-enabled");
     expect(events).toBeTruthy();
     expect(events && events[0]).toEqual([false]);
@@ -106,10 +105,9 @@ describe("BundleHeader", () => {
     const w = mount(BundleHeader, {
       props: { instance: instance(), name: "x", childCount: 0 },
     });
-    // Trash button now uses shared `.wp-btn--icon-sm.wp-btn--danger`
-    // base classes (Phase 1 row-primitive consolidation); the
+    // Trash is the shared WpIconButton (danger tone); the
     // bundle-color-tinted bg override stays on `.wp-bundle-action`.
-    await w.find(".wp-bundle-action.wp-btn--danger").trigger("click");
+    await w.find('.wp-bundle-action[data-tone="danger"]').trigger("click");
     expect(w.emitted("remove")).toBeTruthy();
   });
 
@@ -119,5 +117,38 @@ describe("BundleHeader", () => {
     });
     await w.find(".wp-bundle-header").trigger("contextmenu");
     expect(w.emitted("contextmenu")).toBeTruthy();
+  });
+});
+
+describe("BundleHeader — EXAMPLE chip", () => {
+  it("shows EXAMPLE instead of MISSING on a missing example bundle", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: true, example: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(true);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+  });
+
+  it("shows nothing on a missing example sub-bundle", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: true, example: true, nested: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(false);
+  });
+
+  it("shows MISSING on a missing bundle without the flag", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(false);
+    expect(w.find(".wp-mod-badge--missing").exists()).toBe(true);
+  });
+
+  it("shows no chip once the example bundle is in the library", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance(), name: "x", childCount: 1, libraryMissing: false, example: true },
+    });
+    expect(w.find('[data-test="bundle-example"]').exists()).toBe(false);
   });
 });

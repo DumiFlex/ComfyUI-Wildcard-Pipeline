@@ -11,10 +11,9 @@
  *     `shared/kind-icons`) + the matching `.wp-row-type-icon--{slug}`
  *     tint variant in `shared/row-primitives.css`.
  *   - `showId` opt-in renders the short 8-hex id via the global `.wp-id`
- *     primitive (`manager/styles/tokens.css`).
- *   - `categoryName` + `categoryColor` use the shared `.wp-cat-chip`
- *     primitive (tokens.css) styled via `catChipStyle` from
- *     `../utils/catChip`.
+ *     primitive (`kit/theme/tokens.css`).
+ *   - `categoryName` + `categoryColor` render the kit Chip with its
+ *     `color` tint (the same pill every list view uses for a category).
  *   - `statusBadges` render through the shared `.wp-mod-badge` family
  *     (row-primitives.css) — every consumer surface uses the same
  *     letterform and palette, no Polish-A custom chip styling left.
@@ -27,9 +26,10 @@
  * bundle row gets `indent=1`); each level adds 16px of left padding.
  */
 import { computed, ref, useId } from "vue";
-import Checkbox from "../components/ui/Checkbox.vue";
+import Button from "@/kit/Button.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import { kindIcon } from "../../components/shared/kind-icons";
-import CategoryChip from "../components/CategoryChip.vue";
+import Chip from "@/kit/Chip.vue";
 
 /**
  * Status-badge taxonomy — six variants paired 1:1 with
@@ -81,7 +81,7 @@ interface Props {
   checked: boolean;
   /** Entity kind for the type-icon column. */
   kind?: string;
-  /** Optional category metadata for the `.wp-cat-chip` primitive. */
+  /** Optional category metadata for the category Chip. */
   categoryName?: string;
   categoryColor?: string;
   /** PrimeIcons slug for the category, rendered inside the chip. Absent for
@@ -256,13 +256,13 @@ function onRowClick(ev: MouseEvent): void {
       >{{ shortId }}</span>
     </div>
 
-    <CategoryChip
+    <Chip
       v-if="props.categoryName"
-      :name="props.categoryName"
+     
       :color="props.categoryColor"
       :icon="props.categoryIcon"
       data-test="picker-row-cat-chip"
-    />
+    >{{ props.categoryName }}</Chip>
     <span v-else class="wp-picker-row__col-spacer" aria-hidden="true" />
 
     <span
@@ -290,30 +290,26 @@ function onRowClick(ev: MouseEvent): void {
       aria-hidden="true"
     />
     <span v-else class="wp-picker-row__dep-chips">
-      <button
+      <Chip
         v-if="props.unselectedDeps.length > 0"
-        type="button"
-        class="wp-dep-chip"
+        as="button"
+        tone="warn"
+        icon="pi-arrow-right"
         :aria-expanded="unselectedExpanded ? 'true' : 'false'"
         :aria-controls="unselectedListId"
         data-test="dep-warn-chip"
         @click="toggleUnselected"
-      >
-        <i class="pi pi-arrow-right" aria-hidden="true" />
-        <span>Requires {{ props.unselectedDeps.length }}</span>
-      </button>
-      <button
+      >Requires {{ props.unselectedDeps.length }}</Chip>
+      <Chip
         v-if="props.missingDeps.length > 0"
-        type="button"
-        class="wp-dep-chip wp-dep-chip--missing"
+        as="button"
+        tone="danger"
+        icon="pi-exclamation-triangle"
         :aria-expanded="missingExpanded ? 'true' : 'false'"
         :aria-controls="missingListId"
         data-test="dep-missing-chip"
         @click="toggleMissing"
-      >
-        <i class="pi pi-exclamation-triangle" aria-hidden="true" />
-        <span>Missing {{ props.missingDeps.length }}</span>
-      </button>
+      >Missing {{ props.missingDeps.length }}</Chip>
     </span>
 
     <div
@@ -331,13 +327,15 @@ function onRowClick(ev: MouseEvent): void {
         <i :class="depIconClass(d)" aria-hidden="true" />
         <span class="wp-row-dep-list__name">{{ d.name }}</span>
         <span class="wp-row-dep-list__id">{{ d.id.slice(0, 8) }}</span>
-        <button
-          type="button"
+        <Button
+          variant="link"
+          size="sm"
+          icon="pi-plus"
           class="wp-row-dep-list__action"
           :data-test="`dep-warn-select-${d.id}`"
           :aria-label="`Select ${d.name}`"
           @click="emit('select-dep', d.id)"
-        >+ select</button>
+        >Select</Button>
       </div>
     </div>
 
@@ -425,7 +423,7 @@ function onRowClick(ev: MouseEvent): void {
 .wp-row-name {
   /* Explicit flex-direction: row to override the global
    * `.wp-row-name { flex-direction: column }` from
-   * manager/styles/tokens.css:1002. The picker row's name + id pair
+   * kit/theme/tokens.css:1002. The picker row's name + id pair
    * sits horizontally on a shared baseline. */
   display: flex;
   flex-direction: row;
@@ -472,17 +470,8 @@ function onRowClick(ev: MouseEvent): void {
 }
 .wp-id:hover { color: var(--wp-text-muted); }
 
-/* Category chip — mirrors prototype lines 176-177. */
-.wp-cat-chip {
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid;
-  letter-spacing: .01em;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
+/* Category chip: the kit Chip; keep it from shrinking in the row. */
+.wp-chip--color { flex-shrink: 0; }
 
 /* Status badges — mirrors prototype lines 180-187. Picker-row local
  * override (slightly tighter than shared row-primitives baseline). */
@@ -494,7 +483,7 @@ function onRowClick(ev: MouseEvent): void {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 6px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -518,36 +507,6 @@ function onRowClick(ev: MouseEvent): void {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-/* Dep chip — amber (unselected deps) / red (truly missing).
- * Verbatim from prototype lines 190-199. */
-.wp-dep-chip {
-  background: color-mix(in oklab, var(--wp-warn) 14%, transparent);
-  color: var(--wp-warn);
-  font-family: var(--wp-font);
-  font-size: var(--wp-text-xs);
-  font-weight: 500;
-  padding: 2px 8px 2px 6px;
-  border-radius: var(--wp-radius-sm);
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-.wp-dep-chip--missing {
-  background: color-mix(in oklab, var(--wp-danger) 14%, transparent);
-  color: var(--wp-danger);
-  border-color: color-mix(in oklab, var(--wp-danger) 32%, transparent);
-}
-.wp-dep-chip .pi { font-size: 9px; }
-.wp-dep-chip:hover {
-  background: color-mix(in oklab, var(--wp-warn) 24%, transparent);
-}
-.wp-dep-chip--missing:hover {
-  background: color-mix(in oklab, var(--wp-danger) 22%, transparent);
 }
 
 /* Expanded dep list — spans full row width below the chip(s).
@@ -594,23 +553,7 @@ function onRowClick(ev: MouseEvent): void {
   font-family: var(--wp-font-mono);
   font-size: 10px;
 }
-.wp-row-dep-list__action {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 32%, transparent);
-  color: var(--wp-warn);
-  font-size: 9.5px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: var(--wp-radius-sm);
-  cursor: pointer;
-  font-family: var(--wp-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.wp-row-dep-list__action:hover {
-  background: color-mix(in oklab, var(--wp-warn) 18%, transparent);
-}
+.wp-row-dep-list__action { margin-left: auto; }
 .wp-row-dep-list__verdict {
   margin-left: auto;
   color: var(--wp-danger);

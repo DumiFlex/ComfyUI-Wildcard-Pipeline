@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
+import Checkbox from "@/kit/Checkbox.vue";
+import Input from "@/kit/Input.vue";
+import WpIconButton from "@/kit/WpIconButton.vue";
+import DragHandle from "@/kit/DragHandle.vue";
 
 const props = defineProps<{
   row: InjectorRow;
@@ -180,35 +184,28 @@ function onDragEnd(): void {
     @contextmenu="onContextMenu"
   >
     <div class="wp-inj-row-header">
-      <span class="wp-drag-handle" aria-hidden="true" title="Drag to reorder">
-        <svg class="wp-drag-handle__grip" viewBox="0 0 6 12" width="6" height="12" fill="currentColor" aria-hidden="true" focusable="false">
-          <circle cx="1.5" cy="2" r="1" />
-          <circle cx="4.5" cy="2" r="1" />
-          <circle cx="1.5" cy="6" r="1" />
-          <circle cx="4.5" cy="6" r="1" />
-          <circle cx="1.5" cy="10" r="1" />
-          <circle cx="4.5" cy="10" r="1" />
-        </svg>
+      <span class="wp-drag-handle" aria-hidden="true">
+        <DragHandle title="Drag to reorder" />
       </span>
-      <button
-        type="button"
+      <WpIconButton
+        variant="bare"
         class="wp-collapse-btn"
         draggable="false"
         data-test="inj-row-collapse"
-        :title="row._collapsed ? 'Expand' : 'Collapse'"
-        :aria-label="row._collapsed ? 'Expand row preview' : 'Collapse row preview'"
+        :icon="row._collapsed ? 'pi-caret-right' : 'pi-caret-down'"
+        :label="row._collapsed ? 'Expand row preview' : 'Collapse row preview'"
+        :hint="row._collapsed ? 'Expand' : 'Collapse'"
         @click.stop="emit('update', { _collapsed: !row._collapsed })"
-      ><i :class="['pi', row._collapsed ? 'pi-caret-right' : 'pi-caret-down']" aria-hidden="true" /></button>
-      <label class="wp-inj-toggle" :title="row.enabled ? 'Disable' : 'Enable'" draggable="false">
-        <input
-          type="checkbox"
-          :checked="row.enabled"
-          data-test="inj-row-enabled"
-          :aria-label="`enable injector row ${row._uid}`"
-          @change="(ev) => emit('update', { enabled: (ev.target as HTMLInputElement).checked })"
-        />
-        <span class="wp-inj-toggle-mark"></span>
-      </label>
+      />
+      <Checkbox
+        size="sm"
+        :title="row.enabled ? 'Disable' : 'Enable'"
+        draggable="false"
+        :model-value="row.enabled"
+        data-test="inj-row-enabled"
+        :aria-label="`enable injector row ${row._uid}`"
+        @update:model-value="(next) => emit('update', { enabled: next })"
+      />
 
       <span class="wp-row-type-icon" aria-hidden="true">
         <i :class="['pi', isGeneral ? 'pi-bolt' : typeIcon]" />
@@ -235,24 +232,20 @@ function onDragEnd(): void {
         data-test="inj-row-type"
       >{{ valueType.toLowerCase() }}</span>
 
-      <div
-        class="wp-vbind-wrap"
-        :class="{ 'wp-vbind-wrap--empty': isEmpty }"
+      <Input
+        size="sm"
+        mono
+        prefix="$"
+        class="wp-inj-bind"
+        :tone="isEmpty ? 'warn' : undefined"
+        data-test="inj-row-binding"
+        :model-value="row.binding"
+        :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
+        placeholder="variable_name"
+        spellcheck="false"
         draggable="false"
-      >
-        <span class="wp-vbind-prefix">$</span>
-        <input
-          type="text"
-          class="wp-vbind-input"
-          data-test="inj-row-binding"
-          :value="row.binding"
-          :aria-label="isGeneral ? 'binding for template row' : `binding for ${row.slot_name}`"
-          placeholder="variable_name"
-          spellcheck="false"
-          draggable="false"
-          @input="onBindingInput"
-        />
-      </div>
+        @input="onBindingInput"
+      />
 
       <span
         v-if="conflictSeverity"
@@ -270,24 +263,25 @@ function onDragEnd(): void {
       >{{ conflictLabel }}</span>
 
       <div class="wp-row-actions" draggable="false">
-        <button
-          type="button"
-          class="wp-btn--icon-sm wp-btn--accent"
-          :class="{ 'is-active': row.internal }"
+        <WpIconButton
+          icon="pi-globe"
+          tone="accent"
+          :pressed="!!row.internal"
           data-test="inj-row-internal"
           draggable="false"
-          :title="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
+          :label="row.internal ? 'Unmark internal' : 'Mark internal'"
+          :hint="row.internal ? 'Internal flag active — hidden from assembler chip strip' : 'Mark internal — hide from assembler chip strip'"
           @click="emit('update', { internal: !row.internal })"
-        ><i class="pi pi-globe" aria-hidden="true" /></button>
-        <button
-          type="button"
-          class="wp-btn--icon-sm wp-btn--danger"
+        />
+        <WpIconButton
+          icon="pi-trash"
+          tone="danger"
           data-test="inj-row-remove"
           draggable="false"
-          :title="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
-          :aria-label="isGeneral ? 'delete template row' : `disconnect ${row.slot_name}`"
+          :label="isGeneral ? 'Delete this template row' : `Disconnect ${row.slot_name}`"
+          :hint="isGeneral ? 'Delete this template row' : 'Disconnect this input wire'"
           @click="emit('disconnect')"
-        ><i class="pi pi-trash" aria-hidden="true" /></button>
+        />
       </div>
     </div>
     <!-- Collapse-row holds only the shared summary line — identical
@@ -325,8 +319,6 @@ function onDragEnd(): void {
 </template>
 
 <style scoped>
-@import "../shared/var-binding-input.css";
-@import "../shared/theme.css";
 @import "../shared/row-primitives.css";
 
 /* Card-framed row — mirrors .wp-module shape. Type-color left stripe
@@ -409,7 +401,7 @@ function onDragEnd(): void {
   right: 0;
   height: 3px;
   background: var(--wp-accent);
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   box-shadow: 0 0 8px var(--wp-accent);
   pointer-events: none;
   animation: wp-inj-drop-bar-in var(--wp-motion-quick) ease-out;
@@ -421,8 +413,8 @@ function onDragEnd(): void {
   to   { opacity: 1; transform: scaleX(1); }
 }
 
-/* Enter / leave / flash classes consumed by src/components/shared/
- * flip.ts when InjectorWidget calls withEnterAnimation /
+/* Enter / leave / flash classes consumed by the kit's flip.ts (@/kit/flip)
+ * when InjectorWidget calls withEnterAnimation /
  * withLeaveAnimation / flashRows. Mirror of ModuleRow's
  * .wp-module--* family with injector-tinted accents — visual parity
  * across both row UIs. The `transition: none` on --arriving snaps
@@ -496,32 +488,6 @@ function onDragEnd(): void {
   background: color-mix(in srgb, var(--wp-warn) 4%, var(--wp-bg3));
 }
 
-/* Toggle checkbox — same as Context's .wp-toggle */
-.wp-inj-toggle { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
-.wp-inj-toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-.wp-inj-toggle-mark {
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  border: 1px solid var(--wp-border2);
-  background: var(--wp-bg2);
-  transition: background-color var(--wp-motion-hover), border-color var(--wp-motion-hover);
-}
-.wp-inj-toggle input:checked + .wp-inj-toggle-mark {
-  background: var(--wp-accent);
-  border-color: var(--wp-accent);
-}
-.wp-inj-toggle input:focus-visible + .wp-inj-toggle-mark {
-  box-shadow: 0 0 0 2px var(--wp-violet);
-}
-
 /* Type icon — base style lives in src/components/shared/row-primitives.css
  * under `.wp-row-type-icon`. Only the per-value-type color overrides
  * are injector-specific and stay here. ContextWidget has its own
@@ -555,7 +521,7 @@ function onDragEnd(): void {
   text-transform: lowercase;
   letter-spacing: 0.04em;
   padding: 3px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in oklab, var(--wp-text3) 18%, transparent);
   color: var(--wp-text2);
   flex-shrink: 0;
@@ -598,12 +564,12 @@ function onDragEnd(): void {
 .wp-inj-row[data-type="sampler"]      .wp-kind-chip { background: color-mix(in oklab, var(--wp-var-2) 22%, transparent); color: var(--wp-var-2); }
 
 /* .wp-conflict-dot + .wp-conflict-badge + severity variants
- * + .wp-btn--icon-sm + variants → src/components/shared/row-primitives.css.
+ * → src/components/shared/row-primitives.css.
  * The shared file is imported at the top of this scoped block. */
 
 /* Injector-specific badge truncation. The shared .wp-conflict-badge
  * doesn't truncate by default (Context's row has flex:1 module name
- * absorbing slack). Injector's row layout puts vbind-wrap right next
+ * absorbing slack). Injector's row layout puts the binding right next
  * to the badge, so a long label can squeeze the binding input. Cap
  * + ellipsis prevents that. */
 .wp-conflict-badge {
@@ -614,8 +580,12 @@ function onDragEnd(): void {
   flex-shrink: 1;
 }
 
-/* Row action cluster — flex row of icon buttons. Uses the shared
- * .wp-btn--icon-sm for each button's styling. */
+/* Binding field: takes the row's slack, floored at 80px so siblings
+ * (conflict badge, action cluster) can't squash it; the `$` and a few
+ * characters stay visible on the narrowest node. */
+.wp-inj-row .wp-inj-bind { flex: 1 1 0; min-width: 80px; }
+
+/* Row action cluster — flex row of WpIconButtons. */
 .wp-row-actions { display: flex; gap: 1px; flex-shrink: 0; }
 
 /* Summary line — base shape comes from shared `.wp-summary`. Override
@@ -654,7 +624,7 @@ function onDragEnd(): void {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 1px 5px;
-  border-radius: 2px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
   color: var(--wp-accent);
 }

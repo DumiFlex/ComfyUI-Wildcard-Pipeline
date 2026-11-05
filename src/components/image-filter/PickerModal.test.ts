@@ -2,7 +2,7 @@ import { beforeEach, describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import PickerModal from "./PickerModal.vue";
 import { _resetImageFilterForTests, type WaitingRequest } from "../../extension/image-filter";
-import { dropDraftEdits } from "./picker-state";
+import { dropDraftEdits, saveDraftEdits } from "./picker-state";
 
 const ref = (n: string) => ({ filename: `${n}.png`, subfolder: "", type: "temp" });
 
@@ -38,7 +38,7 @@ describe("PickerModal", () => {
     await first.find('[data-test="image-filter-tile-0-2"]').trigger("click");
     first.unmount();
     const again = mk(req);
-    expect(again.find('[data-test="image-filter-status"]').text()).toContain("1 picked");
+    expect(again.find('[data-test="image-filter-status"]').text()).toContain("1 of 3 picked");
     expect(again.find('[data-test="image-filter-keep-picked"]').text()).toBe("Keep 1 picked");
   });
 
@@ -49,65 +49,140 @@ describe("PickerModal", () => {
     expect(keep.attributes("disabled")).toBeDefined();
     await w.find('[data-test="image-filter-tile-0-3"]').trigger("click");
     await w.find('[data-test="image-filter-tile-0-1"]').trigger("click");
-    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 picked");
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 of 4 picked");
     await keep.trigger("click");
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 3]] });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 3]], labels: { "0:1": "#1 · 2", "0:3": "#1 · 4" } });
   });
 
-  it("clicking a frame zooms its first image; clicking an image only picks it", async () => {
+  it("clicking a frame opens Detail on its first image; clicking an image only picks it", async () => {
     const w = mk(request([2, 2], { labels: [{ loop_index: 0 }, { loop_index: 1 }] }));
     await w.find('[data-test="image-filter-tile-1-1"]').trigger("click");
-    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(false);
-    expect(w.find('[data-test="image-filter-status"]').text()).toContain("1 picked");
+    expect(w.find('[data-test="image-filter-detail"]').exists()).toBe(false);
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("1 of 4 picked");
     await w.find('[data-test="image-filter-frame-1"] .wp-ifp__frame-label').trigger("click");
-    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("image 1");
+    expect(w.find('[data-test="image-filter-refine"]').text()).toContain("image 1");
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("3 / 4");
   });
 
-  it("the header Zoom button opens the zoom on the first picked image and closes it again", async () => {
+  it("the mode switch moves between Grid, Detail and Zoom; Detail opens on the first picked image", async () => {
     const w = mk(request([3]));
     await w.find('[data-test="image-filter-tile-0-2"]').trigger("click");
-    const btn = w.find('[data-test="image-filter-zoom-toggle"]');
-    await btn.trigger("click");
-    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("3 / 3");
-    expect(btn.text()).toBe("Back to all");
-    await btn.trigger("click");
-    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(false);
+    await w.find('[data-test="image-filter-mode-detail"]').trigger("click");
+    expect(w.find('[data-test="image-filter-picker"]').attributes("data-mode")).toBe("detail");
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("3 / 3");
+    expect(w.find('[data-test="image-filter-pick"]').text()).toBe("Picked");
+    await w.find('[data-test="image-filter-mode-zoom"]').trigger("click");
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
+    expect(w.find('[data-test="imgzoom-fit"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-zoom-cap"]').text()).toContain("3 / 3");
+    await w.find('[data-test="image-filter-mode-grid"]').trigger("click");
+    expect(w.find('[data-test="image-filter-frames"]').exists()).toBe(true);
   });
 
-  it("a loop's frames are grouped; the frame's all button picks the whole frame", async () => {
+  it("the footer stays the same in every mode", async () => {
+    const w = mk(request([2]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    for (const key of ["g", "d", "z"]) {
+      await root.trigger("keydown", { key });
+      expect(w.find('[data-test="image-filter-keep-picked"]').exists()).toBe(true);
+      expect(w.find('[data-test="image-filter-status"]').text()).toContain("0 of 2 picked");
+    }
+  });
+
+  it("a loop's frames are grouped; the frame's Pick frame button picks the whole frame", async () => {
     const w = mk(request([2, 2, 2], { labels: [{ loop_index: 0 }, { loop_index: 1 }, { loop_index: 2 }] }));
     expect(w.findAll('[data-test^="image-filter-frame-"]')).toHaveLength(3);
-    await w.find('[data-test="image-filter-frame-1"] .wp-ifp__frame-all').trigger("click");
-    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(false);
-    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 picked from 1 frame");
+    await w.find('[data-test="image-filter-pick-frame-1"]').trigger("click");
+    expect(w.find('[data-test="image-filter-detail"]').exists()).toBe(false);
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 of 6 picked from 1 frame");
+    expect(w.find('[data-test="image-filter-frame-1"]').text()).toContain("2 of 2");
+    expect(w.find('[data-test="image-filter-pick-frame-1"]').text()).toBe("Clear frame");
     await w.find('[data-test="image-filter-keep-picked"]').trigger("click");
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[1, 0], [1, 1]] });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[1, 0], [1, 1]], labels: { "1:0": "#2 · 1", "1:1": "#2 · 2" } });
   });
 
   it("keep all and stop branch answer directly", async () => {
     const w = mk(request([3]));
     await w.find('[data-test="image-filter-keep-all"]').trigger("click");
     await w.find('[data-test="image-filter-stop"]').trigger("click");
-    expect(w.emitted("answer")).toEqual([[{ action: "keep_all" }], [{ action: "stop" }]]);
+    expect(w.emitted("answer")).toEqual([
+      [{ action: "keep_all", labels: { "0:0": "#1 · 1", "0:1": "#1 · 2", "0:2": "#1 · 3" } }],
+      [{ action: "stop" }],
+    ]);
   });
 
-  it("Space zooms the hovered image; arrows move, ↑ picks, Escape leaves the zoom first", async () => {
+  it("Space picks the hovered image in Grid; D opens it; arrows move, P picks; Escape steps back a mode", async () => {
     const w = mk(request([3]));
+    await w.vm.$nextTick();
     await w.find('[data-test="image-filter-tile-0-1"]').trigger("mouseenter");
     const root = w.find('[data-test="image-filter-picker"]');
     await root.trigger("keydown", { key: " " });
-    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("2 / 3");
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("1 of 3 picked");
+    await root.trigger("keydown", { key: "d" });
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("2 / 3");
     await root.trigger("keydown", { key: "ArrowRight" });
-    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("3 / 3");
-    await root.trigger("keydown", { key: "ArrowUp" });
-    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("Picked");
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("3 / 3");
+    await root.trigger("keydown", { key: "p" });
+    expect(w.find('[data-test="image-filter-pick"]').text()).toBe("Picked");
+    await root.trigger("keydown", { key: "z" });
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
     await root.trigger("keydown", { key: "Escape" });
-    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(false);
+    expect(w.find('[data-test="image-filter-detail"]').exists()).toBe(true);
+    await root.trigger("keydown", { key: "Escape" });
+    expect(w.find('[data-test="image-filter-frames"]').exists()).toBe(true);
     expect(w.emitted("minimize")).toBeUndefined();
     await root.trigger("keydown", { key: "Escape" });
     expect(w.emitted("minimize")).toHaveLength(1);
     await root.trigger("keydown", { key: "Enter" });
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 2]] });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 2]], labels: { "0:1": "#1 · 2", "0:2": "#1 · 3" } });
+  });
+
+  it("the strip in Detail jumps to an image; double-clicking it opens Zoom", async () => {
+    const w = mk(request([4]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    await w.find('[data-test="image-filter-strip-0-3"]').trigger("click");
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("4 / 4");
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("0 of 4 picked");
+    await w.find('[data-test="image-filter-strip-0-1"]').trigger("dblclick");
+    expect(w.find('[data-test="image-filter-zoom-cap"]').text()).toContain("2 / 4");
+  });
+
+  it("Zoom: C pins the image and ←/→ puts another beside it; the picture says when it is picked", async () => {
+    const w = mk(request([3]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "z" });
+    expect(w.find('[data-test="image-filter-zoom-picked"]').exists()).toBe(false);
+    await root.trigger("keydown", { key: "p" });
+    expect(w.find('[data-test="image-filter-zoom-picked"]').exists()).toBe(true);
+    await root.trigger("keydown", { key: "c" });
+    expect(w.find('[data-test="image-filter-zoom-compare"]').text()).toBe("Pinned");
+    expect(w.find('[data-test="imgzoom-second"]').exists()).toBe(false);
+    await root.trigger("keydown", { key: "ArrowRight" });
+    expect(w.find('[data-test="imgzoom-second"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-zoom-cap"]').text()).toContain("Image 1 · pinned");
+    expect(w.find('[data-test="image-filter-zoom-cap-second"]').text()).toContain("Image 2");
+    // P picks the right-hand (current) image; the pinned one keeps its badge.
+    await root.trigger("keydown", { key: "p" });
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 of 3 picked");
+    // The pin carries over to Detail and back; Grid drops it.
+    await root.trigger("keydown", { key: "d" });
+    expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(true);
+    await root.trigger("keydown", { key: "g" });
+    await root.trigger("keydown", { key: "z" });
+    expect(w.find('[data-test="imgzoom-second"]').exists()).toBe(false);
+  });
+
+  it("Prompt and Negative each have a copy button, and Detail has no Zoom button", async () => {
+    const w = mk(request([1], { labels: [{ positive: "a cat", negative: "blurry" }] }));
+    await w.vm.$nextTick();
+    await w.find('[data-test="image-filter-picker"]').trigger("keydown", { key: "d" });
+    expect(w.find('[data-test="image-filter-copy-positive"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-copy-negative"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-to-zoom"]').exists()).toBe(false);
   });
 
   it("Ctrl+A picks everything, again clears", async () => {
@@ -116,9 +191,9 @@ describe("PickerModal", () => {
     await w.vm.$nextTick();
     const root = w.find('[data-test="image-filter-picker"]');
     await root.trigger("keydown", { key: "a", ctrlKey: true });
-    expect(w.find('[data-test="image-filter-status"]').text()).toContain("3 picked");
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("3 of 3 picked");
     await root.trigger("keydown", { key: "a", ctrlKey: true });
-    expect(w.find('[data-test="image-filter-status"]').text()).toContain("0 picked");
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("0 of 3 picked");
   });
 
   it("shows the countdown when the node has a timeout", () => {
@@ -126,36 +201,35 @@ describe("PickerModal", () => {
     expect(w.find('[data-test="image-filter-status"]').text()).toContain("2:05 left");
   });
 
-  it("remembers being zoomed: the next picker opens zoomed in", async () => {
+  it("remembers the mode: the next picker opens in it", async () => {
     const w = mk(request([2]));
     await w.vm.$nextTick();
-    const root = w.find('[data-test="image-filter-picker"]');
-    await root.trigger("keydown", { key: " " });
-    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
+    await w.find('[data-test="image-filter-picker"]').trigger("keydown", { key: "z" });
     w.unmount();
     const again = mk(request([2], { token: "tok2" }));
     expect(again.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
     await again.vm.$nextTick();
-    await again.find('[data-test="image-filter-picker"]').trigger("keydown", { key: " " });
+    await again.find('[data-test="image-filter-picker"]').trigger("keydown", { key: "g" });
     again.unmount();
-    expect(mk(request([2])).find('[data-test="image-filter-zoom"]').exists()).toBe(false);
+    expect(mk(request([2])).find('[data-test="image-filter-frames"]').exists()).toBe(true);
   });
 
   it("an edited prompt goes out with the picks, for the whole frame with Same shape", async () => {
     const w = mk(request([2], { labels: [{ positive: "a cat", negative: "blurry" }] }));
     await w.vm.$nextTick();
     const root = w.find('[data-test="image-filter-picker"]');
-    await root.trigger("keydown", { key: " " });
+    await root.trigger("keydown", { key: "d" });
     const pos = w.find('[data-test="image-filter-positive"]');
     expect((pos.element as HTMLTextAreaElement).value).toBe("a cat");
     await pos.setValue("a dog");
     expect(w.find('[data-test="image-filter-refine"]').text()).toContain("edited");
-    await w.find('[data-test="image-filter-zoom-pick"]').trigger("click");
+    await w.find('[data-test="image-filter-pick"]').trigger("click");
     await root.trigger("keydown", { key: "Enter" });
     expect(w.emitted("answer")?.[0]?.[0]).toEqual({
       action: "picks",
       picks: [[0, 0]],
       edits: { "0:0": { positive: "a dog" } },
+      labels: { "0:0": "#1 · 1" },
     });
   });
 
@@ -163,77 +237,186 @@ describe("PickerModal", () => {
     const w = mk(request([2], { labels: [{ positive: "a cat" }], send_as: "per_image" }));
     await w.vm.$nextTick();
     const root = w.find('[data-test="image-filter-picker"]');
-    await root.trigger("keydown", { key: " " });
+    await root.trigger("keydown", { key: "d" });
     const pos = w.find('[data-test="image-filter-positive"]');
     await pos.setValue("x");
     await pos.setValue("a cat");
     await pos.setValue("y");
     await w.find('[data-test="image-filter-keep-all"]').trigger("click");
-    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "keep_all", edits: { "0:0": { positive: "y" } } });
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({
+      action: "keep_all",
+      edits: { "0:0": { positive: "y" } },
+      labels: { "0:0": "#1 · 1", "0:1": "#1 · 2" },
+    });
   });
 
-  it("warns that edits only change text without a CLIP", async () => {
+  it("every image has a label under its tile and in Detail; a rename goes out, clearing it brings the default back", async () => {
+    const w = mk(request([2, 1], { labels: [{ loop_index: 4 }, { loop_index: 5 }] }));
+    expect(w.find('[data-test="image-filter-tile-label-0-1"]').text()).toBe("#5 · 2");
+    // A frame with one image carries no image number.
+    expect(w.find('[data-test="image-filter-tile-label-1-0"]').text()).toBe("#6");
+    await w.find('[data-test="image-filter-tile-label-0-1"] button').trigger("click");
+    const box = w.find('[data-test="image-filter-tile-label-0-1"] input');
+    await box.setValue("  hero   shot ");
+    await box.trigger("keydown", { key: "Enter" });
+    // The rename box keeps Enter: nothing was answered.
+    expect(w.emitted("answer")).toBeUndefined();
+    expect(w.find('[data-test="image-filter-tile-label-0-1"]').text()).toBe("hero shot");
+    // Renaming doesn't open Detail (the frame around the tile does).
+    expect(w.find('[data-test="image-filter-detail"]').exists()).toBe(false);
+    await w.find('[data-test="image-filter-tile-0-1"]').trigger("click");
+    await w.find('[data-test="image-filter-mode-detail"]').trigger("click");
+    expect(w.find('[data-test="image-filter-label"]').text()).toBe("hero shot");
+    await w.find('[data-test="image-filter-keep-picked"]').trigger("click");
+    // A label alone is not a refine: it rides `labels`, never `edits`.
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1]], labels: { "0:1": "hero shot" } });
+  });
+
+  it("clearing a label in Detail goes back to the default", async () => {
+    const w = mk(request([2]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    const label = () => w.find('[data-test="image-filter-label"]');
+    expect(label().text()).toBe("#1 · 1");
+    await label().find("button").trigger("click");
+    await label().find("input").setValue("first");
+    await label().find("input").trigger("keydown", { key: "Enter" });
+    expect(label().text()).toBe("first");
+    expect(w.text()).not.toContain("refined");
+    await label().find("button").trigger("click");
+    await label().find("input").setValue("");
+    await label().find("input").trigger("keydown", { key: "Enter" });
+    expect(label().text()).toBe("#1 · 1");
+    await w.find('[data-test="image-filter-keep-all"]').trigger("click");
+    expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "keep_all", labels: { "0:0": "#1 · 1", "0:1": "#1 · 2" } });
+  });
+
+  it("shows only the prompt fields that are wired, and warns without a CLIP", async () => {
     const w = mk(request([1], { labels: [{ positive: "p" }], has_clip: false }));
     await w.vm.$nextTick();
-    await w.find('[data-test="image-filter-picker"]').trigger("keydown", { key: " " });
+    await w.find('[data-test="image-filter-picker"]').trigger("keydown", { key: "d" });
     expect(w.find('[data-test="image-filter-no-clip"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-positive"]').exists()).toBe(true);
     expect(w.find('[data-test="image-filter-negative"]').exists()).toBe(false);
+  });
+
+  it("with no prompt wired, Detail shows one line instead of empty fields", async () => {
+    const w = mk(request([1], { has_clip: false }));
+    await w.vm.$nextTick();
+    await w.find('[data-test="image-filter-picker"]').trigger("keydown", { key: "d" });
+    expect(w.find('[data-test="image-filter-no-prompt"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-positive"]').exists()).toBe(false);
+    expect(w.find('[data-test="image-filter-no-clip"]').exists()).toBe(false);
   });
 
   it("C pins an image and compares it with the next one", async () => {
     const w = mk(request([3]));
     await w.vm.$nextTick();
     const root = w.find('[data-test="image-filter-picker"]');
-    await root.trigger("keydown", { key: " " });
+    await root.trigger("keydown", { key: "d" });
     await root.trigger("keydown", { key: "c" });
     expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(false);
     await root.trigger("keydown", { key: "ArrowRight" });
+    expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(true);
+    // The split is the kit Slider: its arrows move the line, not the image.
+    const thumb = w.find('[data-test="image-filter-compare-slider"] [role="slider"]');
+    expect(thumb.attributes("aria-label")).toBe("Compare slider");
+    expect(thumb.attributes("aria-valuenow")).toBe("50");
+    await thumb.trigger("keydown", { key: "ArrowRight" });
+    expect(thumb.attributes("aria-valuenow")).toBe("51");
+    expect(w.find(".wp-ifp__compare-line").attributes("style")).toContain("left: 51%");
     expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(true);
     await root.trigger("keydown", { key: "c" });
     expect(w.find('[data-test="image-filter-compare"]').exists()).toBe(false);
   });
 
-  it("M opens the mask painter for the zoomed image", async () => {
+  it("M opens the mask painter for the image in Detail", async () => {
     const w = mk(request([1]));
     await w.vm.$nextTick();
     const root = w.find('[data-test="image-filter-picker"]');
-    await root.trigger("keydown", { key: " " });
+    await root.trigger("keydown", { key: "d" });
     await root.trigger("keydown", { key: "m" });
     expect(w.find('[data-test="image-filter-mask"]').exists()).toBe(true);
     expect(w.find('[data-test="image-filter-mask-clear"]').exists()).toBe(true);
   });
 
-  it("I adds Details to the zoom: values, marked prompt, the frame's images; it is remembered", async () => {
-    const labels = [{ positive: "1girl, red hair, calm", vars: { hair: "red hair", mood: "calm" }, seed: 9 }];
-    const w = mk(request([2], { labels }));
+  it("the painter has Brush, Lasso and Fill, Paint or Erase (X), size keys, and arrows on a slider stay on it", async () => {
+    const w = mk(request([3]));
     await w.vm.$nextTick();
     const root = w.find('[data-test="image-filter-picker"]');
-    await root.trigger("keydown", { key: " " });
-    expect(w.find('[data-test="image-filter-details"]').exists()).toBe(false);
-    await root.trigger("keydown", { key: "i" });
+    await root.trigger("keydown", { key: "d" });
+    await root.trigger("keydown", { key: "m" });
+    for (const t of ["brush", "lasso", "fill"]) expect(w.find(`[data-test="image-filter-tool-${t}"]`).exists()).toBe(true);
+    const erase = () => w.find('[data-test="image-filter-paint-mode-erase"]').attributes("aria-checked");
+    expect(erase()).toBe("false");
+    await root.trigger("keydown", { key: "x" });
+    expect(erase()).toBe("true");
+    const size = () => w.find('[data-test="image-filter-brush-size"] [role="slider"]').attributes("aria-valuenow");
+    expect(size()).toBe("40");
+    await root.trigger("keydown", { key: "]" });
+    expect(size()).toBe("48");
+    await root.trigger("keydown", { key: "[" });
+    expect(size()).toBe("40");
+    // Arrow keys on a brush slider move the slider, not to the next image.
+    await w.find('[data-test="image-filter-brush-hardness"] [role="slider"]').trigger("keydown", { key: "ArrowLeft" });
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("1 / 3");
+    expect(w.find('[data-test="image-filter-brush-hardness"] [role="slider"]').attributes("aria-valuenow")).toBe("95");
+    // Nothing painted yet: nothing to undo.
+    expect(w.find('[data-test="image-filter-mask-undo"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("the Mask tab previews a painted mask over the image or on its own", async () => {
+    const mask = "data:image/png;base64,iVBORw0KGgo=";
+    saveDraftEdits("tok", { "0:1": { mask } });
+    const w = mk(request([2]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    await w.find('[data-test="image-filter-tab-mask"]').trigger("click");
+    expect(w.find('[data-test="image-filter-mask-empty"]').exists()).toBe(true);
+    expect(w.find('[data-test="image-filter-mask-preview"]').exists()).toBe(false);
+    await root.trigger("keydown", { key: "ArrowRight" });
+    const preview = w.find('[data-test="image-filter-mask-preview"]');
+    expect(preview.classes()).toContain("is-over");
+    expect(preview.find(".wp-ifp__mask-layer").attributes("style")).toContain(mask);
+    await w.find('[data-test="image-filter-mask-view-only"]').trigger("click");
+    expect(w.find('[data-test="image-filter-mask-preview"]').classes()).toContain("is-only");
+  });
+
+  it("Detail lists the frame's values, marks them in the prompt and picks the whole frame", async () => {
+    const labels = [{ positive: "1girl, red hair, calm", vars: { hair: "red hair", mood: "calm" }, seed: 9 }, {}];
+    const w = mk(request([2, 1], { labels }));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    // The side panel opens on the Prompt tab; Values sits one tab over.
+    expect(w.find('[data-test="image-filter-values"]').exists()).toBe(false);
+    const marked = w.find('[data-test="image-filter-positive-marked"]');
+    expect(marked.findAll("mark").map((m) => m.text())).toEqual(["red hair", "calm"]);
+    // Each variable keeps its own colour, and hovering a mark names it.
+    const hues = marked.findAll("mark").map((m) => m.attributes("style"));
+    expect(hues[0]).not.toEqual(hues[1]);
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("seed 9");
+    await w.find('[data-test="image-filter-tab-values"]').trigger("click");
     const details = w.find('[data-test="image-filter-details"]');
     expect(details.text()).toContain("$hair");
     expect(details.find('[data-test="image-filter-values"]').text()).toContain("seed9");
-    const marked = w.find('[data-test="image-filter-positive-marked"]');
-    expect(marked.findAll("mark").map((m) => m.text())).toEqual(["red hair", "calm"]);
+    await w.find('[data-test="image-filter-tab-prompt"]').trigger("click");
     await marked.trigger("click");
     expect(w.find('[data-test="image-filter-positive"]').exists()).toBe(true);
-    await details.find('[data-test="image-filter-details-frame"]').trigger("click");
-    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 picked");
-    await details.findAll(".wp-ifp-tile")[1]?.trigger("click");
-    expect(w.find('[data-test="image-filter-zoom"]').text()).toContain("2 / 2");
-    w.unmount();
-    const again = mk(request([2], { labels }));
-    expect(again.find('[data-test="image-filter-details"]').exists()).toBe(true);
+    await w.find('[data-test="image-filter-details-frame"]').trigger("click");
+    expect(w.find('[data-test="image-filter-status"]').text()).toContain("2 of 3 picked");
   });
 
-  it("Fit (button or F) scales the overview's images and is remembered", async () => {
+  it("tile size S / M / L / Fit (or F) sizes the grid and is remembered", async () => {
     const w = mk(request([3]));
     await w.vm.$nextTick();
-    expect(w.find('[data-test="image-filter-frame-0"]').attributes("style")).toBeUndefined();
-    await w.find('[data-test="image-filter-fit"]').trigger("click");
+    expect(w.find('[data-test="image-filter-frame-0"]').attributes("style")).toContain("200px");
+    await w.find('[data-test="image-filter-tile-size-l"]').trigger("click");
+    expect(w.find('[data-test="image-filter-frame-0"]').attributes("style")).toContain("320px");
+    await w.find('[data-test="image-filter-tile-size-fit"]').trigger("click");
     expect(w.find('[data-test="image-filter-picker"]').classes()).toContain("is-fit");
-    expect(w.find('[data-test="image-filter-frame-0"]').attributes("style")).toContain("--wp-ifp-tile");
     w.unmount();
     const again = mk(request([3]));
     await again.vm.$nextTick();

@@ -18,6 +18,13 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")
 const APP_VERSION = pkg.version;
 const APP_LICENSE = pkg.license;
 
+// The shared component kit comes from npm (@dumiflex/wp-kit, source .vue /
+// .ts / CSS) and is imported as `@/kit/<file>`, so that alias points into the
+// package. Its version is `__KIT_VERSION__`, for the Settings About card.
+const KIT_DIR = resolve(__dirname, "node_modules/@dumiflex/wp-kit/src");
+const kitPkg = JSON.parse(readFileSync(resolve(KIT_DIR, "../package.json"), "utf-8")) as { version: string };
+const KIT_VERSION = { version: kitPkg.version };
+
 // Two build targets controlled by --mode flag:
 //   pnpm build:extension → js/main.js  (ComfyUI web extension, critical-path bundle)
 //   pnpm build:manager   → web_dist/   (standalone SPA, post-MVP)
@@ -28,7 +35,9 @@ export default defineConfig(({ mode }) => {
   const common = {
     plugins: [vue()],
     resolve: {
+      // "@/kit" before "@": the first prefix that matches wins.
       alias: {
+        "@/kit": KIT_DIR,
         "@": resolve(__dirname, "./src"),
         vue: "vue/dist/vue.runtime.esm-bundler.js",
       },
@@ -37,6 +46,7 @@ export default defineConfig(({ mode }) => {
       "process.env.NODE_ENV": JSON.stringify("production"),
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __APP_LICENSE__: JSON.stringify(APP_LICENSE),
+      __KIT_VERSION__: JSON.stringify(KIT_VERSION),
     },
     // PostCSS config moved to `config/postcss.config.js` — Vite no
     // longer auto-discovers it from the project root, so point at it

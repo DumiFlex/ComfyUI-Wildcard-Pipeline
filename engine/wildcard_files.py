@@ -37,6 +37,21 @@ from typing import Any
 from engine._fingerprint import module_fingerprint
 from engine.modules.snapshot import payload_hash
 from engine.syntax.subcat_filter import validate_subcat_name
+from engine.wildcard_logic import (
+    MODEL_FAMILIES,
+    MODEL_VARIANTS,
+    UMI_QUERY_RE,
+    cond_vars,
+    eval_condition,
+    extract_negatives,
+    model_env,
+    model_source,
+    normalize_ppp,
+    parse_condition,
+    parse_umi_query,
+    split_ppp_if,
+    umi_matches,
+)
 
 try:  # PyYAML ships with ComfyUI; the converter degrades without it.
     import yaml as _yaml
@@ -109,6 +124,8 @@ _REF_RE = re.compile(
 # `${name?=!value}`. Only the first two are reads.
 
 _WP_REF_START = re.compile(r"@\{[0-9a-f]{8}")
+# Umi AI tag queries: `<[tag]>`, `<[a][b]>`, `<[a|b]>`, `<[--a]>`, `<file:[tag]>`.
+_UMI_QUERY_RE = re.compile(r"<(?P<file>[\w .\-/]+)?:?\[(?P<body>[^<>]*?)\]>")
 _INLINE_COMMENT_RE = re.compile(r"\s+#.*$")
 
 # The report keeps at most this many examples per note kind, and this
@@ -122,11 +139,14 @@ _MAX_WILDCARD_NOTES = 6
 _LOSSY_KINDS = frozenset({
     "condition_dropped", "unresolved_reference", "template_args_dropped",
     "variable_kept_as_text", "wrap_kept_as_text", "filter_dropped",
-    "command_dropped",
+    "command_dropped", "ppp_directive_kept_as_text", "tag_query_kept_as_text",
+    "tag_query_no_match", "negative_dropped", "variable_read_in_nested_list",
+    "too_many_copies",
 })
 _CLOSE_KINDS = frozenset({
     "default_params_dropped", "label_dropped", "extra_else_dropped",
     "inline_else_dropped", "multi_pick_range_capped", "merged_fallback_dropped",
+    "affixes_per_pick", "immediate_variable_as_macro", "negative_moved_to_option",
 })
 
 # Merging: a folder of small related lists (hair/colors/red.txt,
@@ -166,6 +186,25 @@ class _Wildcard:
     sub_categories: list[str] = field(default_factory=list)
     # `#` comment lines from the source, kept as the module description.
     comments: list[str] = field(default_factory=list)
+    # PPP default parameters (first choice `2-3$$, $$` or an object):
+    # see :func:`_read_defaults`. A reference with no parameters of its
+    # own uses these, as PPP does.
+    defaults: dict[str, Any] | None = None
+    # An Umi AI YAML file (prompt text as keys, a `Tags:` list each).
+    umi: bool = False
+    # Tag axes to store on the row (Umi `Yaml Tags.txt` headers).
+    tag_groups: dict[str, list[str]] = field(default_factory=dict)
+    # Umi files are split into layers so a query never reaches its own
+    # entry (see _umi_layers); 0 for everything else.
+    layer: int = 0
+    # The variable a generated wildcard writes (default: from the path).
+    binding: str | None = None
+    # Built by the converter (a variable setter, a part of a stack, a
+    # specialised copy): never merged, never an entry point of its own.
+    generated: bool = False
+    # A specialised copy (`__t(x=v)__`): the variables its text reads,
+    # bound to the source text that replaces each read.
+    copy_env: dict[str, str] | None = None
 
 
 @dataclass
@@ -191,6 +230,19 @@ class _Merge:
     expr: dict[str, str] = field(default_factory=dict)
     member_tags: dict[str, list[str]] = field(default_factory=dict)
     tag_groups: dict[str, list[str]] = field(default_factory=dict)
+    # Set for a table / grid (see :func:`_choose_grids`): the list name
+    # every member shares. Members are then tagged by the folders BETWEEN
+    # the root and that name, and the wildcard is named ``root/leaf``.
+    leaf: str | None = None
+
+    @property
+    def display(self) -> str:
+        return f"{self.root}/{self.leaf}" if self.leaf else self.root
+
+    @property
+    def separate_key(self) -> str:
+        """What ``keep_separate`` takes to undo this merge."""
+        return f"{self.root}/*/{self.leaf}" if self.leaf else self.root
 
 
 class _Report:
@@ -298,8 +350,12 @@ def _load_structured(text: str, ext: str) -> Any:
 
 def _collect(
     files: list[SourceFile], report: _Report, exclude: set[str],
+    umi_axes: dict[str, list[str]] | None = None,
 ) -> list[_Wildcard]:
-    """Turn files into wildcards (raw items, not yet converted)."""
+    """Turn files into wildcards (raw items, not yet converted).
+
+    An Umi AI ``Yaml Tags.txt`` is not a list: its ``Header:`` blocks name
+    tag axes, which go to ``umi_axes``."""
     wanted = sorted(
         (f for f in files if _clean_path(f.path) and is_wildcard_file(f.path)),
         key=lambda f: f.path.lower(),
@@ -320,6 +376,13 @@ def _collect(
             continue
         try:
             text = _decode(f.data)
+            if ext == ".txt" and pure.name.lower() == "yaml tags.txt":
+                axes = _read_umi_axes(text)
+                if axes:
+                    if umi_axes is not None:
+                        umi_axes.update(axes)
+                    entry["status"] = "axes"
+                    continue
             if ext == ".txt":
                 lines = []
                 comments: list[str] = []
@@ -344,7 +407,10 @@ def _collect(
             entry["error"] = str(exc).split("\n")[0][:200]
             continue
         before = len(found)
-        if isinstance(data, dict):
+        umi_items = _umi_items(data) if isinstance(data, dict) else None
+        if umi_items is not None:
+            found.append(_Wildcard(stem_path, rel, umi_items, umi=True))
+        elif isinstance(data, dict):
             _walk_dict(data, folder, rel, found, report)
         elif isinstance(data, list):
             found.append(_Wildcard(stem_path, rel, data))
@@ -354,6 +420,59 @@ def _collect(
             entry["status"] = "empty"
         entry["wildcards"] = len(found) - before
     return found
+
+
+def _umi_items(data: dict[Any, Any]) -> list[dict[str, Any]] | None:
+    """An Umi AI YAML file: each key is a prompt, each value holds a
+    ``Tags`` list. Returns PPP-style ``{text, labels}`` items, or None
+    when the file isn't shaped like that."""
+    tagged = 0
+    for value in data.values():
+        if isinstance(value, dict) and any(str(k).casefold() == "tags" for k in value):
+            tagged += 1
+    if not data or tagged * 2 < len(data):
+        return None
+    items: list[dict[str, Any]] = []
+    for key, value in data.items():
+        if key is None or not str(key).strip():
+            continue
+        tags: list[str] = []
+        if isinstance(value, dict):
+            raw = next((v for k, v in value.items() if str(k).casefold() == "tags"), None)
+            if isinstance(raw, str):
+                raw = [raw]
+            tags = [str(t).strip() for t in raw or [] if str(t).strip()]
+        items.append({
+            "text": str(key),
+            "labels": [t for t in (_umi_tag(x) for x in tags) if t],
+            "umi_tags": {t.casefold() for t in tags},
+        })
+    return items
+
+
+def _umi_tag(label: str) -> str | None:
+    """Umi tags compare without case: store them lowercased."""
+    return _slug_tag(label.casefold())
+
+
+def _read_umi_axes(text: str) -> dict[str, list[str]]:
+    """``Header:`` followed by ``- tag`` lines → ``{header: [tags]}``."""
+    axes: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in text.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+        if s.endswith(":") and not s.startswith("-"):
+            current = s[:-1].strip()
+            axes.setdefault(current, [])
+        elif s.startswith("-") and current is not None:
+            tag = _umi_tag(s[1:].strip().strip("'\""))
+            if tag and tag not in axes[current]:
+                axes[current].append(tag)
+        else:
+            return {}
+    return {k: v for k, v in axes.items() if v}
 
 
 def _walk_dict(
@@ -434,6 +553,55 @@ class _Ctx:
     edges: dict[str, set[str]] = field(default_factory=dict)
     ref_counts: dict[str, int] = field(default_factory=dict)
     comments: dict[str, list[str]] = field(default_factory=dict)
+    # Ids already in the user's library: a reference the upload can't
+    # resolve still links to a wildcard an earlier import of the same
+    # pack created (ids are derived from the path).
+    library_ids: set[str] = field(default_factory=set)
+    # Which tool the pack was written for (see :func:`detect_dialect`).
+    dialect: str = "mixed"
+    # The wildcard the last resolved reference points at, or None for a
+    # group / library target: lets `_reference` read its defaults.
+    target: _Wildcard | None = None
+    # --- logic layer (P3) ---
+    current_wc: _Wildcard | None = None
+    used_ids: set[str] = field(default_factory=set)
+    # Macro variables in effect while converting one value: `${x=v}`
+    # assignments and `__t(x=v)__` arguments, by name → source text.
+    env: dict[str, str] = field(default_factory=dict)
+    # While converting a line of an entry point: the variables it sets
+    # with `${x=!v}` (rolled once) and the ones it reads that nothing
+    # sets (template slots). Reads of both become `$x` in a Combine.
+    line_vars: dict[str, dict[str, Any]] | None = None
+    # Negative text pulled out of the value being converted.
+    negatives: list[str] = field(default_factory=list)
+    depth: int = 0
+    # Raw scan: the variables each wildcard reads, what it references.
+    reads: dict[str, set[str]] = field(default_factory=dict)
+    raw_refs: dict[str, set[str]] = field(default_factory=dict)
+    entry_keys: set[str] = field(default_factory=set)
+    copies: dict[tuple[str, tuple[tuple[str, str], ...]], _Wildcard] = field(default_factory=dict)
+    pending: list[_Wildcard] = field(default_factory=list)
+    # Stacks: ordered module lists that run together (see _line_stack).
+    stacks: list[dict[str, Any]] = field(default_factory=list)
+    extra_rows: list[dict[str, Any]] = field(default_factory=list)
+    # Variable → the stacks whose setter writes it, for constraints.
+    setters: dict[str, list[tuple[dict[str, Any], tuple[str, Any, dict[str, Any]]]]] = (
+        field(default_factory=dict)
+    )
+    # (wildcard, option id, condition AST) for PPP `if` conditions.
+    option_conds: list[tuple[_Wildcard, str, Any]] = field(default_factory=list)
+    # Lists a merge must leave alone: the ones a setter rolls a variable
+    # from when a condition tests that variable (a constraint needs that
+    # list's own options as its source).
+    merge_held: set[str] = field(default_factory=set)
+    # Umi AI: every tagged entry, for `<[tag]>` queries.
+    umi_db: list[dict[str, Any]] = field(default_factory=list)
+    umi_axes: dict[str, list[str]] = field(default_factory=dict)
+    # Wildcards the logic layer built (setters, stack parts, model checks).
+    pending_generated: list[_Wildcard] = field(default_factory=list)
+    reads_memo: dict[str, set[str]] = field(default_factory=dict)
+    umi_tagsets: dict[int, set[str]] = field(default_factory=dict)
+    model_stacks: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def convert_files(
@@ -447,6 +615,12 @@ def convert_files(
     pack_name: str | None = None,
     merge: bool = True,
     keep_separate: set[str] | None = None,
+    library_ids: set[str] | None = None,
+    dialect: str | None = None,
+    axis_names: dict[str, dict[str, str]] | None = None,
+    bundle_mode: str | None = None,
+    samples: int = 3,
+    fold_copies: bool = True,
 ) -> dict[str, Any]:
     """Convert wildcard files into ``{"payload": envelope, "report": …}``.
 
@@ -460,12 +634,29 @@ def convert_files(
     ``pack_name`` — our one level of bundle nesting. ``merge`` folds
     folders of related lists into one tagged wildcard each (see
     :func:`_choose_merges`); ``keep_separate`` lists folders (as the plan
-    names them) whose lists stay one wildcard each.
+    names them) whose lists stay one wildcard each. ``library_ids`` are
+    the ids already in the library (see :class:`_Ctx`). ``dialect``
+    forces the source tool instead of detecting it (``dynamicprompts``,
+    ``ppp``, ``impact``, ``umi`` or ``mixed``). ``axis_names`` renames
+    the tag groups of a merged wildcard: ``{wildcard name: {old: new}}``.
+    ``bundle_mode`` picks the bundles: ``stacks`` (the default: one per
+    stack of modules that must run together, see :func:`_line_stack`),
+    ``entries`` (also one per top folder holding its entry points, the
+    older layout) or ``none``; ``make_bundles=False`` means ``none``.
+    ``samples`` rolls each entry point and stack that many times with the
+    engine, for the review. ``fold_copies`` folds entry points that differ
+    only by one tag into one wildcard steered by a source (see
+    :func:`_fold_copies`).
     """
+    if bundle_mode not in ("stacks", "entries", "none"):
+        bundle_mode = "stacks"
+    if not make_bundles:
+        bundle_mode = "none"
     report = _Report()
+    umi_axes: dict[str, list[str]] = {}
     wildcards: list[_Wildcard] = []
     seen: dict[str, _Wildcard] = {}
-    for wc in _collect(files, report, exclude or set()):
+    for wc in _collect(files, report, exclude or set(), umi_axes):
         key = _norm(wc.path)
         if key in seen:
             report.note(
@@ -478,6 +669,7 @@ def convert_files(
             continue
         seen[key] = wc
         wildcards.append(wc)
+    wildcards, umi_db = _umi_layers(wildcards)
 
     used_ids: set[str] = set()
     for wc in wildcards:
@@ -491,20 +683,52 @@ def convert_files(
         library={k.lower(): v for k, v in (library_wildcards or {}).items()},
         groups={},
         all_wildcards=wildcards,
+        library_ids=set(library_ids or ()),
+        used_ids=used_ids,
+        umi_db=umi_db,
+        umi_axes=umi_axes,
     )
+    detected = detect_dialect(wildcards)
+    ctx.dialect = dialect if dialect in DIALECTS else detected["dialect"]
+    _scan_raw(wildcards, ctx)
+    # Defaults first: a reference reads its target's defaults, and the
+    # target may come later in the pack.
+    for wc in wildcards:
+        ctx.current = wc.path
+        _read_defaults(wc, ctx)
     for wc in wildcards:
         ctx.current = wc.path
         _convert_wildcard(wc, ctx)
+    # Specialised copies (`__t(x=v)__`) can ask for more copies.
+    while ctx.pending:
+        copy = ctx.pending.pop(0)
+        ctx.current = copy.path
+        _convert_wildcard(copy, ctx)
+        wildcards.append(copy)
+    for _wc, _, cond in ctx.option_conds:
+        src = model_source(cond)
+        if src is not None:
+            _model_stack(src, ctx)
+    wildcards.extend(ctx.pending_generated)
+    stacked = {_norm(st["entry"].path) for st in ctx.stacks if st.get("entry") is not None}
 
     for grp in ctx.groups.values():
         grp.id = _unique_id(_short_hash("group", grp.pattern), used_ids)
         grp.name = _display_name(grp.display)
 
-    merges = _choose_merges(wildcards, ctx, keep_separate or set()) if merge else []
+    merges: list[_Merge] = []
+    if merge:
+        # What the converter built stays as it is: never merged.
+        base = [w for w in wildcards if not w.generated]
+        ctx.merge_held = _condition_sources(ctx)
+        grids = _choose_grids(base, ctx, keep_separate or set())
+        merges = _choose_merges(base, ctx, keep_separate or set(), grids)
     for m in merges:
-        m.id = _unique_id(_short_hash("merge", _norm(m.root)), used_ids)
-        m.name = _display_name(m.root)
+        kind = "grid" if m.leaf else "merge"
+        m.id = _unique_id(_short_hash(kind, _norm(m.display)), used_ids)
+        m.name = _display_name(m.display)
         _tag_merge(m, ctx)
+        _rename_axes(m, (axis_names or {}).get(m.name) or {})
     retarget = {_norm(w.path): (m, m.expr[_norm(w.path)]) for m in merges for w in m.members}
     collapsed = _collapse_groups(merges, ctx)
 
@@ -556,22 +780,28 @@ def convert_files(
     rows: list[dict[str, Any]] = []
     for wc in wildcards:
         if not wc.options:
-            report.note("empty_wildcard", wc.path, "no usable values")
+            if _norm(wc.path) not in stacked:
+                report.note("empty_wildcard", wc.path, "no usable values")
             continue
         if _norm(wc.path) in retarget:
             continue
-        description = f"Imported from {wc.source}"
+        if wc.generated and not wc.copy_env:
+            description = f"Built by the import ({wc.source or 'model checks'})"
+        else:
+            description = f"Imported from {wc.source}"
         comments = wc.comments + ctx.comments.get(wc.path, [])
         if comments:
             description += "\n\n" + "\n".join(comments)
+        payload_w: dict[str, Any] = {
+            "var_binding": wc.binding or _ident(wc.path.split("/")[-1]),
+            "sub_categories": wc.sub_categories,
+            "options": wc.options,
+        }
+        if wc.tag_groups:
+            payload_w["tag_groups"] = wc.tag_groups
         rows.append(_module_row(
             wc.id, wc.name, description[:_MAX_DESCRIPTION_LEN],
-            category_for(wc.path), tags,
-            {
-                "var_binding": _ident(wc.path.split("/")[-1]),
-                "sub_categories": wc.sub_categories,
-                "options": wc.options,
-            },
+            category_for(wc.path) if wc.source else None, tags, payload_w,
         ))
     for m in merges:
         rows.append(_merge_row(m, category_for(m.members[0].path), tags, ctx))
@@ -608,21 +838,57 @@ def convert_files(
 
     group_ids = {g.id for g in ctx.groups.values()}
     group_rows = sum(1 for r in rows if r["id"] in group_ids)
+    rows_by_id = {r["id"]: r for r in rows}
+    _build_constraints(ctx, rows_by_id, retarget)
+    if fold_copies:
+        roles = {p["id"]: p["role"] for p in _plan(rows, wildcards, ctx, merges, collapsed)}
+        folded = _fold_copies(rows, roles, ctx)
+        if folded:
+            rows = [r for r in rows if r["id"] not in folded]
+            rows_by_id = {r["id"]: r for r in rows}
+    logic_rows: list[dict[str, Any]] = []
+    for st in ctx.stacks:
+        for kind, obj, _inst in st["children"]:
+            if kind == "row" and obj["id"] not in rows_by_id:
+                entry = st.get("entry")
+                folder = st.get("folder")
+                row = _module_row(
+                    obj["id"], obj["name"], obj["description"][:_MAX_DESCRIPTION_LEN],
+                    category_for(entry.path if entry is not None else folder or "")
+                    if entry is not None or folder else None,
+                    tags, obj["payload"], mtype=obj["type"],
+                )
+                rows_by_id[row["id"]] = row
+                if row["type"] == "wildcard":
+                    rows.append(row)
+                else:
+                    logic_rows.append(row)
+    stacks = _finish_stacks(ctx, rows_by_id, retarget)
     plan = _plan(rows, wildcards, ctx, merges, collapsed)
+    plan.extend(_stack_plan(stacks, ctx))
     entry_ids = {p["id"] for p in plan if p["role"] == "entry"}
     entries = [r for r in rows if r["id"] in entry_ids]
-    bundles = _build_bundles(entries, used_ids, tags, pack_name) if make_bundles else []
+    bundles: list[dict[str, Any]] = []
+    if bundle_mode == "entries":
+        bundles = _build_bundles(entries, used_ids, tags, pack_name)
+    if bundle_mode != "none":
+        bundles += _stack_bundles(stacks, used_ids, tags)
+    by_type: dict[str, list[dict[str, Any]]] = {}
+    for row in logic_rows:
+        by_type.setdefault(row["type"], []).append(row)
     payload = {
         "schema_version": 2,
         "bundles": bundles,
         "wildcards": rows,
         "fixed_values": [],
-        "combines": [],
-        "derivations": [],
-        "constraints": [],
+        "combines": by_type.get("combine", []),
+        "derivations": by_type.get("derivation", []),
+        "constraints": by_type.get("constraint", []),
         "categories": list(categories.values()),
         "templates": [],
     }
+    if samples > 0:
+        _roll_samples(plan, payload, stacks, samples)
     # Fallback options need v9; reuse the exporter's content stamp.
     from engine.migrations.stamping import schema_version_for_payload
 
@@ -640,6 +906,13 @@ def convert_files(
             "bundles": len(bundles),
             "merged": len(merges),
             "merged_lists": sum(len(m.members) for m in merges),
+            "stacks": len(stacks),
+            "constraints": len(by_type.get("constraint", [])),
+            "combines": len(by_type.get("combine", [])),
+            "bundle_mode": bundle_mode,
+            "dialect": ctx.dialect,
+            "dialect_detected": detected["dialect"],
+            "dialect_evidence": detected["evidence"],
             "plan": plan,
         },
     }
@@ -677,7 +950,11 @@ def _plan(
         elif wc is not None:
             path, key = wc.path, _norm(wc.path)
             refs = ctx.ref_counts.get(key, 0)
-            if refs == 0:
+            if wc.copy_env:
+                role = "copy"
+            elif wc.generated:
+                role = "stack part"
+            elif refs == 0:
                 role = "vocabulary"
             elif referenced.get(key):
                 role = "composition"
@@ -750,6 +1027,8 @@ def _merge_plan(
         "notes": notes,
         "source": m.members[0].source,
         "merge_root": m.root,
+        "separate_key": m.separate_key,
+        "structure": "table" if m.leaf else "folder",
         "merged_from": [
             {
                 "name": w.path[len(m.root) + 1:],
@@ -778,8 +1057,24 @@ def _referenced(ctx: _Ctx) -> dict[str, int]:
     return out
 
 
+def _condition_sources(ctx: _Ctx) -> set[str]:
+    """Paths of the lists setters roll a condition-tested variable from."""
+    tested: set[str] = set()
+    for _wc, _oid, cond in ctx.option_conds:
+        if model_source(cond) is None:
+            tested |= set(cond_vars(cond))
+    out: set[str] = set()
+    for var in tested:
+        for _stack, spec in ctx.setters.get(var, []):
+            w = spec[1]
+            if isinstance(w, _Wildcard):
+                out.add(_norm(w.path))
+    return out
+
+
 def _choose_merges(
     wildcards: list[_Wildcard], ctx: _Ctx, keep_separate: set[str],
+    grids: list[_Merge] | None = None,
 ) -> list[_Merge]:
     """Pick the folders whose lists become one tagged wildcard.
 
@@ -795,10 +1090,12 @@ def _choose_merges(
     referenced = _referenced(ctx)
     blocked = {_norm(k) for k in keep_separate if k.strip()}
     names = {_norm(w.path) for w in wildcards}
+    claimed = {_norm(w.path) for g in grids or [] for w in g.members}
+    claimed |= _grid_kept_apart(wildcards, blocked)
 
     def eligible(w: _Wildcard) -> bool:
         key = _norm(w.path)
-        if not w.options or "/" not in key:
+        if not w.options or "/" not in key or key in claimed or key in ctx.merge_held:
             return False
         if any(key.startswith(b + "/") or key == b for b in blocked):
             return False
@@ -860,7 +1157,151 @@ def _choose_merges(
 
     for top in sorted({k.split("/", 1)[0] for k in tree}):
         visit(top)
-    return _break_cycles(merges, ctx)
+    return _break_cycles([*(grids or []), *merges], ctx)
+
+
+#: A table or grid needs the shared list name in at least this many
+#: sibling folders, and at most this many options per merged wildcard.
+GRID_MIN_RECORDS = 3
+GRID_MAX_OPTIONS = 2000
+
+
+def _grid_kept_apart(wildcards: list[_Wildcard], blocked: set[str]) -> set[str]:
+    """Lists the user un-merged from a table (``root/*/leaf`` keys): they
+    stay one wildcard each, so folder merging leaves them alone too."""
+    out: set[str] = set()
+    for key in blocked:
+        if "/*/" not in key:
+            continue
+        root, leaf = key.rsplit("/*/", 1)
+        for w in wildcards:
+            k = _norm(w.path)
+            if k.startswith(root + "/") and k.rsplit("/", 1)[-1] == leaf:
+                out.add(k)
+    return out
+
+
+def _choose_grids(
+    wildcards: list[_Wildcard], ctx: _Ctx, keep_separate: set[str],
+) -> list[_Merge]:
+    """Find tables and grids: folders whose subfolders repeat the same
+    list names, like ``magical-beings/<161 beings>/{name, prompt}`` or
+    ``clothings/<era>/<gender>/<slot>``.
+
+    Each shared list name becomes ONE wildcard across the subfolders
+    (``magical-beings/prompt``), its options tagged by the folders in
+    between (the being; the era and gender), one tag group per level.
+    That turns a folder dimension into an axis you can filter or steer,
+    where merging by folder would give one wildcard per era. A reference
+    to one list becomes the merged wildcard filtered by its folders.
+
+    A folder qualifies when at least two list names each appear under
+    :data:`GRID_MIN_RECORDS` of its subfolders and those names cover
+    most of the lists below it. Unlike folder merging, entry points
+    merge too: a table's prompt lists become one entry wildcard. Shallow
+    folders are tried first; what a grid doesn't take is left for
+    :func:`_choose_merges`.
+    """
+    blocked = {_norm(k) for k in keep_separate if k.strip()}
+    names = {_norm(w.path) for w in wildcards}
+
+    def usable(w: _Wildcard) -> bool:
+        key = _norm(w.path)
+        if not w.options or key.count("/") < 2 or key in ctx.merge_held:
+            return False
+        if any(key.startswith(b + "/") or key == b for b in blocked if "/*/" not in b):
+            return False
+        own = f"@{{{w.id}#"
+        return not any(own in o["value"] for o in w.options)
+
+    tree: dict[str, list[_Wildcard]] = {}
+    for w in wildcards:
+        if not usable(w):
+            continue
+        parts = _norm(w.path).split("/")
+        for i in range(1, len(parts) - 1):
+            tree.setdefault("/".join(parts[:i]), []).append(w)
+
+    grids: list[_Merge] = []
+    done: set[str] = set()
+    for folder in sorted(tree, key=lambda f: (f.count("/"), f)):
+        under = [w for w in tree[folder] if _norm(w.path) not in done]
+        base = folder.count("/") + 1
+        by_leaf: dict[str, list[_Wildcard]] = {}
+        for w in under:
+            rel = _norm(w.path).split("/")[base:]
+            if len(rel) >= 2:
+                by_leaf.setdefault(rel[-1], []).append(w)
+        good: dict[str, list[_Wildcard]] = {}
+        kept = 0  # lists of columns the user kept apart still count
+        for leaf, ws in by_leaf.items():
+            if f"{folder}/{leaf}" in names:
+                continue
+            firsts = {_norm(w.path).split("/")[base] for w in ws}
+            if len(firsts) < GRID_MIN_RECORDS:
+                continue
+            if sum(len(w.options) for w in ws) > GRID_MAX_OPTIONS:
+                continue
+            if not _tags_tell_apart(ws, base):
+                continue
+            if f"{folder}/*/{leaf}" in blocked:
+                kept += len(ws)
+                continue
+            good[leaf] = ws
+        if not good or len(good) + (1 if kept else 0) < 2:
+            continue
+        covered = sum(len(ws) for ws in good.values()) + kept
+        if covered * 2 < len(under):
+            continue  # a few shared names in a folder of other things
+        display = "/".join(
+            next(iter(good.values()))[0].path.replace("\\", "/").strip("/").split("/")[: base],
+        )
+        for leaf, ws in sorted(good.items()):
+            grids.append(_Merge(root=display, members=list(ws), leaf=leaf))
+            done.update(_norm(w.path) for w in ws)
+    return grids
+
+
+def _tags_tell_apart(ws: list[_Wildcard], base: int) -> bool:
+    """True when each list's folders (level, name) pick it alone: no
+    list's folders are all among another's, as with ``x/female/top``
+    next to ``x/female/dress/top``."""
+    sets = [
+        frozenset(enumerate(_norm(w.path).split("/")[base:-1]))
+        for w in ws
+    ]
+    for i, a in enumerate(sets):
+        for j, b in enumerate(sets):
+            if i != j and a <= b:
+                return False
+    return True
+
+
+_NO_SINGULAR = frozenset({"clothes", "clothing", "series", "species", "news", "pants", "glasses"})
+
+
+def _singular(word: str) -> str:
+    w = word.strip()
+    if w.lower() in _NO_SINGULAR:
+        return w
+    if w.endswith("ies") and len(w) > 4:
+        return w[:-3] + "y"
+    if w.endswith("s") and not w.endswith("ss") and len(w) > 3:
+        return w[:-1]
+    return w
+
+
+def _rename_axes(m: _Merge, names: dict[str, str]) -> None:
+    """Apply the review's tag group renames (``{old: new}``) to a merge."""
+    if not names:
+        return
+    out: dict[str, list[str]] = {}
+    for old, tags in m.tag_groups.items():
+        new = (names.get(old) or "").strip()[:_MAX_NAME_LEN] or old
+        while new in out:
+            new += "+"
+        out[new] = tags
+    m.tag_groups = out
 
 
 def _break_cycles(merges: list[_Merge], ctx: _Ctx) -> list[_Merge]:
@@ -927,8 +1368,9 @@ def _tag_merge(m: _Merge, ctx: _Ctx) -> None:
     """
     base = m.root.count("/") + 1
     labels = {t.lower() for w in m.members for o in w.options for t in o["sub_categories"]}
+    cut = -1 if m.leaf else None
     rels = {
-        _norm(w.path): w.path.replace("\\", "/").strip("/").split("/")[base:]
+        _norm(w.path): w.path.replace("\\", "/").strip("/").split("/")[base:cut]
         for w in m.members
     }
     folders = {"/".join(r[:i]).lower() for r in rels.values() for i in range(1, len(r))}
@@ -967,6 +1409,17 @@ def _tag_merge(m: _Merge, ctx: _Ctx) -> None:
         members = list(by_level[level])
         if all(t.lower().removesuffix("_list") in _GENDER_TAGS for t in members):
             name = "gender"
+        elif m.leaf:
+            # A table's first level is its records (`magical-beings` →
+            # `magical-being`); a small deeper level reads best as its
+            # members (`dress/attire`).
+            named += 1
+            if named == 1:
+                name = _singular(last)
+            elif len(members) <= 3:
+                name = "/".join(members)
+            else:
+                name = f"{_singular(last)} ({named})"
         else:
             named += 1
             name = last if named == 1 else f"{last} ({named})"
@@ -1029,16 +1482,26 @@ def _merge_row(
                     )
                 has_fallback = True
             options.append(opt)
-    description = (
-        f"Merged from {len(m.members)} lists under {m.root}/ (imported). "
-        "Each option is tagged with the folders and list it came from, so "
-        f"filtering by those tags (for example {next(iter(m.expr.values()))}) "
-        "draws from one list."
-    )
+    example = next(iter(m.expr.values()))
+    if m.leaf:
+        description = (
+            f"The {m.leaf} list of {len(m.members)} folders under {m.root}/ "
+            "(imported), as one wildcard. Each option is tagged with the "
+            f"folders it came from, so filtering by them (for example {example}) "
+            "draws from one folder's list."
+        )
+        binding = _ident(f"{_singular(m.root.split('/')[-1])}_{m.leaf}")
+    else:
+        description = (
+            f"Merged from {len(m.members)} lists under {m.root}/ (imported). "
+            "Each option is tagged with the folders and list it came from, so "
+            f"filtering by those tags (for example {example}) draws from one list."
+        )
+        binding = _ident(m.root.split("/")[-1])
     return _module_row(
         m.id, m.name, description[:_MAX_DESCRIPTION_LEN], category_id, tags,
         {
-            "var_binding": _ident(m.root.split("/")[-1]),
+            "var_binding": binding,
             "sub_categories": list(registry),
             "tag_groups": m.tag_groups,
             "options": options,
@@ -1046,18 +1509,20 @@ def _merge_row(
     )
 
 
-def _child_snapshot(row: dict[str, Any]) -> dict[str, Any]:
-    """A wildcard as a bundle child: the same frozen widget snapshot the
+def _child_snapshot(
+    row: dict[str, Any], instance: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A module as a bundle child: the same frozen widget snapshot the
     bundle editor stores when you add a library module."""
     return {
         "id": row["id"],
-        "type": "wildcard",
+        "type": row.get("type", "wildcard"),
         "enabled": True,
         "collapsed": False,
         "meta": {"name": row["name"], "library_name": row["name"]},
         "payload": row["payload"],
         "payload_hash": payload_hash(row["payload"]),
-        "instance": {},
+        "instance": dict(instance or {}),
         "entries": [],
     }
 
@@ -1139,11 +1604,11 @@ def _unique_id(candidate: str, used: set[str]) -> str:
 
 def _module_row(
     mid: str, name: str, description: str, category_id: str | None,
-    tags: list[str], payload: dict[str, Any],
+    tags: list[str], payload: dict[str, Any], mtype: str = "wildcard",
 ) -> dict[str, Any]:
     row = {
         "id": mid,
-        "type": "wildcard",
+        "type": mtype,
         "name": name,
         "description": description,
         "category_id": category_id,
@@ -1159,57 +1624,257 @@ def _module_row(
 
 
 def _convert_wildcard(wc: _Wildcard, ctx: _Ctx) -> None:
+    ctx.current_wc = wc
     items = list(wc.items)
     if items and _is_params(items[0]):
-        first = items.pop(0)
-        if not (isinstance(first, dict) and set(first) <= {"description"}):
-            ctx.report.note("default_params_dropped", wc.path, _short(first))
-    seen_values: dict[str, dict[str, Any]] = {}
+        items.pop(0)  # read by _read_defaults
+    seen_values: dict[tuple[str, str, str], dict[str, Any]] = {}
     tags: dict[str, None] = {}
     fallback_used = False
+    # Lines of an entry point may become stacks (see _line_stack).
+    collect = not wc.generated and _norm(wc.path) in ctx.entry_keys
+    stack_lines: list[dict[str, Any]] = []
     for idx, item in enumerate(items):
-        choice = _parse_choice(item, ctx)
-        if choice is None:
-            continue
-        value, weight, labels, is_else = choice
-        if not value.strip():
-            continue
-        if value in seen_values:
-            # Each copy of a line is one more ticket in the source draw:
-            # fold it into the weight so the odds stay the same.
-            prev = seen_values[value]
-            total = prev["weight"] + weight
-            prev["weight"] = int(total) if float(total).is_integer() else total
-            ctx.report.note("duplicate_value", wc.path, _readable(value))
-            continue
-        opt: dict[str, Any] = {
-            "id": _short_hash(wc.path, str(idx)),
-            "value": value,
-            "weight": weight,
-            "sub_categories": [],
-        }
-        for label in labels:
-            tag = _slug_tag(label)
-            if tag is None:
-                ctx.report.note("label_dropped", wc.path, label)
+        ctx.env = dict(wc.copy_env or {})
+        ctx.line_vars = {} if collect else None
+        ctx.negatives = []
+        ctx.depth = 0
+        choices = _parse_choice(item, ctx, conds=True)
+        line_vars, negatives = ctx.line_vars, ctx.negatives
+        ctx.line_vars = None
+        ctx.env = {}
+        for sub, (value, weight, labels, is_else, cond) in enumerate(choices):
+            value = value.strip()
+            if line_vars:
+                stack_lines.append({
+                    "value": value, "vars": line_vars, "negatives": negatives,
+                    "cond": cond, "weight": weight,
+                })
                 continue
-            if tag not in opt["sub_categories"]:
-                opt["sub_categories"].append(tag)
-            tags[tag] = None
-        if is_else:
-            if fallback_used:
-                ctx.report.note("extra_else_dropped", wc.path, value)
-            else:
-                opt["fallback"] = True
-                fallback_used = True
-        seen_values[value] = opt
-        wc.options.append(opt)
+            if not value.strip():
+                continue
+            negative = ", ".join(n for n in negatives if n.strip())
+            dedupe = (value, negative, repr(cond))
+            if dedupe in seen_values:
+                # Each copy of a line is one more ticket in the source draw:
+                # fold it into the weight so the odds stay the same.
+                prev = seen_values[dedupe]
+                total = prev["weight"] + weight
+                prev["weight"] = int(total) if float(total).is_integer() else total
+                ctx.report.note("duplicate_value", wc.path, _readable(value))
+                continue
+            opt: dict[str, Any] = {
+                "id": _short_hash(wc.path, str(idx) if sub == 0 else f"{idx}.{sub}"),
+                "value": value,
+                "weight": weight,
+                "sub_categories": [],
+            }
+            if negative:
+                opt["negative"] = negative
+            for label in labels:
+                tag = _slug_tag(label)
+                if tag is None:
+                    ctx.report.note("label_dropped", wc.path, label)
+                    continue
+                if tag not in opt["sub_categories"]:
+                    opt["sub_categories"].append(tag)
+                tags[tag] = None
+            if is_else:
+                if fallback_used:
+                    ctx.report.note("extra_else_dropped", wc.path, value)
+                else:
+                    opt["fallback"] = True
+                    fallback_used = True
+            if cond is not None:
+                ctx.option_conds.append((wc, opt["id"], cond))
+            seen_values[dedupe] = opt
+            wc.options.append(opt)
     # Option ids come from the position in the file; keep them unique if a
     # pathological file still collides on the 8-char hash.
     used: set[str] = set()
+    renamed: dict[str, str] = {}
     for opt in wc.options:
-        opt["id"] = _unique_id(opt["id"], used)
+        new = _unique_id(opt["id"], used)
+        if new != opt["id"]:
+            renamed[opt["id"]] = new
+            opt["id"] = new
+    if renamed:
+        ctx.option_conds = [
+            (w, renamed.get(oid, oid) if w is wc else oid, c) for w, oid, c in ctx.option_conds
+        ]
     wc.sub_categories = list(tags)
+    if wc.umi and ctx.umi_axes:
+        have = set(tags)
+        wc.tag_groups = {
+            name: [t for t in members if t in have]
+            for name, members in ctx.umi_axes.items()
+            if any(t in have for t in members)
+        }
+    _bake_affixes(wc)
+    for n, line in enumerate(stack_lines, start=1):
+        _line_stack(wc, line, n if len(stack_lines) > 1 or wc.options else 0, ctx)
+
+
+def _bake_affixes(wc: _Wildcard) -> None:
+    """PPP ``prefix`` / ``suffix`` around a wildcard that picks one value
+    by default go into every option, so the wildcard reads the same on a
+    Context as through a reference. A wildcard that picks several gets
+    them around the pick at each reference instead (prefix + the joined
+    values + suffix, as PPP writes it)."""
+    d = wc.defaults
+    if not d or not (d.get("prefix") or d.get("suffix")):
+        return
+    if d.get("hi") not in (None, 1):
+        return
+    for opt in wc.options:
+        if opt.get("is_null"):
+            continue
+        opt["value"] = _affix(d, opt["value"])
+    d["baked"] = True
+
+
+def _affix(defaults: dict[str, Any], text: str) -> str:
+    """``text`` between the defaults' prefix and suffix (source text,
+    escaped so a `$` in it stays literal)."""
+    return _escape(defaults.get("prefix") or "") + text + _escape(defaults.get("suffix") or "")
+
+
+def _read_defaults(wc: _Wildcard, ctx: _Ctx) -> None:
+    """PPP wildcard default parameters: a first choice made only of
+    parameters (``r2-3'description'$$, $$``) or an object of parameter
+    keys. Stored on ``wc.defaults`` for the references to this wildcard
+    and for :func:`_bake_affixes`; what has no home here is noted."""
+    if not wc.items or not _is_params(wc.items[0]):
+        return
+    first = wc.items[0]
+    d: dict[str, Any] = {
+        "lo": None, "hi": None, "repeat": False, "optional": False,
+        "sep": None, "prefix": "", "suffix": "",
+    }
+    dropped: list[str] = []
+    description = ""
+    if isinstance(first, dict):
+        if str(first.get("sampler", "")).strip() == "@":
+            dropped.append("cyclical sampler")
+        d["repeat"] = _truthy(first.get("repeating"))
+        d["optional"] = _truthy(first.get("optional"))
+        count = first.get("count")
+        lo, hi = first.get("from"), first.get("to")
+        if count not in (None, ""):
+            d["lo"] = d["hi"] = _int_or_none(count)
+        if lo not in (None, "") or hi not in (None, ""):
+            d["lo"] = _int_or_none(lo) if lo not in (None, "") else 1
+            d["hi"] = _int_or_none(hi) if hi not in (None, "") else None
+        for key in ("prefix", "suffix"):
+            if isinstance(first.get(key), str):
+                d[key] = first[key]
+        if isinstance(first.get("separator"), str):
+            d["sep"] = first["separator"]
+        if first.get("container"):
+            dropped.append("container")
+        if isinstance(first.get("description"), str):
+            description = first["description"].strip()
+    else:
+        pieces = str(first).strip().split("$$")
+        head = _PARAMS_RE.match(pieces[0])
+        if head is not None:
+            if head.group("sampler") == "@":
+                dropped.append("cyclical sampler")
+            d["repeat"] = head.group("r") is not None
+            d["optional"] = head.group("o") is not None
+            rng = (head.group("range") or "").replace(" ", "")
+            if rng:
+                d["lo"], d["hi"] = _parse_range(rng)
+            description = (head.group("d1") or head.group("d2") or "").strip()
+        if len(pieces) >= 3:
+            d["sep"] = pieces[1]
+    if d["optional"] and d["lo"] is None:
+        d["lo"], d["hi"] = 0, 1
+    elif d["optional"]:
+        d["lo"] = 0
+    if description:
+        wc.comments.append(description)
+    if dropped:
+        ctx.report.note("default_params_dropped", wc.path, ", ".join(dropped))
+    wc.defaults = d
+
+
+def _int_or_none(raw: Any) -> int | None:
+    try:
+        return max(0, int(str(raw).strip()))
+    except ValueError:
+        return None
+
+
+def _parse_range(rng: str) -> tuple[int | None, int | None]:
+    """``3`` → (3, 3); ``1-2`` → (1, 2); ``-2`` → (1, 2); ``2-`` → (2, None)."""
+    if "-" in rng:
+        lo, hi = rng.split("-", 1)
+        return (int(lo) if lo else 1, int(hi) if hi else None)
+    return (int(rng), int(rng))
+
+
+def _default_sep(ctx: _Ctx) -> str:
+    """Impact Pack (and LoRA Manager / Easy-Use) join a multi-pick with a
+    space; Dynamic Prompts and PPP with a comma."""
+    return " " if ctx.dialect == "impact" else ", "
+
+
+#: Source tools the converter knows. ``mixed`` = plain lists that any of
+#: them reads the same way.
+DIALECTS = ("dynamicprompts", "ppp", "impact", "umi", "mixed")
+
+_DIALECT_SIGNS: dict[str, list[re.Pattern[str]]] = {
+    "ppp": [
+        re.compile(r"<ppp:"),
+        re.compile(r"^\s*%\s*(?:::)?\s*include\b|^\s*%::"),
+        re.compile(r"^\s*'[^']*'\s*\d*(?:\.\d+)?\s*(?:if\b[^:]*)?::"),
+        re.compile(r"^\s*\d*(?:\.\d+)?\s*if\s+[^:]+::"),
+        re.compile(r"^\s*else\s*::"),
+        re.compile(r"__[^_\s]*'[^']*'__"),
+    ],
+    "impact": [re.compile(r"\d+#__[\w.\-+/*\\]+__")],
+    "dynamicprompts": [
+        re.compile(r"\$\{[A-Za-z_]"),
+        re.compile(r"__[\w.\-/]+\([^)]*=[^)]*\)__"),
+        re.compile(r"%\{"),
+    ],
+    "umi": [_UMI_QUERY_RE],
+}
+
+
+def detect_dialect(wildcards: list[_Wildcard]) -> dict[str, Any]:
+    """Which tool a pack was written for, from what it uses.
+
+    Counts the constructs only one tool reads (PPP directives, labels,
+    conditions and object choices; Impact's ``N#__x__``; Dynamic Prompts
+    variables, templates and wraps; Umi's tag queries and ``Tags:``
+    entries). The most specific tool with any evidence wins; a pack with
+    none is ``mixed``: plain lists every tool reads the same way.
+    """
+    counts = {k: 0 for k in _DIALECT_SIGNS}
+    for wc in wildcards:
+        if wc.path.lower().endswith("/tags"):
+            counts["umi"] += 1
+        if wc.umi:
+            counts["umi"] += len(wc.items)
+            continue
+        for item in wc.items:
+            if isinstance(item, dict):
+                if set(item) & {"labels", "if", "else", "command"}:
+                    counts["ppp"] += 1
+                continue
+            text = item if isinstance(item, str) else json.dumps(item, default=str)
+            for dialect, signs in _DIALECT_SIGNS.items():
+                if any(sign.search(text) for sign in signs):
+                    counts[dialect] += 1
+        if wc.items and _is_params(wc.items[0]):
+            counts["ppp"] += 1
+    evidence = {k: v for k, v in counts.items() if v}
+    for dialect in ("umi", "ppp", "impact", "dynamicprompts"):
+        if counts[dialect]:
+            return {"dialect": dialect, "evidence": evidence}
+    return {"dialect": "mixed", "evidence": evidence}
 
 
 def _readable(value: str) -> str:
@@ -1235,12 +1900,19 @@ def _short(value: Any) -> str:
     return (value if isinstance(value, str) else json.dumps(value, default=str))[:200]
 
 
-def _parse_choice(item: Any, ctx: _Ctx) -> tuple[str, float, list[str], bool] | None:
-    """One raw item → (value, weight, labels, is_else), or None to skip."""
+_Choice = tuple[str, float, list[str], bool, Any]
+
+
+def _parse_choice(item: Any, ctx: _Ctx, conds: bool = False) -> list[_Choice]:
+    """One raw item → its ``(value, weight, labels, is_else, condition)``
+    choices: usually one, several when a PPP ``<ppp:if>`` splits the value
+    (each branch with its condition). ``conds`` says the caller turns
+    conditions into constraints; without it they are noted as dropped."""
     if item is None:
-        return None
+        return []
     if isinstance(item, list):
-        return (_anonymous(item, ctx), 1, [], False)
+        return [(_anonymous(item, ctx), 1, [], False, None)]
+    cond_raw: str | None = None
     if isinstance(item, dict):
         if len(item) == 1:
             ((key, value),) = item.items()
@@ -1248,27 +1920,31 @@ def _parse_choice(item: Any, ctx: _Ctx) -> tuple[str, float, list[str], bool] | 
                 # `options: [anonymous list]` form.
                 parsed = _parse_options(str(key), ctx)
                 if parsed is not None:
-                    weight, labels, is_else, _ = parsed
-                    return (_anonymous(value, ctx), weight, labels, is_else)
+                    weight, labels, is_else, _, cond_raw = parsed
+                    cond = _choice_cond(cond_raw, conds, ctx)
+                    return [(_anonymous(value, ctx), weight, labels, is_else, cond)]
         content = item.get("text", item.get("content"))
-        if isinstance(content, list):
-            text = _anonymous(content, ctx)
-        elif content is None or str(content).strip() == "":
-            ctx.report.note("unsupported_item", ctx.current, _short(item))
-            return None
-        else:
-            text = _join_lines(str(content), ctx)
-            if _truthy(item.get("command")):
-                text = _include(text, ctx)
-            else:
-                text = convert_text(text, ctx)
         weight = _weight(item.get("weight", 1))
         labels = item.get("labels") or []
         if isinstance(labels, str):
             labels = [s for s in labels.split(",") if s.strip()]
+        labels = [str(x) for x in labels]
+        is_else = _truthy(item.get("else"))
         if item.get("if"):
-            ctx.report.note("condition_dropped", ctx.current, f"if {item['if']}")
-        return (text, weight, [str(x) for x in labels], _truthy(item.get("else")))
+            cond_raw = str(item["if"])
+        cond = _choice_cond(cond_raw, conds, ctx)
+        if isinstance(content, list):
+            return [(_anonymous(content, ctx), weight, labels, is_else, cond)]
+        if content is None or str(content).strip() == "":
+            ctx.report.note("unsupported_item", ctx.current, _short(item))
+            return []
+        text = _join_lines(str(content), ctx)
+        if _truthy(item.get("command")):
+            return [(_include(text, ctx), weight, labels, is_else, cond)]
+        return [
+            (v, weight, labels, is_else, _and_cond(cond, c))
+            for v, c in _convert_value(text, conds, ctx)
+        ]
     raw = _join_lines(str(item), ctx)
     weight: float = 1
     labels: list[str] = []
@@ -1278,12 +1954,48 @@ def _parse_choice(item: Any, ctx: _Ctx) -> tuple[str, float, list[str], bool] | 
         head, _, rest = raw.partition("::")
         parsed = _parse_options(head, ctx)
         if parsed is not None:
-            weight, labels, is_else, command = parsed
+            weight, labels, is_else, command, cond_raw = parsed
             raw = rest
     raw = raw.strip()
+    cond = _choice_cond(cond_raw, conds, ctx)
     if command:
-        return (_include(raw, ctx), weight, labels, is_else)
-    return (convert_text(raw, ctx), weight, labels, is_else)
+        return [(_include(raw, ctx), weight, labels, is_else, cond)]
+    return [
+        (v, weight, labels, is_else, _and_cond(cond, c))
+        for v, c in _convert_value(raw, conds, ctx)
+    ]
+
+
+def _choice_cond(raw: str | None, conds: bool, ctx: _Ctx) -> Any:
+    """A choice's PPP ``if`` → condition AST, or None (noted as dropped
+    when it can't become a constraint)."""
+    if not raw or not raw.strip():
+        return None
+    ast = parse_condition(raw) if conds else None
+    if ast is None:
+        ctx.report.note("condition_dropped", ctx.current, f"if {raw.strip()}")
+    return ast
+
+
+def _and_cond(a: Any, b: Any) -> Any:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return ("and", [a, b])
+
+
+def _convert_value(text: str, conds: bool, ctx: _Ctx) -> list[tuple[str, Any]]:
+    """Convert a choice's text; ``<ppp:if>`` blocks split it into one
+    value per branch, each with the condition that selects it."""
+    text = normalize_ppp(text)
+    splits = split_ppp_if(text) if "<ppp:if" in text else None
+    if splits is None:
+        return [(convert_text(text, ctx), None)]
+    if not conds:
+        ctx.report.note("condition_dropped", ctx.current, text)
+        return [(convert_text(splits[-1][0], ctx), None)]
+    return [(convert_text(t, ctx), c) for t, c in splits]
 
 
 def _join_lines(text: str, ctx: _Ctx) -> str:
@@ -1309,16 +2021,19 @@ def _join_lines(text: str, ctx: _Ctx) -> str:
     return " ".join(kept)
 
 
-def _parse_options(head: str, ctx: _Ctx) -> tuple[float, list[str], bool, bool] | None:
+def _parse_options(
+    head: str, ctx: _Ctx,
+) -> tuple[float, list[str], bool, bool, str | None] | None:
+    """A choice head ``'labels' weight if cond else %`` → ``(weight,
+    labels, is_else, is_command, condition text)``."""
     m = _CHOICE_OPTS_RE.match(head)
     if m is None or not head.strip():
         return None
     labels_raw = m.group("l1") if m.group("l1") is not None else m.group("l2")
     labels = [s.strip() for s in (labels_raw or "").split(",") if s.strip()]
-    if m.group("cond"):
-        ctx.report.note("condition_dropped", ctx.current, f"if {m.group('cond').strip()}")
+    cond = m.group("cond").strip() if m.group("cond") else None
     weight = _weight(m.group("w") or 1)
-    return (weight, labels, m.group("else") is not None, m.group("cmd") is not None)
+    return (weight, labels, m.group("else") is not None, m.group("cmd") is not None, cond)
 
 
 def _weight(raw: Any) -> float:
@@ -1349,17 +2064,16 @@ def _include(text: str, ctx: _Ctx) -> str:
 def _anonymous(items: list[Any], ctx: _Ctx) -> str:
     """A nested list inside a wildcard → an inline `{a|b}` pick."""
     branches: list[str] = []
+    ctx.depth += 1
     for item in items:
         if _is_params(item):
             ctx.report.note("default_params_dropped", ctx.current, _short(item))
             continue
-        parsed = _parse_choice(item, ctx)
-        if parsed is None:
-            continue
-        value, weight, labels, _ = parsed
-        if labels:
-            ctx.report.note("label_dropped", ctx.current, ",".join(labels))
-        branches.append(value if weight == 1 else f"{weight}::{value}")
+        for value, weight, labels, _, _cond in _parse_choice(item, ctx):
+            if labels:
+                ctx.report.note("label_dropped", ctx.current, ",".join(labels))
+            branches.append(value if weight == 1 else f"{weight}::{value}")
+    ctx.depth -= 1
     if not branches:
         return ""
     if len(branches) == 1:
@@ -1374,6 +2088,30 @@ def _anonymous(items: list[Any], ctx: _Ctx) -> str:
 
 def convert_text(text: str, ctx: _Ctx) -> str:
     """Rewrite one value's prompt text into Wildcard Pipeline syntax."""
+    text = normalize_ppp(text)
+    if "<ppp:stn" in text or (ctx.dialect == "umi" and "**" in text):
+        nested = ctx.depth > 0 or _inside_braces(text, ("<ppp:stn", "**"))
+        text, negs = extract_negatives(text, umi=ctx.dialect == "umi")
+        if negs and nested:
+            ctx.report.note(
+                "negative_moved_to_option", ctx.current,
+                f"{', '.join(negs)} (applies whenever the option is picked)",
+            )
+        saved, ctx.line_vars = ctx.line_vars, None
+        ctx.negatives.extend(convert_text(n, ctx) for n in negs)
+        ctx.line_vars = saved
+    if "<ppp:if" in text:
+        splits = split_ppp_if(text)
+        if splits is not None:
+            # Only a whole value can split into conditioned options; here
+            # (inside a `{…}` or a nested list) keep what renders when no
+            # condition holds.
+            ctx.report.note("condition_dropped", ctx.current, text)
+            text = splits[-1][0]
+    if "<ppp:" in text:
+        ctx.report.note("ppp_directive_kept_as_text", ctx.current, text)
+    if not ctx.umi_db and _UMI_QUERY_RE.search(text):
+        ctx.report.note("tag_query_kept_as_text", ctx.current, text)
     out: list[str] = []
     i = 0
     n = len(text)
@@ -1394,6 +2132,13 @@ def convert_text(text: str, ctx: _Ctx) -> str:
                 continue
         if ch == "%" and text.startswith("%{", i):
             ctx.report.note("wrap_kept_as_text", ctx.current, text)
+        if ch == "<" and ctx.umi_db:
+            m = UMI_QUERY_RE.match(text, i)
+            if m is not None:
+                flush(i)
+                out.append(_umi_query(m, ctx))
+                i = lit_start = m.end()
+                continue
         if ch == "{" and not (i > 0 and text[i - 1] in "$%"):
             end = _match_brace(text, i)
             if end is not None:
@@ -1462,25 +2207,27 @@ def _variant(body: str, ctx: _Ctx) -> str:
     pieces = _split_top(body, "$$")
     count: tuple[int | None, int | None] | None = None
     repeat = False
-    sep = ", "
+    sep = _default_sep(ctx)
     if len(pieces) >= 2:
         head = _PARAMS_RE.match(pieces[0])
         if head is not None and pieces[0].strip():
             rng = (head.group("range") or "").replace(" ", "")
             repeat = head.group("r") is not None
-            if "-" in rng:
-                lo, hi = rng.split("-", 1)
-                count = (int(lo) if lo else 1, int(hi) if hi else None)
-            elif rng:
-                count = (int(rng), int(rng))
-            else:
-                count = (1, 1)
+            count = _parse_range(rng) if rng else (1, 1)
+            if head.group("o") is not None:
+                # PPP `o`: an empty result is allowed.
+                count = (0, count[1])
             if len(pieces) >= 3:
                 sep = pieces[1]
                 body = "$$".join(pieces[2:])
             else:
                 body = pieces[1]
-    branches = [_convert_branch(b, ctx) for b in _split_top(body, "|")]
+    raw_branches = _split_top(body, "|")
+    if ctx.dialect == "umi":
+        raw_branches = _percent_weights(raw_branches)
+    ctx.depth += 1
+    branches = [_convert_branch(b, ctx) for b in raw_branches]
+    ctx.depth -= 1
     if count is None:
         if len(branches) == 1:
             return branches[0].split("::", 1)[-1] if _has_weight(branches[0]) else branches[0]
@@ -1494,6 +2241,27 @@ def _variant(body: str, ctx: _Ctx) -> str:
     return "{" + rng_txt + ("~" if repeat else "") + "$$" + sep + "$$" + "|".join(branches) + "}"
 
 
+_PERCENT_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)%")
+
+
+def _percent_weights(branches: list[str]) -> list[str]:
+    """Umi AI ``{20%a|b}``: a branch with ``N%`` takes N percent, the
+    others share the rest → ``{20::a|80::b}``."""
+    pct = [_PERCENT_RE.match(b) for b in branches]
+    if not any(pct):
+        return branches
+    given = sum(float(m.group(1)) for m in pct if m)
+    rest = [b for b, m in zip(branches, pct, strict=True) if not m]
+    share = max(0.0, 100.0 - given) / len(rest) if rest else 0.0
+    out = []
+    for b, m in zip(branches, pct, strict=True):
+        w = float(m.group(1)) if m else share
+        text = b[m.end():] if m else b
+        w_txt = str(int(w)) if float(w).is_integer() else f"{w:g}"
+        out.append(f"{w_txt}::{text}")
+    return out
+
+
 def _has_weight(branch: str) -> bool:
     return re.match(r"^\s*(\d+(?:\.\d+)?|\.\d+)::", branch) is not None
 
@@ -1503,7 +2271,9 @@ def _convert_branch(branch: str, ctx: _Ctx) -> str:
         head, _, rest = branch.partition("::")
         parsed = _parse_options(head, ctx)
         if parsed is not None:
-            weight, labels, is_else, command = parsed
+            weight, labels, is_else, command, cond = parsed
+            if cond:
+                ctx.report.note("condition_dropped", ctx.current, f"if {cond}")
             if labels:
                 ctx.report.note("label_dropped", ctx.current, ",".join(labels))
             if is_else:
@@ -1513,14 +2283,67 @@ def _convert_branch(branch: str, ctx: _Ctx) -> str:
     return convert_text(branch, ctx)
 
 
-def _dp_variable(raw: str, ctx: _Ctx) -> str:
-    """Dynamic Prompts variables (`${x}`, `${x:default}`, `${x=…}`).
+_DP_VAR_RE = re.compile(
+    r"^\$\{\s*(?P<name>[A-Za-z_][\w]*)\s*"
+    r"(?:(?P<op>\?=|\+=|=)\s*(?P<bang>!)?(?P<value>.*)|:(?P<default>.*))?\}$",
+    re.DOTALL,
+)
 
-    A wildcard can't read a variable (it is a producer, so `$x` would
-    print literally and warn every run), and assignments have no inline
-    equivalent. Keep the text, which the engine leaves alone, and flag it
-    so the user rebuilds the logic with a Combine.
+
+def _var_placeholder(name: str) -> str:
+    return f"\x00var:{name}\x00"
+
+
+def _dp_variable(raw: str, ctx: _Ctx) -> str:
+    """Dynamic Prompts / PPP variables.
+
+    ``${x=v}`` is a macro: every later read in the same value renders
+    ``v`` again (its own roll), and a wildcard referenced after it that
+    reads ``${x}`` becomes a specialised copy. ``${x=!v}`` is rolled once:
+    in a line of an entry point it becomes a setter wildcard in a stack and
+    reads become ``$x`` in a Combine (see :func:`_line_stack`); anywhere
+    else it falls back to the macro reading. ``${x:d}`` reads ``x``, or
+    renders ``d`` when nothing set it; in an entry point an unset read is a
+    template slot the stack leaves to whatever runs upstream.
     """
+    m = _DP_VAR_RE.match(raw)
+    if m is None:
+        ctx.report.note("variable_kept_as_text", ctx.current, raw)
+        return raw
+    name = m.group("name")
+    lv = ctx.line_vars
+    if m.group("op"):
+        op, value = m.group("op"), m.group("value")
+        if op == "?=" and (name in ctx.env or (lv is not None and name in lv)):
+            return ""
+        if m.group("bang") and lv is not None:
+            lv[name] = {"kind": "set", "raw": value, "op": op}
+            return ""
+        if m.group("bang"):
+            ctx.report.note(
+                "immediate_variable_as_macro", ctx.current,
+                f"{raw}: each read rolls again here (only an entry point's line can hold "
+                "a value rolled once)",
+            )
+        if op == "+=" and name in ctx.env:
+            ctx.env[name] = ctx.env[name] + value
+        else:
+            ctx.env[name] = value
+        return ""
+    if lv is not None and name in lv:
+        return _var_placeholder(name)
+    if name in ctx.env:
+        saved = ctx.env
+        ctx.env = {k: v for k, v in saved.items() if k != name}
+        try:
+            return convert_text(saved[name], ctx)
+        finally:
+            ctx.env = saved
+    if lv is not None:
+        lv[name] = {"kind": "slot", "default": m.group("default")}
+        return _var_placeholder(name)
+    if m.group("default") is not None:
+        return convert_text(m.group("default"), ctx)
     ctx.report.note("variable_kept_as_text", ctx.current, raw)
     return raw
 
@@ -1532,13 +2355,19 @@ def _reference(m: re.Match[str], ctx: _Ctx) -> str:
     params = m.group("params")
     sep = m.group("sep")
     filt = m.group("f1") if m.group("f1") is not None else m.group("f2")
-    if m.group("args"):
-        ctx.report.note("template_args_dropped", ctx.current, raw)
+    args = _parse_ref_args(m.group("args") or "")
 
     target = _resolve_target(name, ctx)
     if target is None:
         ctx.report.note("unresolved_reference", ctx.current, raw)
         return _escape(raw)
+    wc_target = ctx.target
+    if wc_target is not None and (args or ctx.env or ctx.line_vars):
+        copy = _maybe_specialize(wc_target, args, raw, ctx)
+        if copy is not None:
+            target = f"@{{{copy.id}#{copy.name}}}"
+    elif args:
+        ctx.report.note("template_args_dropped", ctx.current, raw)
 
     ref = target
     expr = _filter_expr(filt, raw, ctx) if filt else ""
@@ -1548,7 +2377,9 @@ def _reference(m: re.Match[str], ctx: _Ctx) -> str:
     elif expr:
         ref = target[:-1] + f":{expr}}}"
 
-    lo = hi = 1
+    defaults = wc_target.defaults if wc_target is not None else None
+    lo: int | None = 1
+    hi: int | None = 1
     repeat = False
     if count_txt:
         lo = hi = int(count_txt)
@@ -1557,34 +2388,53 @@ def _reference(m: re.Match[str], ctx: _Ctx) -> str:
         if head is not None:
             rng = (head.group("range") or "").replace(" ", "")
             repeat = head.group("r") is not None
-            if "-" in rng:
-                a, b = rng.split("-", 1)
-                lo = int(a) if a else 1
-                if b:
-                    hi = int(b)
-                else:
-                    # Open range: up to every value. A pick over one ref
-                    # never takes more unique values than the target has,
-                    # so its size is a safe ceiling.
-                    hi = max(lo, _pool_size(name, ctx))
-                    if repeat:
-                        ctx.report.note("multi_pick_range_capped", ctx.current, raw)
-            elif rng:
-                lo = hi = int(rng)
-    if hi <= 1 and lo <= 1:
-        return ref
-    # `{N$$sep$$@{x}}` draws N different values of x, which is exactly
-    # what the source does; `~` allows repeats like the `r` flag.
-    rng_txt = str(lo) if lo == hi else f"{lo}-{hi}"
-    sep_txt = sep if sep is not None else ", "
-    return "{" + rng_txt + ("~" if repeat else "") + "$$" + sep_txt + "$$" + ref + "}"
+            if rng:
+                lo, hi = _parse_range(rng)
+            if head.group("o") is not None:
+                lo = 0
+    elif defaults is not None:
+        # PPP: a reference without parameters uses the wildcard's own.
+        if defaults["lo"] is not None or defaults["hi"] is not None:
+            lo = defaults["lo"] if defaults["lo"] is not None else 1
+            hi = defaults["hi"]
+        repeat = bool(defaults["repeat"])
+    if sep is None and defaults is not None and defaults.get("sep") is not None:
+        sep = defaults["sep"]
+    if hi is None:
+        # Open range: up to every value. A pick over one ref never takes
+        # more unique values than the target has, so its size is a safe
+        # ceiling.
+        hi = max(lo or 1, _pool_size(name, ctx))
+        if repeat:
+            ctx.report.note("multi_pick_range_capped", ctx.current, raw)
+    lo = 1 if lo is None else lo
+    out = ref
+    if not (hi <= 1 and lo == 1):
+        # `{N$$sep$$@{x}}` draws N different values of x, which is
+        # exactly what the source does; `~` allows repeats like the `r`
+        # flag, and a 0 lower bound allows an empty result like `o`.
+        rng_txt = str(lo) if lo == hi else f"{min(lo, hi)}-{max(lo, hi)}"
+        sep_txt = sep if sep is not None else _default_sep(ctx)
+        out = "{" + rng_txt + ("~" if repeat else "") + "$$" + sep_txt + "$$" + ref + "}"
+    if defaults is not None and (defaults.get("prefix") or defaults.get("suffix")):
+        if defaults.get("baked"):
+            if hi > 1:
+                ctx.report.note(
+                    "affixes_per_pick", ctx.current,
+                    f"{raw}: the prefix/suffix of {wc_target.path if wc_target else name} "
+                    "now sits around each value",
+                )
+        else:
+            out = _affix(defaults, out)
+    return out
 
 
 def _pool_size(name: str, ctx: _Ctx) -> int:
     key = _norm(name)
     wc = ctx.by_path.get(key)
     if wc is not None:
-        return max(1, len(wc.items))
+        params = 1 if wc.items and _is_params(wc.items[0]) else 0
+        return max(1, len(wc.items) - params)
     members = [w for w in ctx.all_wildcards if fnmatch.fnmatchcase(_norm(w.path), key)]
     return max(1, sum(len(w.items) for w in members)) if members else 3
 
@@ -1631,22 +2481,37 @@ def _edge(target: str, ctx: _Ctx) -> None:
 
 
 def _find_target(name: str, ctx: _Ctx) -> str | None:
+    ctx.target = None
     key = _norm(name)
     if "*" in key:
         return _group_ref(key, name, ctx)
     wc = ctx.by_path.get(key) or ctx.impact_path.get(key.replace(" ", "-"))
     if wc is None:
-        # Dynamic Prompts / Impact also accept a name relative to any
-        # folder; take a unique suffix match.
+        # Impact Pack, LoRA Manager and Easy-Use read a bare name as
+        # `*/name`: every list with that name in any folder, pooled.
         hits = [w for k, w in ctx.by_path.items() if k.endswith("/" + key)]
         if len(hits) == 1:
             wc = hits[0]
+        elif len(hits) > 1:
+            ctx.report.note(
+                "suffix_pooled", ctx.current,
+                f"__{name}__ matches {len(hits)} lists in different folders; "
+                "picks from all of them, as Impact Pack does",
+            )
+            return _group_ref("*/" + key, "*/" + name, ctx)
     if wc is not None:
         _edge(_norm(wc.path), ctx)
+        ctx.target = wc
         return f"@{{{wc.id}#{wc.name}}}"
     lib = ctx.library.get(key) or ctx.library.get(_display_name(name).lower())
     if lib is not None:
         return f"@{{{lib}#{_display_name(name)}}}"
+    # An earlier import of the same pack: ids come from the path.
+    for kind in ("wildcard", "merge"):
+        own = _short_hash(kind, key)
+        if own in ctx.library_ids:
+            ctx.report.note("resolved_from_library", ctx.current, f"__{name}__ (imported earlier)")
+            return f"@{{{own}#{_display_name(name)}}}"
     # Impact Pack: a folder / YAML key names every wildcard beneath it.
     if any(k.startswith(key + "/") for k in ctx.by_path):
         return _group_ref(key + "/*", name + "/*", ctx)
@@ -1665,6 +2530,1025 @@ def _group_ref(pattern: str, display: str, ctx: _Ctx) -> str | None:
         ctx.groups[pattern] = _Group(pattern, members, display)
     _edge(pattern, ctx)
     return f"\x00group:{pattern}\x00"
+
+# ---------------------------------------------------------------------------
+# Raw scan: variables and references before conversion
+# ---------------------------------------------------------------------------
+
+_READ_RE = re.compile(r"\$\{\s*([A-Za-z_]\w*)\s*(?::[^}]*)?\}")
+_INCLUDE_RE = re.compile(r"%\s*include\s+(\S+)")
+MAX_COPIES = 500
+
+
+def _raw_text(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, list):
+        return "\n".join(_raw_text(x) for x in item)
+    if isinstance(item, dict):
+        return "\n".join(
+            _raw_text(v) for k, v in item.items() if k not in ("umi_tags", "labels")
+        ) + "\n" + "\n".join(str(k) for k in item if not isinstance(k, str) or len(item) == 1)
+    return "" if item is None else str(item)
+
+
+def _scan_raw(wildcards: list[_Wildcard], ctx: _Ctx) -> None:
+    """Which variables each wildcard reads and which wildcards it
+    references, from the source text: lets a reference know whether its
+    target needs a specialised copy, and marks entry points (nothing
+    references them) whose lines may become stacks."""
+    for wc in wildcards:
+        key = _norm(wc.path)
+        text = normalize_ppp("\n".join(_raw_text(i) for i in wc.items))
+        ctx.reads[key] = set(_READ_RE.findall(text))
+        refs: set[str] = set()
+        for m in _REF_RE.finditer(text):
+            name = m.group("name").strip().replace("\\", "/").strip("/")
+            refs |= _quiet_targets(name, ctx)
+        for m in _INCLUDE_RE.finditer(text):
+            refs |= _quiet_targets(m.group(1), ctx)
+        refs.discard(key)
+        ctx.raw_refs[key] = refs
+    referenced: set[str] = set()
+    for refs in ctx.raw_refs.values():
+        referenced |= refs
+    ctx.entry_keys = {k for k in ctx.raw_refs if k not in referenced}
+
+
+def _quiet_targets(name: str, ctx: _Ctx) -> set[str]:
+    key = _norm(name)
+    if not key:
+        return set()
+    if "*" in key:
+        if key.endswith("/**"):
+            return {k for k in ctx.by_path if k.startswith(key[:-3] + "/")}
+        return {k for k in ctx.by_path if fnmatch.fnmatchcase(k, key)}
+    if key in ctx.by_path:
+        return {key}
+    hit = ctx.impact_path.get(key.replace(" ", "-"))
+    if hit is not None:
+        return {_norm(hit.path)}
+    found = {k for k in ctx.by_path if k.endswith("/" + key)}
+    return found or {k for k in ctx.by_path if k.startswith(key + "/")}
+
+
+def _reads_deep(key: str, ctx: _Ctx, stack: set[str] | None = None) -> set[str]:
+    """The variables a wildcard reads, itself or through what it
+    references."""
+    memo = ctx.reads_memo
+    if key in memo:
+        return memo[key]
+    stack = stack if stack is not None else set()
+    if key in stack:
+        return set()
+    stack.add(key)
+    out = set(ctx.reads.get(key, ()))
+    for target in ctx.raw_refs.get(key, ()):
+        out |= _reads_deep(target, ctx, stack)
+    stack.discard(key)
+    memo[key] = out
+    return out
+
+
+def _parse_ref_args(text: str) -> dict[str, str]:
+    """``x=v, y='w'`` (Dynamic Prompts template arguments) → dict."""
+    out: dict[str, str] = {}
+    for part in _split_top(text, ","):
+        if "=" not in part:
+            continue
+        k, _, v = part.partition("=")
+        k = k.strip()
+        v = v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+            v = v[1:-1]
+        if re.fullmatch(r"[A-Za-z_]\w*", k):
+            out[k] = v
+    return out
+
+
+def _short_text(text: str, limit: int = 40) -> str:
+    t = re.sub(r"\s+", " ", text).strip()
+    return t if len(t) <= limit else t[: limit - 1] + "…"
+
+
+def _maybe_specialize(
+    target: _Wildcard, args: dict[str, str], raw: str, ctx: _Ctx,
+) -> _Wildcard | None:
+    """A reference whose target reads variables this value binds (template
+    arguments, ``${x=v}`` macros) points at a copy of the target with those
+    reads filled in, the way Dynamic Prompts renders it."""
+    needed = _reads_deep(_norm(target.path), ctx)
+    if not needed:
+        if args:
+            ctx.report.note(
+                "template_args_dropped", ctx.current, f"{raw}: the list reads no variables",
+            )
+        return None
+    bind: dict[str, str] = {}
+    lv = ctx.line_vars or {}
+    for k in sorted(needed):
+        if k in args:
+            bind[k] = args[k]
+        elif k in ctx.env:
+            bind[k] = ctx.env[k]
+        elif lv.get(k, {}).get("kind") == "set":
+            bind[k] = lv[k]["raw"]
+            ctx.report.note(
+                "variable_read_in_nested_list", ctx.current,
+                f"{raw} reads ${{{k}}}: a list can't read a variable, so it rolls "
+                f"{_short_text(lv[k]['raw'])} on its own",
+            )
+    if not bind:
+        return None
+    key = (_norm(target.path), tuple(sorted(bind.items())))
+    copy = ctx.copies.get(key)
+    if copy is None:
+        if len(ctx.copies) >= MAX_COPIES:
+            ctx.report.note("too_many_copies", ctx.current, raw)
+            return None
+        desc = "; ".join(f"{k}={_short_text(v, 24)}" for k, v in sorted(bind.items()))
+        path = f"{target.path} ({desc})"
+        copy = _Wildcard(
+            path, target.source, list(target.items), defaults=target.defaults,
+            umi=target.umi, layer=target.layer, generated=True, copy_env=dict(bind),
+        )
+        copy.id = _unique_id(_short_hash("copy", key[0], repr(key[1])), ctx.used_ids)
+        copy.name = _display_name(path)
+        ctx.copies[key] = copy
+        ctx.pending.append(copy)
+        ctx.report.note("specialised_copy", ctx.current, f"{raw} → {copy.name}")
+    _edge(_norm(copy.path), ctx)
+    return copy
+
+
+# ---------------------------------------------------------------------------
+# Umi AI
+# ---------------------------------------------------------------------------
+
+UMI_MAX_LAYERS = 12
+
+
+def _umi_layers(wildcards: list[_Wildcard]) -> tuple[list[_Wildcard], list[dict[str, Any]]]:
+    """Split Umi YAML files into layers so a tag query never reaches its
+    own entry: entries without queries are layer 0, an entry whose queries
+    hit layer k entries is layer k + 1. Each layer of a file is its own
+    wildcard (``Body``, ``Body (2)``); a query only draws from layers below
+    the entry it sits in. Returns the wildcards and the tag database."""
+    entries: list[dict[str, Any]] = []
+    for wc in wildcards:
+        if not wc.umi:
+            continue
+        file = PurePosixPath(wc.source).stem.casefold()
+        for item in wc.items:
+            text = str(item.get("text", "")) if isinstance(item, dict) else str(item)
+            queries = [
+                ((m.group("file") or "").strip().casefold(), parse_umi_query(m.group("body")))
+                for m in UMI_QUERY_RE.finditer(text)
+            ]
+            entries.append({
+                "wc": wc, "item": item, "file": file, "queries": queries, "layer": 0,
+                "tags": item.get("umi_tags", set()) if isinstance(item, dict) else set(),
+            })
+    if not entries:
+        return wildcards, []
+    cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for e in entries:
+        hits: list[dict[str, Any]] = []
+        for f, q in e["queries"]:
+            ck = (f, repr(q))
+            if ck not in cache:
+                cache[ck] = [
+                    h for h in entries
+                    if (not f or h["file"] == f) and umi_matches(q, h["tags"])
+                ]
+            hits.extend(cache[ck])
+        e["hits"] = [h for h in hits if h is not e]
+    for _ in range(UMI_MAX_LAYERS):
+        changed = False
+        for e in entries:
+            if not e["queries"]:
+                continue
+            new = min(UMI_MAX_LAYERS, 1 + max((h["layer"] for h in e["hits"]), default=-1))
+            if new != e["layer"]:
+                e["layer"] = new
+                changed = True
+        if not changed:
+            break
+    # An entry no query reaches can sit in its file's top layer: fewer
+    # wildcards, and its own queries still only reach lower layers.
+    reached = {id(h) for e in entries for h in e["hits"]}
+    top: dict[int, int] = {}
+    for e in entries:
+        top[id(e["wc"])] = max(top.get(id(e["wc"]), 0), e["layer"])
+    for e in entries:
+        if id(e) not in reached:
+            e["layer"] = max(e["layer"], top[id(e["wc"])])
+    out: list[_Wildcard] = []
+    for wc in wildcards:
+        if not wc.umi:
+            out.append(wc)
+            continue
+        mine = [e for e in entries if e["wc"] is wc]
+        for n, layer in enumerate(sorted({e["layer"] for e in mine}) or [0]):
+            path = wc.path if n == 0 else f"{wc.path} ({n + 1})"
+            part = _Wildcard(
+                path, wc.source, [e["item"] for e in mine if e["layer"] == layer],
+                comments=wc.comments if n == 0 else [], umi=True, layer=layer,
+            )
+            for e in mine:
+                if e["layer"] == layer:
+                    e["wc"] = part
+            out.append(part)
+    db = [
+        {"wc": e["wc"], "tags": e["tags"], "file": e["file"], "layer": e["layer"]}
+        for e in entries
+    ]
+    return out, db
+
+
+def _umi_query(m: re.Match[str], ctx: _Ctx) -> str:
+    """``<[a][b|--c]>`` → a filtered reference to the wildcard(s) holding
+    the matching entries; several wildcards → a pick between them,
+    weighted by how many entries each holds, as Umi pools them."""
+    q = parse_umi_query(m.group("body"))
+    f = (m.group("file") or "").strip().casefold()
+    cur = ctx.current_wc
+    own = cur.layer if cur is not None and cur.umi else None
+    hits: dict[int, list[Any]] = {}
+    for e in ctx.umi_db:
+        if f and e["file"] != f:
+            continue
+        if own is not None and e["layer"] >= own:
+            continue
+        if umi_matches(q, e["tags"]):
+            hits.setdefault(id(e["wc"]), [e["wc"], 0])[1] += 1
+    if not hits:
+        ctx.report.note("tag_query_no_match", ctx.current, m.group(0))
+        return ""
+    tagsets = ctx.umi_tagsets
+    refs: list[tuple[str, int]] = []
+    for w, n in hits.values():
+        have = tagsets.get(id(w))
+        if have is None:
+            have = {t for it in w.items if isinstance(it, dict) for t in it.get("labels", [])}
+            tagsets[id(w)] = have
+        expr = "" if n == len(w.items) else _umi_expr(q, have)
+        refs.append((f"@{{{w.id}#{w.name}" + (f":{expr}" if expr else "") + "}", n))
+        _edge(_norm(w.path), ctx)
+    cur_key = _norm(ctx.current)
+    ctx.ref_counts[cur_key] = ctx.ref_counts.get(cur_key, 0) + 1
+    if len(refs) == 1:
+        return refs[0][0]
+    return "{" + "|".join(f"{n}::{ref}" for ref, n in refs) + "}"
+
+
+def _inside_braces(text: str, needles: tuple[str, ...]) -> bool:
+    """True when any of ``needles`` starts inside a ``{…}``."""
+    depth = 0
+    for i, c in enumerate(text):
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth = max(0, depth - 1)
+        elif depth and any(text.startswith(n, i) for n in needles):
+            return True
+    return False
+
+
+def _umi_expr(q: list[list[tuple[bool, str]]], have: set[str]) -> str:
+    """The query as our tag filter, simplified against the tags the
+    wildcard has (an absent tag is false, so ``--absent`` always holds)."""
+    ands: list[str] = []
+    for grp in q:
+        ors: list[str] = []
+        always = False
+        for neg, term in grp:
+            tag = _umi_tag(term)
+            if tag is None or tag not in have:
+                if neg:
+                    always = True
+                    break
+                continue
+            ors.append(f"not {tag}" if neg else tag)
+        if always or not ors:
+            continue
+        ands.append(ors[0] if len(ors) == 1 else "(" + " or ".join(ors) + ")")
+    return " and ".join(ands)
+
+
+# ---------------------------------------------------------------------------
+# Stacks: variables rolled once → setter wildcards + a Combine
+# ---------------------------------------------------------------------------
+
+_PLACEHOLDER_RE = re.compile(r"\x00var:([A-Za-z_]\w*)\x00")
+_WHOLE_REF_RE = re.compile(r"^@\{([0-9a-f]{8})#[^}:!]*\}$")
+
+
+def _generated(
+    path: str, source: str, options: list[dict[str, Any]], binding: str, ctx: _Ctx,
+) -> _Wildcard:
+    w = _Wildcard(path, source, [], generated=True, binding=binding)
+    w.id = _unique_id(_short_hash("generated", _norm(path)), ctx.used_ids)
+    w.name = _display_name(path)
+    used: set[str] = set()
+    for i, o in enumerate(options):
+        o.setdefault("id", _short_hash(path, str(i)))
+        o["id"] = _unique_id(o["id"], used)
+        o.setdefault("weight", 1)
+        o.setdefault("sub_categories", [])
+    w.options = options
+    ctx.pending_generated.append(w)
+    return w
+
+
+def _with_env(raw: str, env: dict[str, str], ctx: _Ctx) -> str:
+    """Convert setter / part text outside the line: earlier rolled-once
+    variables it reads fall back to their source text."""
+    saved_env, saved_lv = ctx.env, ctx.line_vars
+    ctx.env, ctx.line_vars = dict(env), None
+    try:
+        return convert_text(raw, ctx)
+    finally:
+        ctx.env, ctx.line_vars = saved_env, saved_lv
+
+
+def _setter(
+    entry: _Wildcard, stack_name: str, var: str, binding: str, raw: str,
+    env: dict[str, str], ctx: _Ctx,
+) -> tuple[str, Any, dict[str, Any]]:
+    """The module that rolls ``${var=!raw}`` once: the referenced wildcard
+    itself (bound to ``var``) when ``raw`` is one plain reference, else a
+    small generated wildcard holding ``raw``'s choices."""
+    body = raw.strip()
+    m = _REF_RE.fullmatch(body)
+    if m is not None and not (m.group("params") or m.group("icount") or m.group("args")
+                              or m.group("f1") or m.group("f2")):
+        name = m.group("name").strip().replace("\\", "/").strip("/")
+        targets = _quiet_targets(name, ctx)
+        if len(targets) == 1:
+            w = ctx.by_path[next(iter(targets))]
+            _edge(_norm(w.path), ctx)
+            return ("wc", w, {"variable_binding": binding})
+    options: list[dict[str, Any]] = []
+    if body.startswith("{") and _match_brace(body, 0) == len(body) - 1 \
+            and "$$" not in _split_top(body[1:-1], "|")[0]:
+        for branch in _split_top(body[1:-1], "|"):
+            text = _with_env(branch, env, ctx)
+            weight: float = 1
+            wm = re.match(r"^\s*(\d+(?:\.\d+)?)::(.*)$", text, re.DOTALL)
+            if wm:
+                weight, text = _weight(wm.group(1)), wm.group(2)
+            options.append({"value": text, "weight": weight})
+    else:
+        options.append({"value": _with_env(body, env, ctx)})
+    w = _generated(f"{stack_name} · {var}", entry.source, options, binding, ctx)
+    return ("wc", w, {})
+
+
+def _derivation(
+    stack_name: str, var: str, value: str, ctx: _Ctx, *, append: bool = False,
+) -> dict[str, Any]:
+    """``$var`` gets ``value`` when nothing upstream set it (or, with
+    ``append``, gets it added when something did)."""
+    rule_id = _short_hash("rule", stack_name, var)
+    if append:
+        rule = {
+            "id": rule_id,
+            "branches": [{
+                "condition": {"var": var, "op": "is_set", "value": ""},
+                "action": {"target_var": var, "mode": "append", "value": value},
+            }],
+            "else": {"action": {"target_var": var, "mode": "replace", "value": value}},
+        }
+    else:
+        rule = {
+            "id": rule_id,
+            "branches": [{
+                "condition": {"var": var, "op": "is_unset", "value": ""},
+                "action": {"target_var": var, "mode": "replace", "value": value},
+            }],
+        }
+    mid = _unique_id(_short_hash("derivation", stack_name, var), ctx.used_ids)
+    return {
+        "type": "derivation", "id": mid, "name": _display_name(f"{stack_name} · {var} default"),
+        "description": f"Sets ${var} for {stack_name} (imported)",
+        "payload": {"rules": [rule]},
+    }
+
+
+def _extract_parts(
+    value: str, out_var: str, entry: _Wildcard, stack_name: str,
+    env: dict[str, str], ctx: _Ctx,
+) -> tuple[str, list[_Wildcard]]:
+    """A Combine can't hold references, so every top-level piece of the
+    line that does (a reference, a group, a ``{…}`` with one inside)
+    becomes a one-option wildcard written to its own variable, and the
+    template reads that variable instead."""
+    parts: list[_Wildcard] = []
+    out: list[str] = []
+    i = 0
+    last = 0
+    n = len(value)
+
+    def add(piece: str) -> str:
+        if _PLACEHOLDER_RE.search(piece):
+            def sub(m: re.Match[str]) -> str:
+                raw = env.get(m.group(1))
+                ctx.report.note(
+                    "variable_read_in_nested_list", entry.path,
+                    f"${m.group(1)} inside {_readable(piece)} rolls again there",
+                )
+                return _with_env(raw, env, ctx) if raw is not None else f"$${m.group(1)}"
+            piece = _PLACEHOLDER_RE.sub(sub, piece)
+        binding = _ident(f"{out_var}_part{len(parts) + 1}")
+        w = _generated(
+            f"{stack_name} · part {len(parts) + 1}", entry.source,
+            [{"value": piece}], binding, ctx,
+        )
+        parts.append(w)
+        return f"${binding}"
+
+    while i < n:
+        if value.startswith("@{", i) and _WP_REF_START.match(value, i):
+            end = value.find("}", i)
+            if end != -1:
+                out.append(value[last:i])
+                out.append(add(value[i:end + 1]))
+                i = last = end + 1
+                continue
+        if value.startswith("\x00group:", i):
+            end = value.find("\x00", i + 1)
+            out.append(value[last:i])
+            out.append(add(value[i:end + 1]))
+            i = last = end + 1
+            continue
+        if value[i] == "{":
+            end = _match_brace(value, i)
+            if end is not None:
+                block = value[i:end + 1]
+                if "@{" in block or "\x00group:" in block:
+                    out.append(value[last:i])
+                    out.append(add(block))
+                    i = last = end + 1
+                    continue
+                i = end + 1
+                continue
+        i += 1
+    out.append(value[last:])
+    return "".join(out), parts
+
+
+def _line_stack(wc: _Wildcard, line: dict[str, Any], n: int, ctx: _Ctx) -> None:
+    """A line of an entry point that sets variables rolled once
+    (``${x=!v}``) or reads ones nothing sets (template slots) → a stack:
+    setters, defaults, parts, then a Combine that renders the line into
+    the entry point's variable."""
+    name = wc.name if n == 0 else f"{wc.name} {n}"
+    out_var = _ident(wc.path.split("/")[-1])
+    stack: dict[str, Any] = {"name": name, "entry": wc, "children": [], "kind": "variables"}
+    children: list[tuple[str, Any, dict[str, Any]]] = stack["children"]
+    env = {k: v["raw"] for k, v in line["vars"].items() if v["kind"] == "set"}
+    inputs: list[str] = []
+    for var, info in line["vars"].items():
+        if info["kind"] == "set":
+            op = info["op"]
+            binding = var if op == "=" else f"{var}_{'default' if op == '?=' else 'add'}"
+            spec = _setter(wc, name, var, binding, info["raw"], env, ctx)
+            children.append(spec)
+            if op == "=":
+                ctx.setters.setdefault(var, []).append((stack, spec))
+            else:
+                children.append(("row", _derivation(
+                    name, var, f"${binding}", ctx, append=op == "+=",
+                ), {}))
+        else:
+            default = info.get("default")
+            if default:
+                text = _with_env(default, env, ctx)
+                if "@{" in text or "\x00group:" in text:
+                    spec = _setter(wc, name, f"{var} default", f"{var}_default", default, env, ctx)
+                    children.append(spec)
+                    text = f"${var}_default"
+                children.append(("row", _derivation(name, var, text, ctx), {}))
+            else:
+                ctx.report.note(
+                    "template_slot", wc.path,
+                    f"${var}: nothing in the pack sets it; set it upstream of {name}",
+                )
+        inputs.append(var)
+    template, parts = _extract_parts(line["value"], out_var, wc, name, env, ctx)
+    for p in parts:
+        children.append(("wc", p, {}))
+        inputs.append(p.binding or "")
+    template = _PLACEHOLDER_RE.sub(lambda m: f"${m.group(1)}", template).strip()
+    negative = ", ".join(x for x in line["negatives"] if x.strip())
+    if negative and ("@{" in negative or "\x00group:" in negative):
+        ctx.report.note("negative_dropped", wc.path, f"{negative} (holds a reference)")
+        negative = ""
+    if line.get("cond") is not None:
+        ctx.report.note("condition_dropped", wc.path, f"{name}: a stack line can't be conditioned")
+    if template:
+        payload: dict[str, Any] = {
+            "template": template,
+            "output_var": out_var,
+            "input_vars": list(dict.fromkeys(v for v in inputs if v)),
+        }
+        if negative:
+            payload["negative"] = negative
+        mid = _unique_id(_short_hash("combine", _norm(wc.path), str(n)), ctx.used_ids)
+        children.append(("row", {
+            "type": "combine", "id": mid, "name": _display_name(name),
+            "description": f"Renders {name} from {wc.source} (imported)",
+            "payload": payload,
+        }, {}))
+    ctx.stacks.append(stack)
+    ctx.report.note("line_became_stack", wc.path, f"{name}: setters + Combine → ${out_var}")
+
+
+# ---------------------------------------------------------------------------
+# Conditions → constraints
+# ---------------------------------------------------------------------------
+
+
+def _model_stack(source: str, ctx: _Ctx) -> dict[str, Any]:
+    """One "Model checks" stack per Model Info variable: a wildcard that
+    takes the option matching ``$model_family`` / ``$model_variant``
+    (``other`` when none does), as the source of the constraints."""
+    stacks = ctx.model_stacks
+    if source in stacks:
+        return stacks[source]
+    values = MODEL_FAMILIES if source == "model_family" else MODEL_VARIANTS
+    options = [{"value": v} for v in values] + [{"value": "other", "fallback": True}]
+    label = "family" if source == "model_family" else "variant"
+    w = _generated(f"model checks · {label}", "", options, f"ppp_{source}", ctx)
+    stack = {
+        "name": f"Model checks ({label})",
+        "entry": None,
+        "kind": "model",
+        "children": [("wc", w, {"match_variable": source})],
+        "source": w,
+    }
+    stacks[source] = stack
+    ctx.stacks.append(stack)
+    return stack
+
+
+def _build_constraints(
+    ctx: _Ctx, rows_by_id: dict[str, dict[str, Any]],
+    retarget: dict[str, tuple[_Merge, str]],
+) -> list[dict[str, Any]]:
+    """PPP ``if`` conditions → Constraints that exclude, for each value of
+    the variable a condition reads, the options whose condition fails.
+    The source is the wildcard that rolls the variable (a stack's setter)
+    or, for model checks, the Model checks stack's wildcard. Each
+    constraint goes into the stack(s) right after its source."""
+    grouped: dict[tuple[Any, ...], list[tuple[str, Any]]] = {}
+    order: list[tuple[Any, ...]] = []
+    cond_wc: dict[int, _Wildcard] = {}
+    for wc, oid, cond in ctx.option_conds:
+        src = model_source(cond)
+        if src is not None:
+            key: tuple[Any, ...] = ("model", src, id(wc))
+        else:
+            names = cond_vars(cond)
+            var = next(iter(names)) if len(names) == 1 else None
+            if var is None or var not in ctx.setters:
+                ctx.report.note(
+                    "condition_dropped", wc.path,
+                    f"{_cond_text(cond)}: nothing in the pack rolls "
+                    f"{', '.join(sorted(names))} once",
+                )
+                continue
+            key = ("var", var, id(wc))
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+            cond_wc[id(wc)] = wc
+        grouped[key].append((oid, cond))
+    out: list[dict[str, Any]] = []
+    for key in order:
+        kind, var, wid = key
+        wc = cond_wc[wid]
+        conds = grouped[key]
+        tkey = _norm(wc.path)
+        hit = retarget.get(tkey)
+        target_row = rows_by_id.get(hit[0].id if hit else wc.id)
+        if target_row is None:
+            continue
+        values_by_oid = {o["id"]: o["value"] for o in wc.options}
+        target_ids = {o["value"]: o["id"] for o in target_row["payload"]["options"]}
+        if kind == "model":
+            stack = _model_stack(var, ctx)
+            sources = [(
+                stack, stack["source"],
+                lambda v, s=var: model_env(s, "" if v == "other" else v),
+            )]
+        else:
+            sources = []
+            for stack, spec in ctx.setters[var]:
+                w = spec[1]
+                if _norm(w.path) in retarget:
+                    ctx.report.note(
+                        "condition_dropped", wc.path,
+                        f"{_cond_text(conds[0][1])}: ${var} comes from a merged list",
+                    )
+                    continue
+                sources.append((stack, w, lambda v, n=var: {n: v}))
+        for stack, src, env_for in sources:
+            exceptions: list[dict[str, Any]] = []
+            seen: set[tuple[str, str]] = set()
+            for so in src.options:
+                env = env_for(so["value"])
+                for oid, cond in conds:
+                    if eval_condition(cond, env):
+                        continue
+                    tval = values_by_oid.get(oid)
+                    if tval is None or (so["value"], tval) in seen:
+                        continue
+                    seen.add((so["value"], tval))
+                    exceptions.append({
+                        "source": so["value"], "target": tval,
+                        "source_id": so["id"], "target_id": target_ids.get(tval, ""),
+                        "mode": "exclude", "factor": 0,
+                    })
+            if not exceptions:
+                continue
+            cid = _unique_id(_short_hash("constraint", src.id, target_row["id"]), ctx.used_ids)
+            row = {
+                "type": "constraint", "id": cid,
+                "name": _display_name(f"{target_row['name']} by {var}"),
+                "description": (
+                    f"PPP conditions of {wc.path} (imported): leaves out the options "
+                    f"whose condition fails for each {var} value"
+                ),
+                "payload": {
+                    "source_wildcard_id": src.id,
+                    "target_wildcard_id": target_row["id"],
+                    "source_wildcard_name": src.name,
+                    "target_wildcard_name": target_row["name"],
+                    "matrix": {},
+                    "exceptions": exceptions,
+                },
+            }
+            out.append(row)
+            # After the source, before what reads it.
+            children = stack["children"]
+            at = next(
+                (i + 1 for i, c in enumerate(children) if c[0] == "wc" and c[1] is src),
+                len(children),
+            )
+            while at < len(children) and children[at][0] == "row" \
+                    and children[at][1].get("type") == "constraint":
+                at += 1
+            children.insert(at, ("row", row, {}))
+    return out
+
+
+def _cond_text(cond: Any) -> str:
+    if cond is None:
+        return ""
+    kind = cond[0]
+    if kind == "cmp":
+        _, var, op, values = cond
+        if op is None:
+            return str(var)
+        vals = ", ".join(f"'{v}'" for v in values)
+        return f"{var} {op} {vals if len(values) == 1 else '(' + vals + ')'}"
+    if kind == "not":
+        return f"not {_cond_text(cond[1])}"
+    return f" {kind} ".join(
+        f"({_cond_text(x)})" if x[0] in ("and", "or") else _cond_text(x) for x in cond[1]
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# Stacks → bundles, plan rows and sample rolls
+# ---------------------------------------------------------------------------
+
+
+def _finish_stacks(
+    ctx: _Ctx, rows_by_id: dict[str, dict[str, Any]],
+    retarget: dict[str, tuple[_Merge, str]],
+) -> list[dict[str, Any]]:
+    """Resolve each stack's children to rows. A setter that is a list
+    merged away becomes the merged wildcard with the list's filter."""
+    out: list[dict[str, Any]] = []
+    for st in ctx.stacks:
+        kids: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for kind, obj, inst in st["children"]:
+            if kind == "wc":
+                hit = retarget.get(_norm(obj.path))
+                if hit is not None:
+                    m, expr = hit
+                    row = rows_by_id.get(m.id)
+                    inst = {**inst, "category_filter": expr}
+                else:
+                    row = rows_by_id.get(obj.id)
+            else:
+                row = rows_by_id.get(obj["id"])
+            if row is not None:
+                kids.append((row, inst))
+        if not kids:
+            continue
+        sid = _unique_id(_short_hash("stack", st["name"].lower()), ctx.used_ids)
+        out.append({**st, "id": sid, "rows": kids})
+    return out
+
+
+def _stack_output(st: dict[str, Any]) -> str:
+    """The variable a stack renders: its Combine's, else its last
+    module's."""
+    for row, _ in reversed(st["rows"]):
+        if row["type"] == "combine":
+            return str(row["payload"].get("output_var") or "")
+    row, inst = st["rows"][-1]
+    return str(inst.get("variable_binding") or row["payload"].get("var_binding") or "")
+
+
+def _stack_plan(stacks: list[dict[str, Any]], ctx: _Ctx) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for st in stacks:
+        entry = st.get("entry")
+        path = entry.path if entry is not None else ""
+        kinds = ctx.report.kinds_by_wildcard.get(path, set()) if path else set()
+        fidelity = (
+            "lossy" if kinds & _LOSSY_KINDS else "close" if kinds & _CLOSE_KINDS else "exact"
+        )
+        out.append({
+            "id": st["id"],
+            "name": st["name"],
+            "domain": path.split("/", 1)[0] if "/" in path else "",
+            "role": "stack",
+            "type": "bundle",
+            "stack_kind": st.get("kind", "variables"),
+            "options": len(st["rows"]),
+            "refs": 0,
+            "referenced_by": 0,
+            "fidelity": fidelity,
+            "notes": ctx.report.by_wildcard.get(path, []) if path else [],
+            "source": entry.source if entry is not None else "",
+            "output": _stack_output(st),
+            "children": [
+                {"id": row["id"], "name": row["name"], "type": row["type"],
+                 **({"instance": inst} if inst else {})}
+                for row, inst in st["rows"]
+            ],
+        })
+    return out
+
+
+def _stack_bundles(
+    stacks: list[dict[str, Any]], used_ids: set[str], tags: list[str],
+) -> list[dict[str, Any]]:
+    out = []
+    for st in stacks:
+        if st.get("kind") == "model":
+            desc = (
+                "PPP model checks (imported). Put it after a WP Model Info node and "
+                "before the prompt it steers: its wildcard takes the loaded model's "
+                "value and its constraints leave out what the pack's conditions rule out."
+            )
+        else:
+            desc = (
+                f"Imported stack: rolls the variables of {st['name']} once, then renders "
+                f"it into ${_stack_output(st)}."
+            )
+        out.append(_bundle_row(
+            st["id"], st["name"], desc, tags,
+            [_child_snapshot(row, inst) for row, inst in st["rows"]],
+        ))
+    return out
+
+
+MAX_SAMPLED = 40
+
+
+def _roll_samples(
+    plan: list[dict[str, Any]], payload: dict[str, Any],
+    stacks: list[dict[str, Any]], seeds: int,
+) -> None:
+    """Roll each entry point and stack a few times with the engine, so the
+    review shows what the import makes; a warning the rolls raise makes
+    the row lossy."""
+    from engine.scenario import run_scenario
+
+    catalog = {r["id"]: r["payload"] for r in payload["wildcards"]}
+    by_id = {r["id"]: r for r in payload["wildcards"]}
+    stack_by_id = {st["id"]: st for st in stacks}
+    done = 0
+    # Stacks first: they are what the import built, so worth a look.
+    for item in sorted(plan, key=lambda p: p["role"] != "stack"):
+        if done >= MAX_SAMPLED:
+            break
+        if item["role"] == "entry" and item["id"] in by_id:
+            row = by_id[item["id"]]
+            modules = [_scenario_module(row, {})]
+            var = str(row["payload"].get("var_binding") or "")
+        elif item["role"] == "stack" and item["id"] in stack_by_id \
+                and stack_by_id[item["id"]].get("kind") != "model":
+            # A model check stack only steers what comes after it.
+            st = stack_by_id[item["id"]]
+            modules = [_scenario_module(row, inst) for row, inst in st["rows"]]
+            var = _stack_output(st)
+        else:
+            continue
+        done += 1
+        try:
+            res = run_scenario(
+                modules, seeds=list(range(1, seeds + 1)), catalog=catalog,
+                track=[var], sample_limit=0,
+            )
+        except Exception:  # noqa: BLE001 - a preview never sinks the import
+            continue
+        tracked = (res.get("tracked") or {}).get("values", {}).get(var, [])
+        item["samples"] = [v for v in tracked if v is not None]
+        problems = [
+            w for w in res.get("warnings", [])
+            if w.get("severity") in ("warn", "warning", "error")
+            and w.get("type") not in ("unknown_var", "match_variable_no_match")
+        ]
+        if problems:
+            item["roll_warnings"] = [
+                {"type": str(w.get("type", "")), "message": str(w.get("message", ""))[:200]}
+                for w in problems[:4]
+            ]
+            item["fidelity"] = "lossy"
+
+
+def _scenario_module(row: dict[str, Any], instance: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row["id"], "_uid": row["id"], "type": row["type"], "enabled": True,
+        "name": row["name"], "payload": row["payload"], "instance": dict(instance),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Parameterised copies (P4)
+# ---------------------------------------------------------------------------
+
+_FILTERED_REF_RE = re.compile(r"@\{([0-9a-f]{8})#([^}:]*):([^}]*)\}")
+
+
+def _drop_tag(value: str, tag: str, touched: set[str]) -> str:
+    """Remove ``tag`` from every reference filter that ANDs it in."""
+    def sub(m: re.Match[str]) -> str:
+        expr = m.group(3)
+        if "(" in expr or " or " in expr or "not " in expr:
+            return m.group(0)
+        terms = [t.strip() for t in expr.split(" and ")]
+        if tag not in terms:
+            return m.group(0)
+        touched.add(m.group(1))
+        rest = [t for t in terms if t != tag]
+        return f"@{{{m.group(1)}#{m.group(2)}" + (f":{' and '.join(rest)}" if rest else "") + "}"
+    return _FILTERED_REF_RE.sub(sub, value)
+
+
+def _skeleton(row: dict[str, Any], tag: str) -> tuple[Any, ...] | None:
+    touched: set[str] = set()
+    values = tuple(
+        (_drop_tag(o["value"], tag, touched), o.get("weight", 1), o.get("negative", ""))
+        for o in row["payload"]["options"]
+    )
+    return (values, tuple(sorted(touched))) if touched else None
+
+
+def _row_tags(row: dict[str, Any]) -> list[str]:
+    seen: dict[str, None] = {}
+    for o in row["payload"]["options"]:
+        for m in _FILTERED_REF_RE.finditer(o["value"]):
+            expr = m.group(3)
+            if "(" in expr or " or " in expr or "not " in expr:
+                continue
+            for t in expr.split(" and "):
+                seen[t.strip()] = None
+    return list(seen)
+
+
+def _fold_copies(rows: list[dict[str, Any]], roles: dict[str, str], ctx: _Ctx) -> set[str]:
+    """Entry points in one folder that are the same text except for one
+    tag in their reference filters (``superhero @{heroes:marvel}`` and
+    ``superhero @{heroes:dc}``) fold into one wildcard without that tag,
+    plus a small source wildcard (``marvel``, ``dc``) and a Constraint
+    whose ``only`` rows keep the referenced options to the tag the source
+    picked. Pinning the source gives back each original. Returns the ids
+    of the folded rows."""
+    by_folder: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if roles.get(row["id"]) != "entry" or "/" not in row["name"]:
+            continue
+        by_folder.setdefault(row["name"].rsplit("/", 1)[0], []).append(row)
+    folded: set[str] = set()
+    names = {r["id"]: r["name"] for r in rows}
+    for folder, group in by_folder.items():
+        left = list(group)
+        while len(left) >= 2:
+            first = left[0]
+            cluster: list[tuple[dict[str, Any], str]] = []
+            skel = None
+            for tag in _row_tags(first):
+                skel = _skeleton(first, tag)
+                if skel is None:
+                    continue
+                cluster = [(first, tag)]
+                for other in left[1:]:
+                    for u in _row_tags(other):
+                        if u != tag and u not in {t for _, t in cluster} \
+                                and _skeleton(other, u) == skel:
+                            cluster.append((other, u))
+                            break
+                if len(cluster) >= 2:
+                    break
+            if skel is None or len(cluster) < 2:
+                left.pop(0)
+                continue
+            _fold_cluster(folder, cluster, skel, ctx, names)
+            done = {id(r) for r, _ in cluster}
+            folded |= {r["id"] for r, _ in cluster}
+            left = [r for r in left if id(r) not in done]
+    return folded
+
+
+def _fold_cluster(
+    folder: str, cluster: list[tuple[dict[str, Any], str]],
+    skel: tuple[Any, ...], ctx: _Ctx, names: dict[str, str],
+) -> None:
+    values, targets = skel
+    first = cluster[0][0]
+    # `random-marvel-hero` folded over `marvel` → `random-hero`.
+    stem = first["name"].rsplit("/", 1)[-1]
+    tag0 = cluster[0][1]
+    named = re.sub(r"[-_ ]{2,}", "-", stem.replace(tag0, "")).strip("-_ ") \
+        if tag0 in stem else ""
+    last = named or folder.split("/")[-1]
+    base = f"{folder}/{named}" if named else f"{folder} · any"
+    n = 2
+    while any(st.get("name") == f"{base} (folded)" for st in ctx.stacks):
+        base = f"{folder}/{named or 'any'} {n}"
+        n += 1
+    comp_payload = {
+        "var_binding": _ident(last),
+        "sub_categories": [],
+        "options": [
+            {
+                "id": o["id"], "value": v, "weight": w, "sub_categories": list(o["sub_categories"]),
+                **({"negative": neg} if neg else {}),
+                **({"fallback": True} if o.get("fallback") else {}),
+            }
+            for o, (v, w, neg) in zip(first["payload"]["options"], values, strict=True)
+        ],
+    }
+    comp_id = _unique_id(_short_hash("folded", _norm(base)), ctx.used_ids)
+    source_opts = [
+        # Matrix rows key on the source option's tags, so each option
+        # carries its own value as its tag.
+        {"id": _short_hash(base, "src", t), "value": t, "weight": 1, "sub_categories": [t]}
+        for _, t in cluster
+    ]
+    src_id = _unique_id(_short_hash("folded-source", _norm(base)), ctx.used_ids)
+    src_name = _display_name(f"{base} · choice")
+    children: list[tuple[str, Any, dict[str, Any]]] = [("row", {
+        "type": "wildcard", "id": src_id, "name": src_name,
+        "description": (
+            f"Which of the {len(cluster)} lists under {folder}/ to make (imported): "
+            "pin it to get one of them back"
+        ),
+        "payload": {"var_binding": _ident(f"{last}_choice"),
+                    "sub_categories": [t for _, t in cluster], "options": source_opts},
+    }, {})]
+    for tid in targets:
+        cid = _unique_id(_short_hash("folded-constraint", src_id, tid), ctx.used_ids)
+        children.append(("row", {
+            "type": "constraint", "id": cid,
+            "name": _display_name(f"{base} · choice → {names.get(tid, tid)}"),
+            "description": f"Keeps each choice of {folder} to its own tag (imported)",
+            "payload": {
+                "source_wildcard_id": src_id,
+                "target_wildcard_id": tid,
+                "source_wildcard_name": src_name,
+                "target_wildcard_name": names.get(tid, ""),
+                "matrix": {t: {t: {"mode": "only", "factor": 1}} for _, t in cluster},
+                "exceptions": [],
+            },
+        }, {}))
+    children.append(("row", {
+        "type": "wildcard", "id": comp_id, "name": _display_name(base),
+        "description": (
+            f"The lists {', '.join(r['name'].rsplit('/', 1)[-1] for r, _ in cluster)} "
+            f"of {folder}/ as one (imported): {src_name} picks which"
+        ),
+        "payload": comp_payload,
+    }, {}))
+    ctx.stacks.append({
+        "name": f"{base} (folded)", "entry": None, "folder": folder,
+        "kind": "copies", "children": children,
+    })
+    for r, t in cluster:
+        ctx.report.note(
+            "copies_folded", r["name"],
+            f"{r['name']} = {base} with {src_name} pinned to {t}",
+        )
 
 
 __all__ = [

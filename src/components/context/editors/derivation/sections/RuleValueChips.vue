@@ -80,7 +80,7 @@ const isEmpty = computed(() => (props.value ?? "").length === 0);
   gap: 3px;
   padding: 0 5px;
   border: 1px dashed color-mix(in srgb, var(--wp-text-dim, var(--wp-text3)) 45%, transparent);
-  border-radius: 3px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
   color: var(--wp-text-dim, var(--wp-text3));
   font: italic 10px/1.4 var(--wp-font-mono);
   letter-spacing: 0.02em;
