@@ -74,7 +74,7 @@ tutorial(
     await t.h.step("Match a variable", async () => {
       await t.go("/");
       await t.say("Match goes the other way: a pick follows a variable that something else set. Here a Context Injector sets wanted time to night.");
-      const inj = await t.addNode("WP Context Injector", { x: 275, y: 170 });
+      const inj = await t.addNode("WP Context Injector", { x: 475, y: 200 });
       await t.click(t.node(inj).locator('[data-test="inj-add-general"]'));
       await t.beat(500);
       await t.fill(t.node(inj).locator('[data-test="inj-row-binding"] input').last(), "wanted_time", { cps: 14 });
@@ -90,10 +90,10 @@ tutorial(
       await t.click(page.locator('[data-test="ibm-save"]'));
       await t.beat(700);
       await t.waitVoice();
-      const ctx = await t.addNode("WP Context", { x: 800, y: 170 });
+      const ctx = await t.addNode("WP Context", { x: 1010, y: 200 });
       await t.wire(inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Hero", "Time of day", "Lighting from time"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1350, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero at $time, $lighting", { cps: 16 });
