@@ -29,22 +29,22 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: head
       - name: Checkout base
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
         with:
           # Explicit version because both checkouts land in subdirs
           # (head/, base/) so there's no package.json at the runner's CWD
           # root for the action to autodetect "packageManager" from.
           version: 9
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -71,7 +71,7 @@ jobs:
       - name: Diff manifests
         run: node head/scripts/bundle-size-diff.mjs sizes/base.json sizes/head.json > report.md
       - name: Upsert PR comment
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: bundle-size
           path: report.md

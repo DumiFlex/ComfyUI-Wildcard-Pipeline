@@ -72,7 +72,7 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: steps.release.outputs.prs_created == 'true'
 
       - name: Auto-merge the release PR once it has notes
@@ -115,12 +115,12 @@ jobs:
         run: echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
       # The release PR's merge commit, which is what the tag points at (main's
       # head on a hand run).
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -138,7 +138,7 @@ jobs:
           fi
           node scripts/release/release-notes.mjs body "$VERSION" "$TAG" > dist/release-body.md
           cp docs/release-notes/next.md dist/shipped-notes.md
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: |
@@ -189,11 +189,11 @@ jobs:
     env:
       TAG: ${{ needs.release.outputs.tag_name || inputs.tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: dev
           token: ${{ secrets.GH_TOKEN }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-notes
           path: ${{ runner.temp }}/release-notes
@@ -228,12 +228,12 @@ jobs:
     if: github.ref == 'refs/heads/beta'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
