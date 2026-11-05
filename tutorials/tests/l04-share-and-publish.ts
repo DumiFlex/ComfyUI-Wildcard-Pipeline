@@ -3,10 +3,9 @@
 // and see the conflict choices; the Publish to community button; then the Community tab (browse and
 // open a pack; nothing is installed or published). Without a reachable community (the cloud) the last
 // step only names the tab.
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { tutorial } from "../tutorial.js";
 
-const EXPORT_FILE = fileURLToPath(new URL("../assets/character-export.json", import.meta.url));
 
 tutorial(
   "L04",
@@ -51,7 +50,7 @@ tutorial(
       await t.beat(800);
       const chooser = page.waitForEvent("filechooser");
       await t.click(page.locator('[data-test="import-file-btn"]'));
-      await (await chooser).setFiles(EXPORT_FILE);
+      await (await chooser).setFiles(path.join(t.packDir, "assets", "character-export.json"));
       await t.beat(1200);
       await t.say("Tick what to bring in, and continue.");
       await t.click(page.locator('[data-test="import-preset-all"]'));

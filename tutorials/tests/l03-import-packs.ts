@@ -2,10 +2,9 @@
 // creature, and scene, which reads __creature__ and __weather__) go through Wildcard packs: load,
 // review the plan (roles, how each list carries over, settings), pick and import. Then scene is used
 // on the canvas: its references roll creature and weather.
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { tutorial } from "../tutorial.js";
 
-const PACK = fileURLToPath(new URL("../assets/pack/", import.meta.url));
 
 tutorial(
   "L03",
@@ -25,7 +24,7 @@ tutorial(
       await t.say("Drop a folder or a zip here, or choose files. These three are plain lists, one option per line. Scene reads the other two by name.");
       const chooser = page.waitForEvent("filechooser");
       await t.click(page.locator('[data-test="pack-pick-files"]'));
-      await (await chooser).setFiles(["weather.txt", "creature.txt", "scene.txt"].map((f) => PACK + f));
+      await (await chooser).setFiles(["weather.txt", "creature.txt", "scene.txt"].map((f) => path.join(t.packDir, "assets", "pack", f)));
       await t.beat(1500);
       await t.waitVoice();
     });
@@ -46,6 +45,9 @@ tutorial(
       await t.callout("set", page.locator('[data-test="pack-settings"]'), "Name, tag, category, dialect", 4);
       await t.waitVoice();
       await t.uncallout("set");
+      await t.say("Apply the settings.");
+      await t.click(page.locator('[data-test="pack-apply"]'));
+      await t.beat(1200);
     });
 
     await t.h.step("Pick and import", async () => {
