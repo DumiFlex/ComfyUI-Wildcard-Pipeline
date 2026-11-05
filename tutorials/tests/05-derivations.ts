@@ -50,6 +50,8 @@ tutorial(
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Time of day", "Setting", "Lighting from time", "Scene line"]);
+      await t.say("Order matters: rows run top to bottom, so the rule goes after Time of day, which it reads, and the combine goes last, after everything it uses. A rule placed above what it reads sees nothing yet.");
+      await t.waitVoice();
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());

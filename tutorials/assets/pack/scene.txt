@@ -1,0 +1,2 @@
+__creature__ in __weather__
+__creature__ resting, __weather__

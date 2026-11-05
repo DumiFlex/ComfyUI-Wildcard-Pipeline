@@ -1,0 +1,373 @@
+{
+  "schema_version": 9,
+  "exported_at": "2026-11-04T20:30:35.074178Z",
+  "bundles": [
+    {
+      "id": "37af0127",
+      "name": "Look",
+      "description": "",
+      "color": "#9b6bff",
+      "category_id": null,
+      "tags": [],
+      "is_favorite": false,
+      "children": [
+        {
+          "id": "4facf8ce",
+          "type": "wildcard",
+          "enabled": true,
+          "collapsed": true,
+          "meta": {
+            "name": "Hair",
+            "library_name": "Hair",
+            "description": "Uses the Colors list through an @{} reference."
+          },
+          "entries": [],
+          "payload": {
+            "var_binding": "hair",
+            "sub_categories": [],
+            "options": [
+              {
+                "id": "a3ff1986",
+                "value": "short @{bc15a82d#Colors} hair",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "e6d04f1d",
+                "value": "long braided @{bc15a82d#Colors} hair",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "28356404",
+                "value": "messy @{bc15a82d#Colors} hair",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "5e455e15",
+                "value": "a shaved head",
+                "weight": 1,
+                "sub_categories": []
+              }
+            ]
+          },
+          "payload_hash": "0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f"
+        },
+        {
+          "id": "38c1b584",
+          "type": "wildcard",
+          "enabled": true,
+          "collapsed": true,
+          "meta": {
+            "name": "Eyes",
+            "library_name": "Eyes",
+            "description": "Has an empty option: sometimes the eyes aren't mentioned."
+          },
+          "entries": [],
+          "payload": {
+            "var_binding": "eyes",
+            "sub_categories": [],
+            "options": [
+              {
+                "id": "fdffc693",
+                "value": "@{bc15a82d#Colors} eyes",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "c6e9202c",
+                "value": "piercing eyes",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "8313f6dc",
+                "value": "tired eyes",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "d8dda0e3",
+                "value": "",
+                "weight": 1,
+                "sub_categories": [],
+                "is_null": true
+              }
+            ]
+          },
+          "payload_hash": "10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0"
+        }
+      ],
+      "payload_hash": "c7bbf167fb4ee005c5b9599e42ddc52523c8ea143bc910580190823381c77ca6",
+      "version": 1,
+      "created_at": "2026-11-04T15:38:23.090764Z",
+      "updated_at": "2026-11-04T15:38:23.090764Z",
+      "community_post_slug": null,
+      "community_version_number": null,
+      "content_rating": "safe"
+    },
+    {
+      "id": "7e3d3ec2",
+      "name": "Character",
+      "description": "",
+      "color": "#4f8cff",
+      "category_id": null,
+      "tags": [],
+      "is_favorite": false,
+      "children": [
+        {
+          "id": "808878ba",
+          "type": "wildcard",
+          "enabled": true,
+          "collapsed": true,
+          "meta": {
+            "name": "Hero",
+            "library_name": "Hero",
+            "description": "Who the picture is about. The tags drive the Scene constraint."
+          },
+          "entries": [],
+          "payload": {
+            "var_binding": "hero",
+            "sub_categories": [
+              "noble",
+              "wild",
+              "urban"
+            ],
+            "options": [
+              {
+                "id": "c8fc80d0",
+                "value": "a knight",
+                "weight": 1,
+                "sub_categories": [
+                  "noble"
+                ]
+              },
+              {
+                "id": "c243437e",
+                "value": "a court mage",
+                "weight": 1,
+                "sub_categories": [
+                  "noble"
+                ]
+              },
+              {
+                "id": "784f4138",
+                "value": "a forest ranger",
+                "weight": 1,
+                "sub_categories": [
+                  "wild"
+                ]
+              },
+              {
+                "id": "e291d944",
+                "value": "a desert nomad",
+                "weight": 1,
+                "sub_categories": [
+                  "wild"
+                ]
+              },
+              {
+                "id": "dd612ba4",
+                "value": "a street thief",
+                "weight": 1,
+                "sub_categories": [
+                  "urban"
+                ]
+              },
+              {
+                "id": "422b5317",
+                "value": "an inventor",
+                "weight": 1,
+                "sub_categories": [
+                  "urban"
+                ]
+              }
+            ]
+          },
+          "payload_hash": "25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed"
+        },
+        {
+          "id": "37af0127",
+          "type": "bundle",
+          "name": "Look",
+          "color": "#9b6bff"
+        },
+        {
+          "id": "b748104b",
+          "type": "bundle",
+          "name": "Outfit",
+          "color": "#e0a030"
+        },
+        {
+          "id": "805bdfa4",
+          "type": "bundle",
+          "name": "Shared lists",
+          "color": "#7a7f8a"
+        }
+      ],
+      "payload_hash": "6182ffec280798815be12a78f27426ea7e133ff346cab48f2aa0f37222f5fce1",
+      "version": 1,
+      "created_at": "2026-11-04T15:38:23.091059Z",
+      "updated_at": "2026-11-04T15:38:23.091059Z",
+      "community_post_slug": null,
+      "community_version_number": null,
+      "content_rating": "safe"
+    },
+    {
+      "id": "805bdfa4",
+      "name": "Shared lists",
+      "description": "",
+      "color": "#7a7f8a",
+      "category_id": null,
+      "tags": [],
+      "is_favorite": false,
+      "children": [
+        {
+          "id": "bc15a82d",
+          "type": "wildcard",
+          "enabled": true,
+          "collapsed": true,
+          "meta": {
+            "name": "Colors",
+            "library_name": "Colors",
+            "description": "Switched off: only read through @{} references."
+          },
+          "entries": [],
+          "payload": {
+            "var_binding": "color",
+            "sub_categories": [],
+            "options": [
+              {
+                "id": "7d1e78ef",
+                "value": "auburn",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "6c3528de",
+                "value": "silver",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "e6eda3f2",
+                "value": "jet black",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "645b75a6",
+                "value": "copper",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "c7331bc4",
+                "value": "pale blonde",
+                "weight": 1,
+                "sub_categories": []
+              },
+              {
+                "id": "5693e178",
+                "value": "emerald",
+                "weight": 1,
+                "sub_categories": []
+              }
+            ]
+          },
+          "payload_hash": "74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77"
+        }
+      ],
+      "payload_hash": "8c84c4fdc3d7781cacafa859b37b055a3b0265189c1394b36bccb7714cc96839",
+      "version": 1,
+      "created_at": "2026-11-04T15:38:23.091250Z",
+      "updated_at": "2026-11-04T15:38:23.091250Z",
+      "community_post_slug": null,
+      "community_version_number": null,
+      "content_rating": "safe"
+    },
+    {
+      "id": "b748104b",
+      "name": "Outfit",
+      "description": "",
+      "color": "#e0a030",
+      "category_id": null,
+      "tags": [],
+      "is_favorite": false,
+      "children": [
+        {
+          "id": "195238e2",
+          "type": "wildcard",
+          "enabled": true,
+          "collapsed": true,
+          "meta": {
+            "name": "Outfit",
+            "library_name": "Outfit",
+            "description": "Options carry negative words; the tunic is the fallback."
+          },
+          "entries": [],
+          "payload": {
+            "var_binding": "outfit",
+            "sub_categories": [
+              "armor",
+              "travel",
+              "formal"
+            ],
+            "options": [
+              {
+                "id": "72f8e1d7",
+                "value": "polished plate armor",
+                "weight": 1,
+                "sub_categories": [
+                  "armor"
+                ],
+                "negative": "rust, broken armor"
+              },
+              {
+                "id": "b553cc92",
+                "value": "a hooded leather coat",
+                "weight": 1,
+                "sub_categories": [
+                  "travel"
+                ]
+              },
+              {
+                "id": "1955f005",
+                "value": "a flowing robe with gold trim",
+                "weight": 1,
+                "sub_categories": [
+                  "formal"
+                ]
+              },
+              {
+                "id": "9f7a6c18",
+                "value": "a patched linen tunic",
+                "weight": 1,
+                "sub_categories": [
+                  "travel"
+                ],
+                "fallback": true
+              }
+            ]
+          },
+          "payload_hash": "3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755"
+        }
+      ],
+      "payload_hash": "f8303f325c67ff3759248361b0d71e96d7b3024ce9773119d6778f06c3f3e8b8",
+      "version": 1,
+      "created_at": "2026-11-04T15:38:23.091558Z",
+      "updated_at": "2026-11-04T15:38:23.091558Z",
+      "community_post_slug": null,
+      "community_version_number": null,
+      "content_rating": "safe"
+    }
+  ],
+  "wildcards": [],
+  "fixed_values": [],
+  "combines": [],
+  "derivations": [],
+  "constraints": [],
+  "categories": [],
+  "templates": []
+}

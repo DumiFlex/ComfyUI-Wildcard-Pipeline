@@ -86,7 +86,7 @@ export class Tutor {
 
   constructor(
     readonly h: Helpers,
-    packDir: string,
+    readonly packDir: string,
     readonly params: Record<string, unknown> = {},
   ) {
     this.page = h.page;
@@ -246,10 +246,11 @@ export class Tutor {
     await sleep(70);
     await this.page.mouse.up({ button });
     if (double) {
+      // clickCount 2 makes the browser fire dblclick (DOM listeners need it; LiteGraph times clicks itself).
       await sleep(90);
-      await this.page.mouse.down();
+      await this.page.mouse.down({ clickCount: 2 });
       await sleep(60);
-      await this.page.mouse.up();
+      await this.page.mouse.up({ clickCount: 2 });
     }
     await sleep(260);
   }
@@ -294,6 +295,17 @@ export class Tutor {
     await sleep(120);
     await this.page.keyboard.press(key);
     await sleep(250);
+  }
+
+  /**
+   * Picks an option in a native drop-down. Its own pop-up list isn't in the recording, so the hand
+   * goes to it and the value changes in place.
+   */
+  async choose(select: Locator, value: string): Promise<void> {
+    await this.moveTo(await this.centre(select));
+    await sleep(250);
+    await select.selectOption(value);
+    await sleep(600);
   }
 
   /** Clicks a field, clears it and types `text` into it. */
@@ -351,7 +363,13 @@ export class Tutor {
         await clearCanvas(this.page);
       } else {
         await this.page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
-        await sleep(400);
+        // The manager paints its page a moment after the network goes quiet; leaving the cut
+        // before that showed a black frame (L05 at Settings › Advanced).
+        await this.page
+          .waitForFunction(() => document.querySelectorAll("[data-test]").length > 3, null, { timeout: 10_000 })
+          .catch(() => undefined);
+        await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
+        await sleep(600);
       }
       await this.page.mouse.move(this.pos.x, this.pos.y);
     }, 0);
@@ -495,11 +513,29 @@ export class Tutor {
    * Adds a node the way a person does: double-click empty canvas at `at`, type `search`, Enter,
    * then click to drop it there. Returns the new node's id.
    */
-  async addNode(search: string, at: Point): Promise<string> {
+  async addNode(search: string, wanted: Point): Promise<string> {
     const before = new Set(await this.nodeIds());
+    // The double click must land on empty canvas. A node that grew (a preview row, a longer list)
+    // or a floating panel can cover the planned point: then drop the new node just below it.
+    const at = await this.page.evaluate((p) => {
+      let { x, y } = p;
+      for (let i = 0; i < 4; i++) {
+        const el = document.elementFromPoint(x, y);
+        if (!el || el.tagName === "CANVAS" || el.classList.contains("lgraphcanvas")) break;
+        // A node, or a panel floating over the canvas (the bookmark dock): go below it.
+        const hit = el.closest("[data-node-id]") ?? el;
+        y = hit.getBoundingClientRect().bottom + 40;
+      }
+      return { x, y: Math.min(y, window.innerHeight - 60) };
+    }, wanted);
     // The search box opens on a double click on empty canvas; when the click is taken for something
     // else (a click just before it), try once more rather than typing into the canvas.
-    const searchOpen = () => this.page.evaluate(() => document.activeElement?.tagName === "INPUT");
+    const searchOpen = () =>
+      this.page.evaluate(() => {
+        // Only the node search box counts: a focused field on a node would take the typed name.
+        const el = document.activeElement;
+        return el?.tagName === "INPUT" && !el.closest("[data-node-id]") && !!el.closest('[role="dialog"], .comfy-vue-node-search-container, .p-dialog, .litesearchbox');
+      });
     await this.click(at, { double: true });
     await sleep(500);
     if (!(await searchOpen())) {
@@ -881,4 +917,101 @@ declare global {
     };
     LiteGraph?: unknown;
   }
+}
+
+// ---- example workflows -----------------------------------------------------------------------------
+
+/**
+ * Opens one of the extension's example workflows from ComfyUI's Templates browser (Extensions ›
+ * ComfyUI-Wildcard-Pipeline) and closes the missing-model card it raises when its checkpoint isn't
+ * installed.
+ */
+export async function openExample(t: Tutor, title: string): Promise<void> {
+  const page = t.page;
+  await t.click(page.getByText("Templates", { exact: true }).first());
+  await sleep(1500);
+  const dialog = page.getByRole("dialog").last();
+  // The extension's entry can sit below the fold of the dialog's nav, and its folder name differs
+  // between a git clone and a Registry install.
+  const entry = dialog.getByText(/^\s*comfyui[-_ ]wildcard[-_ ]pipeline\s*$/i).first();
+  await entry.waitFor({ state: "attached", timeout: 15_000 });
+  // Other installed packs list their templates beside ours even with custom nodes disabled: keep
+  // them out of the video by hiding our entry's siblings in the nav (the recording only).
+  await entry.evaluate((el) => {
+    const item = el.closest(".cursor-pointer") ?? el.parentElement;
+    for (const sib of Array.from(item?.parentElement?.children ?? [])) {
+      if (sib !== item && sib.classList.contains("cursor-pointer")) (sib as HTMLElement).style.display = "none";
+    }
+  });
+  await entry.scrollIntoViewIfNeeded();
+  await sleep(400);
+  await t.click(entry);
+  await sleep(1200);
+  const card = page.locator(`[data-testid="template-workflow-${title}"]`);
+  await card.waitFor({ state: "attached", timeout: 15_000 });
+  await card.scrollIntoViewIfNeeded();
+  await sleep(400);
+  await t.click(card);
+  await page.waitForFunction(() => (window.app?.graph?.nodes?.length ?? 0) > 5, undefined, { timeout: 20_000 });
+  await sleep(2500);
+  const missing = page.getByRole("status").filter({ hasText: "is missing" });
+  if ((await missing.count()) > 0) {
+    await missing.first().getByRole("button").filter({ hasNotText: "View details" }).first().click().catch(() => undefined);
+    await sleep(500);
+  }
+}
+
+/** Points every Load Checkpoint at the pack's `checkpoint` (when ComfyUI has it). Returns whether it did. */
+export async function useCheckpoint(t: Tutor): Promise<boolean> {
+  const ckpt = String(t.params.checkpoint ?? "");
+  if (!ckpt) return false;
+  const info = await t.h.api("/object_info/CheckpointLoaderSimple");
+  const known = ((info.json as Record<string, { input?: { required?: { ckpt_name?: [string[]] } } }> | undefined)?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? []) as string[];
+  const strip = (s: string) => s.replace(/\.(safetensors|ckpt)$/i, "");
+  const name = known.find((k) => k === ckpt || strip(k) === strip(ckpt));
+  if (!name) return false;
+  await t.page.evaluate((n) => {
+    type W = { name: string; value: unknown };
+    const nodes = (window.app?.graph?.nodes ?? []) as unknown as { type: string; widgets?: W[] }[];
+    for (const node of nodes) {
+      if (node.type !== "CheckpointLoaderSimple") continue;
+      const w = node.widgets?.find((x) => x.name === "ckpt_name");
+      if (w) w.value = n;
+    }
+    window.app?.canvas?.setDirty(true, true);
+  }, name);
+  return true;
+}
+
+// ---- the AI assistant ------------------------------------------------------------------------------
+
+/**
+ * Waits (sped up in the video) until the assistant is done: nothing on the page says it's working for
+ * `quiet` ms. The marks are the ones the bench watches.
+ */
+export async function aiWait(t: Tutor, { quiet = 3000, timeout = 30 * 60_000, speed = 20 }: { quiet?: number; timeout?: number; speed?: number } = {}): Promise<void> {
+  await t.fastForward(async () => {
+    const busy = () =>
+      t.page
+        .evaluate(() => {
+          const shown = (e: Element) => {
+            const r = (e as HTMLElement).getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          };
+          return [...document.querySelectorAll(".wp-aiw, .wp-wl, [data-test='pack-working'], [aria-busy='true'], [data-test='ai-chat-live'], [data-test='ai-loading']")].some(shown);
+        })
+        .catch(() => false);
+    // The request can start a moment after the click.
+    const t0 = Date.now();
+    while (Date.now() - t0 < 15_000 && !(await busy())) await sleep(300);
+    let calm = Date.now();
+    const end = await t.h.waitUntil(
+      async () => {
+        if (await busy()) calm = Date.now();
+        return Date.now() - calm >= quiet;
+      },
+      { timeout, interval: 500, what: "the assistant to finish" },
+    );
+    if (end !== "done") throw new StepError("The assistant didn't finish.");
+  }, speed);
 }

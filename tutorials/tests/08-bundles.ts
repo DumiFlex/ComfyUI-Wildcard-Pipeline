@@ -97,7 +97,7 @@ tutorial(
     }
 
     await t.h.step("Outro", async () => {
-      await t.say("That's the basics of Wildcard Pipeline. The advanced videos go further: nested lists, LoRAs, loops and more.");
+      await t.say("Next: the Context node itself, and how it can roll for you.");
     });
   },
 );

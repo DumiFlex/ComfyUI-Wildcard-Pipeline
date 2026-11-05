@@ -135,7 +135,7 @@ tutorial(
     });
 
     await t.h.step("Outro", async () => {
-      await t.say("Roll on every run, lock what you like, and change an item for one node without touching your library.");
+      await t.say("Roll on every run, lock what you like, and change an item for one node without touching your library. Next: make it look your way.");
     });
   },
 );
