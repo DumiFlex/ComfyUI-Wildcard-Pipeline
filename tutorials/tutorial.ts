@@ -246,10 +246,11 @@ export class Tutor {
     await sleep(70);
     await this.page.mouse.up({ button });
     if (double) {
+      // clickCount 2 makes the browser fire dblclick (DOM listeners need it; LiteGraph times clicks itself).
       await sleep(90);
-      await this.page.mouse.down();
+      await this.page.mouse.down({ clickCount: 2 });
       await sleep(60);
-      await this.page.mouse.up();
+      await this.page.mouse.up({ clickCount: 2 });
     }
     await sleep(260);
   }
@@ -917,9 +918,19 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
   await t.click(page.getByText("Templates", { exact: true }).first());
   await sleep(1500);
   const dialog = page.getByRole("dialog").last();
-  await t.click(dialog.getByText("ComfyUI-Wildcard-Pipeline", { exact: true }).first());
+  // The extension's entry can sit below the fold of the dialog's nav, and its folder name differs
+  // between a git clone and a Registry install.
+  const entry = dialog.getByText(/^\s*comfyui[-_ ]wildcard[-_ ]pipeline\s*$/i).first();
+  await entry.waitFor({ state: "attached", timeout: 15_000 });
+  await entry.scrollIntoViewIfNeeded();
+  await sleep(400);
+  await t.click(entry);
   await sleep(1200);
-  await t.click(page.locator(`[data-testid="template-workflow-${title}"]`));
+  const card = page.locator(`[data-testid="template-workflow-${title}"]`);
+  await card.waitFor({ state: "attached", timeout: 15_000 });
+  await card.scrollIntoViewIfNeeded();
+  await sleep(400);
+  await t.click(card);
   await page.waitForFunction(() => (window.app?.graph?.nodes?.length ?? 0) > 5, undefined, { timeout: 20_000 });
   await sleep(2500);
   const missing = page.getByRole("status").filter({ hasText: "is missing" });

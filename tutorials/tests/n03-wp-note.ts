@@ -88,7 +88,10 @@ tutorial(
 
     await t.h.step("Edit again", async () => {
       await t.say("To change a note, double-click it. Done goes back to reading.");
-      await t.click(t.node(step).locator('[data-test="note-panel"]'), { double: true });
+      // Double-click the title line: the body's text and buttons take their own clicks.
+      const box = await t.node(step).locator('[data-test="note-panel"]').boundingBox();
+      if (!box) throw new Error("The note's panel isn't on screen.");
+      await t.click({ x: box.x + box.width * 0.6, y: box.y + 16 }, { double: true });
       await t.beat(1000);
       await t.click(t.node(step).locator('[data-test="note-done"]'));
       await t.beat(800);
