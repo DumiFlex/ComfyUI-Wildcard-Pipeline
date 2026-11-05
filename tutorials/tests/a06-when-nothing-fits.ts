@@ -1,6 +1,7 @@
 // Advanced 6: when nothing fits. Eyes' empty option ("sometimes none") and the node's Exclude null;
 // the throne room set as Setting's fallback; then on the canvas a castle-only Setting and a
-// thief-only Hero (both per-node option overrides) leave nothing live, and the fallback stands in.
+// thief-only Hero (both per-node option overrides) leave nothing live once the constraint is
+// dragged up between Hero and Setting (it only reaches rows below it), and the fallback stands in.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -8,7 +9,7 @@ tutorial(
   {
     title: "When nothing fits",
     description: "Let a wildcard sometimes write nothing, pick a fallback for when rules rule everything out, and narrow a wildcard's options for one node only.",
-    learn: "Null options, Exclude null, fallback options, and per-node option overrides.",
+    learn: "Null options, Exclude null, fallback options, per-node option overrides, and dragging a row into place.",
   },
   async (t) => {
     const page = t.page;
@@ -85,12 +86,29 @@ tutorial(
       await t.waitVoice();
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(900);
+      const rule = t.moduleRow(ctx, "Hero fits the place");
+      const badge = rule.getByText(/no tgt downstream/i).first();
+      await t.callout("badge", badge, "Nothing below it to reach", 6);
+      await t.say("A street thief on castle ramparts? The constraint should stop that, but its badge says it has no target downstream. A constraint only reaches modules below it, and this one sits under Setting.");
+      await t.waitVoice();
+      await t.uncallout("badge");
+      await t.say("Drag it by its grip up between Hero and Setting.");
+      const grip = await t.centre(rule.locator(".wp-drag-handle").first());
+      const setBox = await t.moduleRow(ctx, "Setting").boundingBox();
+      if (!setBox) throw new Error("Setting row not on screen");
+      await t.drag(grip, { x: grip.x, y: setBox.y + 6 });
+      await t.beat(1200);
+      const order = await t.node(ctx).locator(".wp-module .wp-module-name").allInnerTexts();
+      if (order.map((n) => n.trim()).join("|") !== "Hero|Hero fits the place|Setting") throw new Error(`Rows after the drag: ${order.join(", ")}`);
+      await t.waitVoice();
       await t.callout("prev", t.node(asm).locator('[data-test="asm-preview"]'), "The fallback stands in", 6);
-      await t.say("But the constraint keeps city folk out of castles, so nothing is left to pick. The fallback steps in: the throne room, on every seed.");
+      await t.say("Now the badge is gone, and the constraint keeps city folk out of castles, so nothing is left to pick. The fallback steps in: the throne room, on every seed.");
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
       for (let i = 0; i < 3; i++) {
         await t.click(plus);
         await t.beat(1000);
+        const text = (await t.node(asm).locator('[data-test="asm-preview"]').innerText()).trim();
+        if (!/throne room/i.test(text)) throw new Error(`Preview without the fallback: ${text}`);
       }
       await t.waitVoice();
       await t.uncallout("prev");
