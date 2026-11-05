@@ -378,7 +378,7 @@ const mechanicsKeys = [
   { term: "Weights", desc: "\"(word:1.2)\" raises a word, \"(word:0.8)\" lowers it. ComfyUI blends weighted words against an empty prompt, so the same number can feel different from A1111. 1.05 to 1.4 is the useful range; above 1.5 it tends to burn. Qwen-Image, Z-Image and Flux.2 switch weights off, so the brackets reach the model as text. Escape real parentheses: \"name \\(series\\)\"." },
   { term: "Binding", desc: "Models mix up which words go with which noun. Write each colour next to its noun (\"red dress\"; on tag models the compound tag), use two or three colours per image, and never repeat a tag: a duplicate acts like an uncontrolled weight." },
   { term: "LoRA triggers", desc: "A trigger word wakes a LoRA. Take it from the model page and keep it exactly as written. Start at strength 0.7 to 0.8; stack two or three at 0.4 to 0.8 each, under about 2 in total. A LoRA only works on the base family it was trained for." },
-  { term: "Embeddings", desc: "\"embedding:name\" (or \"(embedding:name:1.2)\") in the text. Like LoRAs, they belong to one family. Negative embeddings such as EasyNegative go in a negative." },
+  { term: "Embeddings", desc: "\"embedding:name\" (or \"(embedding:name:1.2)\") in the text. Like LoRAs, they belong to one family. Negative embeddings such as EasyNegative go in a negative. With the Embeddings and LoRAs autocomplete on (Settings › Autocomplete), typing part of a name, \"embedding:\", \"<lora:\" or just \"<\" and picking a file writes the whole reference, \"<lora:path:1.0>\" with both brackets." },
 ];
 
 const mistakes: string[][] = [

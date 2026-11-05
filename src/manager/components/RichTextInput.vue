@@ -56,11 +56,11 @@ import {
 } from "./rich-text/ref-atoms";
 import {
   cleanPastedText, deleteRawRange, isStructuralChange, recolorBlocks,
-  spliceAtTrigger, spliceRange, spliceSpaced, spliceWord, visibleLength,
+  spliceAtTrigger, spliceRange, spliceSpaced, visibleLength,
 } from "./rich-text/atom-edit";
 import {
-  buildWordRows, committedSuffixFor, formatTagCount, groupWordSections, SOURCE_ICON,
-  tagLegendFor, wordRowTextFor, type WordRow,
+  buildWordRows, formatTagCount, groupWordSections, SOURCE_ICON,
+  tagLegendFor, wordRowCommitFor, type WordRow,
 } from "./rich-text/word-rows";
 import {
   AC_MAX_ITEMS, axisKnownFor as axisKnownForProducers, kindTint, matchSuggestions,
@@ -351,16 +351,6 @@ const wordRows = computed<WordRow[]>(() => buildWordRows(tagRows.value, modelRow
 /** Rows grouped for rendering, in the same order as the flat list, with the
  *  flat index carried along so a click knows what it selected. */
 const wordSections = computed(() => groupWordSections(wordRows.value));
-
-/** What follows a committed completion (see `committedSuffixFor`). */
-function committedSuffix(): string {
-  return committedSuffixFor(refKind.value !== null, autocompleteSeparatorEnabled());
-}
-
-/** What a committed row puts in the document (see `wordRowTextFor`). */
-function wordRowText(row: WordRow): string {
-  return wordRowTextFor(row, refKind.value !== null, tagInsertStyle());
-}
 
 /** Categories present in the CURRENT results, in Danbooru's own order —
  *  only when more than one kind is on screen (see `tagLegendFor`). */
@@ -1554,21 +1544,28 @@ function insertRefAtCursor(
 }
 
 /**
- * Splice a plain booru tag over the word being typed.
+ * Commit a bare-word row (tag, LoRA, embedding) over what is being typed.
  *
  * Mirrors `insertChipAtCaret`'s raw-text splice but inserts TEXT, not a chip.
- * `$` and `@` commits build a chip because they carry engine meaning; a tag is
- * just characters in the prompt, so parsing the result yields plain text and
- * nothing renders as a pill.
+ * `$` and `@` commits build a chip because they carry engine meaning; a tag or
+ * model reference is just characters in the prompt, so parsing the result
+ * yields plain text and nothing renders as a pill.
+ *
+ * The range and text come from `wordRowCommitFor`, which is what makes a model
+ * pick leave a complete `<lora:PATH:1.0>` / `embedding:PATH` behind whether the
+ * caret was on a bare word, after a typed `<`, or inside a reference.
  *
  * Deliberately not a branch inside `insertChipAtCaret`: that function's
  * defensive re-derivation scans backwards for a `$`/`@` run, which is exactly
  * wrong for a sigil-less word and would cut from the wrong place.
  */
-function insertTagAtCursor(tag: string): void {
-  const { text: newText, caret: newCaret } = spliceWord(
-    readHostAsText(), currentCursorCharOffset(), acStart.value, tag,
+function commitWordRow(row: WordRow): void {
+  const text = readHostAsText();
+  const { start, end, insert } = wordRowCommitFor(
+    text, currentCursorCharOffset(), acStart.value, row, refKind.value,
+    { separator: autocompleteSeparatorEnabled(), style: tagInsertStyle() },
   );
+  const { text: newText, caret: newCaret } = spliceRange(text, start, end, insert);
   applyAtoms(parseForSurface(newText), { rebuild: true });
   emitValue(newText);
   acOpen.value = false;
@@ -1588,7 +1585,7 @@ function insertTagAtCursor(tag: string): void {
  * and unrendered. Writing `widget.value` instead would work but replaces the
  * whole string and drops the caret.
  *
- * Deliberately does NOT consult `acStart` the way `insertTagAtCursor` does:
+ * Deliberately does NOT consult `acStart` the way `commitWordRow` does:
  * that one is completing a word the user is mid-way through typing and must
  * eat the typed prefix, whereas this one is a foreign insert and must not
  * eat anything. When the caret isn't inside the editor (never focused, or
@@ -2453,7 +2450,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       const row = wordRows.value[acActive.value];
       if (row) {
         ev.preventDefault();
-        insertTagAtCursor(wordRowText(row) + committedSuffix());
+        commitWordRow(row);
         return;
       }
       // Nothing to commit — close and let Enter behave natively rather than
@@ -2787,7 +2784,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
             :data-active="entry.index === acActive ? '' : null"
             role="option"
             :aria-selected="entry.index === acActive"
-            @mousedown.prevent="insertTagAtCursor(wordRowText(entry.row) + committedSuffix())"
+            @mousedown.prevent="commitWordRow(entry.row)"
             @mouseenter="acActive = entry.index"
           >
             <template v-if="entry.row.source !== 'tag'">

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ModelSuggestion, TagSuggestion } from "../../api/types";
 import {
   buildWordRows, committedSuffixFor, formatTagCount, groupWordSections, SOURCE_ICON,
-  tagInsertText, tagLegendFor, TAGS_WHEN_MODELS_MATCH, wordRowTextFor,
+  tagInsertText, tagLegendFor, TAGS_WHEN_MODELS_MATCH, wordRowCommitFor, wordRowTextFor,
+  type WordRow,
 } from "./word-rows";
 
 const tag = (name: string, category_name: TagSuggestion["category_name"] = "general"): TagSuggestion => ({
@@ -53,17 +54,86 @@ describe("committedSuffixFor / wordRowTextFor", () => {
   });
 
   it("builds the inserted text per source", () => {
-    expect(wordRowTextFor({ source: "tag", tag: tag("blue_hair") }, false)).toBe("blue_hair");
-    expect(wordRowTextFor({ source: "lora", model: model("x/y") }, false)).toBe("<lora:x/y:1.0>");
-    expect(wordRowTextFor({ source: "embedding", model: model("z") }, false)).toBe("embedding:z");
-    expect(wordRowTextFor({ source: "lora", model: model("x/y") }, true)).toBe("x/y");
+    expect(wordRowTextFor({ source: "tag", tag: tag("blue_hair") })).toBe("blue_hair");
+    expect(wordRowTextFor({ source: "lora", model: model("x/y") })).toBe("<lora:x/y:1.0>");
+    expect(wordRowTextFor({ source: "embedding", model: model("z") })).toBe("embedding:z");
   });
 
   it("writes a tag in the chosen style and leaves model paths alone", () => {
     const both = { spaces: true, escape: true };
-    expect(wordRowTextFor({ source: "tag", tag: tag("fate_(series)") }, false, both)).toBe("fate \\(series\\)");
-    expect(wordRowTextFor({ source: "lora", model: model("my_lora_(v2)") }, false, both)).toBe("<lora:my_lora_(v2):1.0>");
-    expect(wordRowTextFor({ source: "embedding", model: model("bad_hands") }, false, both)).toBe("embedding:bad_hands");
+    expect(wordRowTextFor({ source: "tag", tag: tag("fate_(series)") }, both)).toBe("fate \\(series\\)");
+    expect(wordRowTextFor({ source: "lora", model: model("my_lora_(v2)") }, both)).toBe("<lora:my_lora_(v2):1.0>");
+    expect(wordRowTextFor({ source: "embedding", model: model("bad_hands") }, both)).toBe("embedding:bad_hands");
+  });
+});
+
+describe("wordRowCommitFor", () => {
+  const PATH = "style\\2X-KO_more_-ill_r1.safetensors";
+  const lora: WordRow = { source: "lora", model: model(PATH) };
+  const embed: WordRow = { source: "embedding", model: model("hands\\lazyhand.safetensors") };
+  const off = { separator: false };
+  const on = { separator: true };
+
+  /** Apply a commit with the caret at `|` and the typed word/name starting at
+   *  `^` (defaults to the caret). Returns the text with `|` at the new caret. */
+  function run(marked: string, row: WordRow, refKind: "lora" | "embedding" | null, opts = off): string {
+    const startMark = marked.indexOf("^");
+    const plain = marked.replace("^", "");
+    const caret = plain.indexOf("|");
+    const text = plain.replace("|", "");
+    const start = startMark >= 0 && startMark < caret + 1 ? startMark : caret;
+    const c = wordRowCommitFor(text, caret, start, row, refKind, opts);
+    const out = text.slice(0, c.start) + c.insert + text.slice(c.end);
+    const at = c.start + c.insert.length;
+    return `${out.slice(0, at)}|${out.slice(at)}`;
+  }
+
+  it("closes a LoRA reference typed up to its name (the reported bug)", () => {
+    expect(run("girl, <lora:^style\\2X|", lora, "lora")).toBe(`girl, <lora:${PATH}:1.0>|`);
+    expect(run("<lora:^|", lora, "lora")).toBe(`<lora:${PATH}:1.0>|`);
+  });
+
+  it("adds the separator after a LoRA it just closed, unless a comma follows", () => {
+    expect(run("<lora:^sty|", lora, "lora", on)).toBe(`<lora:${PATH}:1.0>, |`);
+    expect(run("<lora:^sty|, hat", lora, "lora", on)).toBe(`<lora:${PATH}:1.0>|, hat`);
+  });
+
+  it("replaces the rest of an existing name and keeps its weight", () => {
+    expect(run("<lora:^sty|le_old:0.6>, hat", lora, "lora", on)).toBe(`<lora:${PATH}:0.6>|, hat`);
+  });
+
+  it("gives an auto-closed `<lora:>` the default weight", () => {
+    expect(run("<lora:^sty|>", lora, "lora")).toBe(`<lora:${PATH}:1.0>|`);
+  });
+
+  it("does not eat the next LoRA when this one is unclosed", () => {
+    expect(run("<lora:^sty| girl <lora:x:1>", lora, "lora")).toBe(`<lora:${PATH}:1.0>| girl <lora:x:1>`);
+  });
+
+  it("absorbs a `<` the user typed before a bare word", () => {
+    expect(run("girl, <^sty|", lora, null)).toBe(`girl, <lora:${PATH}:1.0>|`);
+    expect(run("<^sty|>", lora, null)).toBe(`<lora:${PATH}:1.0>|`);
+    expect(run("<^lazy|", embed, null)).toBe("embedding:hands\\lazyhand.safetensors|");
+  });
+
+  it("writes the whole reference for a bare word", () => {
+    expect(run("girl ^sty|", lora, null, on)).toBe(`girl <lora:${PATH}:1.0>, |`);
+    expect(run("^lazy|", embed, null)).toBe("embedding:hands\\lazyhand.safetensors|");
+  });
+
+  it("completes an embedding reference and replaces the rest of its name", () => {
+    expect(run("embedding:^la|", embed, "embedding")).toBe("embedding:hands\\lazyhand.safetensors|");
+    expect(run("embedding:^la|zy_old, hat", embed, "embedding")).toBe("embedding:hands\\lazyhand.safetensors|, hat");
+    expect(run("(embedding:^la|:1.2)", embed, "embedding")).toBe("(embedding:hands\\lazyhand.safetensors|:1.2)");
+  });
+
+  it("turns `<embedding:…>` into the syntax ComfyUI reads", () => {
+    expect(run("<embedding:^la|>", embed, "embedding")).toBe("embedding:hands\\lazyhand.safetensors|");
+    expect(run("<embedding:^la|", embed, "embedding", on)).toBe("embedding:hands\\lazyhand.safetensors, |");
+  });
+
+  it("leaves tags as before", () => {
+    expect(run("^blu|", { source: "tag", tag: tag("blue_hair") }, null, on)).toBe("blue_hair, |");
   });
 });
 
