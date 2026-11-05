@@ -23,6 +23,7 @@
   "packages": {
     ".": {
       "package-name": "comfyui-wildcard-pipeline",
+      "release-as": "2.21.0",
       "extra-files": [{ "type": "toml", "path": "pyproject.toml", "jsonpath": "$.project.version" }]
     }
   }
