@@ -510,12 +510,14 @@ export class Tutor {
   async addNode(search: string, wanted: Point): Promise<string> {
     const before = new Set(await this.nodeIds());
     // The double click must land on empty canvas. A node that grew (a preview row, a longer list)
-    // can cover the planned point: then drop the new node just below the one in the way.
+    // or a floating panel can cover the planned point: then drop the new node just below it.
     const at = await this.page.evaluate((p) => {
       let { x, y } = p;
       for (let i = 0; i < 4; i++) {
-        const hit = document.elementFromPoint(x, y)?.closest("[data-node-id]");
-        if (!hit) break;
+        const el = document.elementFromPoint(x, y);
+        if (!el || el.tagName === "CANVAS" || el.classList.contains("lgraphcanvas")) break;
+        // A node, or a panel floating over the canvas (the bookmark dock): go below it.
+        const hit = el.closest("[data-node-id]") ?? el;
         y = hit.getBoundingClientRect().bottom + 40;
       }
       return { x, y: Math.min(y, window.innerHeight - 60) };

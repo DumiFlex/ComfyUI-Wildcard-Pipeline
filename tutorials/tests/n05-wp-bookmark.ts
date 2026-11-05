@@ -41,9 +41,9 @@ tutorial(
     await t.h.step("A spot worth coming back to", async () => {
       await t.go("/");
       await t.say("In a big workflow you scroll around a lot. A bookmark brings you back to a spot in one click.");
-      const ctx = await t.addNode("WP Context", { x: 700, y: 260 });
+      const ctx = await t.addNode("WP Context", { x: 900, y: 420 });
       await t.pickModules(ctx, ["Hero"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1300, y: 260 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1500, y: 420 });
       await t.wire(ctx, "context", asm, "context");
       await t.waitVoice();
     });
@@ -51,7 +51,7 @@ tutorial(
     let shortcut = "";
     await t.h.step("Add a bookmark", async () => {
       await t.say("Add a WP Bookmark at the top left of the part you want. Give it a name.");
-      const bm = await t.addNode("WP Bookmark", { x: 260, y: 140 });
+      const bm = await t.addNode("WP Bookmark", { x: 480, y: 290 });
       await t.beat(600);
       await t.fill(titleOf(bm), "Prompt", { cps: 14 });
       await t.beat(400);
@@ -63,7 +63,8 @@ tutorial(
       await t.say("Each bookmark gets a shortcut key, shown here. Press it to record another.");
       await t.waitVoice();
       await t.uncallout("key");
-      shortcut = ((await t.node(bm).locator('[data-test="bm-record"]').innerText().catch(() => "")) || "").trim();
+      // Its keys are drawn as separate caps ("Alt 1"): join them the way Playwright names a chord.
+      shortcut = ((await t.node(bm).locator('[data-test="bm-record"]').innerText().catch(() => "")) || "").split(/[\s+]+/).filter(Boolean).join("+");
       await t.click(t.node(bm).locator('[data-test="bm-done"]'));
       await t.beat(900);
       await t.say("Done leaves a small pill on the canvas.");
@@ -89,7 +90,7 @@ tutorial(
 
     await t.h.step("Step through them", async () => {
       await t.say("Add a second one, by the Assembler.");
-      const bm2 = await t.addNode("WP Bookmark", { x: 1300, y: 640 });
+      const bm2 = await t.addNode("WP Bookmark", { x: 1500, y: 860 });
       await t.beat(600);
       await t.fill(titleOf(bm2), "Output", { cps: 14 });
       await t.click(t.node(bm2).locator('[data-test="bm-done"]'));
