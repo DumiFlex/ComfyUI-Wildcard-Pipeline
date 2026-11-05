@@ -20,6 +20,16 @@ tutorial(
 
     await t.h.step("Web settings", async () => {
       await t.go("/wp/settings/ai");
+      // A take that stopped halfway can leave the lookup on; switch it off out of the video so
+      // this one shows turning it on.
+      if (await isOn()) {
+        await t.fastForward(async () => {
+          await danbooru.scrollIntoViewIfNeeded();
+          await danbooru.click();
+          await page.waitForTimeout(600);
+          await page.evaluate(() => window.scrollTo(0, 0));
+        }, 0);
+      }
       await t.say("Web tools are off until you set them up, in Settings, AI assistant.");
       await t.scrollTo(page.locator('[data-test="ai-search-engine"]'), { at: 0.3 });
       await t.callout("eng", page.locator('[data-test="ai-search-engine"]'), "Your own SearXNG, or a search key", 5);
@@ -72,7 +82,7 @@ tutorial(
     });
 
     await t.h.step("Back as it was", async () => {
-      if (turnedOn) {
+      if (turnedOn || (await isOn())) {
         await t.click(page.locator('[data-test="ai-chat-close"]'));
         await t.beat(500);
         await t.scrollTo(danbooru, { at: 0.4 });
