@@ -1815,6 +1815,7 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
             </td>
             <td>
               <WpNumber v-if="ex.mode === 'boost' || ex.mode === 'reduce'"
+                class="cn-ex-factor"
                 commit="input"
                 :model-value="ex.factor"
                 size="sm"
@@ -2003,6 +2004,8 @@ defineExpose({ sourceWildcardId, targetWildcardId, sourceWildcardName, targetWil
 .cn-locked--danger .cn-locked__icon { color: var(--wp-danger); }
 .cn-col-mode { width: 150px; }
 .cn-col-factor { width: 120px; }
+/* The number box takes its input's default width (~150 px) unless told; fill the cell. */
+.cn-ex-factor { width: 100%; }
 .cn-col-trash { width: 40px; }
 .cn-dash { font-size: var(--wp-text-xs); }
 
