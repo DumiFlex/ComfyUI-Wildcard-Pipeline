@@ -195,6 +195,22 @@ function widgetNumber(node: LiteNodeLike, name: string): number {
 }
 
 
+/** A Context's seed as the run will see it: its own `seed` widget, or, when
+ *  the seed input is wired (an Int / seed node feeding several Contexts),
+ *  the number widget of the node at the other end. NaN when unreadable. */
+function contextSeed(node: LiteNodeLike, graph: LiteGraphLike): number {
+  const slot = node.inputs?.find((x) => x.name === "seed");
+  if (slot?.link != null) {
+    const link = graph.links[slot.link];
+    const origin = link ? graph.getNodeById(link.origin_id) : null;
+    const w = origin?.widgets?.find((x) => x.name === "value" || x.name === "seed")
+      ?? origin?.widgets?.find((x) => typeof x.value === "number");
+    const v = typeof w?.value === "number" ? w.value : Number(w?.value);
+    return Number.isFinite(v) ? v : NaN;
+  }
+  return widgetNumber(node, "seed");
+}
+
 function isSubgraphNode(n: LiteNodeLike): boolean {
   if (typeof n.isSubgraphNode === "function") {
     try { return n.isSubgraphNode() === true; } catch { /* fall through */ }
@@ -820,7 +836,7 @@ export function collectUpstreamChain(
       widgetValue(n, "wp_modules"),
       { version: 1, modules: [] },
     );
-    const seed = widgetNumber(n, "seed");
+    const seed = contextSeed(n, graphOf(n, rootGraph));
     opts.seeds?.push(Number.isSafeInteger(seed) ? seed : null);
     // Apply the bundle gate before posting to `/wp/api/preview/resolve`.
     // The server runs each step as a flat module list — it doesn't see
