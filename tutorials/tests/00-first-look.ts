@@ -49,12 +49,16 @@ tutorial(
     });
 
     await t.h.step("A wildcard", async () => {
-      await t.say("Let's open the wildcards.");
+      // Click first, then talk about the page: a click after its line waits for the line to end,
+      // so the page changed one line late.
       await t.click(nav("wildcards"));
+      await t.say("Here are the wildcards.");
       await t.beat(900);
-      await t.say("Hero is a list of heroes. Open it to see its options.");
+      await t.waitVoice();
       await t.click(page.locator("table").getByText("Hero", { exact: true }).first());
+      await t.say("Hero is a list of heroes. Its editor shows the options.");
       await t.beat(1200);
+      await t.waitVoice();
       const options = page.locator('[data-test^="wc-opt-row-"]');
       await t.scrollTo(page.getByText(/^Options \(\d+\)$/).first());
       await t.callout("opts", [options.first(), options.last()], "Options, weights and chances", 4);
@@ -69,12 +73,14 @@ tutorial(
     });
 
     await t.h.step("Docs and settings", async () => {
-      await t.say("Documentation explains every node, editor and setting, with pictures.");
       await t.click(nav("docs"));
+      await t.say("Documentation explains every node, editor and setting, with pictures.");
       await t.beat(1500);
-      await t.say("And the gear opens the settings: themes, density, and how the canvas widgets look.");
+      await t.waitVoice();
       await t.click(page.locator('[data-test="topbar-settings"]'));
+      await t.say("And the gear opens the settings: themes, density, and how the canvas widgets look.");
       await t.beat(1500);
+      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {
