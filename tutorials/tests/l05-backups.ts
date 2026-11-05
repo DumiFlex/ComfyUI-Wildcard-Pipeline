@@ -16,9 +16,12 @@ tutorial(
     const page = t.page;
     const list = page.locator('[data-test="backup-list"]');
     // Rows from before this video (the recorder's own safety backups) stay out of the picture.
+    // Hides the backups from before the video (all but the one it makes, by its note).
     const hideOld = async () =>
       page.evaluate(() => {
-        for (const li of Array.from(document.querySelectorAll('[data-test="backup-list"] > li'))) (li as HTMLElement).style.display = "none";
+        for (const li of Array.from(document.querySelectorAll('[data-test="backup-list"] > li'))) {
+          if (!li.textContent?.includes("Before my big edit")) (li as HTMLElement).style.display = "none";
+        }
         for (const sel of ['[data-test="backup-show-all"]', '[data-test="backup-pinned-count"]']) {
           const el = document.querySelector(sel) as HTMLElement | null;
           if (el) el.style.visibility = "hidden";
@@ -88,6 +91,11 @@ tutorial(
       await t.go("/wp/settings/library");
       await hideOld();
       await t.say("The same page shows the database: its file, its size, and maintenance tools. Integrity check finds damage, Vacuum makes the file smaller.");
+      // The file details and Maintenance sit in folds: open both.
+      for (const summary of await page.locator(".wp-db__details > summary").all()) {
+        if (!(await summary.evaluate((el) => (el.parentElement as HTMLDetailsElement).open))) await t.click(summary);
+        await t.beat(300);
+      }
       await t.scrollTo(page.locator('[data-test="database-file"]'), { at: 0.3 });
       await t.callout("db", [page.locator('[data-test="database-file"]'), page.locator('[data-test="database-run-integrity"]')], "The file, and its upkeep", 5);
       await t.waitVoice();
