@@ -289,7 +289,7 @@ onMounted(() => {
         />
       </span>
     </SettingRow>
-    <SettingRow label="LoRAs" hint="Installed LoRA names, inserted as <lora:name:1.0>." setting-key="ac-lora">
+    <SettingRow label="LoRAs" hint="Installed LoRA files, inserted whole as <lora:path:1.0>, after a typed < or <lora: too." setting-key="ac-lora">
       <span class="wp-set-pill" :data-tone="modelPill('lora').tone" data-test="lora-count">{{ modelPill("lora").text }}</span>
       <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
@@ -312,7 +312,7 @@ onMounted(() => {
         />
       </span>
     </SettingRow>
-    <SettingRow label="Embeddings" hint="Installed embedding names, inserted as embedding:name." setting-key="ac-embedding">
+    <SettingRow label="Embeddings" hint="Installed embedding files, inserted as embedding:path." setting-key="ac-embedding">
       <span class="wp-set-pill" :data-tone="modelPill('embedding').tone" data-test="embedding-count">{{ modelPill("embedding").text }}</span>
       <span v-toggle-row class="wp-set-ac__pair">
         <span class="wp-set-ac__cap">Manager</span>
