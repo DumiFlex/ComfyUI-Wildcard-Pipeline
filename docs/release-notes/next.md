@@ -118,6 +118,7 @@ The assistant is new and **off by default**. Turn it on in **Settings › AI ass
 
 ### Fixes
 
+- **No tip inside a tip in the chat.** A reply that wrote its own 💡 or "Tip:" inside a tip box drew a second box inside the first; it now shows one.
 - **Typing a wildcard weight like 0.5 keeps it.** The weight field floored a 0 to 0.01 the moment it was typed, so typing 0.5 saved 0.015. The 0.01 floor now applies only when you leave the field at 0, and an emptied field keeps the weight it had.
 - **References to the node's own wildcards no longer show as broken.** A `@{}` reference to a wildcard that sits on the same WP Context node (switched off, or in a switched-off bundle, like **Shared lists** in the example workflows) always resolved at run time, but the option rows in the wildcard editor and the derivation editor only asked the library, so on a machine whose library lacks that wildcard the chip turned red with "not in the library". They now check the node's rows first, like the engine does, and the chip's card says **pool: this node**. References nested inside a referenced wildcard follow the same rule at every level.
 - **WP nodes follow the dark theme on ComfyUI frontend 1.58.** The newest frontend no longer marks dark mode with the `dark-theme` class the nodes looked for, so every WP widget drew in light colours on a dark canvas. The nodes now read ComfyUI's active colour palette and still follow a switch between light and dark palettes.
