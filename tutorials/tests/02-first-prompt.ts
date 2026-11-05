@@ -1,9 +1,9 @@
-// Tutorial 1: your first random prompt. Context node, three wildcards from the library, an
+// Get started 2: your first random prompt. Context node, three wildcards from the library, an
 // Assembler template, a new seed, and WP Debug to see the picks after a run. No model needed.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
-  "T01",
+  "T02",
   {
     title: "Your first random prompt",
     description: "A Context node with three wildcards, a Prompt Assembler template, a new seed, and WP Debug after a run.",
@@ -13,7 +13,7 @@ tutorial(
     const page = t.page;
 
     await t.h.step("Intro", async () => {
-      await t.say("Wildcard Pipeline builds random prompts from lists you keep in a library. Let's make a first one.");
+      await t.say("Wildcard Pipeline builds random prompts from the lists in your library. With the tutorial library in, let's make a first one.");
       await t.beat(400);
     });
 
