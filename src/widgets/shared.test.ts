@@ -183,6 +183,22 @@ describe("RELEVANT_INSTANCE_KEYS — tier 2 cache invalidation", () => {
     expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("disabled_matrix_cells")).toBe(true);
   });
 
+  it("keeps every instance key an engine handler reads, so per-node edits reach the preview", async () => {
+    const { RELEVANT_INSTANCE_KEYS_FOR_TEST } = await import("./assembler");
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const dir = join(process.cwd(), "engine", "modules");
+    const read = new Set<string>();
+    for (const f of readdirSync(dir).filter((x) => x.endsWith(".py"))) {
+      const src = readFileSync(join(dir, f), "utf8");
+      for (const m of src.matchAll(/\binst(?:ance)?\.get\("([a-z_]+)"/g)) if (m[1]) read.add(m[1]);
+      for (const m of src.matchAll(/\binst(?:ance)?\["([a-z_]+)"\]/g)) if (m[1]) read.add(m[1]);
+    }
+    expect(read.size).toBeGreaterThan(10);
+    const missing = [...read].filter((k) => !RELEVANT_INSTANCE_KEYS_FOR_TEST.has(k));
+    expect(missing).toEqual([]);
+  });
+
   it("excludes _ui namespace from cache key", async () => {
     const { RELEVANT_INSTANCE_KEYS_FOR_TEST } = await import("./assembler");
     expect(RELEVANT_INSTANCE_KEYS_FOR_TEST.has("_ui")).toBe(false);

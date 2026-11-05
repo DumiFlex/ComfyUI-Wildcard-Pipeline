@@ -244,6 +244,19 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "disabled_rule_ids",
   "disabled_exception_keys",
   "disabled_matrix_cells",
+  // Per-node edits the handlers read too: without them the preview rolled
+  // the library item while Run used this node's version.
+  "target_select",
+  "seed_scope",
+  "extra_exceptions",
+  "cell_mode_overrides",
+  "cell_factor_overrides",
+  "exception_mode_overrides",
+  "exception_factor_overrides",
+  "condition_value_overrides",
+  "action_value_overrides",
+  "disabled_branch_keys",
+  "rule_order_override",
 ]);
 
 /** Test-only export. Allows whitelist invariants to be asserted without
