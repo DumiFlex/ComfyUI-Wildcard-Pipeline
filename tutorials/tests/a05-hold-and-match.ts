@@ -33,6 +33,7 @@ tutorial(
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero wearing $outfit, $setting", { cps: 16 });
       await t.beat(600);
+      await t.say("To read the prompts, add Show Any from the Easy-Use pack: it lists every prompt the loop makes.");
       const text = await t.addNode("Show Any", { x: 1340, y: 620 });
       await t.wire(asm, "prompt", text, "anything");
       await t.waitVoice();

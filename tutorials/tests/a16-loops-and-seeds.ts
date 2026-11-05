@@ -23,6 +23,7 @@ tutorial(
       await t.pickModules(ctx, ["Hero", "Time of day", "Outfit"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
+      await t.say("To read the prompts, add Show Any from the Easy-Use pack: it lists every prompt the loop makes.");
       const text = await t.addNode("Show Any", { x: 1340, y: 620 });
       await t.wire(asm, "prompt", text, "anything");
       await t.waitVoice();
