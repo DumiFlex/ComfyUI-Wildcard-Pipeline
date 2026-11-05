@@ -40,7 +40,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <DocAnnotated
         src="images/docs/wp-prompt-assembler.png"
         ratio="1720 / 860"
-        caption="The Assembler with a template, its variable chips and its preview. The preview inside the node rolls each Context on its own seed, so it is what Run prints and changes with the seed; the two Preview as Text nodes show what the run printed."
+        caption="The Assembler with a template, its variable chips and its preview. The preview inside the node rolls each Context on its own seed (or the Int or seed node wired into it), so it is what Run prints and changes with the seed; the two Preview as Text nodes show what the run printed."
       />
     </DocSection>
 
