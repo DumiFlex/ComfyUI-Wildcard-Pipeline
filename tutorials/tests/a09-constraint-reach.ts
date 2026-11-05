@@ -104,6 +104,9 @@ tutorial(
       await t.beat(700);
       await t.say("Now only the first place follows the rule. The later one rolls freely, castles included.");
       await roll(14, /later in (a torch-lit throne room|castle ramparts)/);
+      if (!/later in (a torch-lit throne room|castle ramparts)/.test((await prev.textContent()) ?? "")) {
+        throw new Error("The preview never put the later place in a castle with reach first");
+      }
       await t.callout("prev", prev, "The later place can be a castle", 6);
       await t.waitVoice();
       await t.uncallout("prev");
