@@ -363,7 +363,13 @@ export class Tutor {
         await clearCanvas(this.page);
       } else {
         await this.page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => undefined);
-        await sleep(400);
+        // The manager paints its page a moment after the network goes quiet; leaving the cut
+        // before that showed a black frame (L05 at Settings › Advanced).
+        await this.page
+          .waitForFunction(() => document.querySelectorAll("[data-test]").length > 3, null, { timeout: 10_000 })
+          .catch(() => undefined);
+        await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
+        await sleep(600);
       }
       await this.page.mouse.move(this.pos.x, this.pos.y);
     }, 0);
