@@ -86,6 +86,14 @@ tutorial(
       await t.waitVoice();
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(900);
+      // Land on a seed where the broken order shows (ramparts), so the fix has a before.
+      const preview = t.node(asm).locator('[data-test="asm-preview"]');
+      const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
+      for (let i = 0; i < 16 && !/ramparts/i.test(await preview.innerText()); i++) {
+        await t.click(plus);
+        await t.beat(1000);
+      }
+      if (!/ramparts/i.test(await preview.innerText())) throw new Error("No seed showed castle ramparts before the drag");
       const rule = t.moduleRow(ctx, "Hero fits the place");
       const badge = rule.getByText(/no tgt downstream/i).first();
       await t.callout("badge", badge, "Nothing below it to reach", 6);
@@ -103,11 +111,10 @@ tutorial(
       await t.waitVoice();
       await t.callout("prev", t.node(asm).locator('[data-test="asm-preview"]'), "The fallback stands in", 6);
       await t.say("Now the badge is gone, and the constraint keeps city folk out of castles, so nothing is left to pick. The fallback steps in: the throne room, on every seed.");
-      const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
       for (let i = 0; i < 3; i++) {
         await t.click(plus);
         await t.beat(1000);
-        const text = (await t.node(asm).locator('[data-test="asm-preview"]').innerText()).trim();
+        const text = (await preview.innerText()).trim();
         if (!/throne room/i.test(text)) throw new Error(`Preview without the fallback: ${text}`);
       }
       await t.waitVoice();
