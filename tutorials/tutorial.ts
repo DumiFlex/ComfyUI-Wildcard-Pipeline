@@ -922,6 +922,14 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
   // between a git clone and a Registry install.
   const entry = dialog.getByText(/^\s*comfyui[-_ ]wildcard[-_ ]pipeline\s*$/i).first();
   await entry.waitFor({ state: "attached", timeout: 15_000 });
+  // Other installed packs list their templates beside ours even with custom nodes disabled: keep
+  // them out of the video by hiding our entry's siblings in the nav (the recording only).
+  await entry.evaluate((el) => {
+    const item = el.closest(".cursor-pointer") ?? el.parentElement;
+    for (const sib of Array.from(item?.parentElement?.children ?? [])) {
+      if (sib !== item && sib.classList.contains("cursor-pointer")) (sib as HTMLElement).style.display = "none";
+    }
+  });
   await entry.scrollIntoViewIfNeeded();
   await sleep(400);
   await t.click(entry);
