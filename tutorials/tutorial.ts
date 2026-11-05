@@ -998,7 +998,7 @@ export async function aiWait(t: Tutor, { quiet = 3000, timeout = 30 * 60_000, sp
             const r = (e as HTMLElement).getBoundingClientRect();
             return r.width > 0 && r.height > 0;
           };
-          return [...document.querySelectorAll(".wp-aiw, [aria-busy='true'], [data-test='ai-chat-live'], [data-test='ai-loading']")].some(shown);
+          return [...document.querySelectorAll(".wp-aiw, .wp-wl, [data-test='pack-working'], [aria-busy='true'], [data-test='ai-chat-live'], [data-test='ai-loading']")].some(shown);
         })
         .catch(() => false);
     // The request can start a moment after the click.
