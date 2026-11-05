@@ -13,7 +13,7 @@ After the take, `render.mjs` adds a text-to-speech voice and writes the finished
 | `pack.ts` | The Watchwright pack. It records in Chromium at 1920 × 1080 in dark mode, keeps a video of every take, and puts your library back afterwards (`../bench/lifecycle.ts`). |
 | `tutorial.ts` | The presenter (`Tutor`): `say`, `click`, `drag`, `type`, `fill`, `scrollTo`, `go`, `callout`, `addNode`, `wire`, `pickModules`, `run`, `fastForward`, plus `showcase` for rendering real images. |
 | `cursor.js` | The page script that draws the pointer, captions, callouts and the sync mark. |
-| `library.json` | The library every take starts from (the example workflows' rows). Viewers get the same file as `WP Tutorials library.json` next to the videos; T00 shows how to import it into an empty library. |
+| `library.json` | The library every take starts from (the example workflows' rows). Viewers get the same file as `WP Tutorials library.json` next to the videos; T01 shows how to import it into an empty library. |
 | `voice/speak.py` | Speaks every `t.say("…")` line with Kokoro-82M into `voice/cache/` and writes `voice/lines.json`. |
 | `render.mjs` | Turns a take into `out/<id>-<title>.mp4`, `.srt` and `.chapters.txt`. |
 

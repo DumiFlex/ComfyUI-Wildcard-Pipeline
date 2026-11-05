@@ -1,4 +1,4 @@
-// Get started 0: the tutorial library. Every video uses the same small library (library.json, shipped
+// Get started 1: the tutorial library. Every video uses the same small library (library.json, shipped
 // with the videos as "WP Tutorials library.json"). A new install starts empty, so this one empties the
 // library off camera, shows the empty dashboard, imports the file on Import / Export › Import, and
 // shows the items. It names the example workflows' "Add to my library" note button as the other way.
@@ -8,7 +8,7 @@ import { resetLibrary } from "../../bench/shared.js";
 import { tutorial } from "../tutorial.js";
 
 tutorial(
-  "T00",
+  "T01",
   {
     title: "Before you start: the tutorial library",
     description: "Every tutorial uses the same small library. Import it once so you can follow along.",
@@ -28,7 +28,7 @@ tutorial(
     try {
       await t.h.step("An empty library", async () => {
         await t.go("/wp/");
-        await t.say("The tutorials all use the same small library: a hero, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.");
+        await t.say("The library from the tour is the one every tutorial uses: a hero, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.");
         await t.waitVoice();
         await t.say("So first, bring the tutorial library in. The file, WP Tutorials library dot json, comes with the videos.");
         await t.waitVoice();

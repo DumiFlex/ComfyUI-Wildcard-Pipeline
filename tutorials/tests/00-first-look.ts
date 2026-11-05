@@ -1,9 +1,9 @@
-// Tutorial 2: a first look around. The manager button on the canvas, the dashboard, what the
+// Get started 0: a first look around. The manager button on the canvas, the dashboard, what the
 // sidebar holds, a wildcard and its options, the docs and the settings. Nothing is changed.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
-  "T02",
+  "T00",
   {
     title: "A first look around",
     description: "Where the manager is, what its sidebar holds, a wildcard's options, and where the docs and settings live.",
@@ -16,7 +16,7 @@ tutorial(
 
     await t.h.step("The manager button", async () => {
       const button = page.getByRole("button", { name: /Wildcard Pipeline Workspace/ }).first();
-      await t.say("Wildcard Pipeline adds a button to ComfyUI's top bar. It opens the manager, where your library lives.");
+      await t.say("Welcome to Wildcard Pipeline. Before we build anything, a quick look around. It adds a button to ComfyUI's top bar that opens the manager, where your library lives.");
       await t.hover(button);
       await t.callout("btn", button, "Opens the manager", 6);
       await t.waitVoice();
@@ -37,7 +37,7 @@ tutorial(
     await t.h.step("The sidebar", async () => {
       const modules = ["wildcards", "fixed-values", "combines", "derivations", "constraints", "bundles"].map(nav);
       await t.callout("mods", modules, "Modules", 4);
-      await t.say("The sidebar lists your modules: the pieces a prompt is built from.");
+      await t.say("The sidebar lists your modules: the pieces a prompt is built from. This is the small library every tutorial uses; the next video shows how to get it.");
       await t.waitVoice();
       await t.say("Wildcards are lists to roll from. Fixed values always say the same thing. Combines join variables into a line.");
       await t.waitVoice();
@@ -76,7 +76,7 @@ tutorial(
     });
 
     await t.h.step("Outro", async () => {
-      await t.say("That's the tour. Next, we'll make a wildcard of our own.");
+      await t.say("That's the tour. Next: bring the tutorial library into yours, so you can follow along.");
     });
   },
 );
