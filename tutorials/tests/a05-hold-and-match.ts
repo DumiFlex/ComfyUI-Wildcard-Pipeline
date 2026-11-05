@@ -33,8 +33,8 @@ tutorial(
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$hero wearing $outfit, $setting", { cps: 16 });
       await t.beat(600);
-      const text = await t.addNode("Preview as Text", { x: 1340, y: 620 });
-      await t.wire(asm, "prompt", text, "source");
+      const text = await t.addNode("Show Any", { x: 1340, y: 620 });
+      await t.wire(asm, "prompt", text, "anything");
       await t.waitVoice();
       await t.say("Set the count to four, and Run.");
       const more = t.node(loop).locator('[data-widget-name="count"] button').last();

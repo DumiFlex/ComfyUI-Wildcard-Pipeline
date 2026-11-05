@@ -1,7 +1,7 @@
 // Advanced 16: loops and seeds. A Context Loop runs four frames of Hero, Time of day and Outfit;
 // $iteration (shown, not internal) numbers each prompt. The seeds window lists each frame's seed and
 // locks one. Sweep combinations runs every Time of day × Outfit pair while the hero holds. A WP Seed
-// List on loop_config gives the sampler one seed per frame. Run with Preview as Text.
+// List on loop_config gives the sampler one seed per frame. Run with Easy-Use's Show Any, which lists every frame (Preview as Text shows only one).
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -23,8 +23,8 @@ tutorial(
       await t.pickModules(ctx, ["Hero", "Time of day", "Outfit"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
-      const text = await t.addNode("Preview as Text", { x: 1340, y: 620 });
-      await t.wire(asm, "prompt", text, "source");
+      const text = await t.addNode("Show Any", { x: 1340, y: 620 });
+      await t.wire(asm, "prompt", text, "anything");
       await t.waitVoice();
       await t.say("The loop writes iteration, the frame's number. It's hidden by default, so it stays out of prompts. Untick hidden to print it.");
       const hidden = t.node(loop).locator('[data-test="loop-iteration-internal"]');
@@ -106,8 +106,8 @@ tutorial(
       await t.say("The loop varies the prompt. For a new image seed per frame too, wire loop config into a WP Seed List, and its seed output into your KSampler.");
       const sl = await t.addNode("WP Seed List", { x: 270, y: 680 });
       await t.wire(nodes.loop, "loop_config", sl, "loop_config");
-      const p2 = await t.addNode("Preview as Text", { x: 790, y: 720 });
-      await t.wire(sl, "seed", p2, "source");
+      const p2 = await t.addNode("Show Any", { x: 790, y: 720 });
+      await t.wire(sl, "seed", p2, "anything");
       await t.run();
       await t.callout("sl", t.node(p2), "One sampler seed per frame", 5);
       await t.waitVoice();
