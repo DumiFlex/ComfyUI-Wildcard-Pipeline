@@ -1,7 +1,8 @@
 // Advanced 9: how far a constraint reaches. Three chained Contexts: Hero (only the thief) + the
 // constraint, then Setting, then Setting again bound to $later. Reach "all" keeps both settings out of
 // castles; "first" covers only the next one, so the later one can roll a castle; "pick" ticks exactly
-// which ones. The constraint's reach is changed for this node in its Edit view.
+// which ones. The constraint's reach is changed for this node in its Edit view. One Int node feeds
+// all three seeds, so a step rolls the whole chain.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -55,11 +56,18 @@ tutorial(
       await t.type("$hero in $setting, later in $later", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
-      return { c1, c2, c3, asm };
+      await t.say("Each Context has its own seed. To roll the whole chain at once, add an Int node and wire it into all three seeds.");
+      const seed = await t.addNode("Int", { x: 360, y: 680 });
+      for (const c of [c1, c2, c3]) {
+        await t.wire(seed, "INT", c, "seed");
+        await t.beat(300);
+      }
+      await t.waitVoice();
+      return { c1, c2, c3, asm, seed };
     });
 
     const prev = t.node(nodes.asm).locator('[data-test="asm-preview"]');
-    const plus = t.node(nodes.c1).getByRole("button", { name: /increment|increase|\+/i }).first();
+    const plus = t.node(nodes.seed).getByRole("button", { name: /increment|increase|\+/i }).first();
     const roll = async (n: number, until?: RegExp) => {
       for (let i = 0; i < n; i++) {
         await t.click(plus);
