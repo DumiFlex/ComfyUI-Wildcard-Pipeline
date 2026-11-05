@@ -1,12 +1,13 @@
 // Advanced 2: several picks from one wildcard. On the node: Pick 2–3 in the item's edit view, its
-// separator and Allow repeats. Inline: {2$$ and $$a|b|c}, a range {1-3$$…} and ~ for repeats.
+// separator and Allow repeats. Inline (in a fixed value; the Assembler template doesn't resolve
+// them): {2$$ and $$a|b|c}, a range {1-3$$…} and ~ for repeats.
 import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
   "A02",
   {
     title: "Pick several at once",
-    description: "Make one wildcard pick two or three options for a node, choose the separator, and write several picks inline with {2$$ and $$a|b|c}.",
+    description: "Make one wildcard pick two or three options for a node, choose the separator, and write several picks inline with {2$$ and $$a|b|c} in a fixed value.",
     learn: "Pick counts and ranges, separators, Allow repeats, and the inline multi-pick syntax.",
   },
   async (t) => {
@@ -66,10 +67,31 @@ tutorial(
     });
 
     await t.h.step("Inline", async () => {
-      await t.say("You can also write several picks right in a template or an option. Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.");
+      // Inline picks resolve inside an option, a fixed value or a combine, never in the
+      // Assembler's template (it only fills in $variables), so the demo writes one in a fixed value.
+      await t.say("You can also write several picks inline, inside a wildcard option, a fixed value or a combine. Not in the Assembler: its template only fills in variables. Add the Style fixed value.");
+      await t.pickModules(nodes.ctx, ["Style"]);
+      await t.waitVoice();
+      await t.say("Right-click Style, open Edit, and change its value on this node.");
+      await t.click(t.moduleRow(nodes.ctx, "Style").locator(".wp-module-name"), { right: true });
+      await t.beat(600);
+      await t.click(page.getByRole("menuitem", { name: "Edit" }));
+      await t.beat(1000);
+      const modal = page.getByRole("dialog").last();
+      await t.click(modal.locator('[data-test="row-value"] [contenteditable="true"], [data-test="row-value"] textarea').first());
+      await t.press("ControlOrMeta+a");
+      await t.waitVoice();
+      await t.say("Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.");
+      await t.type("{2$$ and $$watercolor|ink|oil paint|charcoal} painting", { cps: 16 });
+      await t.beat(600);
+      await t.waitVoice();
+      await t.click(modal.locator('[data-test="fvm-save"]'));
+      await t.beat(900);
+      await t.say("Then print it in the template.");
       await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("End");
-      await t.type(", carrying {2$$ and $$a dagger|a lantern|a map|a satchel}", { cps: 16 });
+      await t.type(", $style", { cps: 16 });
+      await t.press("Escape");
       await t.beat(800);
       await t.waitVoice();
       await t.say("Two means exactly two. One dash three picks one to three, and a tilde after the count lets one come up twice.");
@@ -92,7 +114,7 @@ tutorial(
     }
 
     await t.h.step("Outro", async () => {
-      await t.say("Pick several on the node for a library list, or inline for a quick one. Next: wildcards inside wildcards.");
+      await t.say("Pick several on the node for a library list, or inline inside a value for a quick one. Next: wildcards inside wildcards.");
     });
   },
 );
