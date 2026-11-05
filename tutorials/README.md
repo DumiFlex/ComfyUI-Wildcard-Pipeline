@@ -29,10 +29,10 @@ Other custom nodes add their own buttons, menus, badges and node colours to the 
 
 ```bash
 # from the ComfyUI folder; the user folder must already exist; any empty folder will do
-python main.py --port 8190 --disable-all-custom-nodes --whitelist-custom-nodes ComfyUI-Wildcard-Pipeline --user-directory <empty folder>
+python main.py --port 8190 --disable-all-custom-nodes --whitelist-custom-nodes ComfyUI-Wildcard-Pipeline ComfyUI-Easy-Use --user-directory <empty folder>
 ```
 
-The whitelist name is the extension's folder name in `custom_nodes`. Then start Watchwright with `WP_TUTORIALS_URL=http://127.0.0.1:8190/wp/` in its environment, so the pack records that ComfyUI instead of the one on 8189.
+The whitelist names are folder names in `custom_nodes`. ComfyUI-Easy-Use is only there for its Show Any node, which lists every frame of a loop (A05, A16); ComfyUI's Preview as Text shows one. Then start Watchwright with `WP_TUTORIALS_URL=http://127.0.0.1:8190/wp/` in its environment, so the pack records that ComfyUI instead of the one on 8189.
 
 The pack's `reset` setting (on by default) loads `library.json` before the first tutorial, so every take shows the same items. Your library is backed up first and put back when the run ends, the same way the bench packs do it (see `../bench/README.md` › Putting your library back).
 
