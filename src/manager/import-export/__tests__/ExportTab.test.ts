@@ -8,7 +8,7 @@ vi.mock("../../api/client", () => ({
     bundles: { list: vi.fn() },
     categories: { list: vi.fn() },
     templates: { list: vi.fn() },
-    importExport: { build: vi.fn() },
+    importExport: { build: vi.fn(), plain: vi.fn() },
   },
   ApiError: class ApiError extends Error {
     constructor(public status: number, message: string) {
@@ -54,7 +54,7 @@ const apiAny = api as unknown as {
   bundles: { list: ReturnType<typeof vi.fn> };
   categories: { list: ReturnType<typeof vi.fn> };
   templates: { list: ReturnType<typeof vi.fn> };
-  importExport: { build: ReturnType<typeof vi.fn> };
+  importExport: { build: ReturnType<typeof vi.fn>; plain: ReturnType<typeof vi.fn> };
 };
 
 const pushMock = (toastModule as unknown as { __pushMock: ReturnType<typeof vi.fn> }).__pushMock;
@@ -507,6 +507,50 @@ describe("ExportTab.vue", () => {
       expect(createMock).toHaveBeenCalledTimes(1);
       expect(clickSpy).toHaveBeenCalledTimes(1);
       expect(revokeMock).toHaveBeenCalledWith("blob:fake");
+    } finally {
+      if (originalCreate === undefined) {
+        delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+      } else {
+        (URL as unknown as { createObjectURL: unknown }).createObjectURL = originalCreate;
+      }
+      if (originalRevoke === undefined) {
+        delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
+      } else {
+        (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = originalRevoke;
+      }
+      clickSpy.mockRestore();
+    }
+  });
+
+  it("'Wildcard files' exports the picks as a plain zip named after the item", async () => {
+    const createMock = vi.fn(() => "blob:zip");
+    const revokeMock = vi.fn();
+    const originalCreate = (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+    const originalRevoke = (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
+    (URL as unknown as { createObjectURL: typeof createMock }).createObjectURL = createMock;
+    (URL as unknown as { revokeObjectURL: typeof revokeMock }).revokeObjectURL = revokeMock;
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    apiAny.importExport.plain.mockResolvedValue({
+      filename: "colors-wildcards.zip", data: btoa("PK"), files: 1, skipped: [],
+    });
+    try {
+      const wrap = mount(ExportTab);
+      await flushPromises();
+      await expandSection(wrap, "wildcard");
+      await wrap.get('[data-test="export-tab-row-wildcard-w1"] button[role="checkbox"]').trigger("click");
+      await flushPromises();
+      await wrap.get('[data-test="export-tab-plain"]').trigger("click");
+      await flushPromises();
+
+      expect(apiAny.importExport.build).not.toHaveBeenCalled();
+      expect(apiAny.importExport.plain).toHaveBeenCalledTimes(1);
+      const body = apiAny.importExport.plain.mock.calls[0]![0];
+      expect(body.wildcard_uuids).toEqual(["w1"]);
+      expect(typeof body.name).toBe("string");
+      expect(body.name.length).toBeGreaterThan(0);
+      expect(createMock).toHaveBeenCalledTimes(1);
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(pushMock).toHaveBeenCalledWith(expect.objectContaining({ summary: "Wildcard files ready" }));
     } finally {
       if (originalCreate === undefined) {
         delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;

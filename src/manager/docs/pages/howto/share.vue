@@ -45,6 +45,27 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </p>
     </DocSection>
 
+    <DocSection title="Share with people who don't use Wildcard Pipeline">
+      <p>
+        <b>Wildcard files (.zip)</b>, next to Export, writes the same picks as plain <code>.txt</code>
+        wildcard files that Dynamic Prompts, Impact Pack, Prompt-PostProcessor, Easy-Use and
+        A1111/Forge read: one file per wildcard, one option per line, in a folder named after what
+        you picked. Use them as <code>__folder/name__</code>.
+      </p>
+      <ul>
+        <li>References to other wildcards become <code>__folder/name__</code>, and
+          <code>$hair</code> becomes <code>__folder/hair__</code>. In those tools that is a new
+          pick, not the same one.</li>
+        <li>Uneven weights become repeated lines, since those tools pick lines evenly.</li>
+        <li>Fixed values and combines get a one-line file each, templates go in
+          <code>templates/</code>.</li>
+        <li>Rules (derivations, constraints), tags, the chance of nothing, fallbacks and negatives
+          on options have no plain form. The zip's <code>README.md</code> lists what changed in
+          each file.</li>
+      </ul>
+      <p>The community site offers the same download on every pack.</p>
+    </DocSection>
+
     <DocSection title="Publish to the community">
       <p>
         On a module or bundle, the <b>Publish to community</b> button opens the publish form with

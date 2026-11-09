@@ -1,3 +1,7 @@
+### New
+
+- **Export as plain wildcard files.** Import / Export → Export has a new **Wildcard files (.zip)** button: the picks become `.txt` wildcard files for Dynamic Prompts, Impact Pack, Prompt-PostProcessor, Easy-Use and A1111/Forge, so you can share a pack with people who don't use Wildcard Pipeline. References and `$variables` become `__folder/name__`, uneven weights become repeated lines, and a README in the zip lists what had no plain form (rules, tags, the chance of nothing, negatives).
+
 ### Fixes
 
 - **Subgraphs see the variables around them again.** On current ComfyUI frontends (1.5x) a WP Context or Assembler inside a subgraph never found the variables set outside it, so a `$time` wired in from the parent graph showed as MISSING VAR and the subgraph's badge counted conflicts that weren't there. The walk now crosses a subgraph's edges in both directions, upstream and downstream.
