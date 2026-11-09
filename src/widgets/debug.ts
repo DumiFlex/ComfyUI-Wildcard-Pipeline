@@ -3,7 +3,7 @@ import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
 import { reactiveFromGraph } from "../extension/reactive";
-import { findRootGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
+import { findRootGraph, showGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
 import { baseCodename } from "../extension/node-codename";
 
 const DebugViewer = defineAsyncComponent(() => import("../components/debug/DebugViewer.vue"));
@@ -72,15 +72,7 @@ export function focusNode(id: string): void {
     canvas.centerOnNode?.(node);
     canvas.setDirty?.(true, true);
   };
-  if (canvas.graph === hit.graph) {
-    show();
-    return;
-  }
-  if (typeof canvas.setGraph !== "function") return;
-  canvas.setGraph(hit.graph);
-  // Opening a graph restores the viewport ComfyUI last saved for it, a tick
-  // later; centre after that or the restore pans straight back.
-  setTimeout(show, 50);
+  showGraph(canvas, hit.graph, show);
 }
 
 export function create(node: DebugNode, inputName: string) {

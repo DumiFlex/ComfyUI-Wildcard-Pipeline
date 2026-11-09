@@ -487,6 +487,8 @@ interface AppWithQueue {
 }
 interface AppCanvas {
   canvas?: HTMLCanvasElement;
+  graph?: LiteGraphLike | null;
+  setGraph?: (graph: LiteGraphLike) => void;
   ds?: { scale?: number; offset?: [number, number] };
   centerOnNode?: (n: unknown) => void;
   selectNode?: (n: unknown, addToCurrentSelection?: boolean) => void;
@@ -533,18 +535,27 @@ function ensureFlashStyle() {
 /** Focus + select a node, uncollapsing it first if needed and pulsing
  *  a brief border around it so the user's eye lands on it instantly.
  *  No-op when the canvas surface doesn't expose the calls (e.g.
- *  headless tests). Subgraph-resident nodes can still be focused once
- *  the user navigates into the subgraph; we don't auto-navigate to
- *  keep the flow predictable.
+ *  headless tests). A node in another graph than the one on screen
+ *  (inside a subgraph, or out at the root while the user is inside one)
+ *  opens that graph first, the same way the breadcrumb does, so Focus
+ *  reaches the node wherever it lives.
  *
  *  Flash strategy: a position:fixed DOM overlay anchored to the node's
  *  screen-space bounds via the canvas's drag-state transform. LiteGraph
  *  nodes are drawn on a `<canvas>`, so there's no per-node DOM to
  *  style — an overlay div is the cleanest way to add a CSS border
  *  without monkey-patching the canvas render loop. */
-function focusNode(node: FocusableNode) {
+function focusNode(node: FocusableNode, graph: LiteGraphLike) {
   const canvas = appQ.canvas;
   if (!canvas) return;
+  try {
+    graphMod.showGraph(canvas, graph, () => showNode(node, canvas));
+  } catch (err) {
+    console.warn("[wildcard-pipeline] focusNode failed:", err);
+  }
+}
+
+function showNode(node: FocusableNode, canvas: AppCanvas) {
   try {
     // Uncollapse before centering — a collapsed node has tiny bounds,
     // so centerOnNode would scroll to a hard-to-spot strip. Only call
@@ -611,9 +622,10 @@ function mountFlashOverlay(node: FocusableNode, canvas: AppCanvas) {
   const start = performance.now();
   let raf = 0;
   function tick() {
-    // The Vue renderer may recreate the element mid-flash; re-resolve when
-    // the one we hold falls out of the document.
-    if (nodeEl && !nodeEl.isConnected) {
+    // The Vue renderer may recreate the element mid-flash, or (right after
+    // Focus opened another graph) not have drawn it yet; re-resolve until
+    // we hold one in the document.
+    if (!nodeEl?.isConnected) {
       nodeEl = document.querySelector<HTMLElement>(nodeSelector);
     }
     const box = nodeEl?.getBoundingClientRect();
@@ -664,7 +676,9 @@ const origQueuePrompt = appQ.queuePrompt;
 if (typeof origQueuePrompt === "function") {
   appQ.queuePrompt = function (...args: unknown[]) {
     try {
-      const graph = appQ.graph as unknown as LiteGraphLike;
+      // app.graph is the graph ON SCREEN, which is a subgraph while the user
+      // is inside one; climb to the root so the scan sees every assembler.
+      const graph = graphMod.findRootGraph(appQ.graph as unknown as LiteGraphLike);
       // Note: per-Context seed snapshot now happens via each
       // seed widget's `beforeQueued` hook (registered in
       // widgets/context.ts). That fires after queue submit but
@@ -673,7 +687,7 @@ if (typeof origQueuePrompt === "function") {
       // walkAllNodes recurses into nested subgraphs so assemblers inside a
       // subgraph still get their templates scanned. collectUpstreamVariables
       // crosses boundaries the other direction.
-      for (const { node } of graphMod.walkAllNodes(graph)) {
+      for (const { node, graph: home } of graphMod.walkAllNodes(graph)) {
         if (node.type !== "WP_PromptAssembler") continue;
         // Skip bypassed (mode=4) + muted (mode=2) nodes — LiteGraph
         // omits them from execution, so flagging unresolved vars on a
@@ -706,7 +720,7 @@ if (typeof origQueuePrompt === "function") {
           {
             severity: "warning",
             lifeMs: 8000,
-            action: { label: "Focus", onSelect: () => focusNode(targetNode as unknown as FocusableNode) },
+            action: { label: "Focus", onSelect: () => focusNode(targetNode as unknown as FocusableNode, home) },
           },
         );
       }
