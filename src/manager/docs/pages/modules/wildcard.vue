@@ -28,7 +28,7 @@ const instanceOptions = [
   { term: "Variable binding", desc: "The variable this use writes. It starts as the library's; change it to use the same wildcard twice ($hair and $hair_b) without one overwriting the other." },
   { term: "Option toggles", desc: "Untick options this use may not pick. Leaving one ticked fixes the value, though a constraint can still rule it out (keep a fallback for that)." },
   { term: "Per-use weights", desc: "Change an option's weight for this use only. The library editor doesn't show them." },
-  { term: "Category filter", desc: 'Only pick options with certain tags, e.g. "feline and warm, not lynx" (a comma means or). Click the tag pills or type it under Advanced.' },
+  { term: "Category filter", desc: 'Only pick options with certain tags, e.g. "feline and warm, not lynx" (a comma means or). Click the tag pills or type it under Advanced. A wildcard whose options have no tags says so in the Pool, since there is nothing to filter by.' },
   { term: "Pick, separator, Allow repeats", desc: "Pick several options at once. See below." },
   { term: "Exclude null", desc: "Leaves the null option out for this use, so something always prints." },
   { term: "Fallback", desc: "Untick the fallback to switch it off for this use; then nothing prints when nothing is left." },
