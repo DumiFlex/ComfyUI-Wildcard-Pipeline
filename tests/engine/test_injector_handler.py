@@ -240,20 +240,18 @@ def test_template_empty_or_whitespace_falls_back_to_pass_through():
     assert out.values[0].context["b"] == "raw_b"
 
 
-def test_template_boolean_substitution_matches_python_str():
-    # Booleans render as Python's str(bool) -> "True"/"False" so the
-    # template path's output agrees with the pass-through path's
-    # downstream stringification semantics. Consistent casing avoids
-    # the "i love False" / "i love false" disparity when a row toggles
-    # between template + pass-through.
+def test_template_boolean_substitution_reads_true_false():
+    # Booleans render as "true" / "false", the words WP Toggles writes and a
+    # derivation's equals test compares against, so a Boolean node wired into
+    # the Injector can drive a rule.
     rows = json.dumps({
         "version": 1,
         "rows": [_row_with_template("input_0", "flag", "is_on=$input_0")],
     })
     out = WPContextInjector.execute(wp_rows=rows, upstream=None, input_0=True)
-    assert out.values[0].context["flag"] == "is_on=True"
+    assert out.values[0].context["flag"] == "is_on=true"
     out2 = WPContextInjector.execute(wp_rows=rows, upstream=None, input_0=False)
-    assert out2.values[0].context["flag"] == "is_on=False"
+    assert out2.values[0].context["flag"] == "is_on=false"
 
 
 def test_template_trace_kind_marks_template_row():
@@ -428,3 +426,19 @@ def test_general_row_does_not_leak_internal_ctx_keys_into_template_scope():
     })
     out = WPContextInjector.execute(wp_rows=rows, upstream=upstream, input_0="x")
     assert out.values[0].context["combo"] == "up"
+
+
+def test_boolean_pass_through_drives_an_equals_true_rule():
+    # A Boolean node wired straight into a row (no template) keeps the bool; a
+    # derivation reading it with `equals true` must match, as with WP Toggles.
+    from engine.modules.derivation_handler import _eval_condition
+
+    rows = json.dumps({
+        "version": 1,
+        "rows": [_row_with_template("input_0", "lora_on", "")],
+    })
+    on = WPContextInjector.execute(wp_rows=rows, upstream=None, input_0=True).values[0].context
+    off = WPContextInjector.execute(wp_rows=rows, upstream=None, input_0=False).values[0].context
+    cond = {"var": "lora_on", "op": "equals", "value": "true"}
+    assert _eval_condition(cond, on) is True
+    assert _eval_condition(cond, off) is False

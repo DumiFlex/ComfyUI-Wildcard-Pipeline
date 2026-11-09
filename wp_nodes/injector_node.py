@@ -12,6 +12,7 @@ from typing import Any
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import negatives
+from engine.syntax.types import bool_text
 from wp_nodes.types import InjectorRowsInput, PipelineContext
 
 _BINDING_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
@@ -26,8 +27,8 @@ def _render_template(template: str, slot_values: dict[str, Any]) -> str:
 
     - `$$` -> literal `$`
     - `$slot_name` where slot is wired -> stringified value at that slot
-       (Python `str()` semantics — booleans yield "True"/"False" to match
-       the pass-through path's downstream stringification.)
+       (booleans yield "true"/"false", as everywhere a variable is read,
+       so a Boolean node can drive a derivation's `equals true`.)
     - `$slot_name` where slot is NOT wired -> left as literal `$slot_name`
        so the user can spot the typo in the rendered output
     """
@@ -37,7 +38,8 @@ def _render_template(template: str, slot_values: dict[str, Any]) -> str:
             return "$"
         name = m.group(1)
         if name in slot_values:
-            return str(slot_values[name])
+            value = slot_values[name]
+            return bool_text(value) if isinstance(value, bool) else str(value)
         return m.group(0)
 
     return _TEMPLATE_TOKEN_RE.sub(repl, template)
