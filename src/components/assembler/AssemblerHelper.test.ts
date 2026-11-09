@@ -542,3 +542,28 @@ describe("AssemblerHelper negative preview", () => {
     expect(w.find('[data-test="asm-neg-preview"]').exists()).toBe(false);
   });
 });
+
+describe("AssemblerHelper.vue with no Context", () => {
+  it("calls a template with no $names plain text and says why the variables row is empty", () => {
+    const w = mount(AssemblerHelper, {
+      props: { upstreamVars: [], templateVars: [], template: "1girl blue hair", resolved: "1girl blue hair" },
+    });
+    expect(w.find('[data-test="asm-preview-status"]').text()).toBe("plain text");
+    expect(w.find('[data-test="asm-vars-none"]').exists()).toBe(true);
+  });
+
+  it("counts unresolved $names when nothing sets them", () => {
+    const w = mount(AssemblerHelper, {
+      props: { upstreamVars: [], templateVars: ["hair"], template: "a $hair girl", resolved: "" },
+    });
+    expect(w.find('[data-test="asm-preview-status"]').text()).toBe("1 unresolved");
+    expect(w.find('[data-test="asm-vars-none"]').exists()).toBe(false);
+  });
+
+  it("drops the placeholder once a variable comes in", () => {
+    const w = mount(AssemblerHelper, {
+      props: { upstreamVars: ["hair"], templateVars: [], template: "x", resolved: "x" },
+    });
+    expect(w.find('[data-test="asm-vars-none"]').exists()).toBe(false);
+  });
+});
