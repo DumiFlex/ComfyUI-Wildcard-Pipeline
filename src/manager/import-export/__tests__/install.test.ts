@@ -330,13 +330,39 @@ describe("installEnvelope — natively-supported future versions install as-is",
     expect(opts[1].fallback).toBe(true);
   });
 
-  it("rejects a v11 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+  it("installs a v11 envelope as-is and keeps a ref filter that reads a variable", async () => {
     const v11Envelope = {
       schema_version: 11,
-      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      bundles: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      wildcards: [
+        {
+          id: "wcpf0002",
+          type: "wildcard",
+          name: "scene",
+          payload: {
+            var_binding: "scene",
+            options: [{ id: "o1", value: "at @{0de11002#Setting:$model_variant}", weight: 1 }],
+          },
+        },
+      ],
     };
     const { importExport, seen } = fakeCommit();
     const result = await installEnvelope({ envelope: v11Envelope }, { importExport });
+
+    expect(result.ok).toBe(true);
+    const added = seen[0].adds.find((a) => a.kind === "wildcard");
+    if (!added) throw new Error("wildcard add not found in commit payload");
+    const opts = (added.entity.payload as { options: Array<{ value: string }> }).options;
+    expect(opts[0].value).toBe("at @{0de11002#Setting:$model_variant}");
+  });
+
+  it("rejects a v12 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v12Envelope = {
+      schema_version: 12,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+    };
+    const { importExport, seen } = fakeCommit();
+    const result = await installEnvelope({ envelope: v12Envelope }, { importExport });
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("parse_failed");

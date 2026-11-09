@@ -666,6 +666,7 @@ class WildcardHandler(ModuleHandler):
         expr: str,
         *,
         exclude_null: bool,
+        bound: tuple[dict[str, Any] | None] | None = None,
     ) -> list[dict[str, Any]]:
         """Narrow an option pool by a boolean sub-category expression.
 
@@ -673,9 +674,13 @@ class WildcardHandler(ModuleHandler):
         against each non-null option's tag set (`sub_categories`). Empty
         / whitespace `expr` ⇒ no tag filtering. The null option
         (`is_null`) is governed solely by `exclude_null`; the expression
-        never applies to it (spec §3.4).
+        never applies to it (spec §3.4). `bound` holds an already-bound
+        expression (schema v11 `$name` terms, `bind_for_wildcard`).
         """
-        ast = _parse_subcat(expr) if isinstance(expr, str) else None
+        if bound is not None:
+            ast = bound[0]
+        else:
+            ast = _parse_subcat(expr) if isinstance(expr, str) else None
         out: list[dict[str, Any]] = []
         for o in options:
             if o.get("is_null"):
@@ -924,11 +929,35 @@ class WildcardHandler(ModuleHandler):
         category_filter = instance.get("category_filter")
         exclude_null = bool(instance.get("exclude_null", False))
         pool = options
+        filter_vars: dict[str, Any] = {}
         if (isinstance(category_filter, str) and category_filter.strip()) or exclude_null:
+            # Schema v11: `$name` terms read this run's variables, so one
+            # tagged wildcard narrows per model ($model_variant) and the
+            # constraints below still apply to what is left.
+            from engine.syntax.subcat_filter import (
+                bind_for_wildcard,
+                filter_variable_warning,
+                variables,
+            )
+            bound_ast, notes = bind_for_wildcard(
+                category_filter if isinstance(category_filter, str) else "",
+                lambda n: ctx.get(n),
+                payload,
+            )
+            if isinstance(category_filter, str) and "$" in category_filter:
+                parsed = _parse_subcat(category_filter)
+                for name in variables(parsed):
+                    raw = ctx.get(name)
+                    filter_vars[name] = "" if raw is None else str(raw)
+            if notes and isinstance(ctx.get("__wp_warnings__"), list):
+                mid = str(ctx.get("__wp_current_module_id__") or "")
+                for note in notes:
+                    ctx["__wp_warnings__"].append(filter_variable_warning(note, module_id=mid))
             pool = cls._apply_pool_filter(
                 pool,
                 category_filter if isinstance(category_filter, str) else "",
                 exclude_null=exclude_null,
+                bound=(bound_ast,),
             )
         enabled = instance.get("enabled_options")
         if enabled is not None:
@@ -1020,6 +1049,8 @@ class WildcardHandler(ModuleHandler):
         if detail is not None:
             if isinstance(category_filter, str) and category_filter.strip():
                 detail["filter"] = category_filter.strip()
+                if filter_vars:
+                    detail["filter_vars"] = filter_vars
             if exclude_null:
                 detail["exclude_null"] = True
             if not options:

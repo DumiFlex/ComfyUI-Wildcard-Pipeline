@@ -1,3 +1,7 @@
+### Wildcards
+
+- **Filter a wildcard by a variable.** The Pool filter can now read a `$variable` when the prompt runs. Tag a Setting wildcard's options `pony` or `illustrious`, pick `$model_variant` under **By variable** in its Pool, and each run keeps the options for the loaded model; options with no model tag stay for every model. Constraints on the wildcard still apply to what is left, so you no longer need a Model wildcard with Match variable plus a constraint just to narrow one list. References work the same way: `@{Setting:$model_variant}`. A value is compared like a tag (case and spaces don't matter), a multi-pick list keeps options for any of its picks, and an unset variable or a value that is no tag there leaves that part of the filter out, with a note in WP Debug. Packs that use it need this version (schema 11).
+
 ### Fixes
 
 - **Empty wildcard pool.** A wildcard whose options have no tags used to open an empty Pool. It now says why: there are no tags to filter by, so every enabled option can roll, and tags added in the library editor (Sub-Categories) show up there as pills. Advanced says the same instead of an empty palette, and the Pool's expand button is no longer highlighted when there is nothing to open.

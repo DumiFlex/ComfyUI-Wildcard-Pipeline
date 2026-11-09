@@ -97,6 +97,8 @@ def _map_tags(ast: dict[str, Any] | None, fn) -> dict[str, Any] | None:
     (src/manager/cascade/subcatExprCascade.ts)."""
     if ast is None:
         return None
+    if "var" in ast:
+        return ast
     if "tag" in ast:
         v = fn(ast["tag"])
         return None if v is None else {"tag": v}
@@ -113,7 +115,7 @@ def _expr_tags(ast: dict[str, Any] | None) -> set[str]:
     out: set[str] = set()
 
     def walk(n: dict[str, Any] | None) -> None:
-        if n is None:
+        if n is None or "var" in n:
             return
         if "tag" in n:
             out.add(n["tag"])
