@@ -14,6 +14,7 @@ from aiohttp import web
 
 from engine.db.repositories import BundleNotFound, BundleRepository
 from engine.modules.dispatcher import get_handler
+from engine.modules.snapshot import payload_hash
 from wp_api._helpers import (
     db_session,
     json_error,
@@ -205,6 +206,27 @@ def _validate_parents_compatible(
     )
 
 
+def _with_payload_hash(child: object) -> object:
+    """A leaf child with a payload but no ``payload_hash`` gets the hash of
+    its own payload.
+
+    The canvas copies a child's ``payload_hash`` onto the row it inserts and
+    reads a row with no hash whose id IS in the library as drifted
+    (``library-status.ts:matchStateOf``), so a bundle written without child
+    hashes (a hand-made or imported pack) showed every child as drifted
+    straight after it was added. The snapshot's own hash is the right one:
+    it equals the library's exactly when the two payloads match.
+    """
+    if (
+        isinstance(child, dict)
+        and child.get("type") != "bundle"
+        and not child.get("payload_hash")
+        and isinstance(child.get("payload"), dict)
+    ):
+        return {**child, "payload_hash": payload_hash(child["payload"])}
+    return child
+
+
 def _expand_bundle_children(
     children: list,
     repo: BundleRepository,
@@ -221,14 +243,16 @@ def _expand_bundle_children(
     out: list = []
     for child in children:
         if not isinstance(child, dict) or child.get("type") != "bundle":
-            out.append(child)
+            out.append(_with_payload_hash(child))
             continue
         ref_id = child.get("id")
         expanded = dict(child)
         if isinstance(ref_id, str):
             try:
                 target = repo.get(ref_id)
-                expanded["children"] = target.get("children") or []
+                expanded["children"] = [
+                    _with_payload_hash(c) for c in target.get("children") or []
+                ]
                 # Refresh display fields off the live target so renames
                 # propagate. The cached values on the parent only matter
                 # when the target is missing.

@@ -321,3 +321,32 @@ async def test_post_empty_children_unaffected(wp_client):
         "children": [],
     })
     assert resp.status == 201
+
+
+# ── Child payload hashes ──────────────────────────────────────────────────
+
+
+async def test_get_fills_missing_child_payload_hash(wp_client):
+    """A child saved without `payload_hash` (a hand-made or imported pack)
+    gets its own payload's hash on GET, top level and inside a reference;
+    the canvas reads a hashless row whose id is in the library as drifted."""
+    from engine.modules.snapshot import payload_hash
+
+    leaf = {"id": "aaaa0002", "type": "wildcard",
+            "payload": {"options": [{"id": "o1", "value": "x", "weight": 1}]}}
+    inner = await _create_bundle(wp_client, name="inner", children=[leaf])
+    outer = await _create_bundle(
+        wp_client, name="outer", children=[leaf, _bundle_ref(inner["id"])],
+    )
+    resp = await wp_client.get(f"/wp/api/bundles/{outer['id']}")
+    body = await resp.json()
+    want = payload_hash(leaf["payload"])
+    assert body["children"][0]["payload_hash"] == want
+    assert body["children"][1]["children"][0]["payload_hash"] == want
+
+
+async def test_get_keeps_a_stored_child_payload_hash(wp_client):
+    leaf = {**_leaf_wildcard("aaaa0003"), "payload_hash": "stale"}
+    b = await _create_bundle(wp_client, name="kept", children=[leaf])
+    resp = await wp_client.get(f"/wp/api/bundles/{b['id']}")
+    assert (await resp.json())["children"][0]["payload_hash"] == "stale"
