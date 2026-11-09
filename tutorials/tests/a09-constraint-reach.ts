@@ -1,6 +1,6 @@
-// Advanced 9: how far a constraint reaches. Three chained Contexts: Hero (only the thief) + the
+// Advanced 9: how far a constraint reaches. Three chained Contexts: Role (only the inventor) + the
 // constraint, then Setting, then Setting again bound to $later. Reach "all" keeps both settings out of
-// castles; "first" covers only the next one, so the later one can roll a castle; "pick" ticks exactly
+// the forest; "first" covers only the next one, so the later one can roll a forest; "pick" ticks exactly
 // which ones. The constraint's reach is changed for this node in its Edit view. One Int node feeds
 // all three seeds, so a step rolls the whole chain.
 import { tutorial } from "../tutorial.js";
@@ -24,12 +24,12 @@ tutorial(
 
     const nodes = await t.h.step("Two settings", async () => {
       await t.go("/");
-      await t.say("A story in two places. The first Context picks the hero and the Hero fits the place constraint.");
+      await t.say("A story in two places. The first Context picks the role and the Role fits the place constraint.");
       const c1 = await t.addNode("WP Context", { x: 340, y: 170 });
-      await t.pickModules(c1, ["Hero", "Hero fits the place"]);
-      await t.say("For a clear test, keep only the street thief on this node. City folk are never sent to a castle.");
-      let modal = await editItem(c1, "Hero");
-      for (const who of ["a knight", "a court mage", "a forest ranger", "a desert nomad", "an inventor"]) {
+      await t.pickModules(c1, ["Role", "Role fits the place"]);
+      await t.say("For a clear test, keep only the clockwork inventor on this node. Inventors are never sent to the forest.");
+      let modal = await editItem(c1, "Role");
+      for (const who of ["a knight", "a battle mage", "a forest ranger"]) {
         await t.click(modal.getByLabel(`Use option ${who}`));
         await t.beat(200);
       }
@@ -53,7 +53,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 170 });
       await t.wire(c3, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero in $setting, later in $later", { cps: 16 });
+      await t.type("A painting of $role $setting, and later $later.", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       await t.say("Each Context has its own seed. To roll the whole chain at once, add an Int node and wire it into all three seeds.");
@@ -77,8 +77,8 @@ tutorial(
     };
 
     await t.h.step("All", async () => {
-      await t.say("Reach is all by default: the constraint covers every Setting after it, in this Context or in the ones it feeds. Neither place is ever a castle.");
-      await t.callout("prev", prev, "City or wilds, both times", 6);
+      await t.say("Reach is all by default: the constraint covers every Setting after it, in this Context or in the ones it feeds. Neither place is ever a forest.");
+      await t.callout("prev", prev, "Castle or city, both times", 6);
       await roll(4);
       await t.waitVoice();
       await t.uncallout("prev");
@@ -86,7 +86,7 @@ tutorial(
 
     await t.h.step("First", async () => {
       await t.say("Edit the constraint on this node and set its reach to first.");
-      const modal = await editItem(nodes.c1, "Hero fits the place");
+      const modal = await editItem(nodes.c1, "Role fits the place");
       const section = modal.locator('[data-test="reach-section"]');
       await t.scrollTo(section, { at: 0.5 });
       await t.click(modal.locator('[data-test="reach-mode-first"]'));
@@ -102,19 +102,19 @@ tutorial(
       await t.waitVoice();
       await t.click(modal.locator('[data-test="cnm-save"]'));
       await t.beat(700);
-      await t.say("Now only the first place follows the rule. The later one rolls freely, castles included.");
-      await roll(14, /later in (a torch-lit throne room|castle ramparts)/);
-      if (!/later in (a torch-lit throne room|castle ramparts)/.test((await prev.textContent()) ?? "")) {
-        throw new Error("The preview never put the later place in a castle with reach first");
+      await t.say("Now only the first place follows the rule. The later one rolls freely, forests included.");
+      await roll(14, /later in a (misty pine forest|mossy clearing)/);
+      if (!/later in a (misty pine forest|mossy clearing)/.test((await prev.textContent()) ?? "")) {
+        throw new Error("The preview never put the later place in a forest with reach first");
       }
-      await t.callout("prev", prev, "The later place can be a castle", 6);
+      await t.callout("prev", prev, "The later place can be a forest", 6);
       await t.waitVoice();
       await t.uncallout("prev");
     });
 
     await t.h.step("Pick", async () => {
       await t.say("Pick lists every Setting the constraint can reach, with its node, so you tick exactly the ones it covers.");
-      const modal = await editItem(nodes.c1, "Hero fits the place");
+      const modal = await editItem(nodes.c1, "Role fits the place");
       await t.scrollTo(modal.locator('[data-test="reach-section"]'), { at: 0.5 });
       await t.click(modal.locator('[data-test="reach-mode-pick"]'));
       await t.beat(700);

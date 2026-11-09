@@ -1,5 +1,5 @@
 // Advanced 4: reading a pick's parts. $gear.SHOES prints the tag a Travel gear pick rolled from
-// its SHOES accepts group; $color.0 / $color.1 read single picks of a two-pick Colors; $outfit.neg
+// its SHOES accepts group; $hair_color.0 / .1 read single picks of a two-pick Hair colors; $outfit.neg
 // reads a variable's negative, placed first in the Assembler's negative box.
 import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
@@ -7,7 +7,7 @@ tutorial(
   "A04",
   {
     title: "Reading a pick's parts",
-    description: "Print the tag a pick rolled with $gear.SHOES, one of several picks with $color.0, and a variable's negative with $outfit.neg.",
+    description: "Print the tag a pick rolled with $gear.SHOES, one of several picks with $hair_color.0, and a variable's negative with $outfit.neg.",
     learn: "The .GROUP, .0 / .1 and .neg readers, and where each one is useful.",
   },
   async (t) => {
@@ -28,15 +28,15 @@ tutorial(
 
     const nodes = await t.h.step("Print the tag", async () => {
       await t.go("/");
-      await t.say("Pick Hero, Travel gear, Colors and Outfit.");
+      await t.say("Pick Role, Travel gear and Hair colors, then the rule that fits the outfit to the role, and Outfit.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Travel gear", "Colors", "Outfit"]);
+      await t.pickModules(ctx, ["Role", "Travel gear", "Hair colors", "Outfit fits the role", "Outfit"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.waitVoice();
       await t.say("Dollar gear prints the gear. Dollar gear dot SHOES prints the shoe it rolled, in the group's name, in capitals.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero in $gear and $gear.SHOES", { cps: 16 });
+      await t.type("A painting of $role in $gear and $gear.SHOES", { cps: 16 });
       await t.beat(800);
       await t.waitVoice();
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
@@ -52,8 +52,8 @@ tutorial(
     });
 
     await t.h.step("One of several picks", async () => {
-      await t.say("Now make Colors pick two for this node: right-click it, Edit, and set the pick to exactly two.");
-      await t.click(t.moduleRow(nodes.ctx, "Colors").locator(".wp-module-name"), { right: true });
+      await t.say("Now make Hair colors pick two for this node: right-click it, Edit, and set the pick to exactly two.");
+      await t.click(t.moduleRow(nodes.ctx, "Hair colors").locator(".wp-module-name"), { right: true });
       await t.beat(600);
       await t.click(page.getByRole("menuitem", { name: "Edit" }));
       await t.beat(1000);
@@ -66,10 +66,10 @@ tutorial(
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(900);
       await t.waitVoice();
-      await t.say("Dollar color prints both. Dot zero is the first pick, dot one the second. Give one to the hair and one to the eyes.");
+      await t.say("Dollar hair color prints both. Dot zero is the first pick, dot one the second. Use one for the hair and one for its streaks.");
       await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("End");
-      await t.type(", $color.0 hair, $color.1 eyes", { cps: 16 });
+      await t.type(", with $hair_color.0 hair and $hair_color.1 streaks", { cps: 16 });
       await t.beat(800);
       await t.waitVoice();
       await t.callout("prev", preview(nodes.asm), "Two colors, never the same", 6);

@@ -1,4 +1,4 @@
-// Nodes 4: WP Debug in depth. Hero, Setting, Time of day, Lighting from time and the constraint "Hero
+// Nodes 4: WP Debug in depth. Role, Setting, Time of day, Lighting from time and the constraint "Role
 // fits the place" (last, so it reaches nothing) → WP Debug. Variables (value, who set it, filter),
 // Trace (steps in order, a derivation's rules opened), Warnings (the constraint that never applied),
 // Raw, and Copy.
@@ -15,9 +15,9 @@ tutorial(
 
     const dbg = await t.h.step("Debug after a Context", async () => {
       await t.go("/");
-      await t.say("A Context with Hero, Setting, Time of day, Lighting from time, and the constraint Hero fits the place.");
+      await t.say("A Context with Role, Setting, Time of day, Lighting from time, and the constraint Role fits the place, put last on purpose.");
       const ctx = await t.addNode("WP Context", { x: 480, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Setting", "Time of day", "Lighting from time", "Hero fits the place"]);
+      await t.pickModules(ctx, ["Role", "Setting", "Time of day", "Lighting from time", "Role fits the place"]);
       await t.say("Wire WP Debug after it. It changes nothing; it shows what reached that point.");
       const dbg = await t.addNode("WP Debug", { x: 1300, y: 170 });
       await t.page.evaluate((id) => {
@@ -70,7 +70,7 @@ tutorial(
       await t.click(view().locator('[data-test="dbg-tab-warnings"]'));
       await t.beat(900);
       await t.callout("warn", view().locator('[data-test="dbg-warning"]').first(), "Never applied", 6);
-      await t.say("Hero fits the place sits after Hero, so it had nothing left to steer: it never applied. A constraint goes before the items it changes.");
+      await t.say("Role fits the place sits after the Setting it should change, so the setting had already rolled: it never applied. A constraint goes before the items it changes.");
       await t.waitVoice();
       await t.uncallout("warn");
     });

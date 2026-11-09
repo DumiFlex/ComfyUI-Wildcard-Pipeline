@@ -1,6 +1,6 @@
-// Advanced 7: derivations in depth. A new "Royal crest" rule: IF $hero matches knight|mage AND NOT
-// $setting contains forest, THEN append a crest to $hero and, as a second action, set $eyes to
-// "@color eyes" (a reference inside an action). AND flips to OR and back. Then on the canvas.
+// Advanced 7: derivations in depth. A new "Royal guard" rule: IF $role matches knight|mage AND NOT
+// $setting contains forest, THEN append "of the royal guard" to $role and, as a second action, set
+// $hair to "@hair_color hair under a gold circlet" (a reference inside an action). AND flips to OR and back. Then on the canvas.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -29,8 +29,8 @@ tutorial(
 
     await t.h.step("Two conditions", async () => {
       await t.go("/wp/derivations/new");
-      await t.say("Let's build a rule: knights and mages wear a royal crest, but not out in the forest.");
-      await t.fill(T("identity-name"), "Royal crest");
+      await t.say("Let's build a rule: knights and mages belong to the royal guard, but not out in the forest.");
+      await t.fill(T("identity-name"), "Royal guard");
       await t.click(T("add-rule"));
       await t.beat(700);
       await t.click(page.locator('[data-test="rule-0"]').getByText("Rule 1").first());
@@ -41,8 +41,8 @@ tutorial(
       }
       await t.scrollTo(T("branch-0-0"));
       await t.waitVoice();
-      await t.say("When hero matches knight or mage. Matches takes a regular expression: the bar means or.");
-      await varField("cond-var-0-0", "hero");
+      await t.say("When role matches knight or mage. Matches takes a regular expression: the bar means or.");
+      await varField("cond-var-0-0", "role");
       await pick("cond-op-0-0", "matches (regex)");
       await t.click(T("cond-value-0-0"));
       await t.type("knight|mage", { cps: 14 });
@@ -75,23 +75,23 @@ tutorial(
 
     await t.h.step("Two actions", async () => {
       await t.scrollTo(T("act-block-0-0"));
-      await t.say("Then: Append to hero, so the crest goes after the pick. Prepend puts text in front.");
-      await varField("act-target-0-0", "hero");
+      await t.say("Then: Append to role, so the words go after the pick. Prepend puts text in front.");
+      await varField("act-target-0-0", "role");
       await pick("act-mode-0-0", "Append");
       await t.click(T("act-value-0-0"));
-      await t.type(" wearing a royal crest", { cps: 16 });
+      await t.type(" of the royal guard", { cps: 16 });
       await t.beat(500);
       await t.waitVoice();
-      await t.say("One branch can do several things. Add an action: eyes become a fresh roll of Colors, written with an at reference, like in a list.");
+      await t.say("One branch can do several things. Add an action: the hair becomes a fresh roll of Hair colors under a gold circlet, written with an at reference, like in a list.");
       await t.click(T("act-add-0-0"));
       await t.beat(600);
-      await varField("act-target-0-0-1", "eyes");
+      await varField("act-target-0-0-1", "hair");
       await t.click(T("act-value-0-0-1"));
-      await t.type("@colo", { cps: 12 });
+      await t.type("@hair_c", { cps: 12 });
       await t.beat(700);
       await t.press("Enter");
       await t.beat(700);
-      await t.type(" eyes", { cps: 14 });
+      await t.type(" hair under a gold circlet", { cps: 14 });
       await t.beat(500);
       await t.callout("acts", [T("act-block-0-0"), T("act-block-0-0-1")], "Run in order, top to bottom", 6);
       await t.waitVoice();
@@ -103,13 +103,13 @@ tutorial(
 
     await t.h.step("On the canvas", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Hero, Eyes, Setting and the new rule, which goes after the lists it reads.");
+      await t.say("On the canvas, pick Role, Hair, Setting and the new rule, which goes after the lists it reads.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Eyes", "Setting", "Royal crest"]);
+      await t.pickModules(ctx, ["Role", "Hair", "Setting", "Royal guard"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero with $eyes, in $setting", { cps: 16 });
+      await t.type("A painting of $role with $hair, $setting.", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       const prev = t.node(asm).locator('[data-test="asm-preview"]');
@@ -118,10 +118,10 @@ tutorial(
       for (let i = 0; i < 14; i++) {
         await t.click(plus);
         await t.beat(800);
-        if (/crest/.test(((await prev.count()) > 0 ? ((await prev.textContent()) ?? "") : ""))) break;
+        if (/royal guard/.test(((await prev.count()) > 0 ? ((await prev.textContent()) ?? "") : ""))) break;
       }
-      await t.callout("prev", prev, "Crest appended, eyes rolled", 6);
-      await t.say("There's the crest, and the eyes are a color. Any other hero keeps the plain Eyes roll.");
+      await t.callout("prev", prev, "Words appended, hair rolled", 6);
+      await t.say("There's the royal guard, with a circlet on freshly rolled hair. Anyone else keeps the plain Hair roll.");
       await t.waitVoice();
       await t.uncallout("prev");
     });

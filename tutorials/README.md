@@ -13,7 +13,7 @@ After the take, `render.mjs` adds a text-to-speech voice and writes the finished
 | `pack.ts` | The Watchwright pack. It records in Chromium at 1920 × 1080 in dark mode, keeps a video of every take, and puts your library back afterwards (`../bench/lifecycle.ts`). |
 | `tutorial.ts` | The presenter (`Tutor`): `say`, `click`, `drag`, `type`, `fill`, `scrollTo`, `go`, `callout`, `addNode`, `wire`, `pickModules`, `run`, `fastForward`, plus `showcase` for rendering real images. |
 | `cursor.js` | The page script that draws the pointer, captions, callouts and the sync mark. |
-| `library.json` | The library every take starts from (the example workflows' rows). Viewers get the same file as `WP Tutorials library.json` next to the videos; T01 shows how to import it into an empty library. |
+| `library.json` | The library every take starts from: a small fantasy-portrait pack (Role, Hair, Eyes, Outfit, Setting, Time of day …, the rules between them and six bundles). It is written by `build_library.py`; edit that and run `python tutorials/build_library.py`, never the JSON. Viewers get the same file as `WP Tutorials library.json` next to the videos; T01 shows how to import it into an empty library. |
 | `voice/speak.py` | Speaks every `t.say("…")` line with Kokoro-82M into `voice/cache/` and writes `voice/lines.json`. |
 | `render.mjs` | Turns a take into `out/<id>-<title>.mp4`, `.srt` and `.chapters.txt`. |
 
@@ -52,7 +52,7 @@ tutorial("T07", { title: "Your next tutorial" }, async (t) => {
 });
 ```
 
-- `t.say(line)` shows the caption and returns right away, so the hands work while the voice speaks. The next `say` waits until the line has been spoken. Use `t.waitVoice()` to wait on purpose, for example to keep a callout up until its line ends. Each line must be a plain string literal so `speak.py` can find it. In a line, `$hero` is read as "hero" and "WP" as "W P".
+- `t.say(line)` shows the caption and returns right away, so the hands work while the voice speaks. The next `say` waits until the line has been spoken. Use `t.waitVoice()` to wait on purpose, for example to keep a callout up until its line ends. Each line must be a plain string literal so `speak.py` can find it. In a line, `$role` is read as "role" and "WP" as "W P".
 - Every `t.h.step` becomes a chapter.
 - `t.addNode(search, {x, y})` drops the node centred on that point. Leave the bottom 140 px free for the caption.
 - Wrap a long wait in `t.fastForward(() => …)`, such as a model run. The video plays that part 6× faster.
@@ -75,7 +75,7 @@ The recording ComfyUI finds the Klein files in another install's models folder t
 - `t.go("/wp/wildcards")` opens a manager page, or `t.go("/")` for an empty canvas. The load plays fast and the caption stays up.
 - `t.fill(locator, text)` clicks a field, clears it and types, the way a person would.
 - `t.scrollTo(locator)` wheel-scrolls the page until the target is near the top. `t.click` scrolls by itself when its target is off screen or under the caption.
-- `t.pickModules(contextId, ["Hero", "Setting"])` opens a Context node's picker, scrolls to each row and ticks it (in that order), then adds them.
+- `t.pickModules(contextId, ["Role", "Setting"])` opens a Context node's picker, scrolls to each row and ticks it (in that order), then adds them.
 - `if (showcasing(t)) await showcase(t, { from: assembler, preview, chain })` builds a folded checkpoint → sampler chain fed by the Assembler, adds a preview and runs it a few times, fast-forwarded. `between(i)` runs before each run after the first (change a seed, flip a toggle).
 
 ## Notes

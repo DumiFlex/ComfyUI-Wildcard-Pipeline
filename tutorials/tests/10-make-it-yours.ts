@@ -36,7 +36,7 @@ tutorial(
       await t.go("/");
       await t.say("Wildcard Pipeline fits into ComfyUI. Here is a Context node with three lists, as it looks out of the box.");
       const ctx = await t.addNode("WP Context", { x: 620, y: 260 });
-      await t.pickModules(ctx, ["Hero", "Outfit", "Setting"]);
+      await t.pickModules(ctx, ["Role", "Outfit", "Setting"]);
       await t.waitVoice();
       await t.say("How it looks on the canvas is up to you. Open ComfyUI's Settings and find Wildcard Pipeline at the bottom.");
       const dialog = await openSettings(t);

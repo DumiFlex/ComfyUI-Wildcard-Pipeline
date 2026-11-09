@@ -18,11 +18,11 @@ tutorial(
       await t.say("A template is the sentence the Assembler fills in. Once you like one, keep it in your library.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 400, y: 300 });
-      await t.pickModules(ctx, ["Hero", "Outfit", "Setting"]);
+      await t.pickModules(ctx, ["Role", "Hair", "Setting"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1050, y: 300 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero wearing $outfit, standing in $setting");
+      await t.type("A painting of $role with $hair, $setting.");
       await t.beat(800);
       await t.say("Open the negative box under it, too. A template keeps its negative with it.");
       // Open the negative box unless it already is (it starts open or folded depending on its text).
@@ -45,7 +45,7 @@ tutorial(
       await t.click(save);
       await t.uncallout("save");
       await t.beat(600);
-      await t.fill(page.locator('[data-test="save-tpl-name"]').locator("input").or(page.locator('input[data-test="save-tpl-name"]')).first(), "Hero portrait");
+      await t.fill(page.locator('[data-test="save-tpl-name"]').locator("input").or(page.locator('input[data-test="save-tpl-name"]')).first(), "Painted portrait");
       await t.callout("preview", page.locator('[data-test="save-tpl-preview"]'), "What gets saved", 6);
       await t.say("Give it a name. The preview shows what gets saved.");
       await t.waitVoice();
@@ -60,7 +60,7 @@ tutorial(
       await t.wire(nodes.ctx, "context", asm2, "context");
       await t.click(t.node(asm2).locator('[data-test="asm-load-template"]'));
       await t.beat(800);
-      const row = page.locator('[data-test="load-tpl-row"]').filter({ hasText: "Hero portrait" }).first();
+      const row = page.locator('[data-test="load-tpl-row"]').filter({ hasText: "Painted portrait" }).first();
       await t.callout("row", row, "Your saved template", 6);
       await t.say("Your templates are listed here. Pick one.");
       await t.waitVoice();
@@ -77,8 +77,8 @@ tutorial(
       await t.go("/wp/templates");
       await t.say("Every saved template lives on the Templates page of the manager.");
       await t.beat(800);
-      const listed = page.getByText("Hero portrait", { exact: true }).first();
-      await t.callout("listed", listed, "Hero portrait", 8);
+      const listed = page.getByText("Painted portrait", { exact: true }).first();
+      await t.callout("listed", listed, "Painted portrait", 8);
       await t.waitVoice();
       await t.uncallout("listed");
       await t.say("Open it to rename it, edit the text, or give it a category, tags and a favourite star.");

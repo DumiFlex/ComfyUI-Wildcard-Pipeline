@@ -1,5 +1,5 @@
 // Library 5: backups. Settings › Library & data: automatic backups (daily, how many to keep), Back up
-// now with a note, a change (Hero loses "an inventor"), Restore of the noted backup (live, no
+// now with a note, a change (Role loses "a clockwork inventor"), Restore of the noted backup (live, no
 // restart, with its own "Before restore" backup), pins, then the database's location and
 // maintenance, and exporting settings (Advanced). Backups the recording's own lifecycle made are
 // hidden from the list so it shows only this video's.
@@ -57,10 +57,10 @@ tutorial(
     });
 
     await t.h.step("Restore, without a restart", async () => {
-      await t.say("Now the big edit: Hero loses the inventor.");
+      await t.say("Now the big edit: Role loses the clockwork inventor.");
       await t.go("/wp/wildcards/808878ba/edit");
       await t.beat(900);
-      const row = page.locator('[data-test="wc-opt-row-5"]');
+      const row = page.locator('[data-test="wc-opt-row-3"]');
       await t.hover(row);
       await t.beat(400);
       await t.click(row.getByRole("button", { name: "Remove option" }));
@@ -82,7 +82,7 @@ tutorial(
       await t.beat(1800);
       await t.go("/wp/wildcards/808878ba/edit");
       await t.beat(900);
-      await t.callout("back", page.locator('[data-test="wc-opt-row-5"]'), "The inventor is back", 4);
+      await t.callout("back", page.locator('[data-test="wc-opt-row-3"]'), "The inventor is back", 4);
       await t.waitVoice();
       await t.uncallout("back");
     });

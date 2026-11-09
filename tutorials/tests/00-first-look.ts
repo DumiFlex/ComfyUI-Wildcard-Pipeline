@@ -1,5 +1,6 @@
 // Get started 0: a first look around. The manager button on the canvas, the dashboard, what the
-// sidebar holds, a wildcard and its options, the docs and the settings. Nothing is changed.
+// sidebar sections hold, the library, a wildcard and its options, the docs, the settings and the
+// Discord button. Nothing is changed.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -27,11 +28,12 @@ tutorial(
 
     await t.h.step("The dashboard", async () => {
       await t.go("/wp/dashboard");
-      await t.say("The manager opens in its own window, on the dashboard.");
+      await t.say("The manager opens in its own window, on the dashboard. The cards count what your library holds.");
       await t.beat(800);
+      await t.waitVoice();
       const quick = page.locator('[data-test="dashboard-quick-create"]');
+      await t.say("And from this row you can start any new item in one click.");
       await t.callout("quick", quick, "Start a new item", 8);
-      await t.say("From here you can start any new item in one click.");
       await t.waitVoice();
       await t.uncallout("quick");
     });
@@ -39,13 +41,30 @@ tutorial(
     await t.h.step("The sidebar", async () => {
       const modules = ["wildcards", "fixed-values", "combines", "derivations", "constraints", "bundles"].map(nav);
       await t.callout("mods", modules, "Modules", 4);
-      await t.say("The sidebar lists your modules: the pieces a prompt is built from. This is the small library every tutorial uses; the next video shows how to get it.");
+      await t.say("The sidebar comes in sections. Modules are the pieces a prompt is built from.");
       await t.waitVoice();
       await t.say("Wildcards are lists to roll from. Fixed values always say the same thing. Combines join variables into a line.");
       await t.waitVoice();
       await t.say("Derivations set a variable by a rule, constraints keep picks that clash apart, and bundles group items together.");
       await t.waitVoice();
       await t.uncallout("mods");
+      const library = ["templates", "categories", "tags", "health", "import-export", "test"].map(nav);
+      await t.callout("lib", library, "Library", 4);
+      await t.say("Library holds what works across your items: saved templates, categories and tags to sort them, a health check, import and export, and the test runner, which rolls a stack many times to show how often each option comes up.");
+      await t.waitVoice();
+      await t.uncallout("lib");
+      const started = page.locator("a.wp-nav, button.wp-nav").filter({ hasText: /Community|Documentation|View Source|Feedback/ });
+      await t.callout("start", [started.first(), started.last()], "Get started", 4);
+      await t.say("Get started has the community, where people share packs, the documentation, the source code, and feedback and support.");
+      await t.waitVoice();
+      await t.uncallout("start");
+    });
+
+    await t.h.step("Your library", async () => {
+      await t.click(nav("all"));
+      await t.say("All items shows everything in your library in one list. This is the small library every tutorial uses: a role, hair, eyes, outfits, a setting, and a few rules. The next video shows how to get it.");
+      await t.beat(1200);
+      await t.waitVoice();
     });
 
     await t.h.step("A wildcard", async () => {
@@ -55,8 +74,8 @@ tutorial(
       await t.say("Here are the wildcards.");
       await t.beat(900);
       await t.waitVoice();
-      await t.click(page.locator("table").getByText("Hero", { exact: true }).first());
-      await t.say("Hero is a list of heroes. Its editor shows the options.");
+      await t.click(page.locator("table").getByText("Role", { exact: true }).first());
+      await t.say("Role is a list of who the picture is about: a knight, a battle mage, a forest ranger and a clockwork inventor. Its editor shows the options.");
       await t.beat(1200);
       await t.waitVoice();
       const options = page.locator('[data-test^="wc-opt-row-"]');
@@ -66,8 +85,8 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("opts");
       const tags = page.locator('[data-test^="opt-tags-"]');
-      await t.callout("tags", [tags.first(), tags.last()], "Tags", 6);
-      await t.say("Tags sort options into groups, like noble or urban. Rules can read them later.");
+      await t.callout("tags", [tags.first(), tags.last()], "Tags", 10);
+      await t.say("Tags sort options into groups. Here each role carries its own tag, and rules read those tags to pick a fitting outfit and place.");
       await t.waitVoice();
       await t.uncallout("tags");
     });
@@ -78,9 +97,20 @@ tutorial(
       await t.beat(1500);
       await t.waitVoice();
       await t.click(page.locator('[data-test="topbar-settings"]'));
-      await t.say("And the gear opens the settings: themes, density, and how the canvas widgets look.");
-      await t.beat(1500);
+      await t.say("The gear opens the settings.");
+      await t.beat(1200);
       await t.waitVoice();
+      const sections = page.locator('[data-test^="settings-nav-"]');
+      await t.callout("sections", [sections.first(), sections.last()], "Settings", 4);
+      await t.say("Besides the look of the manager, they cover how editors and autocomplete behave, the nodes on the canvas, the test runner, the AI assistant, your database and its backups, and moving settings to another machine.");
+      await t.waitVoice();
+      await t.uncallout("sections");
+      const discord = page.locator(".wp-topbar__discord").first();
+      await t.hover(discord);
+      await t.callout("discord", discord, "Help on Discord", 6);
+      await t.say("Stuck? The Discord button in the top bar is the fastest way to ask a person.");
+      await t.waitVoice();
+      await t.uncallout("discord");
     });
 
     await t.h.step("Outro", async () => {

@@ -1,7 +1,7 @@
-// Advanced 18: subgraphs. Time of day in one Context → a Context with Hero + Lighting from time →
+// Advanced 18: subgraphs. Time of day in one Context → a Context with Role + Lighting from time →
 // Assembler → Preview as Text. The second Context and the Assembler become a subgraph; variables still
 // cross its edge (run). Delete the first Context and the subgraph's badge says what broke inside
-// (missing $time); Undo. Enter the subgraph to see the nodes inside.
+// (missing $time, on its header); Undo. Enter the subgraph to see the nodes inside.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -20,16 +20,16 @@ tutorial(
 
     const nodes = await t.h.step("A small pipeline", async () => {
       await t.go("/");
-      await t.say("One Context sets the time of day. The next adds a hero and lighting that reads the time, into an Assembler.");
+      await t.say("One Context sets the time of day. The next adds a role and the lighting rule, which reads the time, into an Assembler.");
       const up = await t.addNode("WP Context", { x: 360, y: 170 });
       await t.pickModules(up, ["Time of day"]);
       const ctx = await t.addNode("WP Context", { x: 1010, y: 170 });
       await t.wire(up, "context", ctx, "upstream");
-      await t.pickModules(ctx, ["Hero", "Lighting from time"]);
+      await t.pickModules(ctx, ["Role", "Lighting from time"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 640 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero at $time, $lighting", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting.", { cps: 16 });
       await t.beat(500);
       const text = await t.addNode("Preview as Text", { x: 1620, y: 640 });
       await t.wire(asm, "prompt", text, "source");
@@ -68,8 +68,10 @@ tutorial(
         const g = window.app?.graph as { nodes?: { id: number | string; subgraph?: unknown }[] } | undefined;
         return String(g?.nodes?.find((n) => n.subgraph)?.id ?? "");
       });
-      await t.callout("badge", t.node(sub), "What broke inside", 6);
-      await t.say("Nothing sets time any more, and the subgraph's badge says so, without opening it. It shows the worst problem inside.");
+      const badge = t.node(sub).getByText(/missing \$time|\d+ conflicts?/).first();
+      await badge.waitFor({ timeout: 8000 });
+      await t.callout("badge", badge, "What broke inside", 6);
+      await t.say("Nothing sets time any more, and the subgraph's badge says so, without opening it. It shows the worst problem inside, or how many there are.");
       await t.waitVoice();
       await t.uncallout("badge");
       await t.say("Undo puts it back.");

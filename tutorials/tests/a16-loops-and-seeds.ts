@@ -1,6 +1,6 @@
-// Advanced 16: loops and seeds. A Context Loop runs four frames of Hero, Time of day and Outfit;
+// Advanced 16: loops and seeds. A Context Loop runs four frames of Role, Hair and Time of day;
 // $iteration (shown, not internal) numbers each prompt. The seeds window lists each frame's seed and
-// locks one. Sweep combinations runs every Time of day × Outfit pair while the hero holds. A WP Seed
+// locks one. Sweep combinations runs every Time of day × Hair pair while the role holds. A WP Seed
 // List on loop_config gives the sampler one seed per frame. Run with Easy-Use's Show Any, which lists every frame (Preview as Text shows only one).
 import { tutorial } from "../tutorial.js";
 
@@ -13,6 +13,14 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
+    // A highlight on a Show Any waits until the run's text is in it, not just until the run ends.
+    const filled = async (node: string, re: RegExp) => {
+      for (let i = 0; i < 60; i++) {
+        if (re.test(await t.node(node).innerText().catch(() => ""))) break;
+        await t.beat(250);
+      }
+      await t.beat(400);
+    };
 
     const nodes = await t.h.step("Four frames", async () => {
       await t.go("/");
@@ -20,7 +28,7 @@ tutorial(
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
-      await t.pickModules(ctx, ["Hero", "Time of day", "Outfit"]);
+      await t.pickModules(ctx, ["Role", "Hair", "Time of day"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.say("To read the prompts, add Show Any from the Easy-Use pack: it lists every prompt the loop makes.");
@@ -35,7 +43,7 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("it");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("frame $iteration: $hero wearing $outfit at $time", { cps: 16 });
+      await t.type("frame $iteration: a painting of $role with $hair, $time", { cps: 16 });
       await t.beat(600);
       await t.say("Set the count to four, and Run.");
       const more = t.node(loop).locator('[data-widget-name="count"] button').last();
@@ -44,6 +52,7 @@ tutorial(
         await t.beat(350);
       }
       await t.run();
+      await filled(text, /frame 4/);
       await t.callout("out", t.node(text), "Four numbered prompts", 6);
       await t.say("Four prompts from one click, each with its own picks.");
       await t.waitVoice();
@@ -78,8 +87,8 @@ tutorial(
       await t.click(modal.locator('[data-test="sweep-toggle"]'));
       await t.beat(600);
       await t.waitVoice();
-      await t.say("Add Time of day, then Outfit.");
-      for (const name of [/time/i, /outfit/i]) {
+      await t.say("Add Time of day, then Hair.");
+      for (const name of [/time/i, /^hair\b/i]) {
         // The add list is a native drop-down: choose the option whose label matches.
         const add = modal.locator('[data-test="sweep-add"]');
         const select = (await add.evaluate((el) => el.tagName)) === "SELECT" ? add : add.locator("select").first();
@@ -91,14 +100,15 @@ tutorial(
         await t.beat(800);
       }
       await t.callout("total", modal.locator('[data-test="sweep-total"]'), "3 times 4: twelve frames", 5);
-      await t.say("Three times of day by four outfits: twelve frames. The hero isn't swept, so Hold other picks keeps one hero on all of them.");
+      await t.say("Three times of day by four hair styles: twelve frames. The role isn't swept, so Hold other picks keeps one role on all of them.");
       await t.waitVoice();
       await t.uncallout("total");
       await t.click(modal.locator('[data-test="sweep-modal-done"]'));
       await t.beat(700);
       await t.say("Run.");
       await t.run();
-      await t.callout("out", t.node(nodes.text), "Every pair, one hero", 6);
+      await filled(nodes.text, /frame 12/);
+      await t.callout("out", t.node(nodes.text), "Every pair, one role", 6);
       await t.waitVoice();
       await t.uncallout("out");
     });
@@ -110,6 +120,7 @@ tutorial(
       const p2 = await t.addNode("Show Any", { x: 790, y: 720 });
       await t.wire(sl, "seed", p2, "anything");
       await t.run();
+      await filled(p2, /\d{4,}[\s\S]*\d{4,}/);
       await t.callout("sl", t.node(p2), "One sampler seed per frame", 5);
       await t.waitVoice();
       await t.uncallout("sl");
