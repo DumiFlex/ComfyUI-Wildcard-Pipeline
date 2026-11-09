@@ -62,6 +62,34 @@ type Point = { x: number; y: number };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
+
+/**
+ * The part of an element that is really on screen: its box cut down to every ancestor that clips
+ * its overflow (a scrolling panel, a dialog body) and to the window, so a callout never boxes the
+ * hidden rest of a long list. Null when nothing of it shows.
+ */
+async function shownBox(el: Locator, timeout = 5_000): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  return el
+    .evaluate(
+      (node) => {
+        const r = node.getBoundingClientRect();
+        let [l, t, rt, b] = [r.left, r.top, r.right, r.bottom];
+        for (let p = node.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+          const cs = getComputedStyle(p);
+          if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+          const q = p.getBoundingClientRect();
+          if (cs.overflowX !== "visible") [l, rt] = [Math.max(l, q.left), Math.min(rt, q.right)];
+          if (cs.overflowY !== "visible") [t, b] = [Math.max(t, q.top), Math.min(b, q.bottom)];
+        }
+        [l, t, rt, b] = [Math.max(l, 0), Math.max(t, 0), Math.min(rt, window.innerWidth), Math.min(b, window.innerHeight)];
+        return rt > l && b > t ? { x: l, y: t, width: rt - l, height: b - t } : null;
+      },
+      undefined,
+      { timeout },
+    )
+    .catch(() => null);
+}
+
 export class Tutor {
   readonly page: Page;
   /** WP Debug's node id once addDebugUnder placed it. */
@@ -389,7 +417,7 @@ export class Tutor {
     const boxes = [];
     for (const one of Array.isArray(target) ? target : [target]) {
       await one.waitFor({ state: "visible", timeout: 15_000 });
-      const b = await one.boundingBox();
+      const b = await shownBox(one);
       if (b) boxes.push(b);
     }
     if (!boxes.length) return;
@@ -431,7 +459,7 @@ export class Tutor {
               { timeout: 200 },
             )
             .catch(() => false);
-          const b = seen ? await one.boundingBox({ timeout: 200 }).catch(() => null) : null;
+          const b = seen ? await shownBox(one, 200) : null;
           if (b && b.width > 0 && b.height > 0) boxes.push(b);
         }
         if (!this.followers.has(id)) return;
@@ -570,6 +598,24 @@ export class Tutor {
    * Adds a node the way a person does: double-click empty canvas at `at`, type `search`, Enter,
    * then click to drop it there. Returns the new node's id.
    */
+  /**
+   * Off camera: removes what earlier videos of the same run added to the library (items, bundles,
+   * templates and categories that library.json doesn't have), so a video that lists the library
+   * shows it as a viewer has it after importing library.json.
+   */
+  async tidyLibrary(): Promise<void> {
+    const want = JSON.parse(readFileSync(path.join(this.packDir, "library.json"), "utf8")) as Record<string, unknown>;
+    const ids = new Set<string>();
+    for (const v of Object.values(want)) if (Array.isArray(v)) for (const x of v as { id?: unknown }[]) if (typeof x?.id === "string") ids.add(x.id);
+    const lib = await this.h.library();
+    for (const x of lib.bundles) if (!ids.has(x.id)) await this.h.api(`/wp/api/bundles/${x.id}`, { method: "DELETE" });
+    for (const x of lib.templates) if (!ids.has(x.id)) await this.h.api(`/wp/api/templates/${x.id}`, { method: "DELETE" });
+    for (const x of lib.modules) if (!ids.has(x.id)) await this.h.api(`/wp/api/modules/${x.id}`, { method: "DELETE" });
+    const cats = await this.h.api("/wp/api/categories");
+    const catList = (cats.json?.items ?? cats.json ?? []) as { id: string }[];
+    for (const c of catList) if (!ids.has(c.id)) await this.h.api(`/wp/api/categories/${c.id}`, { method: "DELETE" });
+  }
+
   async addNode(search: string, wanted: Point): Promise<string> {
     const before = new Set(await this.nodeIds());
     // The double click must land on empty canvas. A node that grew (a preview row, a longer list)
@@ -593,6 +639,9 @@ export class Tutor {
         const el = document.activeElement;
         return el?.tagName === "INPUT" && !el.closest("[data-node-id]") && !!el.closest('[role="dialog"], .comfy-vue-node-search-container, .p-dialog, .litesearchbox');
       });
+    // A field just typed into (a Text node's box) keeps the focus, and the canvas then takes the
+    // first click as a blur: let go of it first, so the double click reaches the canvas.
+    await this.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
     await this.click(at, { double: true });
     await sleep(500);
     if (!(await searchOpen())) {
@@ -1070,6 +1119,18 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
   await card.waitFor({ state: "attached", timeout: 15_000 });
   await card.scrollIntoViewIfNeeded();
   await sleep(400);
+  // The example's checkpoint is rarely installed: ComfyUI's "is missing" toast would show until
+  // useCheckpoint swaps the model, so keep it off the recording as it appears.
+  await page.evaluate(() => {
+    const hide = () => {
+      for (const el of Array.from(document.querySelectorAll('[role="status"], [role="alert"], .p-toast-message')))
+        if (/is missing/i.test(el.textContent ?? "")) (el as HTMLElement).style.display = "none";
+    };
+    hide();
+    const obs = new MutationObserver(hide);
+    obs.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => obs.disconnect(), 15_000);
+  });
   await t.click(card);
   await page.waitForFunction(() => (window.app?.graph?.nodes?.length ?? 0) > 5, undefined, { timeout: 20_000 });
   await sleep(2500);
@@ -1078,11 +1139,25 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
     await missing.first().getByRole("button").filter({ hasNotText: "View details" }).first().click().catch(() => undefined);
     await sleep(500);
   }
+  // Tabs left open by earlier videos of the run: show only this example's tab (the recording only).
+  const name = title.replace(/^\d+\s*-\s*/, "").toLowerCase();
+  await page.evaluate((n) => {
+    for (const tab of Array.from(document.querySelectorAll('[data-testid="workflow-tab"]')))
+      if (!(tab.textContent ?? "").toLowerCase().includes(n)) {
+        // Hide its own wrapper when it holds just this tab, so no empty slot is left in the strip.
+        const wrap = tab.parentElement;
+        const one = wrap && wrap.querySelectorAll('[data-testid="workflow-tab"]').length === 1 ? wrap : tab;
+        (one as HTMLElement).style.display = "none";
+      }
+  }, name);
 }
 
-/** Points every Load Checkpoint at the pack's `checkpoint` (when ComfyUI has it). Returns whether it did. */
+/**
+ * Points every Load Checkpoint at the pack's `checkpoint`, else its `exampleCheckpoint` (when ComfyUI
+ * has it). Returns whether it did.
+ */
 export async function useCheckpoint(t: Tutor): Promise<boolean> {
-  const ckpt = String(t.params.checkpoint ?? "");
+  const ckpt = String(t.params.checkpoint || t.params.exampleCheckpoint || "");
   if (!ckpt) return false;
   const info = await t.h.api("/object_info/CheckpointLoaderSimple");
   const known = ((info.json as Record<string, { input?: { required?: { ckpt_name?: [string[]] } } }> | undefined)?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? []) as string[];

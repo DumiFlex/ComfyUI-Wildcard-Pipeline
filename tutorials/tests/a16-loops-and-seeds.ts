@@ -88,14 +88,15 @@ tutorial(
       await t.beat(600);
       await t.waitVoice();
       await t.say("Add Time of day, then Hair.");
-      for (const name of [/time/i, /^hair\b/i]) {
+      for (const name of [/^\$?time\b/i, /^\$?hair\b/i]) {
         // The add list is a native drop-down: choose the option whose label matches.
         const add = modal.locator('[data-test="sweep-add"]');
         const select = (await add.evaluate((el) => el.tagName)) === "SELECT" ? add : add.locator("select").first();
         const value = await select.locator("option").evaluateAll(
-          (opts, src) => (opts as HTMLOptionElement[]).find((o) => new RegExp(src, "i").test(o.text))?.value ?? "",
+          (opts, src) => (opts as HTMLOptionElement[]).find((o) => !o.disabled && new RegExp(src, "i").test(o.text.trim()))?.value ?? "",
           name.source,
         );
+        if (!value) throw new Error(`No sweep option matches ${name}`);
         await t.choose(select, value);
         await t.beat(800);
       }

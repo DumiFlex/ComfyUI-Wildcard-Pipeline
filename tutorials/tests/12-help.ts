@@ -77,7 +77,8 @@ tutorial(
       await t.say("Control and slash shows every keyboard shortcut.");
       await t.press("Control+/");
       await t.beat(1200);
-      await t.callout("keys", page.getByRole("dialog").last(), "Keyboard shortcuts", 4);
+      // The dialog role sits on a full-width wrapper; box the panel inside it.
+      await t.callout("keys", page.getByRole("dialog").last().locator(".wp-modal").first(), "Keyboard shortcuts", 4);
       await t.waitVoice();
       await t.uncallout("keys");
       await t.press("Escape");
