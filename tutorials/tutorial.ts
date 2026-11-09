@@ -621,6 +621,9 @@ export class Tutor {
         const el = document.activeElement;
         return el?.tagName === "INPUT" && !el.closest("[data-node-id]") && !!el.closest('[role="dialog"], .comfy-vue-node-search-container, .p-dialog, .litesearchbox');
       });
+    // A field just typed into (a Text node's box) keeps the focus, and the canvas then takes the
+    // first click as a blur: let go of it first, so the double click reaches the canvas.
+    await this.page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
     await this.click(at, { double: true });
     await sleep(500);
     if (!(await searchOpen())) {
