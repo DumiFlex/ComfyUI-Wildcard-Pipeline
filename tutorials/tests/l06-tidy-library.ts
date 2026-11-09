@@ -15,6 +15,8 @@ tutorial(
     const page = t.page;
 
     await t.h.step("The dashboard", async () => {
+      // Earlier videos in the run add items; this one shows the library as it is after the import.
+      await t.tidyLibrary();
       await t.go("/wp/dashboard");
       await t.say("The dashboard is the library at a glance: how many of each kind, what you changed last, and what needs a look.");
       await t.beat(1500);

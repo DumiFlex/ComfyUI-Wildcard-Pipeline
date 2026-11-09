@@ -598,6 +598,24 @@ export class Tutor {
    * Adds a node the way a person does: double-click empty canvas at `at`, type `search`, Enter,
    * then click to drop it there. Returns the new node's id.
    */
+  /**
+   * Off camera: removes what earlier videos of the same run added to the library (items, bundles,
+   * templates and categories that library.json doesn't have), so a video that lists the library
+   * shows it as a viewer has it after importing library.json.
+   */
+  async tidyLibrary(): Promise<void> {
+    const want = JSON.parse(readFileSync(path.join(this.packDir, "library.json"), "utf8")) as Record<string, unknown>;
+    const ids = new Set<string>();
+    for (const v of Object.values(want)) if (Array.isArray(v)) for (const x of v as { id?: unknown }[]) if (typeof x?.id === "string") ids.add(x.id);
+    const lib = await this.h.library();
+    for (const x of lib.bundles) if (!ids.has(x.id)) await this.h.api(`/wp/api/bundles/${x.id}`, { method: "DELETE" });
+    for (const x of lib.templates) if (!ids.has(x.id)) await this.h.api(`/wp/api/templates/${x.id}`, { method: "DELETE" });
+    for (const x of lib.modules) if (!ids.has(x.id)) await this.h.api(`/wp/api/modules/${x.id}`, { method: "DELETE" });
+    const cats = await this.h.api("/wp/api/categories");
+    const catList = (cats.json?.items ?? cats.json ?? []) as { id: string }[];
+    for (const c of catList) if (!ids.has(c.id)) await this.h.api(`/wp/api/categories/${c.id}`, { method: "DELETE" });
+  }
+
   async addNode(search: string, wanted: Point): Promise<string> {
     const before = new Set(await this.nodeIds());
     // The double click must land on empty canvas. A node that grew (a preview row, a longer list)
