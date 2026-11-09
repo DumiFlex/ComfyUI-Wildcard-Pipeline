@@ -123,6 +123,12 @@ def parse_var_reference(name: str) -> tuple[str, int | None, str | None]:
     return (m.group(1), int(idx) if idx is not None else None, axis)
 
 
+def bool_text(value: bool) -> str:
+    """A boolean as a variable's text: "true" / "false", the words WP Toggles writes and a
+    derivation's equals test compares against."""
+    return "true" if value else "false"
+
+
 def deref_var_value(value: str | ListVar | None, index: int | None) -> str:
     """Render a resolved var value to a string, honoring an optional ``.K``
     list accessor (SP2a). ListVar: bare -> ``sep.join(items)``; ``.K`` ->
@@ -138,7 +144,10 @@ def deref_var_value(value: str | ListVar | None, index: int | None) -> str:
         if index is not None:
             return value.items[index] if 0 <= index < len(value.items) else ""
         return value.sep.join(value.items)
-    s = value if isinstance(value, str) else str(value)
+    if isinstance(value, bool):
+        s = bool_text(value)
+    else:
+        s = value if isinstance(value, str) else str(value)
     if index is not None:
         return s if index == 0 else ""
     return s
