@@ -24,6 +24,8 @@ tutorial(
     const nodes = await t.h.step("A loop", async () => {
       await t.go("/");
       await t.say("A Context Loop runs the workflow several times from one click. Each frame rolls its own picks.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
@@ -31,8 +33,9 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role wearing $outfit, $setting.", { cps: 16 });
+      await t.type("A painting of $role wearing $outfit, $setting", { cps: 16 });
       await t.beat(600);
+      await t.normalSpeed();
       await t.say("To read the prompts, add Show Any from the Easy-Use pack: it lists every prompt the loop makes.");
       const text = await t.addNode("Show Any", { x: 1340, y: 620 });
       await t.wire(asm, "prompt", text, "anything");
@@ -92,7 +95,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $time, $lighting.", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting", { cps: 16 });
       await t.beat(600);
       await t.say("Time of day still rolls: dawn, sunset or night. Edit it, and type wanted time into Match variable.");
       const modal = await editItem(ctx, "Time of day");
@@ -106,12 +109,21 @@ tutorial(
       await t.uncallout("match");
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(800);
+      // The Assembler's preview only sees the Injector's placeholder before a run, so Match has
+      // nothing to match there: run, and read the prompt in Preview as Text.
+      await t.say("Add Preview as Text for the finished prompt, and run it on a few seeds.");
+      const text = await t.addNode("Preview as Text", { x: 1560, y: 600 });
+      await t.wire(asm, "prompt", text, "source");
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
-      await t.callout("prev", t.node(asm).locator('[data-test="asm-preview"]'), "Always night, always moonlight", 6);
+      await t.run();
+      await t.beat(600);
+      await t.callout("prev", t.node(text), "Always night, always moonlight", 6);
       await t.say("Now time is night on every seed. And Lighting, which reads time, gives moonlight every time: a matched pick drives the rules and constraints after it.");
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         await t.click(plus);
-        await t.beat(1000);
+        await t.beat(400);
+        await t.run();
+        await t.beat(900);
       }
       await t.waitVoice();
       await t.uncallout("prev");

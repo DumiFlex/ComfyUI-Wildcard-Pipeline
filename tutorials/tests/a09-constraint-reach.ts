@@ -53,7 +53,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 170 });
       await t.wire(c3, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $setting, and later $later.", { cps: 16 });
+      await t.type("A painting of $role $setting, and later $later", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       await t.say("Each Context has its own seed. To roll the whole chain at once, add an Int node and wire it into all three seeds.");

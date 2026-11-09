@@ -23,7 +23,7 @@ tutorial(
       await t.click(page.locator('[data-test="toggle-branch-0-0"]'));
       await t.beat(600);
       const branch = page.locator('[data-test="branch-0-0"]');
-      await t.scrollTo(branch);
+      await t.scrollTo(branch, { at: 0.15, force: true });
       await t.callout("if", page.locator('[data-test="cond-test-0-0"]'), "IF time is at night", 6);
       await t.say("If the time rolled at night,");
       await t.waitVoice();
@@ -82,7 +82,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of a lone traveler $scene.");
+      await t.type("A painting of a lone traveler $scene");
       await t.beat(1000);
       await t.say("Only the scene reaches the template, so hide the other three with their globe buttons. The combine still reads them.");
       await t.hide(ctx, ["Time of day", "Setting", "Lighting from time"]);

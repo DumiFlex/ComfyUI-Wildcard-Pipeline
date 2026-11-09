@@ -4,6 +4,7 @@
 // open a pack; nothing is installed or published). Without a reachable community (the cloud) the last
 // step only names the tab.
 import path from "node:path";
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
 
@@ -68,6 +69,16 @@ tutorial(
     await t.h.step("Publish to the community", async () => {
       await t.click(page.locator('[data-test="io-tab-export"]'));
       await t.beat(800);
+      // The tab comes back with nothing ticked, and Publish greyed out: tick Character again.
+      const row = page.locator('[data-test="export-tab-row-bundle-7e3d3ec2"]');
+      if (!(await row.isVisible().catch(() => false))) {
+        await t.click(page.locator('[data-test="export-tab-section-bundle"] [data-test="picker-section-toggle"]'));
+        await t.beat(500);
+      }
+      await t.click(row);
+      await t.beat(500);
+      const publish = page.locator('[data-test="export-tab-publish-community"]');
+      if (await publish.isDisabled()) throw new StepError("Publish to community is still greyed out.");
       await t.callout("pub", page.locator('[data-test="export-tab-publish-community"]'), "Share with everyone", 5);
       await t.say("To share with everyone, Publish to community opens the publish form with your selection filled in. Every module and bundle editor has the same button.");
       await t.waitVoice();

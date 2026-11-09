@@ -23,9 +23,12 @@ tutorial(
     const nodes = await t.h.step("Two Contexts", async () => {
       await t.go("/");
       await t.say("A big prompt reads better in parts. One Context for the character: Role, Hair, Eyes, and the Subject combine that joins them.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const a = await t.addNode("WP Context", { x: 340, y: 170 });
       await t.pickModules(a, ["Role", "Hair", "Eyes", "Subject"]);
       await t.waitVoice();
+      await t.normalSpeed();
       await t.say("A second Context for the scene, wired into the first one's upstream: Time of day, Setting, the lighting rule and the Scene combine.");
       const b = await t.addNode("WP Context", { x: 1000, y: 170 });
       await t.wire(a, "context", b, "upstream");
@@ -38,7 +41,7 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("vars");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $subject $scene.", { cps: 16 });
+      await t.type("A painting of $subject $scene", { cps: 16 });
       await t.beat(600);
       return { a, b, asm };
     });

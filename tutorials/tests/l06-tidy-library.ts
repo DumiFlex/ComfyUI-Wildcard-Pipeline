@@ -2,7 +2,21 @@
 // category made on Categories; Role, Setting and Outfit selected in All items and given the category
 // and a "characters" tag in bulk; Role starred; Filters by category, favourites, tags and content
 // rating.
-import { tutorial } from "../tutorial.js";
+import { StepError } from "watchwright";
+import { tutorial, type Tutor } from "../tutorial.js";
+
+const ROLE = "808878ba";
+
+async function isFavourite(t: Tutor): Promise<boolean> {
+  const r = await t.h.api(`/wp/api/modules/${ROLE}`);
+  const row = (r.json?.data ?? r.json) as { is_favorite?: unknown } | undefined;
+  return !!row?.is_favorite;
+}
+
+/** Off camera: puts Role's star on or off (the API only toggles it). */
+async function setFavourite(t: Tutor, on: boolean): Promise<void> {
+  if ((await isFavourite(t)) !== on) await t.h.api(`/wp/api/modules/${ROLE}/favorite`, { method: "POST" });
+}
 
 tutorial(
   "L06",
@@ -64,15 +78,21 @@ tutorial(
     });
 
     await t.h.step("Favourites and search", async () => {
-      await t.say("The star marks a favourite. Star Role.");
-      const role = page.locator("tr", { has: page.locator('[data-test="row-select-808878ba"]') });
-      await t.click(role.getByRole("button", { name: /favorite/i }).first());
-      await t.beat(700);
-      await t.say("The search box finds items by name, id or tag. Type hair.");
-      await t.fill(page.getByPlaceholder(/Search by name/), "hair", { cps: 12 });
+      // Off camera: a star left from an earlier take would make the click below take it off.
+      await setFavourite(t, false);
+      await t.say("The search box finds items by name, id or tag. Type role.");
+      const search = page.getByPlaceholder(/Search by name/);
+      await t.fill(search, "role", { cps: 12 });
       await t.beat(1000);
       await t.waitVoice();
-      await t.fill(page.getByPlaceholder(/Search by name/), "", { cps: 12 });
+      // Role is on the second page of the full table; found, its row is at the top.
+      await t.say("The star marks a favourite. Star Role.");
+      const role = page.locator("tr", { has: page.locator(`[data-test="row-select-${ROLE}"]`) });
+      await t.click(role.getByRole("button", { name: /favorite/i }).first());
+      await t.beat(700);
+      if (!(await isFavourite(t))) throw new StepError("Role didn't get its star.");
+      await t.waitVoice();
+      await t.fill(search, "", { cps: 12 });
       await t.beat(500);
     });
 
@@ -91,6 +111,9 @@ tutorial(
 
     await t.h.step("Outro", async () => {
       await t.say("Categories and tags sort it, the star and search find it, and filters narrow it down. That's the library track.");
+      await t.waitVoice();
+      // Off camera: the next video starts without the star.
+      await setFavourite(t, false);
     });
   },
 );

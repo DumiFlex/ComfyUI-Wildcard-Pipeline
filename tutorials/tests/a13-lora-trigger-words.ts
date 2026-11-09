@@ -54,10 +54,17 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $subject in a quiet forest.", { cps: 16 });
+      await t.type("A painting of $subject in a quiet forest", { cps: 16 });
       await t.beat(800);
       await t.waitVoice();
-      const prev = t.node(asm).locator('[data-test="asm-preview"]');
+      // The Assembler's own preview only sees the Injector's placeholders before a run: run it and
+      // read the prompt in Preview as Text.
+      await t.say("Add Preview as Text for the finished prompt, and Run.");
+      const text = await t.addNode("Preview as Text", { x: 1560, y: 600 });
+      await t.wire(asm, "prompt", text, "source");
+      await t.run();
+      await t.beat(800);
+      const prev = t.node(text);
       await t.callout("prev", prev, "The LoRA's words, not a roll", 6);
       await t.say("While the Boolean is on, the rule puts the trigger words in place of the whole subject, so the rolled role, hair and eyes don't fight the LoRA.");
       await t.waitVoice();
@@ -66,9 +73,11 @@ tutorial(
     });
 
     await t.h.step("Off again", async () => {
-      await t.say("Switch the Boolean off, and the rolled subject comes back.");
+      await t.say("Switch the Boolean off and run again: the rolled subject comes back.");
       await t.click(nodes.toggle);
-      await t.beat(900);
+      await t.beat(600);
+      await t.run();
+      await t.beat(800);
       await t.callout("prev", prev, "Rolled again", 6);
       await t.waitVoice();
       await t.uncallout("prev");

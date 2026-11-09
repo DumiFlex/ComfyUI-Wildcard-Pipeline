@@ -58,6 +58,15 @@ tutorial(
       await t.click(page.locator('[data-test="pack-build"]'));
       await aiWait(t, { timeout: 90 * 60_000, quiet: 5000 });
       await t.waitVoice();
+      // A small model's pack often comes back with findings: say what they are, not just show them.
+      const findings = page.locator('[data-test="pack-finding"]');
+      const n = await findings.count();
+      if (n > 0) {
+        await t.callout("found", findings.first(), n > 1 ? `${n} things to look at` : "One thing to look at", 5);
+        await t.say("Anything the check finds is listed here, with a Fix button for each. Fix them, or install as it is and change it later.");
+        await t.waitVoice();
+        await t.uncallout("found");
+      }
     });
 
     await t.h.step("Install", async () => {

@@ -76,18 +76,24 @@ tutorial(
         await t.click(allow);
         await aiWait(t);
       }
-      await t.callout("ans", page.locator('[data-test="ai-chat-reply"]').last(), "The tag, from Danbooru", 5);
+      const reply = page.locator('[data-test="ai-chat-reply"]').last();
+      await t.callout("ans", reply, "The tag, from Danbooru", 5);
+      await t.say("And here's what it found: the tag as Danbooru writes it, ready to paste into an option.");
       await t.waitVoice();
+      await t.beat(1500);
       await t.uncallout("ans");
     });
 
     await t.h.step("Back as it was", async () => {
+      // Off camera: the switch goes back off for the next video.
       if (turnedOn || (await isOn())) {
-        await t.click(page.locator('[data-test="ai-chat-close"]'));
-        await t.beat(500);
-        await t.scrollTo(danbooru, { at: 0.4 });
-        await t.click(danbooru);
-        await t.beat(600);
+        await t.fastForward(async () => {
+          await t.click(page.locator('[data-test="ai-chat-close"]'));
+          await t.beat(500);
+          await t.scrollTo(danbooru, { at: 0.4 });
+          await t.click(danbooru);
+          await t.beat(600);
+        }, 0);
       }
     });
 

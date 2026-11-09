@@ -2,6 +2,7 @@
 // text, or a caption from an LLM node); wired into the Injector they become $cloak and $color. A
 // template row joins them into $look, the Injector's built-in combine. The Injector feeds a Context
 // with Role and Setting, and the Assembler prints all of it.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -58,6 +59,8 @@ tutorial(
       await t.click(page.locator('[data-test="ibm-template"]').locator('[contenteditable="true"], textarea').first());
       await t.type("a $color $cloak with a silver clasp", { cps: 14 });
       await t.beat(600);
+      const typed = await page.locator('[data-test="ibm-template"]').innerText().catch(() => "");
+      if (!/silver clasp/.test(typed)) throw new StepError("The look row's template didn't take the typing.");
       await t.callout("prev", page.locator('[data-test="ibm-preview"]'), "What $look will be", 6);
       await t.waitVoice();
       await t.uncallout("prev");
@@ -75,9 +78,15 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role in $look, $setting.", { cps: 16 });
+      await t.type("A painting of $role in $look, $setting", { cps: 16 });
       await t.beat(800);
-      await t.callout("prev", t.node(asm).locator('[data-test="asm-preview"]'), "Your text, inside the rolled prompt", 6);
+      // Before a run the Assembler's preview shows $look as a placeholder: run, and read the prompt.
+      await t.say("Add Preview as Text for the finished prompt, and Run.");
+      const text = await t.addNode("Preview as Text", { x: 1560, y: 600 });
+      await t.wire(asm, "prompt", text, "source");
+      await t.run();
+      await t.beat(800);
+      await t.callout("prev", t.node(text), "Your text, inside the rolled prompt", 6);
       await t.waitVoice();
       await t.say("The role and the place still roll. The cloak is whatever the text boxes say, so change a text and the prompt follows.");
       await t.waitVoice();

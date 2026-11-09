@@ -21,6 +21,8 @@ tutorial(
     const nodes = await t.h.step("A small pipeline", async () => {
       await t.go("/");
       await t.say("One Context sets the time of day. The next adds a role and the lighting rule, which reads the time, into an Assembler.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const up = await t.addNode("WP Context", { x: 360, y: 170 });
       await t.pickModules(up, ["Time of day"]);
       const ctx = await t.addNode("WP Context", { x: 1010, y: 170 });
@@ -29,7 +31,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 640 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $time, $lighting.", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting", { cps: 16 });
       await t.beat(500);
       const text = await t.addNode("Preview as Text", { x: 1620, y: 640 });
       await t.wire(asm, "prompt", text, "source");
@@ -37,6 +39,7 @@ tutorial(
       return { up, ctx, asm, text };
     });
 
+      await t.normalSpeed();
     await t.h.step("Make a subgraph", async () => {
       await t.say("Select the second Context and the Assembler, and press Convert to subgraph in the toolbar.");
       await t.click(await titleBar(nodes.ctx));

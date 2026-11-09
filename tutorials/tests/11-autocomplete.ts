@@ -26,6 +26,8 @@ tutorial(
     let loras = false;
 
     await t.h.step("Turn it on", async () => {
+      // Off camera: a tag list left from an earlier take would show Replace, not Download.
+      await t.h.api("/wp/api/tags", { method: "DELETE" }).catch(() => undefined);
       await t.go("/wp/settings/autocomplete");
       await t.say("Wildcard Pipeline can suggest tags, LoRAs and embeddings while you type. It's all off until you turn it on, here in the manager's Settings, under Autocomplete.");
       await t.waitVoice();
@@ -64,8 +66,9 @@ tutorial(
     await t.h.step("While you type", async () => {
       await t.go("/wp/wildcards/new");
       await t.say("Now try it in a new wildcard. Type the start of a tag in an option.");
-      await t.scrollTo(page.getByText(/^Options \(\d+\)$/).first());
       const value = (i: number) => page.locator(`[data-test="wc-opt-row-${i}"] .wp-rt__host`).first();
+      // High up, so the suggestion list opens above the caption.
+      await t.scrollTo(value(0), { at: 0.25, force: true });
       await t.click(value(0));
       await t.type("blue_hai", { cps: 10 });
       await t.beat(600);

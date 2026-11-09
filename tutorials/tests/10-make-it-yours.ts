@@ -34,10 +34,15 @@ tutorial(
 
     const ctx = await t.h.step("The settings", async () => {
       await t.go("/");
-      await t.say("Wildcard Pipeline fits into ComfyUI. Here is a Context node with three lists, as it looks out of the box.");
+      // Built before the line that shows it, sped up.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 620, y: 260 });
       await t.pickModules(ctx, ["Role", "Outfit", "Setting"]);
+      await t.normalSpeed();
+      await t.say("Wildcard Pipeline fits into ComfyUI. Here is a Context node with three lists, as it looks out of the box.");
+      await t.callout("ctx", t.node(ctx), "Out of the box", 6);
       await t.waitVoice();
+      await t.uncallout("ctx");
       await t.say("How it looks on the canvas is up to you. Open ComfyUI's Settings and find Wildcard Pipeline at the bottom.");
       const dialog = await openSettings(t);
       await t.callout("groups", dialog.getByText("2. Sizing", { exact: true }).locator("xpath=.."), "Sizing, markers, collapse, accessibility", 6);

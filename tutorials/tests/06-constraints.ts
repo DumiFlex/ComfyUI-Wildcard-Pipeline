@@ -49,7 +49,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 260 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $setting.");
+      await t.type("A painting of $role $setting");
       await t.beat(1000);
       return { ctx, asm };
     });
@@ -65,7 +65,7 @@ tutorial(
 
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
-        await t.say("And here they are as pictures: everyone where they belong.");
+        await t.say("And here they are as pictures. The odds lean, so most land where they belong, and now and then one doesn't.");
         await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
         await showcase(t, { from: nodes.asm, preview: { x: 1560, y: 440, width: 340, height: 500 }, chain: { x: 1820, y: 960 }, between: () => t.click(plus) });

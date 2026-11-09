@@ -109,7 +109,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role with $hair, $setting.", { cps: 16 });
+      await t.type("A painting of $role with $hair, $setting", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       const prev = t.node(asm).locator('[data-test="asm-preview"]');

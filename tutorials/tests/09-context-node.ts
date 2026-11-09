@@ -18,13 +18,16 @@ tutorial(
       await t.go("/");
       await t.say("So far we rolled by clicking plus. The Context node can roll for you.");
       await t.beat(600);
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Hair", "Setting"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role with $hair, $setting.");
+      await t.type("A painting of $role with $hair, $setting");
       await t.beat(800);
+      await t.normalSpeed();
       const mode = t.node(ctx).getByRole("button", { name: /^(Randomize|Fixed|Increment|Decrement) Value$/ }).first();
       await t.callout("mode", mode, "What happens after a run", 6);
       await t.say("This button sets what the seed does after each run.");

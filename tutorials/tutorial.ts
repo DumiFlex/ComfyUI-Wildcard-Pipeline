@@ -60,6 +60,9 @@ export interface FastRange {
 type Point = { x: number; y: number };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Px at the bottom of the window a two-line caption covers; a callout should end above it. */
+const CAPTION_BAND = 180;
+
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 
@@ -134,6 +137,8 @@ export class Tutor {
 
   /** Shows a narration line and starts its voice; returns while it is spoken. */
   async say(text: string): Promise<void> {
+    // A line ends a sped-up part: it plays at normal speed.
+    if (this.ffOpen) await this.normalSpeed();
     await this.waitVoice();
     const id = lineId(text);
     const known = this.lines[id];
@@ -220,6 +225,29 @@ export class Tutor {
       await this.syncMark();
       this.fast.push({ from, to: this.now(), speed });
     }
+  }
+
+  /** Where a `speedUp` part started, and its speed. */
+  private ffOpen: { from: number; speed: number } | null = null;
+
+  /**
+   * From here to `normalSpeed()` the final video plays `speed` times faster: a setup the earlier
+   * videos already taught (placing nodes, picking lists, wiring), so it doesn't play in silence.
+   * Like `fastForward`, without a callback, so the nodes it makes stay in the step's scope.
+   */
+  async speedUp(speed = 6): Promise<void> {
+    if (this.ffOpen) return;
+    await this.waitVoice();
+    if (this.caption) await sleep(Math.max(0, this.caption.until - Date.now()));
+    this.ffOpen = { from: this.now(), speed };
+  }
+
+  async normalSpeed(): Promise<void> {
+    const open = this.ffOpen;
+    if (!open) return;
+    this.ffOpen = null;
+    await this.syncMark();
+    this.fast.push({ from: open.from, to: this.now(), speed: open.speed });
   }
 
   // ---- the hand ------------------------------------------------------------------------------
@@ -312,10 +340,43 @@ export class Tutor {
   }
 
   /** Types like a person: one key at a time. */
-  async type(text: string, { cps = 22 }: { cps?: number } = {}): Promise<void> {
+  async type(text: string, { cps = 22, rest = true }: { cps?: number; rest?: boolean } = {}): Promise<void> {
     await this.lead();
     await this.page.keyboard.type(text, { delay: Math.round(1000 / cps) });
     await sleep(300);
+    if (this.inManager() || !rest) return;
+    // A suggestion list still open after the last word (a $name, its `.neg`) would stay over the
+    // nodes around through the next lines: close it.
+    const listOpen = await this.page
+      // Only in a node's own field: Escape in a dialog would close the dialog.
+      .evaluate(() => !!document.activeElement?.closest("[data-node-id]") && !document.activeElement.closest('[role="dialog"]') && [...document.querySelectorAll('[role="listbox"]')].some((el) => (el as HTMLElement).checkVisibility()))
+      .catch(() => false);
+    if (listOpen) {
+      await this.page.keyboard.press("Escape");
+      await sleep(200);
+    }
+    await this.restOffField();
+  }
+
+  /**
+   * On the canvas, moves the hand off the field it typed into, onto empty canvas near it: a hand
+   * left resting on a field keeps ComfyUI's tooltip for it up over the nodes around.
+   */
+  private async restOffField(): Promise<void> {
+    const spot = await this.page.evaluate((p) => {
+      const tries = [[0, -150], [0, 150], [-240, 0], [240, 0], [0, -260], [0, 260], [-240, -150], [240, -150]];
+      for (const [dx, dy] of tries) {
+        const x = p.x + dx;
+        const y = p.y + dy;
+        if (x < 40 || y < 90 || x > window.innerWidth - 40 || y > window.innerHeight - 220) continue;
+        const el = document.elementFromPoint(x, y);
+        if (el && (el.tagName === "CANVAS" || el.classList.contains("lgraphcanvas"))) return { x, y };
+      }
+      return null;
+    }, this.pos);
+    if (!spot) return;
+    await this.moveTo(spot);
+    await sleep(250);
   }
 
   async press(key: string): Promise<void> {
@@ -353,13 +414,13 @@ export class Tutor {
     return new URL(this.page.url()).pathname.startsWith("/wp");
   }
 
-  async scrollTo(target: Locator, { at = 0.22 }: { at?: number } = {}): Promise<void> {
+  async scrollTo(target: Locator, { at = 0.22, force = false }: { at?: number; force?: boolean } = {}): Promise<void> {
     if (!this.inManager()) return;
     await target.waitFor({ state: "attached", timeout: 15_000 });
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     let first = await target.boundingBox();
     if (!first) return;
-    if (first.y >= 90 && first.y <= view.height * 0.55) return;
+    if (!force && first.y >= 90 && first.y <= view.height * 0.55) return;
     // Scroll from a point on the straight line to the part, so the hand never detours to a
     // corner and turns: it heads for the part, wheels on the way, then finishes the move.
     const aim = { x: Math.min(view.width - 60, Math.max(60, first.x + first.width / 2)), y: Math.min(view.height - 200, Math.max(120, first.y + first.height / 2)) };
@@ -414,13 +475,34 @@ export class Tutor {
 
   /** Draws a box around a part of the screen with an optional label; `uncallout` removes it. */
   async callout(id: string, target: Locator | Locator[], label?: string, pad = 0): Promise<void> {
-    const boxes = [];
-    for (const one of Array.isArray(target) ? target : [target]) {
-      await one.waitFor({ state: "visible", timeout: 15_000 });
-      const b = await shownBox(one);
-      if (b) boxes.push(b);
-    }
+    const targets = Array.isArray(target) ? target : [target];
+    const measure = async () => {
+      const out = [];
+      for (const one of targets) {
+        await one.waitFor({ state: "visible", timeout: 15_000 });
+        const b = await shownBox(one);
+        if (b) out.push(b);
+      }
+      return out;
+    };
+    let boxes = await measure();
     if (!boxes.length) return;
+    // Below this line a two-line caption covers the box.
+    const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
+    const limit = view.height - CAPTION_BAND;
+    const top = Math.min(...boxes.map((b) => b.y));
+    const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+    if (bottom + pad > limit) {
+      if (this.inManager()) {
+        const at = Math.max(100, limit - (bottom - top) - pad - 12) / view.height;
+        const first = targets[0];
+        if (first) await this.scrollTo(first, { at, force: true });
+        boxes = await measure();
+        if (!boxes.length) return;
+      } else {
+        console.warn(`[tutorial] callout "${id}" ends at y ${Math.round(bottom)}, under the caption (limit ${limit}): lay the take out higher.`);
+      }
+    }
     const x = Math.min(...boxes.map((b) => b.x)) - pad;
     const y = Math.min(...boxes.map((b) => b.y)) - pad;
     const box = {
@@ -651,7 +733,7 @@ export class Tutor {
       await sleep(600);
       if (!(await searchOpen())) throw new StepError(`The node search didn't open at ${Math.round(at.x)}, ${Math.round(at.y)}.`);
     }
-    await this.type(search, { cps: 16 });
+    await this.type(search, { cps: 16, rest: false });
     await sleep(700);
     await this.press("Enter");
     await sleep(400);
@@ -662,6 +744,10 @@ export class Tutor {
     const added = (await this.nodeIds()).filter((id) => !before.has(id));
     if (added.length !== 1) throw new StepError(`Adding "${search}" made ${added.length} new node(s).`);
     const id = added[0] as string;
+    // The dropped node is selected, and ComfyUI's selection toolbar would float over the node
+    // above it through the next lines: let go of the selection.
+    await this.page.evaluate(() => (window.app?.canvas as unknown as { deselectAll?: () => void } | undefined)?.deselectAll?.());
+    await sleep(200);
     // A seed that changes after each run would make the video disagree with its narration.
     await this.page.evaluate((nid) => {
       const node = window.app?.graph?.getNodeById(nid) as { widgets?: { name: string; value: unknown; linkedWidgets?: { name: string; value: unknown }[] }[] } | null | undefined;
@@ -671,6 +757,57 @@ export class Tutor {
       }
     }, id);
     return id;
+  }
+
+  /**
+   * Glides the canvas so node `id` sits in the middle of the upper screen at `scale` (≥ 0.8 keeps a
+   * node's text readable at 1080p), and returns the view it left, for `setView`.
+   */
+  async zoomOn(id: string, { scale = 1 }: { scale?: number } = {}): Promise<{ scale: number; offset: [number, number] }> {
+    const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
+    const before = await this.page.evaluate(() => {
+      const ds = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] } } }).canvas.ds;
+      return { scale: ds.scale, offset: [ds.offset[0], ds.offset[1]] as [number, number] };
+    });
+    const target = await this.page.evaluate(
+      ({ id, scale, w, h }) => {
+        const g = (window.app as unknown as { graph: { getNodeById(i: string | number): { pos: [number, number]; size: [number, number] } | null } }).graph;
+        const n = g.getNodeById(id) ?? g.getNodeById(Number(id));
+        if (!n) return null;
+        const cx = n.pos[0] + n.size[0] / 2;
+        const cy = n.pos[1] + n.size[1] / 2;
+        // Screen = (graph + offset) * scale: centre it across, and in the upper 45 % (above the caption).
+        return { scale, offset: [w / 2 / scale - cx, (h * 0.45) / scale - cy] as [number, number] };
+      },
+      { id, scale, w: view.width, h: view.height },
+    );
+    if (target) await this.setView(target);
+    return before;
+  }
+
+  /** Glides the canvas to a view (`zoomOn`'s return value). */
+  async setView(to: { scale: number; offset: [number, number] }, ms = 700): Promise<void> {
+    await this.page.evaluate(
+      ({ to, ms }) =>
+        new Promise<void>((done) => {
+          const c = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] }; setDirty(a: boolean, b: boolean): void } }).canvas;
+          const from = { scale: c.ds.scale, ox: c.ds.offset[0], oy: c.ds.offset[1] };
+          const t0 = performance.now();
+          const step = () => {
+            const k = Math.min(1, (performance.now() - t0) / ms);
+            const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+            c.ds.scale = from.scale + (to.scale - from.scale) * e;
+            c.ds.offset[0] = from.ox + (to.offset[0] - from.ox) * e;
+            c.ds.offset[1] = from.oy + (to.offset[1] - from.oy) * e;
+            c.setDirty(true, true);
+            if (k < 1) requestAnimationFrame(step);
+            else done();
+          };
+          requestAnimationFrame(step);
+        }),
+      { to, ms },
+    );
+    await sleep(300);
   }
 
   /** The on-screen centre of a node's slot dot, by the slot's name. */
@@ -804,7 +941,7 @@ export async function fitDebug(t: Tutor): Promise<void> {
   const view = t.page.viewportSize() ?? { width: 1920, height: 1080 };
   const top = (await t.node(dbg).boundingBox())?.y;
   if (top === undefined) return;
-  const room = view.height - 165 - top;
+  const room = view.height - CAPTION_BAND - 70 - top;
   await t.page.evaluate(
     ({ id, room }) => {
       const app = window.app as unknown as { graph: { getNodeById(id: string | number): { size: [number, number] } | null }; canvas: { ds: { scale: number }; setDirty(a: boolean, b: boolean): void } };
@@ -1026,6 +1163,22 @@ export async function openCanvas(h: Helpers): Promise<void> {
     await set("Comfy.Graph.CanvasInfo", false);
     await set("Comfy.TutorialCompleted", true);
   });
+  // Tabs an earlier video left open (an example workflow): start in one new blank tab.
+  await page.evaluate(async () => {
+    type Wf = unknown;
+    const em = window.app?.extensionManager as unknown as {
+      command?: { execute(id: string): Promise<void> };
+      workflow?: { openWorkflows?: Wf[]; activeWorkflow?: Wf; closeWorkflow?(w: Wf): Promise<void> };
+    } | undefined;
+    const ws = em?.workflow;
+    if (!ws?.openWorkflows || !ws.closeWorkflow || ws.openWorkflows.length < 2) return;
+    try {
+      await em?.command?.execute("Comfy.NewBlankWorkflow");
+      for (const w of [...ws.openWorkflows]) if (w !== ws.activeWorkflow) await ws.closeWorkflow(w).catch(() => undefined);
+    } catch {
+      /* the canvas is cleared below anyway */
+    }
+  });
   // The templates dialog on a first visit, a sidebar left open.
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
@@ -1057,6 +1210,8 @@ export interface TutorialMeta extends TestMeta {
 export function tutorial(id: string, meta: TutorialMeta, body: (t: Tutor) => Promise<void>): void {
   test(id, { runs: 1, section: "Tutorials", ...meta }, async ({ h, packDir, params }) => {
     const t = new Tutor(h, packDir, (params ?? {}) as Record<string, unknown>);
+    // Every video starts from the tutorial library as the viewer has it, whatever ran before.
+    await t.tidyLibrary();
     await openCanvas(h);
     await t.begin();
     await body(t);
@@ -1090,6 +1245,16 @@ declare global {
 
 // ---- example workflows -----------------------------------------------------------------------------
 
+/** In the Templates dialog's nav, hides the other installed packs beside our `entry` (the recording only). */
+export async function hideOtherPacks(entry: Locator): Promise<void> {
+  await entry.evaluate((el) => {
+    const item = el.closest(".cursor-pointer") ?? el.parentElement;
+    for (const sib of Array.from(item?.parentElement?.children ?? [])) {
+      if (sib !== item && sib.classList.contains("cursor-pointer")) (sib as HTMLElement).style.display = "none";
+    }
+  });
+}
+
 /**
  * Opens one of the extension's example workflows from ComfyUI's Templates browser (Extensions ›
  * ComfyUI-Wildcard-Pipeline) and closes the missing-model card it raises when its checkpoint isn't
@@ -1106,12 +1271,7 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
   await entry.waitFor({ state: "attached", timeout: 15_000 });
   // Other installed packs list their templates beside ours even with custom nodes disabled: keep
   // them out of the video by hiding our entry's siblings in the nav (the recording only).
-  await entry.evaluate((el) => {
-    const item = el.closest(".cursor-pointer") ?? el.parentElement;
-    for (const sib of Array.from(item?.parentElement?.children ?? [])) {
-      if (sib !== item && sib.classList.contains("cursor-pointer")) (sib as HTMLElement).style.display = "none";
-    }
-  });
+  await hideOtherPacks(entry);
   await entry.scrollIntoViewIfNeeded();
   await sleep(400);
   await t.click(entry);

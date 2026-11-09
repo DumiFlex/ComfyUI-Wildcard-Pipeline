@@ -77,7 +77,7 @@ tutorial(
       const cl = await t.addNode("WP Prompt Cleaner", { x: 1410, y: 170 });
       await t.wire(nodes.asm, "prompt", cl, "prompt");
       await t.wire(nodes.asm, "negative", cl, "negative");
-      const text = await t.addNode("Preview as Text", { x: 1410, y: 880 });
+      const text = await t.addNode("Preview as Text", { x: 1410, y: 560 });
       await t.wire(cl, "prompt", text, "source");
       await t.waitVoice();
       await t.callout("mode", t.node(cl), "Gentle, Balanced or Aggressive", 4);

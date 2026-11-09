@@ -25,12 +25,15 @@ tutorial(
     const nodes = await t.h.step("Four frames", async () => {
       await t.go("/");
       await t.say("A Context Loop runs everything after it several times from one Run. Put it before your first Context.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Role", "Hair", "Time of day"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
+      await t.normalSpeed();
       await t.say("To read the prompts, add Show Any from the Easy-Use pack: it lists every prompt the loop makes.");
       const text = await t.addNode("Show Any", { x: 1340, y: 620 });
       await t.wire(asm, "prompt", text, "anything");
@@ -100,6 +103,9 @@ tutorial(
         await t.choose(select, value);
         await t.beat(800);
       }
+      // Off the last control, so its tooltip doesn't cover the combinations.
+      await t.moveTo(await t.centre(modal.locator('[data-test="sweep-total"]')));
+      await t.beat(300);
       await t.callout("total", modal.locator('[data-test="sweep-total"]'), "3 times 4: twelve frames", 5);
       await t.say("Three times of day by four hair styles: twelve frames. The role isn't swept, so Hold other picks keeps one role on all of them.");
       await t.waitVoice();

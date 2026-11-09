@@ -16,6 +16,8 @@ tutorial(
     const nodes = await t.h.step("The setup", async () => {
       await t.go("/");
       await t.say("A wildcard picks one option. Sometimes you want two or three: here, the colors in two-tone hair.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Hair colors"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
@@ -29,6 +31,7 @@ tutorial(
 
     const plus = t.node(nodes.ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
 
+      await t.normalSpeed();
     await t.h.step("Pick two or three", async () => {
       await t.say("Right-click Hair colors and open Edit.");
       await t.click(t.moduleRow(nodes.ctx, "Hair colors").locator(".wp-module-name"), { right: true });

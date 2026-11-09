@@ -124,7 +124,7 @@
       const m = document.createElement("div");
       m.style.cssText = "position:absolute;right:0;top:0;width:16px;height:16px;background:#ff00ff;";
       r.appendChild(m);
-      setTimeout(() => m.remove(), ms);
+      setTimeout(() => requestAnimationFrame(() => m.remove()), ms);
     },
     caption(text) {
       layer();

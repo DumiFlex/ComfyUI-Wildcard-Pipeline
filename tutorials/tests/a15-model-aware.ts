@@ -113,7 +113,7 @@ tutorial(
       await t.callout("out", t.node(text), "Klein's quality words", 6);
       await t.waitVoice();
       await t.uncallout("out");
-      await t.say("Load a Pony checkpoint instead, and the same Context rolls score tags. A reference can filter the same way: at Quality per model, colon, dollar model variant.");
+      await t.say("With a Pony checkpoint loaded instead, the same Context would roll score tags. A reference can filter the same way: at Quality per model, colon, dollar model variant.");
       await t.waitVoice();
     });
 

@@ -57,19 +57,25 @@ function findMarks() {
   const times = [...String(r.stderr).matchAll(/pts_time:\s*([\d.]+)/g)].map((m) => Number(m[1]));
   const px = r.stdout;
   const found = [];
+  // When each mark goes off again: the first unlit frame after a lit run. A busy page writes no
+  // new frame for a while, so a mark can stay on screen well past its 0.8 s; painting it out up
+  // to its off time keeps it out of the finished video.
+  const offs = [];
   let on = false;
   let under = null;
   for (let i = 0; i < times.length; i++) {
     const [red, green, blue] = [px[i * 3], px[i * 3 + 1], px[i * 3 + 2]];
     const lit = red > 200 && green < 90 && blue > 200;
     if (lit && !on) found.push(times[i]);
+    if (!lit && on) offs.push(times[i]);
     if (!lit && under === null && times[i] > 0.5) under = [red, green, blue];
     on = lit;
   }
-  return { found, under: under ?? [24, 24, 27] };
+  if (offs.length < found.length) offs.push((times[times.length - 1] ?? 0) + 0.1);
+  return { found, offs, under: under ?? [24, 24, 27] };
 }
 
-const { found, under } = findMarks();
+const { found, offs, under } = findMarks();
 if (!found.length) console.warn("No sync mark found; assuming the video starts with the take's clock.");
 // Pair each mark the take flashed with the one seen in the video, nearest to where it should be. The
 // recorder's clock drifts from the page's under load, so the voice is lined up between pairs.
@@ -183,7 +189,7 @@ const inputs = ["-i", video];
 const graph = [];
 // Paint the sync marks out with the colour under them.
 const hex = under.map((c) => c.toString(16).padStart(2, "0")).join("");
-const paint = found.map((t) => `between(t,${(t - 0.1).toFixed(3)},${(t + 0.7).toFixed(3)})`).join("+");
+const paint = found.map((t, i) => `between(t,${(t - 0.1).toFixed(3)},${(Math.max(t + 0.7, (offs[i] ?? t + 0.7) + 0.1)).toFixed(3)})`).join("+");
 // The recorder writes a frame only when the page changes (gaps of seconds), and `trim` ends a part at
 // its last frame, so make it constant frame rate first or every still stretch at a cut drops out.
 graph.push(`[0:v]fps=${FPS},${paint ? `drawbox=x=iw-20:y=0:w=20:h=20:color=0x${hex}:t=fill:enable='${paint}',` : ""}split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
