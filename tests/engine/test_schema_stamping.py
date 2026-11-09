@@ -7,6 +7,7 @@ from engine.migrations import (
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
     FALLBACK_SCHEMA_VERSION,
+    FILTER_VARIABLES_SCHEMA_VERSION,
     MAX_KNOWN_SCHEMA_VERSION,
     NEGATED_TESTS_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
@@ -265,3 +266,32 @@ def test_negated_tests_need_v10(op, nested, expected):
     assert schema_version_for_payload(_negated_row(op, nested)) == expected
     assert schema_version_for_payload({"children": [_negated_row(op, nested)]}) == expected
     assert MAX_KNOWN_SCHEMA_VERSION >= NEGATED_TESTS_SCHEMA_VERSION
+
+
+def _filter_child(expr):
+    return {"id": "ffffffff", "type": "wildcard", "name": "s",
+            "payload": {"var_binding": "s", "options": [{"id": "o1", "value": "x"}]},
+            "instance": {"category_filter": expr}}
+
+
+@pytest.mark.parametrize("expr,expected", [
+    ("warm and not cold", CURRENT_SCHEMA_VERSION),
+    ("$model_variant", FILTER_VARIABLES_SCHEMA_VERSION),
+    ("indoor and not $season", FILTER_VARIABLES_SCHEMA_VERSION),
+    ("broken $", CURRENT_SCHEMA_VERSION),
+])
+def test_filter_variables_need_v11(expr, expected):
+    assert schema_version_for_payload({"children": [_filter_child(expr)]}) == expected
+    assert MAX_KNOWN_SCHEMA_VERSION >= FILTER_VARIABLES_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("at @{0de11002:indoor}", CURRENT_SCHEMA_VERSION),
+    ("at @{0de11002#Setting:$model_variant}", FILTER_VARIABLES_SCHEMA_VERSION),
+    ("at @{0de11002:not $season!null}", FILTER_VARIABLES_SCHEMA_VERSION),
+    ("costs $5 at @{0de11002}", CURRENT_SCHEMA_VERSION),
+])
+def test_ref_filter_variables_need_v11(text, expected):
+    row = {"id": "eeeeeeee", "type": "wildcard", "name": "w",
+           "payload": {"var_binding": "w", "options": [{"id": "o1", "value": text}]}}
+    assert schema_version_for_payload(row) == expected

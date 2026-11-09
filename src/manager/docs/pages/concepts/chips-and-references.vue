@@ -189,6 +189,11 @@ const chipStates = [
             <td><code>not (warm or cool)</code></td>
             <td>carry neither</td>
           </tr>
+          <tr>
+            <td><code>$model_variant</code></td>
+            <td>carry the tag the variable holds when the prompt runs (e.g. <code>pony</code>),
+              plus options with no tag from that tag's group</td>
+          </tr>
         </tbody>
       </table>
       <ul>
@@ -206,6 +211,15 @@ const chipStates = [
           <b>Tag names match exactly</b>, including case. A name can't contain spaces or any of
           <code>( ) ! , # : { } @ $</code>, and <code>and</code>, <code>or</code>,
           <code>not</code> and <code>null</code> are reserved.
+        </li>
+        <li>
+          <b>A <code>$variable</code> is read when the prompt runs.</b> Its value is compared
+          with the tags like a tag name, ignoring case and with spaces as <code>_</code>
+          ("Light rain" finds <code>light_rain</code>). Options with no tag from the value's
+          group stay, so untagged options work for every value. When the variable isn't set, or
+          its value is no tag here, that part of the filter is left out and the run notes it.
+          A multi-pick list keeps the options tagged with any of its picks. The match count is
+          worked out before the variables.
         </li>
         <li>
           <b>Null is a flag, not a term.</b> To keep the null option out, tick Exclude null (the

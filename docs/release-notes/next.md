@@ -2,8 +2,13 @@
 
 - **Export as plain wildcard files.** Import / Export → Export has a new **Wildcard files (.zip)** button: the picks become `.txt` wildcard files for Dynamic Prompts, Impact Pack, Prompt-PostProcessor, Easy-Use and A1111/Forge, so you can share a pack with people who don't use Wildcard Pipeline. References and `$variables` become `__folder/name__`, uneven weights become repeated lines, and a README in the zip lists what had no plain form (rules, tags, the chance of nothing, negatives).
 
+### Wildcards
+
+- **Filter a wildcard by a variable.** The Pool filter can now read a `$variable` when the prompt runs. Tag a Setting wildcard's options `pony` or `illustrious`, pick `$model_variant` under **By variable** in its Pool, and each run keeps the options for the loaded model; options with no model tag stay for every model. Constraints on the wildcard still apply to what is left, so you no longer need a Model wildcard with Match variable plus a constraint just to narrow one list. References work the same way: `@{Setting:$model_variant}`. A value is compared like a tag (case and spaces don't matter), a multi-pick list keeps options for any of its picks, and an unset variable or a value that is no tag there leaves that part of the filter out, with a note in WP Debug. Packs that use it need this version (schema 11).
+
 ### Fixes
 
+- **Empty wildcard pool.** A wildcard whose options have no tags used to open an empty Pool. It now says why: there are no tags to filter by, so every enabled option can roll, and tags added in the library editor (Sub-Categories) show up there as pills. Advanced says the same instead of an empty palette, and the Pool's expand button is no longer highlighted when there is nothing to open.
 - **Subgraphs see the variables around them again.** On current ComfyUI frontends (1.5x) a WP Context or Assembler inside a subgraph never found the variables set outside it, so a `$time` wired in from the parent graph showed as MISSING VAR and the subgraph's badge counted conflicts that weren't there. The walk now crosses a subgraph's edges in both directions, upstream and downstream.
 - **The subgraph badge shows in Nodes 2.0 straight away.** With Nodes 2.0 on, a subgraph's conflict badge only appeared after you entered and left the subgraph, or switched to the legacy nodes and back. It now shows, changes and clears as soon as the problem inside does.
 - **Centred chevrons on WP Context Loop and WP Seed List.** The arrow on **Per-iteration seeds** and **Sweep combinations** sat right after the label and a little low; it now sits at the right edge, level with the label, with the locked / bypassed / frames badges just before it.

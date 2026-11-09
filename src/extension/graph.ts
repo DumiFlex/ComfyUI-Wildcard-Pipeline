@@ -5,6 +5,7 @@ import {
   type ContextWidgetValue,
 } from "../widgets/_shared";
 import { applyVarAccessor, type ResolvedValue } from "../widgets/richTokenize";
+import { bindFilterForRun } from "@/manager/parsing/subcatFilter";
 // probability.ts is a pure (no-Vue) module despite its path — reused here so
 // the static multi-pick representative mirrors the engine pool exactly.
 import {
@@ -1742,6 +1743,12 @@ function writeBindings(
       };
       const lo = coerce(inst.pick_min, 1);
       const hi = Math.max(lo, coerce(inst.pick_max, lo));
+      // Schema v11: a `$name` in the pool filter reads the run's variables,
+      // as the engine does, so the preview narrows by $model_variant too.
+      const rawFilter = (m.instance as { category_filter?: unknown } | undefined)?.category_filter;
+      const poolInst = (typeof rawFilter === "string" && rawFilter.includes("$")
+        ? { ...m.instance, category_filter: bindFilterForRun(rawFilter, (n) => ctx[n], p) }
+        : m.instance) as unknown as InstanceLike;
       if (lo === 1 && hi === 1) {
         // "Match variable" (engine `_match_variable_option`): the option
         // whose text equals the variable, else the fallback, else option 0.
@@ -1756,7 +1763,7 @@ function writeBindings(
           // toggled-off option never matches and a toggled-off fallback is
           // never used — as the engine does.
           const pool = options.filter((o) =>
-            isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike),
+            isEnabled(o as unknown as WildcardOption, poolInst),
           );
           chosen = (wanted
             ? pool.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
@@ -1773,7 +1780,7 @@ function writeBindings(
         // leaks null (a stray leading separator) or filtered-out options. The
         // API-backed preview shows the real seeded roll.
         const pool = options.filter((o) =>
-          isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike, true),
+          isEnabled(o as unknown as WildcardOption, poolInst, true),
         );
         const sep = typeof inst.pick_separator === "string" ? inst.pick_separator : ", ";
         const n = Math.min(hi, pool.length);

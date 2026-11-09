@@ -5,6 +5,8 @@ A payload is stamped with the LOWEST catalog version its features need, so
 an older consumer can still install everything that doesn't use a newer
 feature:
 
+- ``FILTER_VARIABLES_SCHEMA_VERSION`` (11): a wildcard use's pool filter
+  (``category_filter``) or a ref's ``@{uuid:…}`` filter has a ``$name`` term.
 - ``NEGATED_TESTS_SCHEMA_VERSION`` (10): a derivation test uses
   ``not_contains`` or ``not_matches`` (the editor's NOT toggle).
 - ``FALLBACK_SCHEMA_VERSION`` (9): a wildcard option is flagged
@@ -41,6 +43,7 @@ from engine.migrations import (
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
     FALLBACK_SCHEMA_VERSION,
+    FILTER_VARIABLES_SCHEMA_VERSION,
     NEGATED_TESTS_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
@@ -54,6 +57,11 @@ _SP2B_MARKER_RE = re.compile(r"\{\d+(?:-\d+~?|~)\$\$")
 # `$name.neg`, `$name.K.neg` (and `$name.neg.K`): reads a variable's negatives.
 _NEG_ACCESSOR_RE = re.compile(
     r"\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.neg(?![A-Za-z0-9_])"
+)
+
+# A ref whose `:filter` holds a `$name` term (schema v11).
+_REF_FILTER_VAR_RE = re.compile(
+    r"@\{[0-9a-f]{8}(?:#[^#:}@{!]*)?:[^}]*\$[A-Za-z_]"
 )
 
 
@@ -239,6 +247,22 @@ def uses_negated_tests(node: Any) -> bool:
     )
 
 
+def uses_filter_variables(node: Any) -> bool:
+    """A ``$name`` term in any ``category_filter`` (a use's pool filter, at
+    any depth) or in any ref's ``@{uuid:…}`` filter text."""
+    from engine.syntax.subcat_filter import expr_variables
+
+    if isinstance(node, list):
+        return any(uses_filter_variables(child) for child in node)
+    if isinstance(node, str):
+        return _REF_FILTER_VAR_RE.search(node) is not None
+    if not isinstance(node, dict):
+        return False
+    if expr_variables(node.get("category_filter")):
+        return True
+    return any(uses_filter_variables(value) for value in node.values())
+
+
 def uses_sp2b_grammar(node: Any) -> bool:
     """Range-count or ``~`` multi-pick anywhere in the serialised payload."""
     text = json.dumps(node, ensure_ascii=False, default=str)
@@ -247,6 +271,8 @@ def uses_sp2b_grammar(node: Any) -> bool:
 
 def schema_version_for_payload(payload: Any) -> int:
     """The lowest catalog version that covers every feature in ``payload``."""
+    if uses_filter_variables(payload):
+        return FILTER_VARIABLES_SCHEMA_VERSION
     if uses_negated_tests(payload):
         return NEGATED_TESTS_SCHEMA_VERSION
     if uses_fallback_option(payload):

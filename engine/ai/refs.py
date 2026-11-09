@@ -231,6 +231,8 @@ def _check_filter(expr: str, row: dict[str, Any]) -> str:
     terms: list[str] = []
 
     def walk(n: dict[str, Any]) -> None:
+        if "var" in n:
+            return
         if "tag" in n:
             terms.append(n["tag"])
         elif n["op"] == "not":

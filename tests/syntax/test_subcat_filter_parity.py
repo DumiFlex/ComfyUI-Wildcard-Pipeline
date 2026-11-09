@@ -32,3 +32,23 @@ def test_python_matches_fixture():
         assert reads_as(ast) == c["reads_as"], c["expr"]
         for k, want in c.get("matches", {}).items():
             assert matches(ast, set(k.split(","))) is want, (c["expr"], k)
+
+
+BIND_CASES = json.loads(
+    (pathlib.Path(__file__).parent.parent / "fixtures" / "subcat_filter_bind_cases.json")
+    .read_text()
+)
+
+
+def test_python_bind_matches_fixture():
+    from engine.syntax.subcat_filter import bind
+
+    for c in BIND_CASES:
+        ast, notes = bind(
+            parse(c["expr"]), lambda n, c=c: c["values"].get(n), c["tags"], c["groups"],
+        )
+        assert reads_as(ast) == c["reads_as"], c["expr"]
+        assert [n["reason"] for n in notes] == c["notes"], c["expr"]
+        for k, want in c["matches"].items():
+            tags = set(k.split(",")) if k else set()
+            assert matches(ast, tags) is want, (c["expr"], k)

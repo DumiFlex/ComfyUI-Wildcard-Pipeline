@@ -628,6 +628,20 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
     if (isinstance(filter_expr, str) and filter_expr.strip()) or exclude_null:
         pool_total = len(options)
         ast = _parse_subcat(filter_expr) if isinstance(filter_expr, str) else None
+        if ast is not None and isinstance(filter_expr, str) and "$" in filter_expr:
+            # Schema v11: `$name` terms read the run's variables (as a use's
+            # pool filter does). Quiet resolves (negatives) file nothing.
+            from engine.syntax.subcat_filter import bind, filter_variable_warning, values_of
+            from engine.syntax.subcat_filter import wildcard_tags as _wildcard_tags
+            src = payload_dict if isinstance(payload_dict, dict) else module
+            ast, notes = bind(
+                ast, lambda n: values_of(ctx.get_var(n)), _wildcard_tags(src),
+                src.get("tag_groups") if isinstance(src, dict) else None,
+            )
+            for note in notes:
+                ctx.warnings.append(filter_variable_warning(
+                    note, where=f"@{{{uuid}:{filter_expr}}}: ",
+                ))
         options = [
             o for o in options
             if isinstance(o, dict)
