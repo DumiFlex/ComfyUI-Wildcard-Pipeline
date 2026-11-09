@@ -20,6 +20,9 @@
  *  - `previewDefault: string` — formatted default value (e.g. `"0"`).
  *  - `wiredTo: string` — WP_VarToChoice only: the dropdown input its output
  *    feeds (`Load Checkpoint › ckpt_name · 24 options`), read off the canvas.
+ *  - `executed: boolean` — the node has run since the widget mounted. The
+ *    host sets it on every `executed` event; without it a run whose variable
+ *    was missing (empty source, no choice note) still read "run workflow".
  *  - `choiceNote: string` — WP_VarToChoice only: how the last run found its
  *    value (`Matched “x” loosely.`, `No match for “x”. Used y.`). Replaces the
  *    `parsed from` line, and the amber state reads "fallback".
@@ -42,8 +45,9 @@ const props = withDefaults(
     nodeMode?: number;
     wiredTo?: string;
     choiceNote?: string;
+    executed?: boolean;
   }>(),
-  { previewSource: "", previewParsed: null, previewDefault: "", nodeMode: 0, wiredTo: "", choiceNote: "" },
+  { previewSource: "", previewParsed: null, previewDefault: "", nodeMode: 0, wiredTo: "", choiceNote: "", executed: false },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: string] }>();
@@ -57,7 +61,7 @@ function onPick(next: string | string[] | null): void {
   if (typeof next === "string" && next) emit("update:modelValue", next);
 }
 
-const hasExecuted = computed<boolean>(() => Boolean(props.previewSource || props.choiceNote));
+const hasExecuted = computed<boolean>(() => props.executed || Boolean(props.previewSource || props.choiceNote));
 const usedDefault = computed<boolean>(() => props.previewParsed === null);
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
@@ -99,6 +103,9 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
     </div>
     <div v-else-if="hasExecuted && previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
       parsed from "{{ previewSource }}"
+    </div>
+    <div v-else-if="hasExecuted && picked" class="wp-var-picker__preview-src" data-test="var-picker-unset">
+      {{ picked }} was not set
     </div>
     <div v-if="wiredTo" class="wp-var-picker__wired" data-test="var-picker-wired">
       <span class="wp-var-picker__preview-label">into</span>
