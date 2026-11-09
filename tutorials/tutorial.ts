@@ -62,6 +62,34 @@ type Point = { x: number; y: number };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
+
+/**
+ * The part of an element that is really on screen: its box cut down to every ancestor that clips
+ * its overflow (a scrolling panel, a dialog body) and to the window, so a callout never boxes the
+ * hidden rest of a long list. Null when nothing of it shows.
+ */
+async function shownBox(el: Locator, timeout = 5_000): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  return el
+    .evaluate(
+      (node) => {
+        const r = node.getBoundingClientRect();
+        let [l, t, rt, b] = [r.left, r.top, r.right, r.bottom];
+        for (let p = node.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+          const cs = getComputedStyle(p);
+          if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+          const q = p.getBoundingClientRect();
+          if (cs.overflowX !== "visible") [l, rt] = [Math.max(l, q.left), Math.min(rt, q.right)];
+          if (cs.overflowY !== "visible") [t, b] = [Math.max(t, q.top), Math.min(b, q.bottom)];
+        }
+        [l, t, rt, b] = [Math.max(l, 0), Math.max(t, 0), Math.min(rt, window.innerWidth), Math.min(b, window.innerHeight)];
+        return rt > l && b > t ? { x: l, y: t, width: rt - l, height: b - t } : null;
+      },
+      undefined,
+      { timeout },
+    )
+    .catch(() => null);
+}
+
 export class Tutor {
   readonly page: Page;
   /** WP Debug's node id once addDebugUnder placed it. */
@@ -389,7 +417,7 @@ export class Tutor {
     const boxes = [];
     for (const one of Array.isArray(target) ? target : [target]) {
       await one.waitFor({ state: "visible", timeout: 15_000 });
-      const b = await one.boundingBox();
+      const b = await shownBox(one);
       if (b) boxes.push(b);
     }
     if (!boxes.length) return;
@@ -431,7 +459,7 @@ export class Tutor {
               { timeout: 200 },
             )
             .catch(() => false);
-          const b = seen ? await one.boundingBox({ timeout: 200 }).catch(() => null) : null;
+          const b = seen ? await shownBox(one, 200) : null;
           if (b && b.width > 0 && b.height > 0) boxes.push(b);
         }
         if (!this.followers.has(id)) return;
