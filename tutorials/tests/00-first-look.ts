@@ -17,7 +17,7 @@ tutorial(
 
     await t.h.step("The manager button", async () => {
       const button = page.getByRole("button", { name: /Wildcard Pipeline Workspace/ }).first();
-      await t.say("Welcome to Wildcard Pipeline. These tutorials are recorded on version 2.21. An older version may not have everything shown here, and a newer one may have changed some of it. The videos stay on 2.21, but the built-in docs are kept up to date.");
+      await t.say("Welcome to Wildcard Pipeline. These tutorials are recorded on version 2.22. An older version may not have everything shown here, and a newer one may have changed some of it. The videos stay on 2.22, but the built-in docs are kept up to date.");
       await t.waitVoice();
       await t.say("Before we build anything, a quick look around. Wildcard Pipeline adds a button to ComfyUI's top bar that opens the manager, where your library lives.");
       await t.hover(button);
