@@ -13,12 +13,14 @@ import {
   matches,
   readsAs,
   validateExpression,
+  exprVariables,
   type Ast,
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
+import Combobox from "@/kit/Combobox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import { axisHueAt, UNGROUPED_HUE } from "../../../../shared/axis-color";
 import { vToggleRow } from "@/kit/toggle-row";
@@ -100,7 +102,7 @@ function tagsInExpression(expr: string): Set<string> {
     return seen;
   }
   const walk = (n: Ast | null): void => {
-    if (!n) return;
+    if (!n || "var" in n) return;
     if ("tag" in n) { seen.add(n.tag); return; }
     if (n.op === "not") { walk(n.x); return; }
     n.kids.forEach(walk);
@@ -125,6 +127,33 @@ watch(filterExpr, (next) => {
   if (!same) ticked.value = incoming;
 });
 
+/* ── Variables in the filter (schema v11) ───────────────────────────
+ * A `$name` term reads a variable at run time: options tagged with its
+ * value stay (plus options with no tag of that value's group). Each
+ * variable is its own AND clause next to the pills. */
+const filterVars = ref<string[]>(exprVariables(filterExpr.value));
+watch(filterExpr, (next) => {
+  const incoming = exprVariables(next);
+  if (incoming.join(" ") !== filterVars.value.join(" ")) filterVars.value = incoming;
+});
+
+/** Variables the combobox offers: what upstream writes, plus any the
+ *  filter already reads. */
+const varOptions = computed(() => {
+  const names = new Set<string>([...props.varProducers.keys(), ...filterVars.value]);
+  return [...names].sort().map((name) => {
+    const producer = props.varProducers.get(name);
+    const hint = producer ? [producer.kind, producer.nodeLabel].filter(Boolean).join(" · ") : undefined;
+    return { value: name, label: `$${name}`, hint };
+  });
+});
+
+function onVarsChange(next: string | string[] | null): void {
+  const list = Array.isArray(next) ? next : next ? [next] : [];
+  filterVars.value = list;
+  emit("update", patchInstance(props.module, "category_filter", buildExpression(ticked.value, list)));
+}
+
 function isTagTicked(tag: string): boolean {
   return ticked.value.has(tag);
 }
@@ -132,7 +161,7 @@ function isTagTicked(tag: string): boolean {
 /** Recompute the filter string from a ticked-tag set, respecting group
  *  structure: OR within a group, AND across groups, parens around a
  *  multi-term group clause, empty selection → "". */
-function buildExpression(ticked: Set<string>): string {
+function buildExpression(ticked: Set<string>, vars: readonly string[] = filterVars.value): string {
   const clauses: string[] = [];
   for (const group of pillGroups.value) {
     const picked = group.tags.filter((t) => ticked.has(t));
@@ -140,6 +169,7 @@ function buildExpression(ticked: Set<string>): string {
     const clause = picked.join(" or ");
     clauses.push(picked.length > 1 ? `(${clause})` : clause);
   }
+  for (const v of vars) clauses.push(`$${v}`);
   return clauses.join(" and ");
 }
 
@@ -178,7 +208,7 @@ const advanced = ref(false);
  *  ticked, and the chevron is accented while shut so it still reads as
  *  something to press. */
 const poolOpen = ref(props.defaultOpen);
-const tickedCount = computed(() => ticked.value.size);
+const tickedCount = computed(() => ticked.value.size + filterVars.value.length);
 const draft = ref(filterExpr.value);
 
 // Re-seed the draft when the upstream filter changes (e.g. pills edited it
@@ -197,7 +227,11 @@ const draftReadsAs = computed<string>(() => {
   }
 });
 
-/** Live match count for the current valid draft — "N of M options match". */
+/** Variables the draft reads: their part is only known at run time. */
+const draftVars = computed<string[]>(() => (draftError.value ? [] : exprVariables(draft.value)));
+
+/** Live match count for the current valid draft — "N of M options match"
+ *  (what the tags narrow before the run; `$name` terms come on top). */
 const draftMatchCount = computed<number>(() => {
   if (draftError.value) return 0;
   let ast: Ast | null;
@@ -425,6 +459,29 @@ const skewedTowards = computed(() => {
           </Chip>
         </div>
       </div>
+      <div class="pool__group pool__vars" data-test="pool-vars">
+        <span class="pool__group-name">by variable</span>
+        <div class="pool__vars-body">
+          <Combobox
+            :model-value="filterVars"
+            :options="varOptions"
+            multiple
+            mono
+            size="sm"
+            placeholder="Add a variable…"
+            aria-label="Filter by variable"
+            empty-text="No variables upstream. Type one under Advanced."
+            data-test="pool-vars-input"
+            @update:model-value="onVarsChange"
+          />
+          <p v-if="filterVars.length" class="pool__vars-hint" data-test="pool-vars-hint">
+            At run time keeps the options tagged with
+            <template v-for="(v, i) in filterVars" :key="v">{{ i ? " and " : "" }}<code>${{ v }}</code></template>'s
+            value. Options with no tag in that value's group stay; an unset variable or a value
+            that is no tag here filters nothing.
+          </p>
+        </div>
+      </div>
       <div v-if="filterExpr" class="pool__effective" data-test="pool-effective">
         <span class="pool__effective-label">filter</span>
         <code>{{ filterExpr }}</code>
@@ -456,7 +513,8 @@ const skewedTowards = computed(() => {
           <code>{{ draftReadsAs || "(no filter)" }}</code>
         </span>
         <span class="pool__expr-count" data-test="expr-match-count">
-          {{ draftMatchCount }} of {{ totalCount }} match
+          {{ draftMatchCount }} of {{ totalCount }} match<template v-if="draftVars.length">
+            before {{ draftVars.map((v) => `$${v}`).join(", ") }}</template>
         </span>
       </div>
       <!-- Insert-at-cursor palette (#7): grouped sub-categories + operators
@@ -481,6 +539,17 @@ const skewedTowards = computed(() => {
             :data-test="`pool-ins-${cat}`"
             @click="insertToken(cat)"
           >{{ cat }}</Chip>
+        </div>
+        <div v-if="varOptions.length" class="pool__palette-group" data-test="pool-palette-vars">
+          <span class="pool__palette-axis">variables</span>
+          <Chip
+            v-for="v in varOptions"
+            :key="v.value"
+            as="button"
+            class="pool__ins-chip pool__ins-chip--var"
+            :data-test="`pool-ins-var-${v.value}`"
+            @click="insertToken(v.label)"
+          >{{ v.label }}</Chip>
         </div>
         <div class="pool__palette-ops">
           <Chip
@@ -675,6 +744,20 @@ const skewedTowards = computed(() => {
   color: var(--wp-text);
 }
 .pool__exclude-null--off { opacity: 0.55; }
+.pool__vars-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+}
+.pool__vars-hint {
+  margin: 0;
+  font: 11px/1.45 var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.pool__vars-hint code { font: 11px var(--wp-font-mono); color: var(--wp-text); }
 .pool__empty {
   display: flex;
   align-items: flex-start;

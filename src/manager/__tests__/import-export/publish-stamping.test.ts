@@ -11,6 +11,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
   FALLBACK_SCHEMA_VERSION,
+  FILTER_VARIABLES_SCHEMA_VERSION,
   NEGATED_TESTS_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
@@ -570,5 +571,33 @@ describe("schemaVersionForPayload — NOT-toggled derivation tests (v10)", () =>
     expect(schemaVersionForPayload(row("not_contains"))).toBe(NEGATED_TESTS_SCHEMA_VERSION);
     expect(schemaVersionForPayload(row("not_matches", true))).toBe(NEGATED_TESTS_SCHEMA_VERSION);
     expect(schemaVersionForPayload({ children: [row("not_matches")] })).toBe(NEGATED_TESTS_SCHEMA_VERSION);
+  });
+});
+
+describe("schemaVersionForPayload — variables in a filter (v11)", () => {
+  const child = (expr: string): Record<string, unknown> => ({
+    id: "wc-001abc", type: "wildcard", name: "s",
+    payload: { var_binding: "s", options: [{ id: "o1", value: "x" }] },
+    instance: { category_filter: expr },
+  });
+  const wildcard = (text: string): Record<string, unknown> => ({
+    id: "wc-002abc", type: "wildcard", name: "w",
+    payload: { var_binding: "w", options: [{ id: "o1", value: text }] },
+  });
+
+  it("stays at the chain head for a tag-only filter or a malformed one", () => {
+    expect(schemaVersionForPayload({ children: [child("warm and not cold")] })).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ children: [child("broken $")] })).toBe(CURRENT_SCHEMA_VERSION);
+  });
+
+  it("stamps FILTER_VARIABLES (11) for a $term in a use's pool filter", () => {
+    expect(schemaVersionForPayload({ children: [child("$model_variant")] })).toBe(FILTER_VARIABLES_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ children: [child("indoor and not $season")] })).toBe(FILTER_VARIABLES_SCHEMA_VERSION);
+  });
+
+  it("stamps FILTER_VARIABLES (11) for a $term in a ref filter, not for a $ elsewhere", () => {
+    expect(schemaVersionForPayload(wildcard("at @{0de11002#Setting:$model_variant}"))).toBe(FILTER_VARIABLES_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(wildcard("at @{0de11002:not $season!null}"))).toBe(FILTER_VARIABLES_SCHEMA_VERSION);
+    expect(schemaVersionForPayload(wildcard("costs $5 at @{0de11002:indoor}"))).toBe(CURRENT_SCHEMA_VERSION);
   });
 });

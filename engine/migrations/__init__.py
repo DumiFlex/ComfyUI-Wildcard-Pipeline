@@ -30,7 +30,7 @@ CURRENT_SCHEMA_VERSION = 2
 # MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
 # learns to stamp a new (higher) version — otherwise this commit-side
 # re-validate will reject the very shapes the runtime just learned to produce.
-MAX_KNOWN_SCHEMA_VERSION = 10
+MAX_KNOWN_SCHEMA_VERSION = 11
 
 # Feature stamps (mirror of the TS constants beside MAX_KNOWN). Each is the
 # catalog version a payload needs once it uses that feature; see
@@ -48,6 +48,9 @@ NEGATIVES_SCHEMA_VERSION = 8
 FALLBACK_SCHEMA_VERSION = 9
 # derivation NOT toggle: a test using `not_contains` or `not_matches`
 NEGATED_TESTS_SCHEMA_VERSION = 10
+# pool filter variables: a `$name` term in a use's `category_filter` or a
+# ref's `@{uuid:…}` filter
+FILTER_VARIABLES_SCHEMA_VERSION = 11
 
 _CHAIN = {
     0: migrate_v0_to_v1,

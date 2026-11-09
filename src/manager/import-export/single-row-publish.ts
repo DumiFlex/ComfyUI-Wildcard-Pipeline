@@ -33,6 +33,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
   FALLBACK_SCHEMA_VERSION,
+  FILTER_VARIABLES_SCHEMA_VERSION,
   NEGATED_TESTS_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
   SP2B_SCHEMA_VERSION,
@@ -40,6 +41,7 @@ import {
   TAG_AXES_SCHEMA_VERSION,
 } from "./migrations";
 import { getValidator, type ModuleSubtype } from "@/validators";
+import { exprVariables } from "../parsing/subcatFilter";
 import { version as ENGINE_VERSION } from "../../../package.json";
 import { isNegativeMode } from "../../extension/derivation-conditions";
 
@@ -274,9 +276,28 @@ export function usesNegatedTests(node: unknown): boolean {
   return false;
 }
 
+// A ref whose `:filter` holds a `$name` term (schema v11). Mirror of Python
+// `_REF_FILTER_VAR_RE`.
+const REF_FILTER_VAR_RE = /@\{[0-9a-f]{8}(?:#[^#:}@{!]*)?:[^}]*\$[A-Za-z_]/u;
+
+/**
+ * True when ANY wildcard use's pool filter (`category_filter`, at any depth)
+ * or ANY ref's `@{uuid:…}` filter text has a `$name` term. Mirror of
+ * `engine/migrations/stamping.py:uses_filter_variables`.
+ */
+export function usesFilterVariables(node: unknown): boolean {
+  if (typeof node === "string") return REF_FILTER_VAR_RE.test(node);
+  if (Array.isArray(node)) return node.some((child) => usesFilterVariables(child));
+  if (!isPlainObject(node)) return false;
+  if (exprVariables(node.category_filter).length > 0) return true;
+  return Object.values(node).some((value) => usesFilterVariables(value));
+}
+
 /**
  * Choose the community catalog `schema_version` to stamp for a payload — the
  * MAX version any feature in the payload requires:
+ *   - `FILTER_VARIABLES_SCHEMA_VERSION` (11) when ANY pool or ref filter
+ *     reads a `$name` variable (`usesFilterVariables`).
  *   - `NEGATED_TESTS_SCHEMA_VERSION` (10) when ANY derivation test uses
  *     `not_contains` / `not_matches` (`usesNegatedTests`).
  *   - `FALLBACK_SCHEMA_VERSION` (9) when ANY wildcard option is flagged as
@@ -307,6 +328,7 @@ export function usesNegatedTests(node: unknown): boolean {
  * doesn't actually use a newer feature.
  */
 export function schemaVersionForPayload(payload: Record<string, unknown>): number {
+  if (usesFilterVariables(payload)) return FILTER_VARIABLES_SCHEMA_VERSION;
   if (usesNegatedTests(payload)) return NEGATED_TESTS_SCHEMA_VERSION;
   if (usesFallbackOption(payload)) return FALLBACK_SCHEMA_VERSION;
   if (usesNegatives(payload)) return NEGATIVES_SCHEMA_VERSION;

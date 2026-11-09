@@ -26,6 +26,7 @@ const runtimeWarnings: WarningRow[] = [
   { label: "Constraint source missing", severity: "warn", desc: "The constraint's source wildcard hadn't run yet when the constraint was reached." },
   { label: "Constraint excluded every option", severity: "warn", desc: "The constraint ruled out every option of the target and there was no fallback, so it printed nothing." },
   { label: "Fallback used", severity: "info", desc: "Nothing was left to pick, so the wildcard's fallback option stood in." },
+  { label: "Filter variable left out", severity: "info", desc: "A $variable in a pool or reference filter was unset, or its value is no tag on that wildcard, so that part of the filter narrowed nothing." },
   { label: "No option matches the variable", severity: "info", desc: "A wildcard set to Match variable found no option equal to the variable's value and has no fallback, so it rolled as usual." },
   { label: "Pinned option missing", severity: "warn", desc: "A sweep frame (or other pin) points at an option the wildcard no longer has, so that frame rolled instead." },
   { label: "Constraint factor ignored (allow)", severity: "info", desc: "A rule set to Allow also has a number; Allow ignores it." },

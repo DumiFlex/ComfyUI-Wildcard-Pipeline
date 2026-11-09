@@ -956,3 +956,77 @@ def test_two_wildcards_bound_to_the_same_variable_roll_on_their_own():
     runs = [_run([first, echo, second], seed) for seed in SEEDS]
     same = sum(ctx["before"] == ctx["hair"] for ctx in runs)
     assert same < len(SEEDS) // 2
+
+
+# ── 17. variables in the pool filter (schema v11) ─────────────────────────
+
+HERO = "0de11001"
+SETTING = "0de11002"
+
+
+def _setting(**instance: Any) -> dict:
+    return _wc(SETTING, "setting", [
+        _opt("pony beach", "pony", "outdoor"),
+        _opt("pony castle", "pony", "indoor"),
+        _opt("ilxl beach", "illustrious", "outdoor"),
+        _opt("ilxl castle", "illustrious", "indoor"),
+        _opt("plain meadow", "outdoor"),
+    ], groups={"model": ["pony", "illustrious"], "place": ["indoor", "outdoor"]}, **instance)
+
+
+@pytest.mark.parametrize("ckpt,allowed", [
+    ("ponyDiffusionV6XL.safetensors", {"pony beach", "pony castle", "plain meadow"}),
+    ("illustriousXL_v01.safetensors", {"ilxl beach", "ilxl castle", "plain meadow"}),
+])
+def test_pool_filter_variable_narrows_one_wildcard_per_model(ckpt, allowed):
+    info = WPModelInfo.execute(wp_model_info=json.dumps({"name": ckpt})).values[0]
+    seen: set[str] = set()
+    for seed in NODE_SEEDS:
+        out = _node([_setting(category_filter="$model_variant")], seed, upstream=info)
+        seen.add(out.context["setting"])
+    # Options with no model tag work for every model.
+    assert seen == allowed
+
+
+def test_pool_filter_variable_keeps_constraints_on_the_wildcard():
+    hero = _wc(HERO, "hero", [_opt("knight", "armored"), _opt("swimmer", "light")])
+    con = _con("c11a0001", HERO, SETTING, matrix={"armored": {"outdoor": _cell()},
+                                                   "light": {"indoor": _cell()}})
+    stack = [hero, con, _setting(category_filter="$model_variant")]
+    for seed in SEEDS:
+        ctx = _run(stack, seed, model_variant="pony")
+        want = {"knight": {"pony castle"}, "swimmer": {"pony beach", "plain meadow"}}
+        assert ctx["setting"] in want[ctx["hero"]], (seed, ctx["hero"], ctx["setting"])
+
+
+def test_pool_filter_variable_unset_or_unknown_narrows_nothing_and_says_why():
+    for pins, reason in (({}, "unset"), ({"model_variant": "flux"}, "no_tag")):
+        seen: set[str] = set()
+        for seed in range(60):
+            ctx = _run([_setting(category_filter="$model_variant and outdoor")], seed, **pins)
+            seen.add(ctx["setting"])
+            notes = [w for w in ctx["__wp_warnings__"] if w["type"] == "filter_variable_no_tag"]
+            assert [n["detail"]["reason"] for n in notes] == [reason]
+            assert notes[0]["severity"] == "info"
+        # The term is left out; `outdoor` still applies.
+        assert seen == {"pony beach", "ilxl beach", "plain meadow"}, pins
+
+
+def test_pool_filter_variable_reads_a_multi_pick_list():
+    picks = _wc("0de11003", "models", [_opt("pony"), _opt("illustrious")], pick_min=2,
+                pick_max=2)
+    stack = [picks, _setting(category_filter="$models and indoor")]
+    for seed in range(30):
+        assert _run(stack, seed)["setting"] in {"pony castle", "ilxl castle"}
+
+
+def test_nested_ref_filter_reads_a_variable():
+    setting = _setting()
+    scene = _wc("0de11004", "scene", [_opt(f"at @{{{SETTING}:$model_variant}}", oid="s")])
+    seen: set[str] = set()
+    for seed in SEEDS:
+        ctx = _run([scene], seed, _catalog(setting), model_variant="illustrious")
+        seen.add(ctx["scene"])
+    assert seen == {"at ilxl beach", "at ilxl castle", "at plain meadow"}
+    ctx = _run([scene], 0, _catalog(setting), model_variant="sdxl")
+    assert "filter_variable_no_tag" in _warn_types(ctx)

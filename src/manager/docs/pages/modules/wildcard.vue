@@ -28,7 +28,7 @@ const instanceOptions = [
   { term: "Variable binding", desc: "The variable this use writes. It starts as the library's; change it to use the same wildcard twice ($hair and $hair_b) without one overwriting the other." },
   { term: "Option toggles", desc: "Untick options this use may not pick. Leaving one ticked fixes the value, though a constraint can still rule it out (keep a fallback for that)." },
   { term: "Per-use weights", desc: "Change an option's weight for this use only. The library editor doesn't show them." },
-  { term: "Category filter", desc: 'Only pick options with certain tags, e.g. "feline and warm, not lynx" (a comma means or). Click the tag pills or type it under Advanced. A wildcard whose options have no tags says so in the Pool, since there is nothing to filter by.' },
+  { term: "Category filter", desc: 'Only pick options with certain tags, e.g. "feline and warm, not lynx" (a comma means or). Click the tag pills or type it under Advanced. Pick a variable under By variable (or type $model_variant) to filter by its value when the prompt runs. A wildcard whose options have no tags says so in the Pool, since there is nothing to filter by.' },
   { term: "Pick, separator, Allow repeats", desc: "Pick several options at once. See below." },
   { term: "Exclude null", desc: "Leaves the null option out for this use, so something always prints." },
   { term: "Fallback", desc: "Untick the fallback to switch it off for this use; then nothing prints when nothing is left." },
@@ -161,6 +161,25 @@ const instanceOptions = [
         Constraints react to picks, not variables. To steer one from a variable (such as the loaded
         model), give a wildcard options that spell the variable's values and set <b>Match
         variable</b> on it. WP Model Info has an example.
+      </p>
+    </DocSection>
+
+    <DocSection title="One wildcard, different options per model">
+      <p>
+        To let a variable narrow a wildcard directly, tag its options with the variable's values
+        and add the variable to the Pool's filter. For example, tag a Setting wildcard's options
+        <code>pony</code> or <code>illustrious</code> (in a <code>model</code> tag group), then
+        pick <VarToken>$model_variant</VarToken> under <b>By variable</b> in the Pool. Each run
+        keeps the options tagged with the loaded model; options with no model tag stay for every
+        model. Constraints on the wildcard still apply to what is left, so a Hero → Setting
+        constraint keeps working.
+      </p>
+      <p>
+        The same works in a reference: <VarToken kind="ref">@{Setting:$model_variant}</VarToken>.
+        If the variable isn't set, or its value is no tag on the wildcard, that part of the filter
+        is left out and WP Debug notes it. <b>Match variable</b> is still the way to make a
+        variable the source of a constraint. See <DocRef id="chips-and-references" /> for the
+        filter rules.
       </p>
     </DocSection>
 
