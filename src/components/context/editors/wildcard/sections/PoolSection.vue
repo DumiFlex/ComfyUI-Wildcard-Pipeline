@@ -360,7 +360,7 @@ const skewedTowards = computed(() => {
     <div class="pool__head">
       <WpIconButton
         :icon="poolOpen ? 'pi-chevron-down' : 'pi-chevron-right'"
-        :class="{ 'pool__collapse--nudge': !poolOpen }"
+        :class="{ 'pool__collapse--nudge': !poolOpen && subCategories.length > 0 }"
         :aria-expanded="poolOpen"
         data-test="pool-collapse"
         :label="poolOpen ? 'Collapse tag pool' : 'Expand tag pool'"
@@ -381,7 +381,24 @@ const skewedTowards = computed(() => {
     </div>
 
     <!-- Quick mode — grouped pills. OR within an axis, AND across axes. -->
-    <div v-if="!advanced && poolOpen" class="pool__groups">
+    <!-- No tags on any option: nothing to filter by. Say why the pool is
+         empty and where tags come from, instead of an empty strip. -->
+    <div
+      v-if="!advanced && poolOpen && pillGroups.length === 0"
+      class="pool__empty"
+      data-test="pool-empty"
+    >
+      <i class="pi pi-tags pool__empty-icon" aria-hidden="true" />
+      <div>
+        <div class="pool__empty-title">No tags to filter by</div>
+        <div class="pool__empty-text">
+          None of this wildcard's options have tags yet, so every enabled option can roll.
+          Add tags to the options in the library editor (Sub-Categories) and they show up
+          here as pills: tick some to only roll the options that carry them.
+        </div>
+      </div>
+    </div>
+    <div v-else-if="!advanced && poolOpen" class="pool__groups">
       <div
         v-for="group in pillGroups"
         :key="group.axis"
@@ -444,7 +461,11 @@ const skewedTowards = computed(() => {
       </div>
       <!-- Insert-at-cursor palette (#7): grouped sub-categories + operators
            so the user sees what they can type, like the SPA ref-filter. -->
-      <div v-if="subCategories.length > 0" class="pool__palette" data-test="pool-palette">
+      <div v-if="subCategories.length === 0" class="pool__expr-hint" data-test="pool-empty-advanced">
+        This wildcard's options have no tags yet, so a filter has nothing to match. Add tags in the
+        library editor (Sub-Categories) first.
+      </div>
+      <div v-else class="pool__palette" data-test="pool-palette">
         <div
           v-for="group in pillGroups"
           :key="group.axis"
@@ -654,6 +675,31 @@ const skewedTowards = computed(() => {
   color: var(--wp-text);
 }
 .pool__exclude-null--off { opacity: 0.55; }
+.pool__empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--wp-border);
+  border-radius: min(6px, var(--wp-radius-cap, 999px));
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.pool__empty-icon {
+  font-size: 14px;
+  padding-top: 1px;
+}
+.pool__empty-title {
+  font: 600 11px var(--wp-font-sans);
+  color: var(--wp-text);
+  margin-bottom: 2px;
+}
+.pool__empty-text,
+.pool__expr-hint {
+  font: 11px/1.45 var(--wp-font-sans);
+  color: var(--wp-text-dim, var(--wp-text3));
+}
+.pool__expr-hint { margin-top: 6px; }
 .pool__groups {
   display: flex;
   flex-direction: column;

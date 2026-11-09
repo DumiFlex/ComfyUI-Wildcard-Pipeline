@@ -216,6 +216,36 @@ describe("PoolSection collapse", () => {
   });
 });
 
+describe("PoolSection with no tags", () => {
+  const untagged = {
+    payload: { options: [{ id: "a", value: "dawn", weight: 1 }, { id: "b", value: "night", weight: 1 }] },
+    instance: {},
+  } as unknown as ModuleEntry;
+
+  it("explains why the pool is empty instead of showing an empty strip", () => {
+    const w = mount(PoolSection, { props: { module: untagged } });
+    expect(w.get('[data-test="pool-empty"]').text()).toContain("No tags to filter by");
+    expect(w.find(".pool__groups").exists()).toBe(false);
+  });
+
+  it("does not show the placeholder while collapsed, nor when tags exist", () => {
+    expect(vtuMount(PoolSection, { props: { module: untagged } }).find('[data-test="pool-empty"]').exists()).toBe(false);
+    expect(mount(PoolSection, { props: { module } }).find('[data-test="pool-empty"]').exists()).toBe(false);
+  });
+
+  it("does not accent the collapse control when there is nothing to open", () => {
+    const w = vtuMount(PoolSection, { props: { module: untagged } });
+    expect(w.get('[data-test="pool-collapse"]').classes()).not.toContain("pool__collapse--nudge");
+  });
+
+  it("Advanced says a filter has nothing to match", async () => {
+    const w = mount(PoolSection, { props: { module: untagged } });
+    await w.get('[data-test="pool-advanced"]').trigger("click");
+    expect(w.find('[data-test="pool-empty-advanced"]').exists()).toBe(true);
+    expect(w.find('[data-test="pool-palette"]').exists()).toBe(false);
+  });
+});
+
 describe("PoolSection grouped quick pills", () => {
   it("ticking family=feline + temp=warm builds 'feline and warm'", async () => {
     const w = mount(PoolSection, { props: { module } });
