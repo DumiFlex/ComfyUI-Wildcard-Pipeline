@@ -48,9 +48,12 @@ tutorial(
       await t.say("Derivations set a variable by a rule, constraints keep picks that clash apart, and bundles group items together.");
       await t.waitVoice();
       await t.uncallout("mods");
-      const library = ["templates", "categories", "tags", "health", "import-export", "test"].map(nav);
+      // Pack builder joins the group when an AI assistant is set up.
+      const packs = (await nav("pack-builder").count()) > 0 && (await nav("pack-builder").isVisible());
+      const library = ["templates", "categories", "tags", "health", "import-export", "test", ...(packs ? ["pack-builder"] : [])].map(nav);
       await t.callout("lib", library, "Library", 4);
-      await t.say("Library holds what works across your items: saved templates, categories and tags to sort them, a health check, import and export, and the test runner, which rolls a stack many times to show how often each option comes up.");
+      if (packs) await t.say("Library holds what works across your items: saved templates, categories and tags to sort them, a health check, import and export, the test runner, which rolls a stack many times to show how often each option comes up, and, with an AI assistant set up, the pack builder.");
+      else await t.say("Library holds what works across your items: saved templates, categories and tags to sort them, a health check, import and export, and the test runner, which rolls a stack many times to show how often each option comes up.");
       await t.waitVoice();
       await t.uncallout("lib");
       const started = page.locator("a.wp-nav, button.wp-nav").filter({ hasText: /Community|Documentation|View Source|Feedback/ });
@@ -84,8 +87,9 @@ tutorial(
       await t.say("Every option has a weight. The chance column shows how often each one rolls.");
       await t.waitVoice();
       await t.uncallout("opts");
-      const tags = page.locator('[data-test^="opt-tags-"]');
-      await t.callout("tags", [tags.first(), tags.last()], "Tags", 10);
+      // Each row's whole tag cell: its chips and the picker's arrow.
+      const tags = page.locator(".opt-tags");
+      await t.callout("tags", [tags.first(), tags.last()], "Tags", 4);
       await t.say("Tags sort options into groups. Here each role carries its own tag, and rules read those tags to pick a fitting outfit and place.");
       await t.waitVoice();
       await t.uncallout("tags");

@@ -18,6 +18,42 @@
   let pointer = null;
   let caption = null;
   const callouts = new Map();
+  /**
+   * Puts a callout's box around `rect`, kept a few px inside the window so its stroke is never cut
+   * off at an edge, and its label (above, or below near the top) shifted in when it would run off.
+   */
+  const EDGE = 6;
+  function placeCallout(box, rect) {
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const left = Math.max(EDGE, rect.x - pad);
+    const top = Math.max(EDGE, rect.y - pad);
+    const right = Math.min(vw - EDGE, rect.x + rect.width + pad);
+    const bottom = Math.min(vh - EDGE, rect.y + rect.height + pad);
+    box.style.left = `${left}px`;
+    box.style.top = `${top}px`;
+    box.style.width = `${Math.max(0, right - left)}px`;
+    box.style.height = `${Math.max(0, bottom - top)}px`;
+    const tag = box.firstElementChild;
+    if (!tag) return;
+    const tw = tag.offsetWidth;
+    const th = tag.offsetHeight;
+    // Above the box when there is room, else below it, else inside its top edge.
+    if (top - th - 8 >= EDGE) {
+      tag.style.top = "";
+      tag.style.bottom = "calc(100% + 8px)";
+    } else if (bottom + th + 8 <= vh - EDGE) {
+      tag.style.bottom = "";
+      tag.style.top = "calc(100% + 8px)";
+    } else {
+      tag.style.bottom = "";
+      tag.style.top = "8px";
+    }
+    // From the box's left edge, moved left as far as it must to stay inside the window.
+    const x = Math.min(-3, vw - EDGE - tw - left);
+    tag.style.left = `${Math.max(EDGE - left, x)}px`;
+  }
   let x = -100;
   let y = -100;
 
@@ -105,21 +141,20 @@
       if (!r) return;
       this.uncallout(id);
       const box = document.createElement("div");
-      const pad = 8;
       box.style.cssText =
-        `position:absolute;left:${rect.x - pad}px;top:${rect.y - pad}px;width:${rect.width + pad * 2}px;height:${rect.height + pad * 2}px;` +
+        "position:absolute;box-sizing:border-box;" +
         "border:3px solid #7c6cff;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.28),0 0 18px rgba(124,108,255,.7);" +
         "opacity:0;transition:opacity .3s ease;";
       if (label) {
         const tag = document.createElement("div");
         tag.textContent = label;
-        const above = rect.y > 70;
         tag.style.cssText =
-          `position:absolute;left:-3px;${above ? "bottom:calc(100% + 8px)" : "top:calc(100% + 8px)"};white-space:nowrap;` +
+          "position:absolute;left:-3px;white-space:nowrap;" +
           "padding:6px 14px;border-radius:8px;background:#7c6cff;color:#fff;font:600 22px/1.3 'Inter','Segoe UI',system-ui,sans-serif;";
         box.appendChild(tag);
       }
       r.insertBefore(box, caption);
+      placeCallout(box, rect);
       requestAnimationFrame(() => (box.style.opacity = "1"));
       callouts.set(id, box);
     },
@@ -127,11 +162,7 @@
     recallout(id, rect) {
       const box = callouts.get(id);
       if (!box) return;
-      const pad = 8;
-      box.style.left = `${rect.x - pad}px`;
-      box.style.top = `${rect.y - pad}px`;
-      box.style.width = `${rect.width + pad * 2}px`;
-      box.style.height = `${rect.height + pad * 2}px`;
+      placeCallout(box, rect);
     },
     uncallout(id) {
       const old = callouts.get(id);
