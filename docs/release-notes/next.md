@@ -1,3 +1,7 @@
+### New
+
+- **Export as plain wildcard files.** Import / Export → Export has a new **Wildcard files (.zip)** button: the picks become `.txt` wildcard files for Dynamic Prompts, Impact Pack, Prompt-PostProcessor, Easy-Use and A1111/Forge, so you can share a pack with people who don't use Wildcard Pipeline. References and `$variables` become `__folder/name__`, uneven weights become repeated lines, and a README in the zip lists what had no plain form (rules, tags, the chance of nothing, negatives).
+
 ### Wildcards
 
 - **Filter a wildcard by a variable.** The Pool filter can now read a `$variable` when the prompt runs. Tag a Setting wildcard's options `pony` or `illustrious`, pick `$model_variant` under **By variable** in its Pool, and each run keeps the options for the loaded model; options with no model tag stay for every model. Constraints on the wildcard still apply to what is left, so you no longer need a Model wildcard with Match variable plus a constraint just to narrow one list. References work the same way: `@{Setting:$model_variant}`. A value is compared like a tag (case and spaces don't matter), a multi-pick list keeps options for any of its picks, and an unset variable or a value that is no tag there leaves that part of the filter out, with a note in WP Debug. Packs that use it need this version (schema 11).

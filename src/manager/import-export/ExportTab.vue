@@ -550,9 +550,52 @@ function collectDepWarningRows(): ExportDepWarningRow[] {
   return out;
 }
 
+/** "json" = the full Wildcard Pipeline export; "plain" = a zip of
+ *  `.txt` wildcard files other tools read (engine/wildcard_export.py). */
+const exportFormat = ref<"json" | "plain">("json");
+
+/** The pack folder name for a plain export: the one bundle or item picked,
+ *  else a generic name. */
+function plainPackName(): string {
+  const ids = BUCKETS.flatMap((b) => [...selection.value[b.key]]);
+  if (ids.length !== 1) {
+    const only = [...selection.value.bundle];
+    if (only.length === 1) return bundles.value.find((b) => b.id === only[0])?.name ?? "wildcards";
+    return "wildcards";
+  }
+  return rowMetaFor(ids[0] ?? "")?.name ?? "wildcards";
+}
+
+function downloadZip(base64: string, filename: string): void {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function performExport(): Promise<void> {
   exporting.value = true;
   try {
+    if (exportFormat.value === "plain") {
+      const out = await api.importExport.plain({ ...buildRequest(), name: plainPackName() });
+      downloadZip(out.data, out.filename);
+      const skipped = out.skipped.length
+        ? ` ${out.skipped.length} item${out.skipped.length === 1 ? "" : "s"} (rules) can't be written as plain files; the zip's README lists them.`
+        : "";
+      toast.push({
+        severity: "success",
+        summary: "Wildcard files ready",
+        detail: `${out.files} file${out.files === 1 ? "" : "s"} for Dynamic Prompts, Impact Pack and similar tools.${skipped}`,
+        life: 5000,
+      });
+      return;
+    }
     const payload = await api.importExport.build(buildRequest());
     downloadPayload(payload);
     toast.push({
@@ -578,8 +621,9 @@ async function performExport(): Promise<void> {
   }
 }
 
-async function runExport() {
+async function runExport(format: "json" | "plain" = "json") {
   if (totalSelected.value === 0) return;
+  exportFormat.value = format;
   const rows = collectDepWarningRows();
   if (rows.length > 0) {
     depWarningRows.value = rows;
@@ -880,12 +924,22 @@ function presetFavoritesOnly(): void {
         @click="publishToCommunity"
       >Publish to community</Button>
       <Button
+        variant="secondary"
+        size="sm"
+        icon="pi-file"
+        :disabled="totalSelected === 0 || exporting"
+        :loading="exporting && exportFormat === 'plain'"
+        hint="Plain .txt wildcard files for Dynamic Prompts, Impact Pack and similar tools. Rules (derivations, constraints) and tags stay out; the zip's README lists what changed."
+        data-test="export-tab-plain"
+        @click="runExport('plain')"
+      >Wildcard files (.zip)</Button>
+      <Button
         variant="primary"
         icon="pi-download"
         :disabled="totalSelected === 0 || exporting"
-        :loading="exporting"
+        :loading="exporting && exportFormat === 'json'"
         data-test="export-tab-submit"
-        @click="runExport"
+        @click="runExport('json')"
       >Export</Button>
     </div>
 

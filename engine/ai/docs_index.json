@@ -379,6 +379,10 @@
      "text": "- In the manager open Import / Export → Export.\n- Tick what to share: the whole library, a kind, or single modules and bundles. Select with dependencies adds the wildcards they reference.\n- Download the file and send it.\nTo bring one in, use the Import tab: pick the file or paste its text, choose what to add, and decide what happens when a name already exists. An import can be undone from the message that follows."
     },
     {
+     "title": "Share with people who don't use Wildcard Pipeline",
+     "text": "Wildcard files (.zip), next to Export, writes the same picks as plain .txt wildcard files that Dynamic Prompts, Impact Pack, Prompt-PostProcessor, Easy-Use and A1111/Forge read: one file per wildcard, one option per line, in a folder named after what you picked. Use them as __folder/name__.\n- References to other wildcards become __folder/name__, and $hair becomes __folder/hair__. In those tools that is a new pick, not the same one.\n- Uneven weights become repeated lines, since those tools pick lines evenly.\n- Fixed values and combines get a one-line file each, templates go in templates/.\n- Rules (derivations, constraints), tags, the chance of nothing, fallbacks and negatives on options have no plain form. The zip's README.md lists what changed in each file.\nThe community site offers the same download on every pack."
+    },
+    {
      "title": "Publish to the community",
      "text": "On a module or bundle, the Publish to community button opens the publish form with everything filled in; the Export tab has the same button for a selection. Others find it in the Community tab and install it in one click, with the wildcards it needs.\nA pack that uses a newer feature asks people on an older version to update before it installs, so nothing gets dropped on the way."
     },

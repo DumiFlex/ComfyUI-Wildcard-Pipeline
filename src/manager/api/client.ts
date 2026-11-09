@@ -755,6 +755,16 @@ export const api = {
       });
     },
     /**
+     * POST /wp/api/export/plain — the same picks as plain wildcard files
+     * (one `.txt` per wildcard, for Dynamic Prompts / Impact Pack …), as a
+     * base64 zip. `name` names the pack folder inside it.
+     */
+    plain(req: ExportBuildRequest & { name?: string }) {
+      return request<PlainExportResult>("/wp/api/export/plain", {
+        method: "POST", body: JSON.stringify(req),
+      });
+    },
+    /**
      * POST /wp/api/import/commit — apply a classified commit payload
      * (built by `buildCommitPayload` in `import-export/commit.ts`).
      * On 2xx the server returns `{ok: true, undo_entry_id, summary}`;
@@ -803,6 +813,15 @@ export const api = {
  * separate module-type buckets, NOT a flat "variables" array; templates
  * are the eighth first-class entity.
  */
+export interface PlainExportResult {
+  filename: string;
+  /** The zip, base64. */
+  data: string;
+  files: number;
+  /** Items with no plain-file form (derivations, constraints). */
+  skipped: string[];
+}
+
 export interface ExportBuildRequest {
   bundle_uuids: string[];
   wildcard_uuids: string[];
