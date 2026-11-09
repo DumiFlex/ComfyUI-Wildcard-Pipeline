@@ -189,6 +189,7 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
           nodeMode: nodeMode.value,
           wiredTo: wiredTo?.value ?? "",
           choiceNote: hasExecuted.value ? choiceNote.value : "",
+          executed: hasExecuted.value,
           "onUpdate:modelValue": onUpdate,
         });
     },
@@ -220,7 +221,7 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
     const src = pickFirst(out, "wp_varpicker_source");
     const parsed = pickFirst(out, "wp_varpicker_parsed");
     const def = pickFirst(out, "wp_varpicker_default");
-    if (typeof src === "string") previewSource.value = src;
+    previewSource.value = typeof src === "string" ? src : "";
     // Python sends `null` when the parser fell back to default — keep
     // the null so the SFC paints the amber "default" state.
     previewParsed.value = typeof parsed === "string" ? parsed : null;
