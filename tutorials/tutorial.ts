@@ -500,8 +500,9 @@ export class Tutor {
    * Opens a Context node's Add module picker, ticks the named library items and adds them.
    * A name matches the row whose name is exactly it ("Hero", not "Hero fits the place").
    */
-  async pickModules(ctxId: string, names: string[]): Promise<void> {
-    await this.click(this.node(ctxId).locator('[data-testid="open-picker"]'));
+  async pickModules(ctxId: string, names: string[], { open = true }: { open?: boolean } = {}): Promise<void> {
+    // `open: false` when the picker is already open (a video that opens it while it talks).
+    if (open) await this.click(this.node(ctxId).locator('[data-testid="open-picker"]'));
     const page = this.page;
     for (const name of names) {
       const row = page.locator('[data-test^="picker-row-"]').filter({ has: page.getByText(name, { exact: true }) }).first();
