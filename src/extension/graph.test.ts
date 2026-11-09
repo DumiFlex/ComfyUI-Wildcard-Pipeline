@@ -671,6 +671,21 @@ describe("findRootGraph", () => {
     };
     expect(findRootGraph(orphan)).toBe(orphan);
   });
+
+  it("uses `rootGraph` when litegraph gives one (root carries a UUID id there)", () => {
+    // Current ComfyUI frontends: the root LGraph has a UUID `id`, every
+    // subgraph points at the root through `rootGraph`, and there is no
+    // `_subgraph_node`. The id test alone returned the subgraph itself.
+    const root: LiteGraphLike & { rootGraph?: LiteGraphLike } = {
+      id: "0f1e2d3c-root", _nodes: [], links: {}, getNodeById: () => null,
+    };
+    root.rootGraph = root;
+    const sub: LiteGraphLike & { rootGraph?: LiteGraphLike } = {
+      id: "sub-uuid", _nodes: [], links: {}, getNodeById: () => null, rootGraph: root,
+    };
+    expect(findRootGraph(sub)).toBe(root);
+    expect(findRootGraph(root)).toBe(root);
+  });
 });
 
 describe("findDownstreamAssemblers", () => {
@@ -697,6 +712,77 @@ describe("findDownstreamAssemblers", () => {
 //   - SubgraphOutputNode (id = -20) — boundary inside the subgraph that
 //     proxies external outputs.
 // We model both shapes here and assert the walk doesn't get stuck on either.
+
+describe("subgraph boundaries with text ids (ComfyUI frontend 1.5x)", () => {
+  // Current frontends key nodes and links by strings: the input proxy is
+  // "-10", the output proxy "-20". The walkers compared against the numbers
+  // and stopped at every subgraph edge.
+  const sid = (n: number) => String(n) as unknown as number;
+
+  it("steps OUT through a \"-10\" input proxy", () => {
+    const ctx = fakeContextNode(1, ["time"]);
+    ctx.id = sid(1);
+    ctx.outputs = [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }];
+    const innerAsm: LiteNodeLike = { id: sid(2), type: "WP_PromptAssembler", inputs: [{ name: "context", link: 200 }] };
+    const subgraph: LiteGraphLike = {
+      id: "sg-uuid",
+      _nodes: [innerAsm],
+      links: { 200: { id: 200, origin_id: sid(-10), origin_slot: 0, target_id: sid(2), target_slot: 0 } },
+      getNodeById: (id) => (String(id) === "2" ? innerAsm : null),
+      inputNode: { id: sid(-10), slots: [{ name: "upstream", linkIds: [200] }] },
+      outputNode: { id: sid(-20), slots: [] },
+    };
+    innerAsm.graph = subgraph;
+    const subNode: LiteNodeLike = {
+      id: sid(4), type: "sg-uuid", inputs: [{ name: "upstream", link: 100 }], outputs: [], subgraph, isSubgraphNode: () => true,
+    };
+    const root: LiteGraphLike & { rootGraph?: LiteGraphLike } = {
+      id: "root-uuid",
+      _nodes: [ctx, subNode],
+      links: { 100: { id: 100, origin_id: sid(1), origin_slot: 0, target_id: sid(4), target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 4: subNode } as Record<string, LiteNodeLike>)[String(id)] ?? null,
+    };
+    root.rootGraph = root;
+    (subgraph as { rootGraph?: LiteGraphLike }).rootGraph = root;
+    ctx.graph = root;
+    subNode.graph = root;
+
+    expect(findRootGraph(subgraph)).toBe(root);
+    expect(collectUpstreamVariables(findRootGraph(subgraph), innerAsm)).toEqual(["time"]);
+  });
+
+  it("walks downstream out through a \"-20\" output proxy", () => {
+    const innerCtx = fakeContextNode(1, ["hero"]);
+    innerCtx.id = sid(1);
+    innerCtx.outputs = [{ name: "context", links: [200], type: "PIPELINE_CONTEXT" }];
+    const subgraph: LiteGraphLike = {
+      id: "sg-uuid",
+      _nodes: [innerCtx],
+      links: { 200: { id: 200, origin_id: sid(1), origin_slot: 0, target_id: sid(-20), target_slot: 0 } },
+      getNodeById: (id) => (String(id) === "1" ? innerCtx : null),
+      inputNode: { id: sid(-10), slots: [] },
+      outputNode: { id: sid(-20), slots: [{ name: "context", linkIds: [200] }] },
+    };
+    innerCtx.graph = subgraph;
+    const subNode: LiteNodeLike = {
+      id: sid(4), type: "sg-uuid", inputs: [],
+      outputs: [{ name: "context", links: [300], type: "PIPELINE_CONTEXT" }],
+      subgraph, isSubgraphNode: () => true,
+    };
+    const asm: LiteNodeLike = { id: sid(5), type: "WP_PromptAssembler", inputs: [{ name: "context", link: 300 }] };
+    const root: LiteGraphLike = {
+      id: "root-uuid",
+      _nodes: [subNode, asm],
+      links: { 300: { id: 300, origin_id: sid(4), origin_slot: 0, target_id: sid(5), target_slot: 0 } },
+      getNodeById: (id) => ({ 4: subNode, 5: asm } as Record<string, LiteNodeLike>)[String(id)] ?? null,
+    };
+    subNode.graph = root;
+    asm.graph = root;
+
+    expect(findDownstreamAssemblers(root, innerCtx).map((n) => String(n.id))).toEqual(["5"]);
+    expect(collectUpstreamVariables(root, asm)).toEqual(["hero"]);
+  });
+});
 
 describe("collectUpstreamVariables across subgraph boundaries", () => {
   it("steps OUT of a subgraph to reach an upstream Context in the parent graph", () => {

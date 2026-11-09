@@ -205,7 +205,7 @@ function toggleOverrideStrategy(): void {
       data-test="seedlist-seeds-btn"
       @click="seedsOpen = true"
     >
-      Per-iteration seeds
+      <span class="wp-seedlist__seedbtn-text">Per-iteration seeds</span>
       <span class="wp-seedlist__seedbtn-fill" />
       <span v-if="lockedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-badge">{{ lockedCount }} locked</span>
       <span v-if="bypassedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
@@ -298,7 +298,16 @@ function toggleOverrideStrategy(): void {
 .wp-seedlist--muted { opacity: 0.45; pointer-events: none; }
 .wp-seedlist--bypassed { opacity: 0.65; }
 
+/* The kit Button wraps the slot in an inline label box, so the fill span
+ * can't push the badges and chevron right and the chevron rides the
+ * text's baseline. Make the label the flex row instead; the text keeps
+ * the kit's cap-height trim so it stays level with the icons. */
+.wp-seedlist__seedbtn :deep(.wp-btn__label) { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-box: normal; }
+.wp-seedlist__seedbtn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@supports (text-box: trim-both cap alphabetic) {
+  .wp-seedlist__seedbtn-text { text-box: trim-both cap alphabetic; }
+}
 .wp-seedlist__seedbtn-fill { flex: 1; }
 .wp-seedlist__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
-.wp-seedlist__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-seedlist__seedbtn-chev { flex: none; color: var(--wp-text-dim, var(--wp-text3)); }
 </style>
