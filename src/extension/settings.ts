@@ -24,6 +24,8 @@ import "../components/shared/vue-nodes.css";
 // (the SPA's rich-text.css isn't loaded on the canvas — see the file header).
 import "../components/shared/rich-text-canvas.css";
 import { pushToast } from "../components/shared/toast-store";
+import { setCanvasColorsMode, watchPalette, type CanvasColorsMode } from "./comfy-palette";
+import { watchRootTheme } from "./theme-detector";
 import { notifyCompletionSettingsChanged } from "../manager/utils/tagSetting";
 import { openPlayground } from "../components/settings/playground-store";
 import {
@@ -39,6 +41,9 @@ import {
   SETTING_ID_KIND_STYLE,
   SETTING_ID_COLLAPSE_MODE,
   SETTING_ID_COLOR_INTENSITY,
+  SETTING_ID_CANVAS_COLORS,
+  CANVAS_COLORS_OPTIONS,
+  CANVAS_COLORS_TOOLTIP,
   SETTING_ID_VALIDATION,
   SETTING_ID_TOAST_LIFETIME,
   SETTING_ID_SUPPRESS_INFO,
@@ -725,6 +730,14 @@ export function applyDisplayPrefs(app: AppLike): void {
   // overrides for accent / kind / status tokens (see display-prefs.css).
   state.colorIntensity = asColorIntensity(app.extensionManager?.setting?.get(SETTING_ID_COLOR_INTENSITY), "standard");
   syncMarkers();
+  // ComfyUI palettes beyond Dark / Light (comfy-palette.ts).
+  setCanvasColorsMode(asCanvasColors(app.extensionManager?.setting?.get(SETTING_ID_CANVAS_COLORS)));
+  watchPalette(app);
+  watchRootTheme(app);
+}
+
+function asCanvasColors(v: unknown): CanvasColorsMode {
+  return v === "own" ? "own" : "follow";
 }
 
 /**
@@ -1167,6 +1180,18 @@ export function buildSettings(_app: AppLike): ComfySetting[] {
             singletonKey: "wp-color-intensity",
           });
         }
+      },
+    },
+    {
+      id: SETTING_ID_CANVAS_COLORS,
+      name: "Canvas colors",
+      type: "combo",
+      options: CANVAS_COLORS_OPTIONS,
+      defaultValue: "follow",
+      tooltip: CANVAS_COLORS_TOOLTIP,
+      category: ["Wildcard Pipeline", "2. Sizing", "Canvas colors"],
+      onChange: (newVal) => {
+        setCanvasColorsMode(asCanvasColors(newVal));
       },
     },
     {

@@ -55,6 +55,7 @@ type ToastLifetime = "short" | "default" | "long" | "sticky";
 type CollapseMode = "independent" | "accordion";
 type RowActions = "always" | "hover";
 type ColorIntensity = "muted" | "standard" | "vivid";
+type CanvasColors = "follow" | "own";
 type BundleMasterOffBehavior = "preserve-manual" | "cascade-all";
 
 function asString(v: unknown, fallback: string): string {
@@ -81,6 +82,7 @@ const collapsedByDefault = ref<boolean>(false);
 const bundleCollapsedByDefault = ref<boolean>(false);
 const collapseMode = ref<CollapseMode>("independent");
 const colorIntensity = ref<ColorIntensity>("standard");
+const canvasColors = ref<CanvasColors>("follow");
 const focusMode = ref<boolean>(false);
 const rowActions = ref<RowActions>("always");
 const reduceMotion = ref<A11yMode>("auto");
@@ -118,6 +120,7 @@ function syncFromStore(): void {
   bundleCollapsedByDefault.value = asBool(getSettingValue("bundleCollapsedByDefault"), false);
   collapseMode.value = asString(getSettingValue("collapseMode"), "independent") as CollapseMode;
   colorIntensity.value = asString(getSettingValue("colorIntensity"), "standard") as ColorIntensity;
+  canvasColors.value = asString(getSettingValue("canvasColors"), "follow") === "own" ? "own" : "follow";
   focusMode.value = asBool(getSettingValue("focusMode"), false);
   rowActions.value = asString(getSettingValue("rowActions"), "always") as RowActions;
   reduceMotion.value = asString(getSettingValue("reduceMotion"), "auto") as A11yMode;
@@ -158,6 +161,7 @@ watch(collapsedByDefault, (v) => applySetting("collapsedByDefault", v));
 watch(bundleCollapsedByDefault, (v) => applySetting("bundleCollapsedByDefault", v));
 watch(collapseMode, (v) => applySetting("collapseMode", v));
 watch(colorIntensity, (v) => applySetting("colorIntensity", v));
+watch(canvasColors, (v) => applySetting("canvasColors", v));
 watch(focusMode, (v) => applySetting("focusMode", v));
 watch(rowActions, (v) => applySetting("rowActions", v));
 watch(reduceMotion, (v) => applySetting("reduceMotion", v));
@@ -189,6 +193,7 @@ interface Defaults {
   bundleCollapsedByDefault: boolean;
   collapseMode: CollapseMode;
   colorIntensity: ColorIntensity;
+  canvasColors: CanvasColors;
   focusMode: boolean;
   rowActions: RowActions;
   reduceMotion: A11yMode;
@@ -221,6 +226,7 @@ const defaults: Defaults = {
   bundleCollapsedByDefault: false,
   collapseMode: "independent",
   colorIntensity: "standard",
+  canvasColors: "follow",
   focusMode: false,
   rowActions: "always",
   reduceMotion: "auto",
@@ -344,6 +350,13 @@ onBeforeUnmount(() => {
               <WpSelect
                 v-model="colorIntensity" class="wp-pg__select"
                 :options="[{ value: 'muted', label: 'Muted (low saturation)' }, { value: 'standard', label: 'Standard (default)' }, { value: 'vivid', label: 'Vivid (high saturation)' }]"
+              />
+            </label>
+            <label class="wp-pg__row">
+              <span class="wp-pg__row-label">Canvas colors</span>
+              <WpSelect
+                v-model="canvasColors" class="wp-pg__select"
+                :options="[{ value: 'follow', label: 'Follow ComfyUI palette (default)' }, { value: 'own', label: 'Wildcard Pipeline colors' }]"
               />
             </label>
           </fieldset>
