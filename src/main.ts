@@ -43,6 +43,7 @@ const {
   loadToast,
   loadPlayground,
   loadSubgraphBadge,
+  badgeSlotMod,
   loadImageFilterPicker,
   loadBookmarkDock,
   loadNodeHelp,
@@ -137,6 +138,13 @@ function withBadges(fn: (badgeMod: BadgeModule) => void): void {
 }
 function isSubgraphNode(node: unknown): boolean {
   return (node as { isSubgraphNode?: () => boolean }).isSubgraphNode?.() === true;
+}
+// Nodes 2.0 only notices a badge that is in `node.badges` when it first
+// renders the node, so every SubgraphNode gets its badge getter right away,
+// before the badge module has loaded (see extension/badge-slot.ts).
+badgeSlotMod.setBadgeHost(() => (app as unknown as { extensionManager?: unknown }).extensionManager);
+function prepareBadge(node: unknown): void {
+  badgeSlotMod.ensureBadgeSlot(node as { badges?: unknown[] });
 }
 
 // ComfyUI hands us untyped LiteGraph nodes; we only care about the surface
@@ -451,6 +459,7 @@ app.registerExtension({
   // without opening it.
   nodeCreated(node: unknown) {
     if (!isSubgraphNode(node)) return;
+    prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
   },
@@ -459,6 +468,7 @@ app.registerExtension({
   // workflow. ComfyUI splits the lifecycle so we cover both paths.
   loadedGraphNode(node: unknown) {
     if (!isSubgraphNode(node)) return;
+    prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
   },

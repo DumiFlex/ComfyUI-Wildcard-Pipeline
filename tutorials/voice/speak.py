@@ -69,12 +69,16 @@ def ensure_models() -> None:
 
 
 def spoken_text(text: str) -> str:
-    """What the voice reads: `$hero` reads as "hero", "WP" as letters."""
+    """What the voice reads: `$hero_line` as "hero line", "WP" as letters, "LoRA" as one word."""
+
     def var(m: re.Match[str]) -> str:
-        return m.group(1) + m.group(2).replace(".", " dot ").lower()
+        return (m.group(1) + m.group(2).replace(".", " dot ")).replace("_", " ").lower()
 
     t = re.sub(r"\$(\w+)((?:\.\w+)*)", var, text)
     t = re.sub(r"\bWP\b", "W P", t)
+    # Spelled the way it's said: "LoRA" letter by letter sounds wrong, "lora" reads as one word.
+    t = re.sub(r"\bLoRA(s?)\b", r"lora\1", t)
+    t = re.sub(r"\bComfyUI\b", "Comfy U I", t)
     return t
 
 
