@@ -102,7 +102,9 @@ const summary = computed(() => {
   flex: 0 0 26px;
   padding: 0 2px;
   color: var(--wp-danger);
-  font: 500 11px/1 var(--wp-font-sans);
+  /* Line height above 1: the label and summary clip their overflow, so a
+     tight 1 cut the tails off g, p and y. */
+  font: 500 11px/1.4 var(--wp-font-sans);
   text-transform: lowercase;
 }
 .wp-negbox__head:hover:not(:disabled) { color: var(--wp-danger); }
@@ -114,7 +116,7 @@ const summary = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--wp-text-dim);
-  font: 11px/1 var(--wp-font-mono);
+  font: 11px/1.4 var(--wp-font-mono);
   text-transform: none;
 }
 .wp-negbox__body {

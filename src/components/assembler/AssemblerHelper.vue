@@ -304,6 +304,17 @@ const isResolved = computed(() => {
   return Boolean(props.resolved);
 });
 
+/** The preview header's note. A template with no `$names` is plain text: it
+ *  passes through as typed (the node then works as a multiline text box with
+ *  its own negative), so it is neither "empty" nor "unresolved". */
+const previewStatus = computed<{ text: string; tone: "ok" | "warn" | "" }>(() => {
+  if (!props.template.trim()) return { text: "(template empty)", tone: "" };
+  if (templateVarsInternal.value.length === 0) return { text: "plain text", tone: "ok" };
+  if (missing.value.length > 0) return { text: `${missing.value.length} unresolved`, tone: "warn" };
+  if (isResolved.value) return { text: "resolved", tone: "ok" };
+  return { text: "(not resolved yet)", tone: "" };
+});
+
 // ---------------------------------------------------------------------------
 // Ripple effect
 // ---------------------------------------------------------------------------
@@ -537,14 +548,20 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           @click="onRemoveVar?.(v)"
           @contextmenu="(ev) => openChipMenu(ev, v, true)"
         ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
+        <span
+          v-if="upstreamNames.length === 0 && missing.length === 0"
+          class="wp-asm-vars__none"
+          data-test="asm-vars-none"
+        >No variables here: wire a Context or Injector to use $names. Plain text passes through as typed.</span>
       </div>
 
       <!-- preview section -->
       <div class="wp-asm-section">
         <span>preview</span>
-        <span :class="['wp-asm-section-stat', isResolved ? 'is-ok' : '']">
-          {{ isResolved ? "resolved" : "(template empty or unresolved)" }}
-        </span>
+        <span
+          :class="['wp-asm-section-stat', { 'is-ok': previewStatus.tone === 'ok', 'wp-asm-section-stat--warn': previewStatus.tone === 'warn' }]"
+          data-test="asm-preview-status"
+        >{{ previewStatus.text }}</span>
       </div>
       <div
         class="wp-asm-preview"
@@ -647,6 +664,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
+.wp-asm-vars__none {
+  color: var(--wp-text-dim);
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 2px 4px;
+}
 .wp-asm-section-stat--neg {
   padding: 2px 6px;
   border-radius: min(3px, var(--wp-radius-cap, 999px));
