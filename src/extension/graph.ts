@@ -275,6 +275,38 @@ export function findRootGraph(start: LiteGraphLike): LiteGraphLike {
   return start;
 }
 
+/** The canvas calls `showGraph` needs: the graph on screen and the switch. */
+export interface GraphCanvasLike {
+  graph?: LiteGraphLike | null;
+  setGraph?: (graph: LiteGraphLike) => void;
+}
+
+/** How long ComfyUI takes to restore the viewport it keeps for a graph after
+ *  `setGraph`; pan or centre after it, or the restore pans straight back. */
+export const GRAPH_SWITCH_SETTLE_MS = 50;
+
+/**
+ * Put `graph` on screen, then run `then`. A graph other than the one shown
+ * (a subgraph, or the root seen from inside one) is opened first, the same
+ * way the breadcrumb does, and `then` waits for the viewport restore.
+ * Returns false (and skips `then`) when the canvas can't switch graphs, since
+ * centring a node of another graph would pan over empty canvas.
+ */
+export function showGraph(
+  canvas: GraphCanvasLike,
+  graph: LiteGraphLike | null | undefined,
+  then: () => void,
+): boolean {
+  if (!graph || canvas.graph === graph) {
+    then();
+    return true;
+  }
+  if (typeof canvas.setGraph !== "function") return false;
+  canvas.setGraph(graph);
+  setTimeout(then, GRAPH_SWITCH_SETTLE_MS);
+  return true;
+}
+
 type SubgraphParent = { node: LiteNodeLike; graph: LiteGraphLike };
 
 /**
