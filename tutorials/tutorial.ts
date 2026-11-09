@@ -634,7 +634,8 @@ export class Tutor {
       [nodeId, side, name] as const,
     );
     if (index < 0) throw new StepError(`Node ${nodeId} has no ${side === "in" ? "input" : "output"} "${name}".`);
-    return this.centre(this.page.locator(`[data-slot-key="${nodeId}-${side}-${index}"]`));
+    // Inside the node itself: the node search's preview card can hold a copy of the same key.
+    return this.centre(this.node(nodeId).locator(`[data-slot-key="${nodeId}-${side}-${index}"]`).first());
   }
 
   /** Drags a wire from one node's output to another node's input. */
@@ -642,14 +643,23 @@ export class Tutor {
     const from = await this.slot(fromId, "out", output);
     const to = await this.slot(toId, "in", input);
     await this.drag(from, to);
-    const linked = await this.page.evaluate(
-      ([id, n]) => {
-        const node = window.app?.graph?.getNodeById(id) ?? window.app?.graph?.getNodeById(Number(id));
-        return (node?.inputs ?? []).some((x) => x.name === n && x.link != null);
-      },
-      [toId, input] as const,
-    );
-    if (!linked) throw new StepError(`The wire into ${input} didn't connect.`);
+    const isLinked = () =>
+      this.page.evaluate(
+        ([id, n]) => {
+          const node = window.app?.graph?.getNodeById(id) ?? window.app?.graph?.getNodeById(Number(id));
+          return (node?.inputs ?? []).some((x) => x.name === n && x.link != null);
+        },
+        [toId, input] as const,
+      );
+    if (await isLinked()) return;
+    // A widget input's dot can sit apart from its slot key (a KSampler's sampler_name): drop the
+    // wire just left of the input's label instead.
+    const label = await this.node(toId).getByText(input, { exact: true }).first().boundingBox().catch(() => null);
+    if (label) {
+      await this.drag(from, { x: label.x - 8, y: label.y + label.height / 2 });
+      if (await isLinked()) return;
+    }
+    throw new StepError(`The wire into ${input} didn't connect.`);
   }
 
   /** Presses Run and waits until the queue is empty again. */
@@ -673,7 +683,12 @@ export class Tutor {
 
 export interface ShowcaseOptions {
   /** The node whose `prompt` (and `negative`) outputs feed the sampler. */
-  from: string;
+  from?: string;
+  /** A fixed prompt instead of `from`'s, for a take with no Assembler. */
+  prompt?: string;
+  /** A KSampler already on the canvas, its latent (and maybe sampler) wired by the take: the chain
+   *  feeds it instead of making its own latent and sampler. */
+  sampler?: string;
   /** Where the image preview goes (its top-left corner on screen) and how big it is. */
   preview: Point & { width?: number; height?: number };
   /** Where the small, folded loader + sampler stack goes. */
@@ -791,7 +806,7 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
   const cfg = Number(t.params.cfg ?? (unet ? 1 : 5));
   const image = [Number(t.params.width ?? 1024), Number(t.params.height ?? 1280)] as [number, number];
   const previewId = await t.page.evaluate(
-    ({ from, models, chainAt, previewAt, size, steps, cfg, image }) => {
+    ({ from, prompt, ownSampler, models, chainAt, previewAt, size, steps, cfg, image }) => {
       type LNode = {
         id: number;
         pos: [number, number];
@@ -804,8 +819,9 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
       };
       const LG = window.LiteGraph as { createNode(type: string): LNode };
       const graph = (window.app as unknown as { graph: { add(n: LNode): void; getNodeById(id: string | number): LNode | null } }).graph;
-      const src = graph.getNodeById(from) ?? graph.getNodeById(Number(from));
-      if (!src) throw new Error("no prompt node");
+      const src = from ? (graph.getNodeById(from) ?? graph.getNodeById(Number(from))) : null;
+      if (!src && !prompt) throw new Error("no prompt node");
+      const own = ownSampler ? graph.getNodeById(Number(ownSampler)) : null;
       const make = (type: string, x: number, y: number, fold = true) => {
         const n = LG.createNode(type);
         n.pos = [x, y];
@@ -851,13 +867,15 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
       const pos = make("CLIPTextEncode", cx, cy + 75);
       // Klein runs at cfg 1, where a negative does nothing: it gets the zeroed positive, as in its own workflow.
       const neg = models.unet ? make("ConditioningZeroOut", cx, cy + 100) : make("CLIPTextEncode", cx, cy + 100);
-      const latent = make(models.unet ? "EmptyFlux2LatentImage" : "EmptyLatentImage", cx, cy + 150);
-      set(latent, "width", image[0]);
-      set(latent, "height", image[1]);
-      const sampler = make("KSampler", cx, cy + 200);
+      const latent = own ? null : make(models.unet ? "EmptyFlux2LatentImage" : "EmptyLatentImage", cx, cy + 150);
+      if (latent) {
+        set(latent, "width", image[0]);
+        set(latent, "height", image[1]);
+      }
+      const sampler = own ?? make("KSampler", cx, cy + 200);
       set(sampler, "steps", steps);
       set(sampler, "cfg", cfg);
-      set(sampler, "sampler_name", models.unet ? "euler" : "euler_ancestral");
+      if (!own) set(sampler, "sampler_name", models.unet ? "euler" : "euler_ancestral");
       set(sampler, "scheduler", models.unet ? "simple" : "normal");
       set(sampler, "seed", 1234);
       for (const w of sampler.widgets ?? []) if (w.name === "control_after_generate") w.value = "fixed";
@@ -908,23 +926,24 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
       const preview = make("PreviewImage", px, py, false);
       preview.size = [pw, ph];
       link(clipOut[0], clipOut[1], pos, "clip");
-      link(src, "prompt", pos, "text");
+      if (src) link(src, "prompt", pos, "text");
+      else set(pos, "text", prompt);
       if (models.unet) link(pos, "CONDITIONING", neg, "conditioning");
       else {
         link(clipOut[0], clipOut[1], neg, "clip");
-        if (outIdx(src, "negative") >= 0) link(src, "negative", neg, "text");
+        if (src && outIdx(src, "negative") >= 0) link(src, "negative", neg, "text");
       }
       link(modelOut[0], modelOut[1], sampler, "model");
       link(pos, "CONDITIONING", sampler, "positive");
       link(neg, "CONDITIONING", sampler, "negative");
-      link(latent, "LATENT", sampler, "latent_image");
+      if (latent) link(latent, "LATENT", sampler, "latent_image");
       link(sampler, "LATENT", decode, "samples");
       link(vaeOut[0], vaeOut[1], decode, "vae");
       link(decode, "IMAGE", preview, "images");
       (window.app as unknown as { canvas: { setDirty(a: boolean, b: boolean): void } }).canvas.setDirty(true, true);
       return String(preview.id);
     },
-    { from: o.from, models, chainAt, previewAt, size: [o.preview.width ?? 460, o.preview.height ?? 700] as [number, number], steps, cfg, image },
+    { from: o.from ?? "", prompt: o.prompt ?? "", ownSampler: o.sampler ?? "", models, chainAt, previewAt, size: [o.preview.width ?? 460, o.preview.height ?? 700] as [number, number], steps, cfg, image },
   );
   await t.beat(600);
   const runs = o.runs ?? 3;

@@ -68,10 +68,10 @@ tutorial(
         const g = window.app?.graph as { nodes?: { id: number | string; subgraph?: unknown }[] } | undefined;
         return String(g?.nodes?.find((n) => n.subgraph)?.id ?? "");
       });
-      const badge = t.node(sub).getByText(/missing \$time/).first();
+      const badge = t.node(sub).getByText(/missing \$time|\d+ conflicts?/).first();
       await badge.waitFor({ timeout: 8000 });
       await t.callout("badge", badge, "What broke inside", 6);
-      await t.say("Nothing sets time any more, and the subgraph's badge says so, without opening it. It shows the worst problem inside.");
+      await t.say("Nothing sets time any more, and the subgraph's badge says so, without opening it. It shows the worst problem inside, or how many there are.");
       await t.waitVoice();
       await t.uncallout("badge");
       await t.say("Undo puts it back.");

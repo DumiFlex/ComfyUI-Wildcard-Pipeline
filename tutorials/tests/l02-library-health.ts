@@ -47,6 +47,7 @@ tutorial(
       await t.beat(800);
       await t.click(page.locator('[data-test="wc-add-opt"]'));
       await t.beat(400);
+      await t.scrollTo(page.locator('[data-test="wc-opt-row-9"]'), { at: 0.5 });
       await t.click(page.locator('[data-test="wc-opt-row-9"] .wp-rt__host').first());
       await t.type("a plain grey wool tunic", { cps: 16 });
       await t.beat(400);
@@ -62,6 +63,7 @@ tutorial(
       await t.click(row.getByRole("button", { name: "Open" }));
       await t.beat(1200);
       const dupe = page.locator('[data-test="wc-opt-row-9"]');
+      await t.scrollTo(dupe, { at: 0.5 });
       await t.hover(dupe);
       await t.beat(400);
       await t.say("Remove the copy, and save.");
