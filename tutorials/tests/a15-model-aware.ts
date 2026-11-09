@@ -42,7 +42,7 @@ tutorial(
       await t.say("Wire the model into it. It writes three variables: model family, from the model itself, model variant, from the file name, and model name.");
       await t.waitVoice();
       await t.uncallout("mi");
-      const internal = t.node(mi).locator('[data-test^="mi-internal-"]');
+      const internal = await t.node(mi).locator('[data-test^="mi-internal-"]').all();
       await t.callout("int", internal, "Internal: rules read them, prompts don't", 4);
       await t.say("All three are internal: rules, constraints and pools read them, but the Assembler never prints them, so they stay out of your prompt.");
       await t.waitVoice();
