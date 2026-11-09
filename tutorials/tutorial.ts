@@ -332,7 +332,11 @@ export class Tutor {
     let first = await target.boundingBox();
     if (!first) return;
     if (first.y >= 90 && first.y <= view.height * 0.55) return;
-    await this.moveTo({ x: Math.min(view.width - 60, Math.max(60, first.x + first.width / 2)), y: view.height * 0.5 });
+    // Scroll from a point on the straight line to the part, so the hand never detours to a
+    // corner and turns: it heads for the part, wheels on the way, then finishes the move.
+    const aim = { x: Math.min(view.width - 60, Math.max(60, first.x + first.width / 2)), y: Math.min(view.height - 200, Math.max(120, first.y + first.height / 2)) };
+    const share = Math.hypot(aim.x - this.pos.x, aim.y - this.pos.y) > 40 ? 0.6 : 1;
+    await this.moveTo({ x: this.pos.x + (aim.x - this.pos.x) * share, y: this.pos.y + (aim.y - this.pos.y) * share });
     let last = first.y;
     let stuck = 0;
     for (let i = 0; i < 60; i++) {
@@ -398,9 +402,62 @@ export class Tutor {
       height: Math.max(...boxes.map((b) => b.y + b.height)) + pad - y,
     };
     await this.page.evaluate(([i, b, l]) => window.__tut?.callout(i, b, l), [id, box, label ?? ""] as const);
+    this.follow(id, Array.isArray(target) ? target : [target], pad);
+  }
+
+  /** Callouts being kept on their part: the box follows it as it moves or resizes, and goes when it does. */
+  private followers = new Map<string, ReturnType<typeof setInterval>>();
+
+  private follow(id: string, targets: Locator[], pad: number): void {
+    this.stopFollowing(id);
+    let busy = false;
+    const timer = setInterval(() => {
+      if (busy) return;
+      busy = true;
+      void (async () => {
+        const boxes = [];
+        for (const one of targets) {
+          // Seen means really seen: a part fading out (opacity 0) or hidden counts as gone.
+          const seen = await one
+            .evaluate(
+              (el) => {
+                if (!(el as HTMLElement).checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+                // Also on top where it sits: a copy left behind a newer layer, or off screen, isn't seen.
+                const r = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+                return !hit || el === hit || el.contains(hit);
+              },
+              undefined,
+              { timeout: 200 },
+            )
+            .catch(() => false);
+          const b = seen ? await one.boundingBox({ timeout: 200 }).catch(() => null) : null;
+          if (b && b.width > 0 && b.height > 0) boxes.push(b);
+        }
+        if (!this.followers.has(id)) return;
+        if (!boxes.length) {
+          // The part is gone (a toast that faded, a closed menu): the box goes with it.
+          this.stopFollowing(id);
+          await this.page.evaluate((i) => window.__tut?.uncallout(i), id).catch(() => undefined);
+          return;
+        }
+        const x = Math.min(...boxes.map((b) => b.x)) - pad;
+        const y = Math.min(...boxes.map((b) => b.y)) - pad;
+        const rect = { x, y, width: Math.max(...boxes.map((b) => b.x + b.width)) + pad - x, height: Math.max(...boxes.map((b) => b.y + b.height)) + pad - y };
+        await this.page.evaluate(([i, r]) => window.__tut?.recallout(i, r), [id, rect] as const).catch(() => undefined);
+      })().finally(() => (busy = false));
+    }, 250);
+    this.followers.set(id, timer);
+  }
+
+  private stopFollowing(id: string): void {
+    const timer = this.followers.get(id);
+    if (timer) clearInterval(timer);
+    this.followers.delete(id);
   }
 
   async uncallout(id: string): Promise<void> {
+    this.stopFollowing(id);
     await this.page.evaluate((i) => window.__tut?.uncallout(i), id);
   }
 
@@ -706,18 +763,35 @@ export function showcasing(t: Tutor): boolean {
  * image land on screen. The stack of loader, encoders and sampler is built folded, since the video
  * is about the prompt; the narration around it is the test's. Returns the preview node's id.
  */
+/** Finds a model file in ComfyUI's list for one loader input, ignoring the slash kind and the file ending. */
+async function modelFile(t: Tutor, node: string, input: string, wanted: string, folder: string): Promise<string> {
+  const info = await t.h.api(`/object_info/${node}`);
+  const list = ((info.json as Record<string, { input?: { required?: Record<string, [unknown]> } }> | undefined)?.[node]?.input?.required?.[input]?.[0] ?? []) as string[];
+  const norm = (k: string) => k.replace(/\\/g, "/").replace(/\.(safetensors|ckpt|gguf)$/i, "").toLowerCase();
+  const name = list.find((k) => norm(k) === norm(wanted));
+  if (!name) throw new StepError(`"${wanted}" isn't in ComfyUI's models/${folder}. It has: ${list.slice(0, 8).join(", ") || "none"}.`);
+  return name;
+}
+
 export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
-  const ckpt = String(t.params.checkpoint ?? "");
-  const info = await t.h.api("/object_info/CheckpointLoaderSimple");
-  const known = ((info.json as Record<string, { input?: { required?: { ckpt_name?: [string[]] } } }> | undefined)?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? []) as string[];
-  const name = known.find((k) => k === ckpt || k.replace(/\.(safetensors|ckpt)$/i, "") === ckpt.replace(/\.(safetensors|ckpt)$/i, ""));
-  if (!name) throw new StepError(`The checkpoint "${ckpt}" isn't in ComfyUI's models/checkpoints. It has: ${known.slice(0, 8).join(", ") || "none"}.`);
+  // A diffusion model (Flux 3 Klein by default) with its own text encoder and VAE, or a checkpoint.
+  const unet = String(t.params.unet ?? "");
+  const models = unet
+    ? {
+        unet: await modelFile(t, "UNETLoader", "unet_name", unet, "diffusion_models"),
+        clip: await modelFile(t, "CLIPLoader", "clip_name", String(t.params.clip ?? ""), "text_encoders"),
+        clipType: String(t.params.clipType ?? "flux3"),
+        vae: await modelFile(t, "VAELoader", "vae_name", String(t.params.vae ?? ""), "vae"),
+        ckpt: "",
+      }
+    : { unet: "", clip: "", clipType: "", vae: "", ckpt: await modelFile(t, "CheckpointLoaderSimple", "ckpt_name", String(t.params.checkpoint ?? ""), "checkpoints") };
   const chainAt = await toGraph(t.page, o.chain);
   const previewAt = await toGraph(t.page, o.preview);
-  const steps = Number(t.params.steps ?? 24);
-  const cfg = Number(t.params.cfg ?? 5);
+  const steps = Number(t.params.steps ?? 12);
+  const cfg = Number(t.params.cfg ?? (unet ? 1 : 5));
+  const image = [Number(t.params.width ?? 1024), Number(t.params.height ?? 1280)] as [number, number];
   const previewId = await t.page.evaluate(
-    ({ from, name, chainAt, previewAt, size, steps, cfg }) => {
+    ({ from, models, chainAt, previewAt, size, steps, cfg, image }) => {
       type LNode = {
         id: number;
         pos: [number, number];
@@ -752,17 +826,39 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
         a.connect(i, b, j);
       };
       const [cx, cy] = chainAt;
-      const load = make("CheckpointLoaderSimple", cx, cy);
-      set(load, "ckpt_name", name);
-      const pos = make("CLIPTextEncode", cx, cy + 50);
-      const neg = make("CLIPTextEncode", cx, cy + 100);
-      const latent = make("EmptyLatentImage", cx, cy + 150);
-      set(latent, "width", 832);
-      set(latent, "height", 1216);
+      // Loader outputs as [node, output name], so both model kinds wire the same way below.
+      let modelOut: [LNode, string];
+      let clipOut: [LNode, string];
+      let vaeOut: [LNode, string];
+      if (models.unet) {
+        const unetNode = make("UNETLoader", cx, cy);
+        set(unetNode, "unet_name", models.unet);
+        const clipNode = make("CLIPLoader", cx, cy + 25);
+        set(clipNode, "clip_name", models.clip);
+        set(clipNode, "type", models.clipType);
+        const vaeNode = make("VAELoader", cx, cy + 50);
+        set(vaeNode, "vae_name", models.vae);
+        modelOut = [unetNode, "MODEL"];
+        clipOut = [clipNode, "CLIP"];
+        vaeOut = [vaeNode, "VAE"];
+      } else {
+        const load = make("CheckpointLoaderSimple", cx, cy);
+        set(load, "ckpt_name", models.ckpt);
+        modelOut = [load, "MODEL"];
+        clipOut = [load, "CLIP"];
+        vaeOut = [load, "VAE"];
+      }
+      const pos = make("CLIPTextEncode", cx, cy + 75);
+      // Klein runs at cfg 1, where a negative does nothing: it gets the zeroed positive, as in its own workflow.
+      const neg = models.unet ? make("ConditioningZeroOut", cx, cy + 100) : make("CLIPTextEncode", cx, cy + 100);
+      const latent = make(models.unet ? "EmptyFlux2LatentImage" : "EmptyLatentImage", cx, cy + 150);
+      set(latent, "width", image[0]);
+      set(latent, "height", image[1]);
       const sampler = make("KSampler", cx, cy + 200);
       set(sampler, "steps", steps);
       set(sampler, "cfg", cfg);
-      set(sampler, "sampler_name", "euler_ancestral");
+      set(sampler, "sampler_name", models.unet ? "euler" : "euler_ancestral");
+      set(sampler, "scheduler", models.unet ? "simple" : "normal");
       set(sampler, "seed", 1234);
       for (const w of sampler.widgets ?? []) if (w.name === "control_after_generate") w.value = "fixed";
       const decode = make("VAEDecode", cx, cy + 250);
@@ -811,21 +907,24 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
       }
       const preview = make("PreviewImage", px, py, false);
       preview.size = [pw, ph];
-      link(load, "CLIP", pos, "clip");
-      link(load, "CLIP", neg, "clip");
+      link(clipOut[0], clipOut[1], pos, "clip");
       link(src, "prompt", pos, "text");
-      if (outIdx(src, "negative") >= 0) link(src, "negative", neg, "text");
-      link(load, "MODEL", sampler, "model");
+      if (models.unet) link(pos, "CONDITIONING", neg, "conditioning");
+      else {
+        link(clipOut[0], clipOut[1], neg, "clip");
+        if (outIdx(src, "negative") >= 0) link(src, "negative", neg, "text");
+      }
+      link(modelOut[0], modelOut[1], sampler, "model");
       link(pos, "CONDITIONING", sampler, "positive");
       link(neg, "CONDITIONING", sampler, "negative");
       link(latent, "LATENT", sampler, "latent_image");
       link(sampler, "LATENT", decode, "samples");
-      link(load, "VAE", decode, "vae");
+      link(vaeOut[0], vaeOut[1], decode, "vae");
       link(decode, "IMAGE", preview, "images");
       (window.app as unknown as { canvas: { setDirty(a: boolean, b: boolean): void } }).canvas.setDirty(true, true);
       return String(preview.id);
     },
-    { from: o.from, name, chainAt, previewAt, size: [o.preview.width ?? 460, o.preview.height ?? 700] as [number, number], steps, cfg },
+    { from: o.from, models, chainAt, previewAt, size: [o.preview.width ?? 460, o.preview.height ?? 700] as [number, number], steps, cfg, image },
   );
   await t.beat(600);
   const runs = o.runs ?? 3;
@@ -902,6 +1001,7 @@ declare global {
       mark(ms: number): void;
       caption(text: string): void;
       callout(id: string, rect: { x: number; y: number; width: number; height: number }, label: string): void;
+      recallout(id: string, rect: { x: number; y: number; width: number; height: number }): void;
       uncallout(id: string): void;
       clear(): void;
     };

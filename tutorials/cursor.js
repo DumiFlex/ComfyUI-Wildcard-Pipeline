@@ -11,7 +11,7 @@
   if (window.__tut) return;
   const Z = "2147483647";
   const ARROW =
-    '<svg width="26" height="32" viewBox="0 0 26 32" xmlns="http://www.w3.org/2000/svg">' +
+    '<svg width="20" height="25" viewBox="0 0 26 32" xmlns="http://www.w3.org/2000/svg">' +
     '<path d="M2 2 L2 26 L8.5 20 L13 30 L17.5 28 L13 18.5 L22 18.5 Z" fill="#fff" stroke="#111" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 
   let root = null;
@@ -28,7 +28,7 @@
     root.setAttribute("data-tut", "layer");
     root.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${Z};`;
     pointer = document.createElement("div");
-    pointer.style.cssText = "position:absolute;left:0;top:0;width:26px;height:32px;transform:translate(-100px,-100px);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));will-change:transform;";
+    pointer.style.cssText = "position:absolute;left:0;top:0;width:20px;height:25px;transform:translate(-100px,-100px);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));will-change:transform;";
     pointer.innerHTML = ARROW;
     caption = document.createElement("div");
     caption.style.cssText =
@@ -51,7 +51,7 @@
     if (!r) return;
     const el = document.createElement("div");
     el.style.cssText =
-      `position:absolute;left:${px - 18}px;top:${py - 18}px;width:36px;height:36px;border-radius:50%;` +
+      `position:absolute;left:${px - 14}px;top:${py - 14}px;width:28px;height:28px;border-radius:50%;` +
       "border:3px solid rgba(124,108,255,.95);background:rgba(124,108,255,.22);transform:scale(.4);opacity:1;" +
       "transition:transform .35s ease-out,opacity .45s ease-out;";
     r.insertBefore(el, pointer);
@@ -122,6 +122,16 @@
       r.insertBefore(box, caption);
       requestAnimationFrame(() => (box.style.opacity = "1"));
       callouts.set(id, box);
+    },
+    /** Moves a callout to a new rect (its part moved or changed size). */
+    recallout(id, rect) {
+      const box = callouts.get(id);
+      if (!box) return;
+      const pad = 8;
+      box.style.left = `${rect.x - pad}px`;
+      box.style.top = `${rect.y - pad}px`;
+      box.style.width = `${rect.width + pad * 2}px`;
+      box.style.height = `${rect.height + pad * 2}px`;
     },
     uncallout(id) {
       const old = callouts.get(id);

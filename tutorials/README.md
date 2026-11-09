@@ -63,9 +63,12 @@ tutorial("T07", { title: "Your next tutorial" }, async (t) => {
 | Setting | Default | What it does |
 |---|---|---|
 | `reset` | on | Loads `library.json` before the first tutorial. |
-| `showcase` | off | Ends each tutorial by rendering real images from its prompt (needs a GPU and the checkpoint below). Leave it off where no model is installed. |
-| `checkpoint` | `waiIllustriousSDXL_v170` | The checkpoint the showcase uses, without the extension. A missing one stops the take and lists the ones ComfyUI has. |
-| `steps`, `cfg` | 24, 5 | The showcase sampler's steps and CFG. |
+| `showcase` | off | Ends each tutorial by rendering real images from its prompt (needs a GPU and the model below). Leave it off where no model is installed. |
+| `unet`, `clip`, `clipType`, `vae` | Flux 3 Klein int8, `qwen3vl_4b_int8_convrot`, `flux3`, `flux2-vae` | The diffusion model the showcase loads, with its text encoder and VAE. It runs at cfg 1 with an empty negative, like Klein's own workflow, so negatives show in WP Debug but don't change the image. A missing file stops the take and lists the ones ComfyUI has. |
+| `checkpoint` | empty | Load this checkpoint instead (an SDXL model, say) when `unet` is empty. Set `cfg` to about 5 with it. |
+| `steps`, `cfg`, `width`, `height` | 12, 1, 1024, 1280 | The showcase sampler's steps and CFG, and the image size. |
+
+The recording ComfyUI finds the Klein files in another install's models folder through `--extra-model-paths-config <yaml>`, passed to that ComfyUI only.
 
 ### More helpers
 
