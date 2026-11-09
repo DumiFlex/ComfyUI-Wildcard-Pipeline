@@ -1,6 +1,6 @@
-// Advanced 5: hold and match. A Context Loop runs four frames; Hold across run keeps Hero's pick on
-// every frame while the rest re-roll. Then Match variable: an Injector writes $wanted_time = night and
-// Time of day matches it, so the Lighting derivation that reads $time follows.
+// Advanced 5: hold and match. A Context Loop runs four frames; Hold across run keeps Role's pick on
+// every frame while the rest re-roll. Then Match variable: a Text node wired into an Injector writes
+// $wanted_time = "at night" and Time of day matches it, so the Lighting rule that reads $time follows.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -27,11 +27,11 @@ tutorial(
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
-      await t.pickModules(ctx, ["Hero", "Outfit", "Setting"]);
+      await t.pickModules(ctx, ["Role", "Outfit fits the role", "Outfit", "Setting"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero wearing $outfit, $setting", { cps: 16 });
+      await t.type("A painting of $role wearing $outfit, $setting.", { cps: 16 });
       await t.beat(600);
       await t.say("To read the prompts, add Show Any from the Easy-Use pack: it lists every prompt the loop makes.");
       const text = await t.addNode("Show Any", { x: 1340, y: 620 });
@@ -44,16 +44,16 @@ tutorial(
         await t.beat(350);
       }
       await t.run();
-      await t.callout("out", t.node(text), "Four frames, four heroes", 6);
-      await t.say("Four prompts, and a new hero in each.");
+      await t.callout("out", t.node(text), "Four frames, four characters", 6);
+      await t.say("Four prompts, and a new role in each.");
       await t.waitVoice();
       await t.uncallout("out");
       return { loop, ctx, asm, text };
     });
 
     await t.h.step("Hold across run", async () => {
-      await t.say("For a story, the hero should stay the same. Right-click Hero, Edit, and switch on Hold across run.");
-      const modal = await editItem(nodes.ctx, "Hero");
+      await t.say("For a story, the character should stay the same. Right-click Role, Edit, and switch on Hold across run.");
+      const modal = await editItem(nodes.ctx, "Role");
       const hold = modal.locator('[data-test="runtime-hold"]');
       await t.scrollTo(hold, { at: 0.6 });
       await t.callout("hold", hold, "One pick for the whole run", 6);
@@ -65,40 +65,36 @@ tutorial(
       await t.beat(800);
       await t.say("Run again.");
       await t.run();
-      await t.callout("out", t.node(nodes.text), "Same hero, new outfit and place", 6);
-      await t.say("The same hero in every frame, while the outfit and the place still change. A new seed picks a new hero for the next run.");
+      await t.callout("out", t.node(nodes.text), "Same role, new outfit and place", 6);
+      await t.say("The same role in every frame, while the outfit and the place still change. A new seed picks a new role for the next run.");
       await t.waitVoice();
       await t.uncallout("out");
     });
 
     await t.h.step("Match a variable", async () => {
       await t.go("/");
-      await t.say("Match goes the other way: a pick follows a variable that something else set. Here a Context Injector sets wanted time to night.");
+      await t.say("Match goes the other way: a pick follows a variable that something else set. Here a text box says at night.");
+      const txt = await t.addNode("Text (Multiline)", { x: 470, y: 600 });
+      await t.click(t.node(txt).locator("textarea").first());
+      await t.type("at night", { cps: 12 });
+      await t.beat(500);
       const inj = await t.addNode("WP Context Injector", { x: 475, y: 200 });
-      await t.click(t.node(inj).locator('[data-test="inj-add-general"]'));
-      await t.beat(500);
-      await t.fill(t.node(inj).locator('[data-test="inj-row-binding"] input').last(), "wanted_time", { cps: 14 });
+      await t.say("Wire it into a Context Injector and name it wanted time.");
+      await t.wire(txt, "STRING", inj, "input_0");
+      await t.beat(600);
+      await t.fill(t.node(inj).locator('[data-test="inj-row-binding"] input').first(), "wanted_time", { cps: 14 });
       await t.press("Tab");
-      await t.beat(400);
-      await t.click(t.node(inj).locator('[data-test="inj-row-general-tag"]').last(), { right: true });
       await t.beat(500);
-      await t.click(page.getByRole("menuitem", { name: "Edit" }));
-      await t.beat(800);
-      await t.click(page.locator('[data-test="ibm-template"]').locator('[contenteditable="true"], textarea').first());
-      await t.type("night", { cps: 12 });
-      await t.beat(500);
-      await t.click(page.locator('[data-test="ibm-save"]'));
-      await t.beat(700);
       await t.waitVoice();
       const ctx = await t.addNode("WP Context", { x: 1010, y: 200 });
       await t.wire(inj, "context", ctx, "upstream");
-      await t.pickModules(ctx, ["Hero", "Time of day", "Lighting from time"]);
+      await t.pickModules(ctx, ["Role", "Time of day", "Lighting from time"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero at $time, $lighting", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting.", { cps: 16 });
       await t.beat(600);
-      await t.say("Time of day still rolls: dawn, golden hour or night. Edit it, and type wanted time into Match variable.");
+      await t.say("Time of day still rolls: dawn, sunset or night. Edit it, and type wanted time into Match variable.");
       const modal = await editItem(ctx, "Time of day");
       const match = modal.locator('[data-test="runtime-match-input"] input, input[data-test="runtime-match-input"]').first();
       await t.scrollTo(match, { at: 0.6 });
@@ -119,7 +115,7 @@ tutorial(
       }
       await t.waitVoice();
       await t.uncallout("prev");
-      await t.say("Match is how a model, a LoRA or your own typed text can steer a pack. WP Model Info sets model variables for exactly this.");
+      await t.say("Match takes the one option whose text equals the variable, so the text has to be written the same. To keep a group of options instead, tag them and filter the Pool by the variable.");
       await t.waitVoice();
     });
 

@@ -764,7 +764,7 @@ export function showcasing(t: Tutor): boolean {
  * is about the prompt; the narration around it is the test's. Returns the preview node's id.
  */
 /** Finds a model file in ComfyUI's list for one loader input, ignoring the slash kind and the file ending. */
-async function modelFile(t: Tutor, node: string, input: string, wanted: string, folder: string): Promise<string> {
+export async function modelFile(t: Tutor, node: string, input: string, wanted: string, folder: string): Promise<string> {
   const info = await t.h.api(`/object_info/${node}`);
   const list = ((info.json as Record<string, { input?: { required?: Record<string, [unknown]> } }> | undefined)?.[node]?.input?.required?.[input]?.[0] ?? []) as string[];
   const norm = (k: string) => k.replace(/\\/g, "/").replace(/\.(safetensors|ckpt|gguf)$/i, "").toLowerCase();

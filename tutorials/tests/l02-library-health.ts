@@ -1,5 +1,5 @@
 // Library 2: Library health. A tour of the page (problems, warnings, tidy up, filters), Ignore on a
-// variable an Injector sets on the canvas, then a planted mistake: Outfit gets "a patched linen tunic"
+// variable an Injector sets on the canvas, then a planted mistake: Outfit gets "a plain grey wool tunic"
 // twice; health lists it, Open goes to the wildcard, Remove option fixes it, Check again clears it.
 import { tutorial } from "../tutorial.js";
 
@@ -47,8 +47,8 @@ tutorial(
       await t.beat(800);
       await t.click(page.locator('[data-test="wc-add-opt"]'));
       await t.beat(400);
-      await t.click(page.locator('[data-test="wc-opt-row-4"] .wp-rt__host').first());
-      await t.type("a patched linen tunic", { cps: 16 });
+      await t.click(page.locator('[data-test="wc-opt-row-9"] .wp-rt__host').first());
+      await t.type("a plain grey wool tunic", { cps: 16 });
       await t.beat(400);
       await t.click(page.locator('[data-test="save-btn"]'));
       await t.beat(1200);
@@ -61,7 +61,7 @@ tutorial(
       await t.uncallout("dup");
       await t.click(row.getByRole("button", { name: "Open" }));
       await t.beat(1200);
-      const dupe = page.locator('[data-test="wc-opt-row-4"]');
+      const dupe = page.locator('[data-test="wc-opt-row-9"]');
       await t.hover(dupe);
       await t.beat(400);
       await t.say("Remove the copy, and save.");

@@ -1,6 +1,6 @@
 // Library 6: keep a big library tidy. Dashboard at a glance; All items with search; a "Fantasy"
-// category made on Categories; Hero, Setting and Outfit selected in All items and given the category
-// and a "characters" tag in bulk; Hero starred; Filters by category, favourites, tags and content
+// category made on Categories; Role, Setting and Outfit selected in All items and given the category
+// and a "characters" tag in bulk; Role starred; Filters by category, favourites, tags and content
 // rating.
 import { tutorial } from "../tutorial.js";
 
@@ -62,9 +62,9 @@ tutorial(
     });
 
     await t.h.step("Favourites and search", async () => {
-      await t.say("The star marks a favourite. Star Hero.");
-      const hero = page.locator("tr", { has: page.locator('[data-test="row-select-808878ba"]') });
-      await t.click(hero.getByRole("button", { name: /favorite/i }).first());
+      await t.say("The star marks a favourite. Star Role.");
+      const role = page.locator("tr", { has: page.locator('[data-test="row-select-808878ba"]') });
+      await t.click(role.getByRole("button", { name: /favorite/i }).first());
       await t.beat(700);
       await t.say("The search box finds items by name, id or tag. Type hair.");
       await t.fill(page.getByPlaceholder(/Search by name/), "hair", { cps: 12 });

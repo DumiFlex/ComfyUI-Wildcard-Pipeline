@@ -1,5 +1,5 @@
 // Advanced 10: negatives. An option's negative (plate armor's "rust, broken armor"), a new one on the
-// patched tunic, the derivation actions that add or replace negatives, the Assembler's negative preview
+// chainmail shirt, the derivation actions that add or replace negatives, the Assembler's negative preview
 // coloured by the variable each word came from, and a WP Prompt Cleaner that tidies both outputs.
 import { tutorial } from "../tutorial.js";
 
@@ -16,16 +16,16 @@ tutorial(
 
     await t.h.step("A negative on an option", async () => {
       await t.go("/wp/wildcards/195238e2/edit");
-      await t.say("A negative belongs to the pick that needs it. In Outfit, plate armor sends rust and broken armor to the negative prompt, only when plate armor is picked.");
+      await t.say("A negative belongs to the pick that needs it. In Outfit, the plate armor sends rust and broken armor to the negative prompt, only when the plate armor is picked.");
       await t.scrollTo(T("wc-opt-row-0"), { at: 0.4 });
       await t.callout("neg", T("wc-opt-neg-0"), "Only with plate armor", 6);
       await t.waitVoice();
       await t.uncallout("neg");
-      await t.say("Give the patched tunic one too: clean, new clothes.");
-      await t.click(T("wc-opt-neg-3-add"));
+      await t.say("Give the chainmail shirt one too: rust and broken rings.");
+      await t.click(T("wc-opt-neg-1-add"));
       await t.beat(500);
-      await t.click(T("wc-opt-neg-3").getByLabel("Negative for this option"));
-      await t.type("pristine, brand new clothes", { cps: 16 });
+      await t.click(T("wc-opt-neg-1").getByLabel("Negative for this option"));
+      await t.type("rust, broken rings", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       await t.say("Save it.");
@@ -37,19 +37,19 @@ tutorial(
 
     const nodes = await t.h.step("Where each word came from", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Hero, Outfit, Time of day and Lighting from time.");
+      await t.say("On the canvas, pick Role, the rule that fits the outfit to the role, Outfit, Time of day and Lighting from time.");
       const ctx = await t.addNode("WP Context", { x: 340, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Outfit", "Time of day", "Lighting from time"]);
+      await t.pickModules(ctx, ["Role", "Outfit fits the role", "Outfit", "Time of day", "Lighting from time"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 890, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero wearing $outfit at $time, $lighting, masterpiece, best quality, masterpiece", { cps: 18 });
+      await t.type("A painting of $role wearing $outfit $time, $lighting, masterpiece, best quality, masterpiece", { cps: 18 });
       await t.beat(600);
       await t.waitVoice();
       const neg = t.node(asm).locator('[data-test="asm-neg-preview"]');
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
-      await t.say("Roll until the armor turns up at night.");
-      for (let i = 0; i < 16; i++) {
+      await t.say("Roll until a knight's armor turns up at night.");
+      for (let i = 0; i < 30; i++) {
         const text = (await neg.count()) > 0 ? ((await neg.textContent()) ?? "") : "";
         if (/rust/.test(text) && /overexposed/.test(text)) break;
         await t.click(plus);

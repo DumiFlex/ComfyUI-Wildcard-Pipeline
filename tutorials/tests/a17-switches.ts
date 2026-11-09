@@ -1,4 +1,4 @@
-// Advanced 17: switches. Hero + Time of day → a second Context with Lighting from time → Assembler →
+// Advanced 17: switches. Role + Time → a second Context with Lighting from time → Assembler →
 // Preview as Text. A WP Toggles row "Lighting" writes $use_lighting and, set to Bypass when off, drives
 // the lighting Context through its dot: off = no lighting, on = lighting. Then a WP Node Group stands
 // between them (one switch for many nodes), and WP Mode Relay is shown watching a node.
@@ -17,16 +17,16 @@ tutorial(
 
     const nodes = await t.h.step("A workflow with a part to switch", async () => {
       await t.go("/");
-      await t.say("Here's a hero at a time of day, and a second Context that adds lighting.");
+      await t.say("Here's a role at a time of day, and a second Context that adds the lighting rule.");
       const ctx1 = await t.addNode("WP Context", { x: 900, y: 170 });
-      await t.pickModules(ctx1, ["Hero", "Time of day"]);
+      await t.pickModules(ctx1, ["Role", "Time of day"]);
       const ctx2 = await t.addNode("WP Context", { x: 1550, y: 170 });
       await t.wire(ctx1, "context", ctx2, "upstream");
       await t.pickModules(ctx2, ["Lighting from time"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1550, y: 600 });
       await t.wire(ctx2, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero at $time, $lighting", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting.", { cps: 16 });
       await t.beat(500);
       const text = await t.addNode("Preview as Text", { x: 900, y: 600 });
       await t.wire(asm, "prompt", text, "source");
@@ -65,6 +65,15 @@ tutorial(
       return tg;
     });
 
+    // A highlight on the text waits until the run's prompt is in it.
+    const shown = async (re: RegExp) => {
+      for (let i = 0; i < 60; i++) {
+        if (re.test(await t.node(nodes.text).innerText().catch(() => ""))) break;
+        await t.beat(250);
+      }
+      await t.beat(400);
+    };
+
     const ctlInput = async (): Promise<string> =>
       t.page.evaluate((id) => {
         const n = window.app?.graph?.getNodeById(Number(id)) as { inputs?: { name: string }[] } | null | undefined;
@@ -76,18 +85,26 @@ tutorial(
       await t.wire(nodes.ctx2, "context", tg, await ctlInput());
       await t.beat(800);
       await t.callout("ctx2", t.node(nodes.ctx2), "Off: bypassed", 5);
-      await t.say("The toggle is off, so the lighting Context is bypassed. Run.");
+      await t.say("The toggle is off, and the lighting Context turns purple: it's bypassed, so the run goes straight past it. Run.");
       await t.waitVoice();
       await t.uncallout("ctx2");
       await t.run();
+      await shown(/A painting of/);
       await t.callout("out", t.node(nodes.text), "No lighting", 5);
+      await t.say("The prompt has the role and the time, and no light, because the rule never ran.");
       await t.waitVoice();
       await t.uncallout("out");
-      await t.say("Switch it on, and run again.");
+      await t.say("Now switch the toggle on. Watch the lighting Context: it's back to normal, so the rule runs again.");
       await t.click(t.node(tg).locator('[data-test^="tg-ctl-"]').first());
       await t.beat(800);
+      await t.callout("ctx2", t.node(nodes.ctx2), "On: runs again", 5);
+      await t.waitVoice();
+      await t.uncallout("ctx2");
+      await t.say("Run again.");
       await t.run();
+      await shown(/moonlight|rim light|morning light/);
       await t.callout("out", t.node(nodes.text), "Lighting is back", 5);
+      await t.say("And the light is back in the prompt.");
       await t.waitVoice();
       await t.uncallout("out");
     });

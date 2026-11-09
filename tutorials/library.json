@@ -1,15 +1,21 @@
 {
  "schema_version": 9,
- "exported_at": "2026-11-04T10:16:16.837278Z",
+ "exported_at": "2026-11-09T12:00:00Z",
  "bundles": [
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "37af0127",
    "name": "Look",
    "description": "",
    "color": "#9b6bff",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "children": [
     {
      "id": "4facf8ce",
@@ -19,7 +25,7 @@
      "meta": {
       "name": "Hair",
       "library_name": "Hair",
-      "description": "Uses the Colors list through an @{} reference."
+      "description": "Hair style; the colour comes from Hair colors through an @{} reference."
      },
      "entries": [],
      "payload": {
@@ -28,31 +34,30 @@
       "options": [
        {
         "id": "a3ff1986",
-        "value": "short @{bc15a82d#Colors} hair",
+        "value": "short @{bc15a82d#Hair colors} hair",
         "weight": 1,
         "sub_categories": []
        },
        {
         "id": "e6d04f1d",
-        "value": "long braided @{bc15a82d#Colors} hair",
+        "value": "long @{bc15a82d#Hair colors} hair in a loose braid",
         "weight": 1,
         "sub_categories": []
        },
        {
-        "id": "28356404",
-        "value": "messy @{bc15a82d#Colors} hair",
+        "id": "c71b55d2",
+        "value": "shoulder-length wavy @{bc15a82d#Hair colors} hair",
         "weight": 1,
         "sub_categories": []
        },
        {
-        "id": "5e455e15",
+        "id": "0e3f9a4b",
         "value": "a shaved head",
         "weight": 1,
         "sub_categories": []
        }
       ]
-     },
-     "payload_hash": "0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f"
+     }
     },
     {
      "id": "38c1b584",
@@ -62,7 +67,7 @@
      "meta": {
       "name": "Eyes",
       "library_name": "Eyes",
-      "description": "Has an empty option: sometimes the eyes aren't mentioned."
+      "description": "Eye colour only."
      },
      "entries": [],
      "payload": {
@@ -70,51 +75,48 @@
       "sub_categories": [],
       "options": [
        {
-        "id": "fdffc693",
-        "value": "@{bc15a82d#Colors} eyes",
+        "id": "2b8e61a0",
+        "value": "bright green eyes",
         "weight": 1,
         "sub_categories": []
        },
        {
-        "id": "c6e9202c",
-        "value": "piercing eyes",
+        "id": "8c41d7f2",
+        "value": "pale blue eyes",
         "weight": 1,
         "sub_categories": []
        },
        {
-        "id": "8313f6dc",
-        "value": "tired eyes",
+        "id": "5e0a93bd",
+        "value": "dark brown eyes",
         "weight": 1,
         "sub_categories": []
        },
        {
-        "id": "d8dda0e3",
-        "value": "",
+        "id": "d36f2c18",
+        "value": "amber eyes",
         "weight": 1,
-        "sub_categories": [],
-        "is_null": true
+        "sub_categories": []
        }
       ]
-     },
-     "payload_hash": "10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0"
+     }
     }
-   ],
-   "payload_hash": "c7bbf167fb4ee005c5b9599e42ddc52523c8ea143bc910580190823381c77ca6",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.295335Z",
-   "updated_at": "2026-11-04T10:12:51.295335Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   ]
   },
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "3faee950",
    "name": "LoRA swaps",
    "description": "",
    "color": "#d0508a",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "children": [
     {
      "id": "dd2bee53",
@@ -124,7 +126,7 @@
      "meta": {
       "name": "Character LoRA",
       "library_name": "Character LoRA",
-      "description": "While the LoRA character toggle is on: its words replace $hero, and the rolled hair and eyes step aside."
+      "description": "While $lora_character is true: the LoRA's trigger words replace the whole $subject."
      },
      "entries": [],
      "payload": {
@@ -138,29 +140,16 @@
            "value": "true"
           },
           "action": {
-           "target_var": "hero",
+           "target_var": "subject",
            "mode": "replace",
-           "value": "$lora_hero_words"
-          },
-          "extra_actions": [
-           {
-            "target_var": "hair",
-            "mode": "replace",
-            "value": ""
-           },
-           {
-            "target_var": "eyes",
-            "mode": "replace",
-            "value": ""
-           }
-          ]
+           "value": "$lora_character_words"
+          }
          }
         ],
         "id": "0420af2a"
        }
       ]
-     },
-     "payload_hash": "404b1613ac87aad0af31ac53ded2e1113069194a5b1c1c0a5de30275b48f69dd"
+     }
     },
     {
      "id": "435b5087",
@@ -170,7 +159,7 @@
      "meta": {
       "name": "Its own clothes",
       "library_name": "Its own clothes",
-      "description": "While 'Use its own clothes' is on: the LoRA's outfit words replace $outfit."
+      "description": "While $lora_clothes is true: the LoRA's trigger words replace $outfit."
      },
      "entries": [],
      "payload": {
@@ -193,8 +182,7 @@
         "id": "7cf35a83"
        }
       ]
-     },
-     "payload_hash": "40a85f944f35041eec92671611711864d5cec3f3be8c1b0c5a568200fd0f087e"
+     }
     },
     {
      "id": "804fee67",
@@ -204,7 +192,7 @@
      "meta": {
       "name": "Style LoRA",
       "library_name": "Style LoRA",
-      "description": "While the Style LoRA toggle is on: its words go after $style."
+      "description": "While $style_lora is true: the LoRA's trigger words go after $style."
      },
      "entries": [],
      "payload": {
@@ -220,33 +208,31 @@
           "action": {
            "target_var": "style",
            "mode": "append",
-           "value": ", $lora_style_words"
+           "value": " $lora_style_words"
           }
          }
         ],
         "id": "ddfcd524"
        }
       ]
-     },
-     "payload_hash": "6c318478ad2c1ec1d0b260d576c98fb0b76add95e471658f65dc504a32f8cc36"
+     }
     }
-   ],
-   "payload_hash": "4d94eaf2579dc56c4392c59a79bb8b5bf570ce14355bfa2b51824f96205db122",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.295795Z",
-   "updated_at": "2026-11-04T10:12:51.295795Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   ]
   },
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "7e3d3ec2",
    "name": "Character",
    "description": "",
    "color": "#4f8cff",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "children": [
     {
      "id": "808878ba",
@@ -254,17 +240,18 @@
      "enabled": true,
      "collapsed": true,
      "meta": {
-      "name": "Hero",
-      "library_name": "Hero",
-      "description": "Who the picture is about. The tags drive the Scene constraint."
+      "name": "Role",
+      "library_name": "Role",
+      "description": "Who the subject is. Its tags decide the outfit, the item and the place."
      },
      "entries": [],
      "payload": {
-      "var_binding": "hero",
+      "var_binding": "role",
       "sub_categories": [
-       "noble",
-       "wild",
-       "urban"
+       "knight",
+       "mage",
+       "ranger",
+       "inventor"
       ],
       "options": [
        {
@@ -272,15 +259,15 @@
         "value": "a knight",
         "weight": 1,
         "sub_categories": [
-         "noble"
+         "knight"
         ]
        },
        {
         "id": "c243437e",
-        "value": "a court mage",
+        "value": "a battle mage",
         "weight": 1,
         "sub_categories": [
-         "noble"
+         "mage"
         ]
        },
        {
@@ -288,36 +275,25 @@
         "value": "a forest ranger",
         "weight": 1,
         "sub_categories": [
-         "wild"
-        ]
-       },
-       {
-        "id": "e291d944",
-        "value": "a desert nomad",
-        "weight": 1,
-        "sub_categories": [
-         "wild"
-        ]
-       },
-       {
-        "id": "dd612ba4",
-        "value": "a street thief",
-        "weight": 1,
-        "sub_categories": [
-         "urban"
+         "ranger"
         ]
        },
        {
         "id": "422b5317",
-        "value": "an inventor",
+        "value": "a clockwork inventor",
         "weight": 1,
         "sub_categories": [
-         "urban"
+         "inventor"
         ]
        }
       ]
-     },
-     "payload_hash": "25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed"
+     }
+    },
+    {
+     "id": "805bdfa4",
+     "type": "bundle",
+     "name": "Shared lists",
+     "color": "#7a7f8a"
     },
     {
      "id": "37af0127",
@@ -326,48 +302,62 @@
      "color": "#9b6bff"
     },
     {
+     "id": "9d2e4f61",
+     "type": "combine",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Subject",
+      "library_name": "Subject",
+      "description": "The person: role, hair and eyes in one line."
+     },
+     "entries": [],
+     "payload": {
+      "template": "$role with $hair and $eyes",
+      "output_var": "subject",
+      "input_vars": [
+       "role",
+       "hair",
+       "eyes"
+      ]
+     }
+    },
+    {
      "id": "b748104b",
      "type": "bundle",
      "name": "Outfit",
      "color": "#e0a030"
-    },
-    {
-     "id": "805bdfa4",
-     "type": "bundle",
-     "name": "Shared lists",
-     "color": "#7a7f8a"
     }
-   ],
-   "payload_hash": "6182ffec280798815be12a78f27426ea7e133ff346cab48f2aa0f37222f5fce1",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.295153Z",
-   "updated_at": "2026-11-04T10:12:51.295153Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   ]
   },
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "805bdfa4",
    "name": "Shared lists",
    "description": "",
    "color": "#7a7f8a",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "children": [
     {
      "id": "bc15a82d",
      "type": "wildcard",
-     "enabled": true,
+     "enabled": false,
      "collapsed": true,
      "meta": {
-      "name": "Colors",
-      "library_name": "Colors",
-      "description": "Switched off: only read through @{} references."
+      "name": "Hair colors",
+      "library_name": "Hair colors",
+      "description": "Switched off: only read through @{} references in Hair."
      },
      "entries": [],
      "payload": {
-      "var_binding": "color",
+      "var_binding": "hair_color",
       "sub_categories": [],
       "options": [
        {
@@ -389,44 +379,42 @@
         "sub_categories": []
        },
        {
-        "id": "645b75a6",
-        "value": "copper",
+        "id": "1f0c8a31",
+        "value": "copper red",
         "weight": 1,
         "sub_categories": []
        },
        {
-        "id": "c7331bc4",
-        "value": "pale blonde",
+        "id": "5a77e0c4",
+        "value": "platinum blonde",
         "weight": 1,
         "sub_categories": []
        },
        {
-        "id": "5693e178",
-        "value": "emerald",
+        "id": "9b2d6e10",
+        "value": "chestnut brown",
         "weight": 1,
         "sub_categories": []
        }
       ]
-     },
-     "payload_hash": "74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77"
+     }
     }
-   ],
-   "payload_hash": "8c84c4fdc3d7781cacafa859b37b055a3b0265189c1394b36bccb7714cc96839",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.295495Z",
-   "updated_at": "2026-11-04T10:12:51.295495Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   ]
   },
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "86360bc3",
    "name": "Scene",
    "description": "",
    "color": "#2fb380",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "children": [
     {
      "id": "7ff544c2",
@@ -434,30 +422,36 @@
      "enabled": true,
      "collapsed": true,
      "meta": {
-      "name": "Hero fits the place",
-      "library_name": "Hero fits the place",
-      "description": "Reads the Hero picked in the first Context and re-weights the Setting."
+      "name": "Role fits the place",
+      "library_name": "Role fits the place",
+      "description": "Re-weights Setting by the Role picked upstream: a knight favours the castle, an inventor never goes to the forest."
      },
      "entries": [],
      "payload": {
       "source_wildcard_id": "808878ba",
       "target_wildcard_id": "aa76ada8",
-      "source_wildcard_name": "Hero",
+      "source_wildcard_name": "Role",
       "target_wildcard_name": "Setting",
       "exceptions": [],
       "matrix": {
-       "noble": {
+       "knight": {
         "castle": {
          "mode": "boost",
          "factor": 4
         },
-        "wilds": {
+        "forest": {
          "mode": "reduce",
-         "factor": 0.3
+         "factor": 0.5
         }
        },
-       "wild": {
-        "wilds": {
+       "mage": {
+        "castle": {
+         "mode": "boost",
+         "factor": 2
+        }
+       },
+       "ranger": {
+        "forest": {
          "mode": "boost",
          "factor": 4
         },
@@ -466,19 +460,18 @@
          "factor": 0.3
         }
        },
-       "urban": {
+       "inventor": {
         "city": {
          "mode": "boost",
          "factor": 4
         },
-        "castle": {
+        "forest": {
          "mode": "exclude",
          "factor": 0
         }
        }
       }
-     },
-     "payload_hash": "33a422a0e0c3dc191cb58b1089cc9175e997cfc6aa387a92b765c6169cd9019d"
+     }
     },
     {
      "id": "aa76ada8",
@@ -487,68 +480,68 @@
      "collapsed": true,
      "meta": {
       "name": "Setting",
-      "library_name": "Setting"
+      "library_name": "Setting",
+      "description": "Where. Its tags (castle, forest, city) meet Role in Role fits the place."
      },
      "entries": [],
      "payload": {
       "var_binding": "setting",
       "sub_categories": [
        "castle",
-       "wilds",
+       "forest",
        "city"
       ],
       "options": [
        {
-        "id": "ee9e1c67",
-        "value": "a torch-lit throne room",
+        "id": "c1a0b2c3",
+        "value": "in a torch-lit stone throne room",
         "weight": 1,
         "sub_categories": [
          "castle"
         ]
        },
        {
-        "id": "dee3f9da",
-        "value": "castle ramparts",
+        "id": "d2b1c3d4",
+        "value": "on the battlements of a stone castle",
         "weight": 1,
         "sub_categories": [
          "castle"
         ]
        },
        {
-        "id": "7b51b895",
-        "value": "an ancient pine forest",
+        "id": "e3c2d4e5",
+        "value": "in a misty pine forest at the edge of a cliff",
         "weight": 1,
         "sub_categories": [
-         "wilds"
+         "forest"
         ]
        },
        {
-        "id": "ade62889",
-        "value": "a windswept canyon",
+        "id": "f4d3e5f6",
+        "value": "in a mossy clearing in an old oak forest",
         "weight": 1,
         "sub_categories": [
-         "wilds"
+         "forest"
         ]
        },
        {
-        "id": "4e80731f",
-        "value": "a crowded market street",
+        "id": "a5e4f607",
+        "value": "on a crowded cobblestone market street",
         "weight": 1,
         "sub_categories": [
          "city"
         ]
        },
        {
-        "id": "d61c40b7",
-        "value": "a rooftop garden above the city",
+        "id": "b6f50718",
+        "value": "in a cluttered workshop full of brass gears",
         "weight": 1,
         "sub_categories": [
          "city"
         ]
        }
       ]
-     },
-     "payload_hash": "56fb6858c6d5f7f1a2588df19e3bd1208669eaba42486fe5f28c749cd1af3e95"
+     }
     },
     {
      "id": "49cac59c",
@@ -557,7 +550,8 @@
      "collapsed": true,
      "meta": {
       "name": "Time of day",
-      "library_name": "Time of day"
+      "library_name": "Time of day",
+      "description": "When. Lighting reads it."
      },
      "entries": [],
      "payload": {
@@ -566,25 +560,24 @@
       "options": [
        {
         "id": "7c740b5b",
-        "value": "dawn",
+        "value": "at dawn",
         "weight": 1,
         "sub_categories": []
        },
        {
         "id": "7ddc9c86",
-        "value": "golden hour",
+        "value": "at sunset",
         "weight": 1,
         "sub_categories": []
        },
        {
         "id": "a681b8ca",
-        "value": "night",
+        "value": "at night",
         "weight": 1,
         "sub_categories": []
        }
       ]
-     },
-     "payload_hash": "5a4acb1f8e5bdd5fa5d70365a0fbc5eca38af96db6578b89e502694d5b9bc776"
+     }
     },
     {
      "id": "5774d2a1",
@@ -594,7 +587,7 @@
      "meta": {
       "name": "Lighting from time",
       "library_name": "Lighting from time",
-      "description": "Night gets lantern light (and a negative); else soft light."
+      "description": "Light that fits the time. At night it also adds negatives."
      },
      "entries": [],
      "payload": {
@@ -605,12 +598,12 @@
           "condition": {
            "var": "time",
            "op": "equals",
-           "value": "night"
+           "value": "at night"
           },
           "action": {
            "target_var": "lighting",
            "mode": "replace",
-           "value": "moonlight, warm lantern glow"
+           "value": "lit by pale moonlight and warm lantern glow"
           },
           "extra_actions": [
            {
@@ -619,20 +612,31 @@
             "value": "overexposed, harsh sunlight"
            }
           ]
+         },
+         {
+          "condition": {
+           "var": "time",
+           "op": "equals",
+           "value": "at sunset"
+          },
+          "action": {
+           "target_var": "lighting",
+           "mode": "replace",
+           "value": "with warm orange rim light"
+          }
          }
         ],
+        "id": "e751ba3a",
         "else": {
          "action": {
           "target_var": "lighting",
           "mode": "replace",
-          "value": "soft natural light"
+          "value": "in soft morning light"
          }
-        },
-        "id": "e751ba3a"
+        }
        }
       ]
-     },
-     "payload_hash": "e5b549fb4ac497a054a1fe2faf89c26fe9427460af2842f811e7d0aab5c8df05"
+     }
     },
     {
      "id": "5d75075f",
@@ -640,20 +644,56 @@
      "enabled": true,
      "collapsed": true,
      "meta": {
-      "name": "Scene line",
-      "library_name": "Scene line"
+      "name": "Scene",
+      "library_name": "Scene",
+      "description": "Where, when and the light, as one phrase."
      },
      "entries": [],
      "payload": {
-      "template": "in $setting at $time, $lighting",
+      "template": "$setting $time, $lighting",
       "output_var": "scene",
       "input_vars": [
        "setting",
        "time",
        "lighting"
       ]
+     }
+    },
+    {
+     "id": "3e5f7a9b",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Framing",
+      "library_name": "Framing",
+      "description": "How the camera frames the subject. It starts the sentence."
      },
-     "payload_hash": "a5b688137b629aedc42362a5dbd9a91ffe9e884084fba9ef4c3fd82bfa94cb52"
+     "entries": [],
+     "payload": {
+      "var_binding": "framing",
+      "sub_categories": [],
+      "options": [
+       {
+        "id": "0a1b2c3d",
+        "value": "A full-body shot",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "1b2c3d4e",
+        "value": "A waist-up portrait",
+        "weight": 1,
+        "sub_categories": []
+       },
+       {
+        "id": "2c3d4e5f",
+        "value": "A close-up portrait",
+        "weight": 1,
+        "sub_categories": []
+       }
+      ]
+     }
     },
     {
      "id": "c32f16d6",
@@ -663,7 +703,7 @@
      "meta": {
       "name": "Style",
       "library_name": "Style",
-      "description": "A fixed value with its own negative words."
+      "description": "The look of every picture, with its negatives."
      },
      "entries": [],
      "payload": {
@@ -671,31 +711,119 @@
        {
         "id": "9af7bf95",
         "name": "style",
-        "value": "digital painting, detailed, painterly brushwork",
+        "value": "A detailed digital painting with sharp focus and rich color.",
         "negative": "photo, 3d render, blurry"
        }
       ]
-     },
-     "payload_hash": "e9971ee9ccbf2f5249b67987e2021e5a3f9b3a9e5dc041747c3121c505415020"
+     }
     }
-   ],
-   "payload_hash": "c7e151509f195ed388e97c40ce6144e204cd4f662e3a95dfb20119b8ccb481d7",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.295651Z",
-   "updated_at": "2026-11-04T10:12:51.295651Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   ]
   },
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "b748104b",
    "name": "Outfit",
    "description": "",
    "color": "#e0a030",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "children": [
+    {
+     "id": "6b8c0d2e",
+     "type": "constraint",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Outfit fits the role",
+      "library_name": "Outfit fits the role",
+      "description": "Only rule: each role wears only outfits with its own tag."
+     },
+     "entries": [],
+     "payload": {
+      "source_wildcard_id": "808878ba",
+      "target_wildcard_id": "195238e2",
+      "source_wildcard_name": "Role",
+      "target_wildcard_name": "Outfit",
+      "exceptions": [],
+      "matrix": {
+       "knight": {
+        "knight": {
+         "mode": "only",
+         "factor": 1
+        }
+       },
+       "mage": {
+        "mage": {
+         "mode": "only",
+         "factor": 1
+        }
+       },
+       "ranger": {
+        "ranger": {
+         "mode": "only",
+         "factor": 1
+        }
+       },
+       "inventor": {
+        "inventor": {
+         "mode": "only",
+         "factor": 1
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": "7c9d1e3f",
+     "type": "constraint",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Item fits the role",
+      "library_name": "Item fits the role",
+      "description": "Only rule: each role holds only items with its own tag."
+     },
+     "entries": [],
+     "payload": {
+      "source_wildcard_id": "808878ba",
+      "target_wildcard_id": "7a41c0de",
+      "source_wildcard_name": "Role",
+      "target_wildcard_name": "Held item",
+      "exceptions": [],
+      "matrix": {
+       "knight": {
+        "knight": {
+         "mode": "only",
+         "factor": 1
+        }
+       },
+       "mage": {
+        "mage": {
+         "mode": "only",
+         "factor": 1
+        }
+       },
+       "ranger": {
+        "ranger": {
+         "mode": "only",
+         "factor": 1
+        }
+       },
+       "inventor": {
+        "inventor": {
+         "mode": "only",
+         "factor": 1
+        }
+       }
+      }
+     }
+    },
     {
      "id": "195238e2",
      "type": "wildcard",
@@ -704,192 +832,258 @@
      "meta": {
       "name": "Outfit",
       "library_name": "Outfit",
-      "description": "Options carry negative words; the tunic is the fallback."
+      "description": "Clothes only, tagged by role. The grey tunic is the fallback."
      },
      "entries": [],
      "payload": {
       "var_binding": "outfit",
       "sub_categories": [
-       "armor",
-       "travel",
-       "formal"
+       "knight",
+       "mage",
+       "ranger",
+       "inventor"
       ],
       "options": [
        {
         "id": "72f8e1d7",
-        "value": "polished plate armor",
+        "value": "polished steel plate armor with a blue surcoat",
         "weight": 1,
         "sub_categories": [
-         "armor"
+         "knight"
         ],
         "negative": "rust, broken armor"
        },
        {
-        "id": "b553cc92",
-        "value": "a hooded leather coat",
+        "id": "4c0b7e95",
+        "value": "a chainmail shirt under a red tabard",
         "weight": 1,
         "sub_categories": [
-         "travel"
+         "knight"
         ]
        },
        {
-        "id": "1955f005",
-        "value": "a flowing robe with gold trim",
+        "id": "b5a2c3d1",
+        "value": "a long deep-blue robe embroidered with silver stars",
         "weight": 1,
         "sub_categories": [
-         "formal"
+         "mage"
         ]
        },
        {
-        "id": "9f7a6c18",
-        "value": "a patched linen tunic",
+        "id": "e81f4a6c",
+        "value": "a crimson long coat with brass buttons",
         "weight": 1,
         "sub_categories": [
-         "travel"
-        ],
+         "mage"
+        ]
+       },
+       {
+        "id": "0d9c2b57",
+        "value": "a hooded green cloak over a brown leather jerkin",
+        "weight": 1,
+        "sub_categories": [
+         "ranger"
+        ]
+       },
+       {
+        "id": "6a3e18f0",
+        "value": "a fur-trimmed leather hunting coat",
+        "weight": 1,
+        "sub_categories": [
+         "ranger"
+        ]
+       },
+       {
+        "id": "f2c7d905",
+        "value": "a leather work apron over a white linen shirt",
+        "weight": 1,
+        "sub_categories": [
+         "inventor"
+        ]
+       },
+       {
+        "id": "93b0e4a8",
+        "value": "a brown waistcoat with rolled-up shirt sleeves",
+        "weight": 1,
+        "sub_categories": [
+         "inventor"
+        ]
+       },
+       {
+        "id": "5c61f0e2",
+        "value": "a plain grey wool tunic",
+        "weight": 1,
+        "sub_categories": [],
         "fallback": true
        }
       ]
+     }
+    },
+    {
+     "id": "7a41c0de",
+     "type": "wildcard",
+     "enabled": true,
+     "collapsed": true,
+     "meta": {
+      "name": "Held item",
+      "library_name": "Held item",
+      "description": "What the subject holds, tagged by role."
      },
-     "payload_hash": "3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755"
+     "entries": [],
+     "payload": {
+      "var_binding": "held",
+      "sub_categories": [
+       "knight",
+       "mage",
+       "ranger",
+       "inventor"
+      ],
+      "options": [
+       {
+        "id": "1a7c3e90",
+        "value": "a longsword with a gold hilt",
+        "weight": 1,
+        "sub_categories": [
+         "knight"
+        ]
+       },
+       {
+        "id": "2b8d4fa1",
+        "value": "a round wooden shield painted with a lion",
+        "weight": 1,
+        "sub_categories": [
+         "knight"
+        ]
+       },
+       {
+        "id": "3c9e50b2",
+        "value": "a glowing oak staff",
+        "weight": 1,
+        "sub_categories": [
+         "mage"
+        ]
+       },
+       {
+        "id": "4daf61c3",
+        "value": "an open spellbook with glowing pages",
+        "weight": 1,
+        "sub_categories": [
+         "mage"
+        ]
+       },
+       {
+        "id": "5eb072d4",
+        "value": "a wooden longbow",
+        "weight": 1,
+        "sub_categories": [
+         "ranger"
+        ]
+       },
+       {
+        "id": "6fc183e5",
+        "value": "a brass lantern",
+        "weight": 1,
+        "sub_categories": [
+         "ranger"
+        ]
+       },
+       {
+        "id": "70d294f6",
+        "value": "a large brass wrench",
+        "weight": 1,
+        "sub_categories": [
+         "inventor"
+        ]
+       },
+       {
+        "id": "81e3a507",
+        "value": "a small clockwork bird",
+        "weight": 1,
+        "sub_categories": [
+         "inventor"
+        ]
+       }
+      ]
+     }
     }
-   ],
-   "payload_hash": "f8303f325c67ff3759248361b0d71e96d7b3024ce9773119d6778f06c3f3e8b8",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.295419Z",
-   "updated_at": "2026-11-04T10:12:51.295419Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   ]
   }
  ],
  "wildcards": [
   {
-   "id": "49cac59c",
-   "type": "wildcard",
-   "name": "Time of day",
-   "description": "",
    "category_id": null,
    "tags": [],
    "is_favorite": false,
-   "payload": {
-    "var_binding": "time",
-    "sub_categories": [],
-    "options": [
-     {
-      "id": "7c740b5b",
-      "value": "dawn",
-      "weight": 1,
-      "sub_categories": []
-     },
-     {
-      "id": "7ddc9c86",
-      "value": "golden hour",
-      "weight": 1,
-      "sub_categories": []
-     },
-     {
-      "id": "a681b8ca",
-      "value": "night",
-      "weight": 1,
-      "sub_categories": []
-     }
-    ]
-   },
-   "payload_hash": "5a4acb1f8e5bdd5fa5d70365a0fbc5eca38af96db6578b89e502694d5b9bc776",
-   "snapshot_fingerprint": "f816f674",
    "version": 1,
-   "created_at": "2026-11-04T10:12:51.298581Z",
-   "updated_at": "2026-11-04T10:12:51.298581Z",
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
    "community_post_slug": null,
    "community_version_number": null,
-   "content_rating": "safe"
-  },
-  {
-   "id": "aa76ada8",
+   "content_rating": "safe",
+   "id": "808878ba",
    "type": "wildcard",
-   "name": "Setting",
-   "description": "",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
+   "name": "Role",
+   "description": "Who the subject is. Its tags decide the outfit, the item and the place.",
    "payload": {
-    "var_binding": "setting",
+    "var_binding": "role",
     "sub_categories": [
-     "castle",
-     "wilds",
-     "city"
+     "knight",
+     "mage",
+     "ranger",
+     "inventor"
     ],
     "options": [
      {
-      "id": "ee9e1c67",
-      "value": "a torch-lit throne room",
+      "id": "c8fc80d0",
+      "value": "a knight",
       "weight": 1,
       "sub_categories": [
-       "castle"
+       "knight"
       ]
      },
      {
-      "id": "dee3f9da",
-      "value": "castle ramparts",
+      "id": "c243437e",
+      "value": "a battle mage",
       "weight": 1,
       "sub_categories": [
-       "castle"
+       "mage"
       ]
      },
      {
-      "id": "7b51b895",
-      "value": "an ancient pine forest",
+      "id": "784f4138",
+      "value": "a forest ranger",
       "weight": 1,
       "sub_categories": [
-       "wilds"
+       "ranger"
       ]
      },
      {
-      "id": "ade62889",
-      "value": "a windswept canyon",
+      "id": "422b5317",
+      "value": "a clockwork inventor",
       "weight": 1,
       "sub_categories": [
-       "wilds"
-      ]
-     },
-     {
-      "id": "4e80731f",
-      "value": "a crowded market street",
-      "weight": 1,
-      "sub_categories": [
-       "city"
-      ]
-     },
-     {
-      "id": "d61c40b7",
-      "value": "a rooftop garden above the city",
-      "weight": 1,
-      "sub_categories": [
-       "city"
+       "inventor"
       ]
      }
     ]
-   },
-   "payload_hash": "56fb6858c6d5f7f1a2588df19e3bd1208669eaba42486fe5f28c749cd1af3e95",
-   "snapshot_fingerprint": "70c60cca",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.298427Z",
-   "updated_at": "2026-11-04T10:12:51.298427Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   },
   {
-   "id": "bc15a82d",
-   "type": "wildcard",
-   "name": "Colors",
-   "description": "Switched off: only read through @{} references.",
    "category_id": null,
    "tags": [],
    "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "bc15a82d",
+   "type": "wildcard",
+   "name": "Hair colors",
+   "description": "Switched off: only read through @{} references in Hair.",
    "payload": {
-    "var_binding": "color",
+    "var_binding": "hair_color",
     "sub_categories": [],
     "options": [
      {
@@ -911,296 +1105,478 @@
       "sub_categories": []
      },
      {
-      "id": "645b75a6",
-      "value": "copper",
+      "id": "1f0c8a31",
+      "value": "copper red",
       "weight": 1,
       "sub_categories": []
      },
      {
-      "id": "c7331bc4",
-      "value": "pale blonde",
+      "id": "5a77e0c4",
+      "value": "platinum blonde",
       "weight": 1,
       "sub_categories": []
      },
      {
-      "id": "5693e178",
-      "value": "emerald",
+      "id": "9b2d6e10",
+      "value": "chestnut brown",
       "weight": 1,
       "sub_categories": []
      }
     ]
-   },
-   "payload_hash": "74a9c434f6533144c486b42e877994491f2d0122265d8dcfae70ab5769bbac77",
-   "snapshot_fingerprint": "a7e1d307",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.298234Z",
-   "updated_at": "2026-11-04T10:12:51.298234Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   },
   {
-   "id": "195238e2",
-   "type": "wildcard",
-   "name": "Outfit",
-   "description": "Options carry negative words; the tunic is the fallback.",
    "category_id": null,
    "tags": [],
    "is_favorite": false,
-   "payload": {
-    "var_binding": "outfit",
-    "sub_categories": [
-     "armor",
-     "travel",
-     "formal"
-    ],
-    "options": [
-     {
-      "id": "72f8e1d7",
-      "value": "polished plate armor",
-      "weight": 1,
-      "sub_categories": [
-       "armor"
-      ],
-      "negative": "rust, broken armor"
-     },
-     {
-      "id": "b553cc92",
-      "value": "a hooded leather coat",
-      "weight": 1,
-      "sub_categories": [
-       "travel"
-      ]
-     },
-     {
-      "id": "1955f005",
-      "value": "a flowing robe with gold trim",
-      "weight": 1,
-      "sub_categories": [
-       "formal"
-      ]
-     },
-     {
-      "id": "9f7a6c18",
-      "value": "a patched linen tunic",
-      "weight": 1,
-      "sub_categories": [
-       "travel"
-      ],
-      "fallback": true
-     }
-    ]
-   },
-   "payload_hash": "3a4ec4a5a139d28ec87df215a9de419d0d8c1696337ac97548dc09604e3df755",
-   "snapshot_fingerprint": "bca208b3",
    "version": 1,
-   "created_at": "2026-11-04T10:12:51.298073Z",
-   "updated_at": "2026-11-04T10:12:51.298073Z",
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
    "community_post_slug": null,
    "community_version_number": null,
-   "content_rating": "safe"
-  },
-  {
-   "id": "38c1b584",
-   "type": "wildcard",
-   "name": "Eyes",
-   "description": "Has an empty option: sometimes the eyes aren't mentioned.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
-   "payload": {
-    "var_binding": "eyes",
-    "sub_categories": [],
-    "options": [
-     {
-      "id": "fdffc693",
-      "value": "@{bc15a82d#Colors} eyes",
-      "weight": 1,
-      "sub_categories": []
-     },
-     {
-      "id": "c6e9202c",
-      "value": "piercing eyes",
-      "weight": 1,
-      "sub_categories": []
-     },
-     {
-      "id": "8313f6dc",
-      "value": "tired eyes",
-      "weight": 1,
-      "sub_categories": []
-     },
-     {
-      "id": "d8dda0e3",
-      "value": "",
-      "weight": 1,
-      "sub_categories": [],
-      "is_null": true
-     }
-    ]
-   },
-   "payload_hash": "10901dc30c2f89782b330dd2e365625ea330e471fb30c28ec180c3970085dac0",
-   "snapshot_fingerprint": "d165d84e",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.297951Z",
-   "updated_at": "2026-11-04T10:12:51.297951Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
-  },
-  {
+   "content_rating": "safe",
    "id": "4facf8ce",
    "type": "wildcard",
    "name": "Hair",
-   "description": "Uses the Colors list through an @{} reference.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
+   "description": "Hair style; the colour comes from Hair colors through an @{} reference.",
    "payload": {
     "var_binding": "hair",
     "sub_categories": [],
     "options": [
      {
       "id": "a3ff1986",
-      "value": "short @{bc15a82d#Colors} hair",
+      "value": "short @{bc15a82d#Hair colors} hair",
       "weight": 1,
       "sub_categories": []
      },
      {
       "id": "e6d04f1d",
-      "value": "long braided @{bc15a82d#Colors} hair",
+      "value": "long @{bc15a82d#Hair colors} hair in a loose braid",
       "weight": 1,
       "sub_categories": []
      },
      {
-      "id": "28356404",
-      "value": "messy @{bc15a82d#Colors} hair",
+      "id": "c71b55d2",
+      "value": "shoulder-length wavy @{bc15a82d#Hair colors} hair",
       "weight": 1,
       "sub_categories": []
      },
      {
-      "id": "5e455e15",
+      "id": "0e3f9a4b",
       "value": "a shaved head",
       "weight": 1,
       "sub_categories": []
      }
     ]
-   },
-   "payload_hash": "0490f3c8e08a8e069e24a5f96198e20a0b4a42afd567023647af3f3b690a064f",
-   "snapshot_fingerprint": "fd0a61b9",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.297775Z",
-   "updated_at": "2026-11-04T10:12:51.297775Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   },
   {
-   "id": "808878ba",
-   "type": "wildcard",
-   "name": "Hero",
-   "description": "Who the picture is about. The tags drive the Scene constraint.",
    "category_id": null,
    "tags": [],
    "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "38c1b584",
+   "type": "wildcard",
+   "name": "Eyes",
+   "description": "Eye colour only.",
    "payload": {
-    "var_binding": "hero",
+    "var_binding": "eyes",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "2b8e61a0",
+      "value": "bright green eyes",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "8c41d7f2",
+      "value": "pale blue eyes",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "5e0a93bd",
+      "value": "dark brown eyes",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "d36f2c18",
+      "value": "amber eyes",
+      "weight": 1,
+      "sub_categories": []
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "195238e2",
+   "type": "wildcard",
+   "name": "Outfit",
+   "description": "Clothes only, tagged by role. The grey tunic is the fallback.",
+   "payload": {
+    "var_binding": "outfit",
     "sub_categories": [
-     "noble",
-     "wild",
-     "urban"
+     "knight",
+     "mage",
+     "ranger",
+     "inventor"
     ],
     "options": [
      {
-      "id": "c8fc80d0",
-      "value": "a knight",
+      "id": "72f8e1d7",
+      "value": "polished steel plate armor with a blue surcoat",
       "weight": 1,
       "sub_categories": [
-       "noble"
+       "knight"
+      ],
+      "negative": "rust, broken armor"
+     },
+     {
+      "id": "4c0b7e95",
+      "value": "a chainmail shirt under a red tabard",
+      "weight": 1,
+      "sub_categories": [
+       "knight"
       ]
      },
      {
-      "id": "c243437e",
-      "value": "a court mage",
+      "id": "b5a2c3d1",
+      "value": "a long deep-blue robe embroidered with silver stars",
       "weight": 1,
       "sub_categories": [
-       "noble"
+       "mage"
       ]
      },
      {
-      "id": "784f4138",
-      "value": "a forest ranger",
+      "id": "e81f4a6c",
+      "value": "a crimson long coat with brass buttons",
       "weight": 1,
       "sub_categories": [
-       "wild"
+       "mage"
       ]
      },
      {
-      "id": "e291d944",
-      "value": "a desert nomad",
+      "id": "0d9c2b57",
+      "value": "a hooded green cloak over a brown leather jerkin",
       "weight": 1,
       "sub_categories": [
-       "wild"
+       "ranger"
       ]
      },
      {
-      "id": "dd612ba4",
-      "value": "a street thief",
+      "id": "6a3e18f0",
+      "value": "a fur-trimmed leather hunting coat",
       "weight": 1,
       "sub_categories": [
-       "urban"
+       "ranger"
       ]
      },
      {
-      "id": "422b5317",
-      "value": "an inventor",
+      "id": "f2c7d905",
+      "value": "a leather work apron over a white linen shirt",
       "weight": 1,
       "sub_categories": [
-       "urban"
+       "inventor"
+      ]
+     },
+     {
+      "id": "93b0e4a8",
+      "value": "a brown waistcoat with rolled-up shirt sleeves",
+      "weight": 1,
+      "sub_categories": [
+       "inventor"
+      ]
+     },
+     {
+      "id": "5c61f0e2",
+      "value": "a plain grey wool tunic",
+      "weight": 1,
+      "sub_categories": [],
+      "fallback": true
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "7a41c0de",
+   "type": "wildcard",
+   "name": "Held item",
+   "description": "What the subject holds, tagged by role.",
+   "payload": {
+    "var_binding": "held",
+    "sub_categories": [
+     "knight",
+     "mage",
+     "ranger",
+     "inventor"
+    ],
+    "options": [
+     {
+      "id": "1a7c3e90",
+      "value": "a longsword with a gold hilt",
+      "weight": 1,
+      "sub_categories": [
+       "knight"
+      ]
+     },
+     {
+      "id": "2b8d4fa1",
+      "value": "a round wooden shield painted with a lion",
+      "weight": 1,
+      "sub_categories": [
+       "knight"
+      ]
+     },
+     {
+      "id": "3c9e50b2",
+      "value": "a glowing oak staff",
+      "weight": 1,
+      "sub_categories": [
+       "mage"
+      ]
+     },
+     {
+      "id": "4daf61c3",
+      "value": "an open spellbook with glowing pages",
+      "weight": 1,
+      "sub_categories": [
+       "mage"
+      ]
+     },
+     {
+      "id": "5eb072d4",
+      "value": "a wooden longbow",
+      "weight": 1,
+      "sub_categories": [
+       "ranger"
+      ]
+     },
+     {
+      "id": "6fc183e5",
+      "value": "a brass lantern",
+      "weight": 1,
+      "sub_categories": [
+       "ranger"
+      ]
+     },
+     {
+      "id": "70d294f6",
+      "value": "a large brass wrench",
+      "weight": 1,
+      "sub_categories": [
+       "inventor"
+      ]
+     },
+     {
+      "id": "81e3a507",
+      "value": "a small clockwork bird",
+      "weight": 1,
+      "sub_categories": [
+       "inventor"
       ]
      }
     ]
-   },
-   "payload_hash": "25088fc80c2d2ef51781559595f7916f71d9eaf1c3872030fcab81c8e838e6ed",
-   "snapshot_fingerprint": "9b0946d8",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.295886Z",
-   "updated_at": "2026-11-04T10:12:51.295886Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   },
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "aa76ada8",
+   "type": "wildcard",
+   "name": "Setting",
+   "description": "Where. Its tags (castle, forest, city) meet Role in Role fits the place.",
+   "payload": {
+    "var_binding": "setting",
+    "sub_categories": [
+     "castle",
+     "forest",
+     "city"
+    ],
+    "options": [
+     {
+      "id": "c1a0b2c3",
+      "value": "in a torch-lit stone throne room",
+      "weight": 1,
+      "sub_categories": [
+       "castle"
+      ]
+     },
+     {
+      "id": "d2b1c3d4",
+      "value": "on the battlements of a stone castle",
+      "weight": 1,
+      "sub_categories": [
+       "castle"
+      ]
+     },
+     {
+      "id": "e3c2d4e5",
+      "value": "in a misty pine forest at the edge of a cliff",
+      "weight": 1,
+      "sub_categories": [
+       "forest"
+      ]
+     },
+     {
+      "id": "f4d3e5f6",
+      "value": "in a mossy clearing in an old oak forest",
+      "weight": 1,
+      "sub_categories": [
+       "forest"
+      ]
+     },
+     {
+      "id": "a5e4f607",
+      "value": "on a crowded cobblestone market street",
+      "weight": 1,
+      "sub_categories": [
+       "city"
+      ]
+     },
+     {
+      "id": "b6f50718",
+      "value": "in a cluttered workshop full of brass gears",
+      "weight": 1,
+      "sub_categories": [
+       "city"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "49cac59c",
+   "type": "wildcard",
+   "name": "Time of day",
+   "description": "When. Lighting reads it.",
+   "payload": {
+    "var_binding": "time",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "7c740b5b",
+      "value": "at dawn",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "7ddc9c86",
+      "value": "at sunset",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "a681b8ca",
+      "value": "at night",
+      "weight": 1,
+      "sub_categories": []
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "3e5f7a9b",
+   "type": "wildcard",
+   "name": "Framing",
+   "description": "How the camera frames the subject. It starts the sentence.",
+   "payload": {
+    "var_binding": "framing",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "0a1b2c3d",
+      "value": "A full-body shot",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "1b2c3d4e",
+      "value": "A waist-up portrait",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "2c3d4e5f",
+      "value": "A close-up portrait",
+      "weight": 1,
+      "sub_categories": []
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "a1b2c3d4",
    "type": "wildcard",
    "name": "Travel gear",
    "description": "Tag groups: CLIMATE describes the option, SHOES is an accepts axis read as $gear.SHOES.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "payload": {
     "var_binding": "gear",
     "sub_categories": [
      "cold",
-     "warm",
      "boots",
+     "warm",
      "sandals",
      "slippers"
     ],
-    "tag_groups": {
-     "CLIMATE": [
-      "cold",
-      "warm"
-     ],
-     "SHOES": [
-      "boots",
-      "sandals",
-      "slippers"
-     ]
-    },
-    "tag_group_kinds": {
-     "SHOES": "accepts"
-    },
     "options": [
      {
       "id": "5e1a0001",
@@ -1250,84 +1626,388 @@
        "sandals"
       ]
      }
-    ]
-   },
-   "payload_hash": "edb0992f6d9e888b6dd95c18f6cf15bb647ab79dcb149dd2577e8068cc59ca7b",
-   "snapshot_fingerprint": "0d09ac05",
+    ],
+    "tag_groups": {
+     "CLIMATE": [
+      "cold",
+      "warm"
+     ],
+     "SHOES": [
+      "boots",
+      "sandals",
+      "slippers"
+     ]
+    },
+    "tag_group_kinds": {
+     "SHOES": "accepts"
+    }
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
    "version": 1,
-   "created_at": "2026-11-04T10:12:51.298581Z",
-   "updated_at": "2026-11-04T10:12:51.298581Z",
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
    "community_post_slug": null,
    "community_version_number": null,
-   "content_rating": "safe"
+   "content_rating": "safe",
+   "id": "8e1f3a5c",
+   "type": "wildcard",
+   "name": "Companion",
+   "description": "A sentence to end on. The empty option means no companion, a quarter of the time.",
+   "payload": {
+    "var_binding": "companion",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "9f203b4d",
+      "value": "A black raven sits on their shoulder.",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "a0314c5e",
+      "value": "A grey wolf stands at their side.",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "b1425d6f",
+      "value": "A small red fox sits at their feet.",
+      "weight": 1,
+      "sub_categories": []
+     },
+     {
+      "id": "c2536e70",
+      "value": "",
+      "weight": 1,
+      "sub_categories": [],
+      "is_null": true
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "9a7b5c3d",
+   "type": "wildcard",
+   "name": "Quality per model",
+   "description": "Quality words, tagged by model variant; a Pool filtered by $model_variant keeps the model's.",
+   "payload": {
+    "var_binding": "quality",
+    "sub_categories": [
+     "pony",
+     "illustrious",
+     "klein"
+    ],
+    "options": [
+     {
+      "id": "9a7b0001",
+      "value": "score_9, score_8_up, score_7_up",
+      "weight": 1,
+      "sub_categories": [
+       "pony"
+      ]
+     },
+     {
+      "id": "9a7b0002",
+      "value": "masterpiece, best quality, very aesthetic",
+      "weight": 1,
+      "sub_categories": [
+       "illustrious"
+      ]
+     },
+     {
+      "id": "9a7b0003",
+      "value": "Sharp focus, rich detail and soft natural light.",
+      "weight": 1,
+      "sub_categories": [
+       "klein"
+      ]
+     }
+    ],
+    "tag_groups": {
+     "MODEL": [
+      "pony",
+      "illustrious",
+      "klein"
+     ]
+    }
+   }
   }
  ],
  "fixed_values": [
   {
-   "id": "c32f16d6",
-   "type": "fixed_values",
-   "name": "Style",
-   "description": "A fixed value with its own negative words.",
    "category_id": null,
    "tags": [],
    "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "c32f16d6",
+   "type": "fixed_values",
+   "name": "Style",
+   "description": "The look of every picture, with its negatives.",
    "payload": {
     "values": [
      {
       "id": "9af7bf95",
       "name": "style",
-      "value": "digital painting, detailed, painterly brushwork",
+      "value": "A detailed digital painting with sharp focus and rich color.",
       "negative": "photo, 3d render, blurry"
      }
     ]
-   },
-   "payload_hash": "e9971ee9ccbf2f5249b67987e2021e5a3f9b3a9e5dc041747c3121c505415020",
-   "snapshot_fingerprint": "8c197335",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.298741Z",
-   "updated_at": "2026-11-04T10:12:51.298741Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   }
  ],
  "combines": [
   {
-   "id": "5d75075f",
-   "type": "combine",
-   "name": "Scene line",
-   "description": "",
    "category_id": null,
    "tags": [],
    "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "9d2e4f61",
+   "type": "combine",
+   "name": "Subject",
+   "description": "The person: role, hair and eyes in one line.",
    "payload": {
-    "template": "in $setting at $time, $lighting",
+    "template": "$role with $hair and $eyes",
+    "output_var": "subject",
+    "input_vars": [
+     "role",
+     "hair",
+     "eyes"
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "5d75075f",
+   "type": "combine",
+   "name": "Scene",
+   "description": "Where, when and the light, as one phrase.",
+   "payload": {
+    "template": "$setting $time, $lighting",
     "output_var": "scene",
     "input_vars": [
      "setting",
      "time",
      "lighting"
     ]
-   },
-   "payload_hash": "a5b688137b629aedc42362a5dbd9a91ffe9e884084fba9ef4c3fd82bfa94cb52",
-   "snapshot_fingerprint": "6bfcc7a6",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.298844Z",
-   "updated_at": "2026-11-04T10:12:51.298844Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   }
  ],
  "derivations": [
   {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "5774d2a1",
+   "type": "derivation",
+   "name": "Lighting from time",
+   "description": "Light that fits the time. At night it also adds negatives.",
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "time",
+         "op": "equals",
+         "value": "at night"
+        },
+        "action": {
+         "target_var": "lighting",
+         "mode": "replace",
+         "value": "lit by pale moonlight and warm lantern glow"
+        },
+        "extra_actions": [
+         {
+          "target_var": "lighting",
+          "mode": "negative",
+          "value": "overexposed, harsh sunlight"
+         }
+        ]
+       },
+       {
+        "condition": {
+         "var": "time",
+         "op": "equals",
+         "value": "at sunset"
+        },
+        "action": {
+         "target_var": "lighting",
+         "mode": "replace",
+         "value": "with warm orange rim light"
+        }
+       }
+      ],
+      "id": "e751ba3a",
+      "else": {
+       "action": {
+        "target_var": "lighting",
+        "mode": "replace",
+        "value": "in soft morning light"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "dd2bee53",
+   "type": "derivation",
+   "name": "Character LoRA",
+   "description": "While $lora_character is true: the LoRA's trigger words replace the whole $subject.",
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "lora_character",
+         "op": "equals",
+         "value": "true"
+        },
+        "action": {
+         "target_var": "subject",
+         "mode": "replace",
+         "value": "$lora_character_words"
+        }
+       }
+      ],
+      "id": "0420af2a"
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "435b5087",
+   "type": "derivation",
+   "name": "Its own clothes",
+   "description": "While $lora_clothes is true: the LoRA's trigger words replace $outfit.",
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "lora_clothes",
+         "op": "equals",
+         "value": "true"
+        },
+        "action": {
+         "target_var": "outfit",
+         "mode": "replace",
+         "value": "$lora_outfit_words"
+        }
+       }
+      ],
+      "id": "7cf35a83"
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "804fee67",
+   "type": "derivation",
+   "name": "Style LoRA",
+   "description": "While $style_lora is true: the LoRA's trigger words go after $style.",
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "style_lora",
+         "op": "equals",
+         "value": "true"
+        },
+        "action": {
+         "target_var": "style",
+         "mode": "append",
+         "value": " $lora_style_words"
+        }
+       }
+      ],
+      "id": "ddfcd524"
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
    "id": "5b008dc7",
    "type": "derivation",
    "name": "Settings per model",
    "description": "Reads $model_family from WP Model Info: $size, $sampler and $cfg.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
    "payload": {
     "rules": [
      {
@@ -1405,6 +2085,7 @@
         ]
        }
       ],
+      "id": "e4788601",
       "else": {
        "action": {
         "target_var": "size",
@@ -1423,227 +2104,148 @@
          "value": "5"
         }
        ]
-      },
-      "id": "e4788601"
+      }
      }
     ]
-   },
-   "payload_hash": "c0984a832695df2fe5a9023ea6495102b3a2fbb4cf05c92d376078c0f1ae4fe4",
-   "snapshot_fingerprint": "60a31a8e",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.299473Z",
-   "updated_at": "2026-11-04T10:12:51.299473Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
-  },
-  {
-   "id": "804fee67",
-   "type": "derivation",
-   "name": "Style LoRA",
-   "description": "While the Style LoRA toggle is on: its words go after $style.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
-   "payload": {
-    "rules": [
-     {
-      "branches": [
-       {
-        "condition": {
-         "var": "style_lora",
-         "op": "equals",
-         "value": "true"
-        },
-        "action": {
-         "target_var": "style",
-         "mode": "append",
-         "value": ", $lora_style_words"
-        }
-       }
-      ],
-      "id": "ddfcd524"
-     }
-    ]
-   },
-   "payload_hash": "6c318478ad2c1ec1d0b260d576c98fb0b76add95e471658f65dc504a32f8cc36",
-   "snapshot_fingerprint": "64b57a4b",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.299356Z",
-   "updated_at": "2026-11-04T10:12:51.299356Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
-  },
-  {
-   "id": "435b5087",
-   "type": "derivation",
-   "name": "Its own clothes",
-   "description": "While 'Use its own clothes' is on: the LoRA's outfit words replace $outfit.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
-   "payload": {
-    "rules": [
-     {
-      "branches": [
-       {
-        "condition": {
-         "var": "lora_clothes",
-         "op": "equals",
-         "value": "true"
-        },
-        "action": {
-         "target_var": "outfit",
-         "mode": "replace",
-         "value": "$lora_outfit_words"
-        }
-       }
-      ],
-      "id": "7cf35a83"
-     }
-    ]
-   },
-   "payload_hash": "40a85f944f35041eec92671611711864d5cec3f3be8c1b0c5a568200fd0f087e",
-   "snapshot_fingerprint": "19611293",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.299261Z",
-   "updated_at": "2026-11-04T10:12:51.299261Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
-  },
-  {
-   "id": "dd2bee53",
-   "type": "derivation",
-   "name": "Character LoRA",
-   "description": "While the LoRA character toggle is on: its words replace $hero, and the rolled hair and eyes step aside.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
-   "payload": {
-    "rules": [
-     {
-      "branches": [
-       {
-        "condition": {
-         "var": "lora_character",
-         "op": "equals",
-         "value": "true"
-        },
-        "action": {
-         "target_var": "hero",
-         "mode": "replace",
-         "value": "$lora_hero_words"
-        },
-        "extra_actions": [
-         {
-          "target_var": "hair",
-          "mode": "replace",
-          "value": ""
-         },
-         {
-          "target_var": "eyes",
-          "mode": "replace",
-          "value": ""
-         }
-        ]
-       }
-      ],
-      "id": "0420af2a"
-     }
-    ]
-   },
-   "payload_hash": "404b1613ac87aad0af31ac53ded2e1113069194a5b1c1c0a5de30275b48f69dd",
-   "snapshot_fingerprint": "de245686",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.299113Z",
-   "updated_at": "2026-11-04T10:12:51.299113Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
-  },
-  {
-   "id": "5774d2a1",
-   "type": "derivation",
-   "name": "Lighting from time",
-   "description": "Night gets lantern light (and a negative); else soft light.",
-   "category_id": null,
-   "tags": [],
-   "is_favorite": false,
-   "payload": {
-    "rules": [
-     {
-      "branches": [
-       {
-        "condition": {
-         "var": "time",
-         "op": "equals",
-         "value": "night"
-        },
-        "action": {
-         "target_var": "lighting",
-         "mode": "replace",
-         "value": "moonlight, warm lantern glow"
-        },
-        "extra_actions": [
-         {
-          "target_var": "lighting",
-          "mode": "negative",
-          "value": "overexposed, harsh sunlight"
-         }
-        ]
-       }
-      ],
-      "else": {
-       "action": {
-        "target_var": "lighting",
-        "mode": "replace",
-        "value": "soft natural light"
-       }
-      },
-      "id": "e751ba3a"
-     }
-    ]
-   },
-   "payload_hash": "e5b549fb4ac497a054a1fe2faf89c26fe9427460af2842f811e7d0aab5c8df05",
-   "snapshot_fingerprint": "5b117f47",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.298946Z",
-   "updated_at": "2026-11-04T10:12:51.298946Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   }
  ],
  "constraints": [
   {
-   "id": "7ff544c2",
-   "type": "constraint",
-   "name": "Hero fits the place",
-   "description": "Reads the Hero picked in the first Context and re-weights the Setting.",
    "category_id": null,
    "tags": [],
    "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "6b8c0d2e",
+   "type": "constraint",
+   "name": "Outfit fits the role",
+   "description": "Only rule: each role wears only outfits with its own tag.",
+   "payload": {
+    "source_wildcard_id": "808878ba",
+    "target_wildcard_id": "195238e2",
+    "source_wildcard_name": "Role",
+    "target_wildcard_name": "Outfit",
+    "exceptions": [],
+    "matrix": {
+     "knight": {
+      "knight": {
+       "mode": "only",
+       "factor": 1
+      }
+     },
+     "mage": {
+      "mage": {
+       "mode": "only",
+       "factor": 1
+      }
+     },
+     "ranger": {
+      "ranger": {
+       "mode": "only",
+       "factor": 1
+      }
+     },
+     "inventor": {
+      "inventor": {
+       "mode": "only",
+       "factor": 1
+      }
+     }
+    }
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "7c9d1e3f",
+   "type": "constraint",
+   "name": "Item fits the role",
+   "description": "Only rule: each role holds only items with its own tag.",
+   "payload": {
+    "source_wildcard_id": "808878ba",
+    "target_wildcard_id": "7a41c0de",
+    "source_wildcard_name": "Role",
+    "target_wildcard_name": "Held item",
+    "exceptions": [],
+    "matrix": {
+     "knight": {
+      "knight": {
+       "mode": "only",
+       "factor": 1
+      }
+     },
+     "mage": {
+      "mage": {
+       "mode": "only",
+       "factor": 1
+      }
+     },
+     "ranger": {
+      "ranger": {
+       "mode": "only",
+       "factor": 1
+      }
+     },
+     "inventor": {
+      "inventor": {
+       "mode": "only",
+       "factor": 1
+      }
+     }
+    }
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "7ff544c2",
+   "type": "constraint",
+   "name": "Role fits the place",
+   "description": "Re-weights Setting by the Role picked upstream: a knight favours the castle, an inventor never goes to the forest.",
    "payload": {
     "source_wildcard_id": "808878ba",
     "target_wildcard_id": "aa76ada8",
-    "source_wildcard_name": "Hero",
+    "source_wildcard_name": "Role",
     "target_wildcard_name": "Setting",
     "exceptions": [],
     "matrix": {
-     "noble": {
+     "knight": {
       "castle": {
        "mode": "boost",
        "factor": 4
       },
-      "wilds": {
+      "forest": {
        "mode": "reduce",
-       "factor": 0.3
+       "factor": 0.5
       }
      },
-     "wild": {
-      "wilds": {
+     "mage": {
+      "castle": {
+       "mode": "boost",
+       "factor": 2
+      }
+     },
+     "ranger": {
+      "forest": {
        "mode": "boost",
        "factor": 4
       },
@@ -1652,26 +2254,18 @@
        "factor": 0.3
       }
      },
-     "urban": {
+     "inventor": {
       "city": {
        "mode": "boost",
        "factor": 4
       },
-      "castle": {
+      "forest": {
        "mode": "exclude",
        "factor": 0
       }
      }
     }
-   },
-   "payload_hash": "33a422a0e0c3dc191cb58b1089cc9175e997cfc6aa387a92b765c6169cd9019d",
-   "snapshot_fingerprint": "292a47aa",
-   "version": 1,
-   "created_at": "2026-11-04T10:12:51.299681Z",
-   "updated_at": "2026-11-04T10:12:51.299681Z",
-   "community_post_slug": null,
-   "community_version_number": null,
-   "content_rating": "safe"
+   }
   }
  ],
  "categories": [],

@@ -1,6 +1,6 @@
-// Advanced 19: warnings on the canvas. A Context with Hero and Lighting from time: Lighting reads $time,
-// which nothing sets, so its row says MISSING VAR. An upstream Context with Time of day and Hero fixes
-// it, and the downstream Hero row turns blue (it replaces the upstream hero). The Assembler underlines a
+// Advanced 19: warnings on the canvas. A Context with Role and Lighting from time: Lighting reads $time,
+// which nothing sets, so its row says MISSING VAR. An upstream Context with Time of day and Role fixes
+// it, and the downstream Role row turns blue (it replaces the upstream role). The Assembler underlines a
 // $mood nothing sets. Nothing stops a run; Validation strictness decides what shows.
 import { tutorial } from "../tutorial.js";
 
@@ -16,7 +16,7 @@ tutorial(
       await t.go("/");
       await t.say("Lighting from time reads the time variable. Put it in a Context without Time of day.");
       const ctx = await t.addNode("WP Context", { x: 1010, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Lighting from time"]);
+      await t.pickModules(ctx, ["Role", "Lighting from time"]);
       await t.beat(800);
       const badge = t.moduleRow(ctx, "Lighting from time").locator(".wp-conflict-badge");
       await t.callout("miss", badge, "Nothing sets $time", 5);
@@ -29,13 +29,13 @@ tutorial(
     });
 
     await t.h.step("Fixed upstream", async () => {
-      await t.say("Something before it has to set time. Add a Context in front with Time of day, and Hero too.");
+      await t.say("Something before it has to set time. Add a Context in front with Time of day, and Role too.");
       const up = await t.addNode("WP Context", { x: 360, y: 170 });
-      await t.pickModules(up, ["Time of day", "Hero"]);
+      await t.pickModules(up, ["Time of day", "Role"]);
       await t.wire(up, "context", nodes.ctx, "upstream");
       await t.beat(1000);
-      await t.say("The missing var is gone. The second Hero row is blue now: it replaces the hero from upstream.");
-      await t.callout("blue", t.moduleRow(nodes.ctx, "Hero").locator(".wp-conflict-badge").first(), "Blue: just so you know", 5);
+      await t.say("The missing var is gone. The second Role row is blue now: it replaces the role from upstream.");
+      await t.callout("blue", t.moduleRow(nodes.ctx, "Role").locator(".wp-conflict-badge").first(), "Blue: just so you know", 5);
       await t.waitVoice();
       await t.uncallout("blue");
       await t.say("Blue is for your information. Amber is worth a look. Red points at something that's gone, like a deleted wildcard.");
@@ -47,7 +47,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 640 });
       await t.wire(nodes.ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero at $time, $lighting, $mood", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting, $mood.", { cps: 16 });
       await t.beat(900);
       await t.callout("mood", t.node(asm).locator('[data-test="asm-chip-mood"]'), "Prints nothing", 5);
       await t.say("Mood is flagged as missing, so it would print nothing.");

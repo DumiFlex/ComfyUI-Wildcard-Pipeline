@@ -1,6 +1,6 @@
-// Advanced 3: wildcards inside wildcards. Hair's options read the Colors list through @ chips; a new
-// Cloak list reads Colors and, through a tag filter, only the cold Travel gear. A referenced list
-// doesn't need to be on the node. Ends with the ref recursion limit in Settings › Canvas.
+// Advanced 3: wildcards inside wildcards. Hair's options read the Hair colors list through @ chips; a
+// new Cold weather wear list reads only the ranger outfits and only the cold Travel gear, through
+// tag filters. A referenced list doesn't need to be on the node. Ends with the ref recursion limit in Settings › Canvas.
 import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
@@ -16,41 +16,47 @@ tutorial(
 
     await t.h.step("A list inside a list", async () => {
       await t.go("/wp/wildcards/4facf8ce/edit");
-      await t.say("An option can hold another wildcard. Hair's options read the Colors list: each purple chip rolls a color.");
+      await t.say("An option can hold another wildcard. Hair's options read the Hair colors list: each purple chip rolls a color.");
       await t.scrollTo(page.getByText(/^Options \(\d+\)$/).first());
-      await t.callout("chips", [value(0), value(1)], "@color: a roll of Colors", 6);
+      await t.callout("chips", [value(0), value(1)], "A roll of Hair colors", 6);
       await t.waitVoice();
       await t.uncallout("chips");
-      await t.say("So short hair can be short silver hair, or short copper hair, without writing every pair.");
+      await t.say("So short hair can be short silver hair, or short copper red hair, without writing every pair.");
       await t.waitVoice();
     });
 
     await t.h.step("Make one", async () => {
       await t.go("/wp/wildcards/new");
-      await t.say("Let's make a Cloak list that does the same.");
-      await t.fill(page.locator('[data-test="identity-name"]'), "Cloak");
+      await t.say("Let's make a list of cold-weather clothes from two lists we already have.");
+      await t.fill(page.locator('[data-test="identity-name"]'), "Cold weather wear");
       await t.scrollTo(page.getByText(/^Options \(\d+\)$/).first());
       await t.waitVoice();
-      await t.say("Type an at sign and the start of a variable, and pick it with Enter. Colors has no tags, so it goes straight in.");
+      await t.say("Type an at sign and the start of a variable, and pick it with Enter. Outfit has tags, so Enter offers a filter: pick ranger, then Apply.");
       await t.click(value(0));
-      await t.type("a @colo", { cps: 12 });
-      await t.beat(700);
-      await t.press("Enter");
-      await t.beat(900);
-      await t.type(" wool cloak", { cps: 16 });
-      await t.waitVoice();
-      await t.say("The second option takes from Travel gear. Travel gear has tags, so Enter offers a filter: pick cold, then Apply.");
-      await t.click(value(1));
-      await t.type("@gea", { cps: 12 });
+      await t.type("@outf", { cps: 12 });
       await t.beat(700);
       await t.press("Enter");
       await t.beat(900);
       const picker = page.locator('[data-test="subcat-picker"]').last();
       await t.callout("filter", picker, "Only the tags you want", 6);
-      await t.click(picker.getByRole("button", { name: "cold", exact: true }));
+      await t.click(picker.getByRole("button", { name: "ranger", exact: true }));
       await t.beat(600);
       await t.uncallout("filter");
       await t.click(picker.getByRole("button", { name: "Apply" }));
+      await t.beat(800);
+      await t.callout("ranger", value(0), "Only outfits tagged ranger", 6);
+      await t.waitVoice();
+      await t.uncallout("ranger");
+      await t.say("The second option takes from Travel gear, tagged cold.");
+      await t.click(value(1));
+      await t.type("@gea", { cps: 12 });
+      await t.beat(700);
+      await t.press("Enter");
+      await t.beat(900);
+      const picker2 = page.locator('[data-test="subcat-picker"]').last();
+      await t.click(picker2.getByRole("button", { name: "cold", exact: true }));
+      await t.beat(600);
+      await t.click(picker2.getByRole("button", { name: "Apply" }));
       await t.beat(800);
       await t.callout("cold", value(1), "Only Travel gear tagged cold", 6);
       await t.waitVoice();
@@ -62,15 +68,15 @@ tutorial(
 
     const nodes = await t.h.step("On the canvas", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Hero and Cloak. Colors and Travel gear don't need to be on the node: a reference finds them in the library.");
+      await t.say("On the canvas, pick Role and Cold weather wear. Outfit and Travel gear don't need to be on the node: a reference finds them in the library.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Cloak"]);
+      await t.pickModules(ctx, ["Role", "Cold weather wear"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero in $cloak");
+      await t.type("A painting of $role wearing $cold_weather_wear in falling snow.");
       await t.waitVoice();
-      await t.say("Roll a few seeds: a wool cloak in a new color, or a cold weather coat, never a summer robe.");
+      await t.say("Roll a few seeds: a ranger's cloak or coat, or warm travel gear, never a summer robe.");
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
       for (let i = 0; i < 5; i++) {
         await t.click(plus);
@@ -103,7 +109,7 @@ tutorial(
     });
 
     await t.h.step("Outro", async () => {
-      await t.say("Write a list once, and let other lists read it, all of it, or only the tags you want. Next: reading a pick's parts.");
+      await t.say("Write a list once, and let other lists read it, all of it, or only the tags you want. Next: narrowing a list on one node with its pool.");
     });
   },
 );

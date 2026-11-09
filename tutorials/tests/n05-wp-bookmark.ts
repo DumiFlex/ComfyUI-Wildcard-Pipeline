@@ -1,4 +1,4 @@
-// Nodes 5: WP Bookmark. A Hero Context and an Assembler; a bookmark "Prompt" at their top left (where
+// Nodes 5: WP Bookmark. A Role Context and an Assembler; a bookmark "Prompt" at their top left (where
 // it lands, zoom, shortcut Alt+1); the view wanders off and comes back from the Bookmarks dock, then
 // with Alt+1; a second bookmark, and the dock's previous / next.
 import { tutorial } from "../tutorial.js";
@@ -42,7 +42,7 @@ tutorial(
       await t.go("/");
       await t.say("In a big workflow you scroll around a lot. A bookmark brings you back to a spot in one click.");
       const ctx = await t.addNode("WP Context", { x: 900, y: 420 });
-      await t.pickModules(ctx, ["Hero"]);
+      await t.pickModules(ctx, ["Role"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1500, y: 420 });
       await t.wire(ctx, "context", asm, "context");
       await t.waitVoice();

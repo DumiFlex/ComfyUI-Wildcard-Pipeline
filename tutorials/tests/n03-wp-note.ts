@@ -1,4 +1,4 @@
-// Nodes 3: WP Note. A Hero Context to explain; a Step card with a docs button and an add-to-library
+// Nodes 3: WP Note. A Role Context to explain; a Step card with a docs button and an add-to-library
 // button; a Sticky warning with an icon; a Label with a shipped picture, read by hovering it; double
 // click to edit again; "Also a bookmark" pointed at.
 import { tutorial } from "../tutorial.js";
@@ -16,9 +16,9 @@ tutorial(
 
     await t.h.step("Something to explain", async () => {
       await t.go("/");
-      await t.say("Here's a Context with Hero. Someone opening this workflow might not know where to start, so leave them a note.");
+      await t.say("Here's a Context with Role. Someone opening this workflow might not know where to start, so leave them a note.");
       const ctx = await t.addNode("WP Context", { x: 1400, y: 200 });
-      await t.pickModules(ctx, ["Hero"]);
+      await t.pickModules(ctx, ["Role"]);
       await t.waitVoice();
     });
 
@@ -30,10 +30,10 @@ tutorial(
       await t.beat(300);
       await t.click(t.node(note).locator('[data-test="note-color-tip"]'));
       await t.beat(300);
-      await t.fill(title(note), "Pick your hero", { cps: 14 });
+      await t.fill(title(note), "Pick your character", { cps: 14 });
       await t.waitVoice();
       await t.say("The text takes Markdown: bold, lists, links. A docs link can be drawn as a button.");
-      await t.fill(textArea(note), "Choose a **hero** in the Context on the right.\n\n[Seeds](docs:seeds-and-loops){button pi-play}", { cps: 20 });
+      await t.fill(textArea(note), "Choose a **role** in the Context on the right.\n\n[Seeds](docs:seeds-and-loops){button pi-play}", { cps: 20 });
       await t.beat(500);
       await t.waitVoice();
       await t.say("And wp library makes a button that adds this workflow's items to whoever opens it, after a review.");

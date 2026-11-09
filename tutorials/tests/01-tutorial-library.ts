@@ -28,7 +28,7 @@ tutorial(
     try {
       await t.h.step("An empty library", async () => {
         await t.go("/wp/");
-        await t.say("The library from the tour is the one every tutorial uses: a hero, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.");
+        await t.say("The library from the tour is the one every tutorial uses: a role, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.");
         await t.waitVoice();
         await t.say("So first, bring the tutorial library in. The file, WP Tutorials library dot json, comes with the videos.");
         await t.waitVoice();

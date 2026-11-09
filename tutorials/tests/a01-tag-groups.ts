@@ -49,15 +49,15 @@ tutorial(
 
     const nodes = await t.h.step("Read the rolled tag", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Hero and Travel gear.");
+      await t.say("On the canvas, pick Role and Travel gear.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Travel gear"]);
+      await t.pickModules(ctx, ["Role", "Travel gear"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.say("In the template, $gear.SHOES prints the shoe that was rolled with the gear.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero in $gear, wearing $gear.SHOES");
+      await t.type("A painting of $role in $gear, wearing $gear.SHOES.");
       await t.beat(1000);
       await t.say("Roll a few seeds. The shoes always fit the gear: never sandals with a fur cloak.");
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
