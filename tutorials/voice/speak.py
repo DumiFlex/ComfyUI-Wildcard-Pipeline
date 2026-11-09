@@ -69,7 +69,8 @@ def ensure_models() -> None:
 
 
 def spoken_text(text: str) -> str:
-    """What the voice reads: `$hero_line` reads as "hero line", "WP" as letters, "LoRA" as one word."""
+    """What the voice reads: `$hero_line` as "hero line", "WP" as letters, "LoRA" as one word."""
+
     def var(m: re.Match[str]) -> str:
         return (m.group(1) + m.group(2).replace(".", " dot ")).replace("_", " ").lower()
 
