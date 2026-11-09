@@ -28,13 +28,8 @@ tutorial(
 
     await t.h.step("Pick three wildcards", async () => {
       await t.say("Tick Role, Hair and Setting, then add them.");
-      for (const name of ["Role", "Hair", "Setting"]) {
-        const row = page.locator('[data-test^="picker-row-"]').filter({ hasText: new RegExp(`^\\s*${name}\\b`) }).first();
-        await t.click(row.locator('[data-test="picker-checkbox"]').first());
-      }
-      await t.beat(300);
-      await t.click(page.locator('[data-test="picker-add-btn"]'));
-      await t.beat(800);
+      // Scrolls to (or searches for) each row and checks the tick took, then presses Add.
+      await t.pickModules(ctx, ["Role", "Hair", "Setting"], { open: false });
       await t.callout("mods", t.node(ctx), "Each list rolls one option into a variable");
       await t.say("Each one rolls one option and keeps it in a variable: role, hair and setting.");
       await t.waitVoice();
