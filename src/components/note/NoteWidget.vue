@@ -540,9 +540,16 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
      its own height for its width. */
   .wp-note-md .wp-note-md__img {
     display: block;
+    box-sizing: border-box;
     max-width: 100%;
     height: auto;
     margin: 4px 0 6px;
+    /* A frame, so a picture whose edges match the note (a dark screenshot
+       on a dark note) doesn't read as a hole through the node; the backdrop
+       shows behind a see-through picture. */
+    border: 1px solid var(--wp-border-strong);
+    background: var(--wp-bg-3);
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
     border-radius: min(6px, var(--wp-radius-cap, 999px));
     -webkit-user-drag: none;
     user-select: none;
