@@ -61,7 +61,10 @@ async def test_create_with_color_and_children(wp_client):
     assert resp.status == 201
     body = await resp.json()
     assert body["color"] == "#FB7185"
-    assert body["children"] == children
+    # Each child comes back with its own payload's hash filled in.
+    bare = [{k: v for k, v in c.items() if k != "payload_hash"} for c in body["children"]]
+    assert bare == children
+    assert all(c["payload_hash"] for c in body["children"])
     # payload_hash is non-empty + stable (deterministic from children)
     assert body["payload_hash"] != ""
 
