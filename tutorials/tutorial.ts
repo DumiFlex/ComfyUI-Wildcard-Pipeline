@@ -1129,9 +1129,12 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
   }
 }
 
-/** Points every Load Checkpoint at the pack's `checkpoint` (when ComfyUI has it). Returns whether it did. */
+/**
+ * Points every Load Checkpoint at the pack's `checkpoint`, else its `exampleCheckpoint` (when ComfyUI
+ * has it). Returns whether it did.
+ */
 export async function useCheckpoint(t: Tutor): Promise<boolean> {
-  const ckpt = String(t.params.checkpoint ?? "");
+  const ckpt = String(t.params.checkpoint || t.params.exampleCheckpoint || "");
   if (!ckpt) return false;
   const info = await t.h.api("/object_info/CheckpointLoaderSimple");
   const known = ((info.json as Record<string, { input?: { required?: { ckpt_name?: [string[]] } } }> | undefined)?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] ?? []) as string[];
