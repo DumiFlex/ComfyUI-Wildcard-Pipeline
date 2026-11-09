@@ -1119,6 +1119,18 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
   await card.waitFor({ state: "attached", timeout: 15_000 });
   await card.scrollIntoViewIfNeeded();
   await sleep(400);
+  // The example's checkpoint is rarely installed: ComfyUI's "is missing" toast would show until
+  // useCheckpoint swaps the model, so keep it off the recording as it appears.
+  await page.evaluate(() => {
+    const hide = () => {
+      for (const el of Array.from(document.querySelectorAll('[role="status"], [role="alert"], .p-toast-message')))
+        if (/is missing/i.test(el.textContent ?? "")) (el as HTMLElement).style.display = "none";
+    };
+    hide();
+    const obs = new MutationObserver(hide);
+    obs.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => obs.disconnect(), 15_000);
+  });
   await t.click(card);
   await page.waitForFunction(() => (window.app?.graph?.nodes?.length ?? 0) > 5, undefined, { timeout: 20_000 });
   await sleep(2500);
@@ -1127,6 +1139,17 @@ export async function openExample(t: Tutor, title: string): Promise<void> {
     await missing.first().getByRole("button").filter({ hasNotText: "View details" }).first().click().catch(() => undefined);
     await sleep(500);
   }
+  // Tabs left open by earlier videos of the run: show only this example's tab (the recording only).
+  const name = title.replace(/^\d+\s*-\s*/, "").toLowerCase();
+  await page.evaluate((n) => {
+    for (const tab of Array.from(document.querySelectorAll('[data-testid="workflow-tab"]')))
+      if (!(tab.textContent ?? "").toLowerCase().includes(n)) {
+        // Hide its own wrapper when it holds just this tab, so no empty slot is left in the strip.
+        const wrap = tab.parentElement;
+        const one = wrap && wrap.querySelectorAll('[data-testid="workflow-tab"]').length === 1 ? wrap : tab;
+        (one as HTMLElement).style.display = "none";
+      }
+  }, name);
 }
 
 /**
