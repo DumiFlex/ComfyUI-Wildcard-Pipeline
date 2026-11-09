@@ -105,6 +105,16 @@ describe("VarPicker", () => {
     expect(preview.text()).toContain("run workflow to see result");
   });
 
+  it("shows the default in amber after a run whose variable was missing", () => {
+    const w = mount(VarPicker, {
+      props: { modelValue: "$seed", upstreamVars: ["$seed"], previewSource: "", previewParsed: null, previewDefault: "0", executed: true },
+    });
+    const preview = w.find('[data-test="var-picker-preview"]');
+    expect(preview.classes()).toContain("wp-var-picker__preview--default");
+    expect(preview.text()).toContain("→ default (0)");
+    expect(w.find('[data-test="var-picker-unset"]').text()).toBe("$seed was not set");
+  });
+
   it("shows the empty-state message when no upstream vars exist", async () => {
     const w = mount(VarPicker, {
       attachTo: document.body,
