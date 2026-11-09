@@ -20,7 +20,7 @@ tutorial(
       await t.go("/");
       await t.say("One pack rarely suits every model. Pony wants its score tags, Illustrious its own quality words, Flux plain sentences. WP Model Info tells the pipeline which model is loaded.");
       const unet = String(t.params.unet ?? "");
-      const load = unet ? await t.addNode("Load Diffusion Model", { x: 230, y: 200 }) : await t.addNode("Load Checkpoint", { x: 230, y: 200 });
+      const load = unet ? await t.addNode("Load Diffusion Model", { x: 200, y: 200 }) : await t.addNode("Load Checkpoint", { x: 200, y: 200 });
       const [widget, file] = unet
         ? ["unet_name", await modelFile(t, "UNETLoader", "unet_name", unet, "diffusion_models")]
         : ["ckpt_name", await modelFile(t, "CheckpointLoaderSimple", "ckpt_name", String(t.params.checkpoint ?? ""), "checkpoints")];
@@ -34,7 +34,7 @@ tutorial(
         [load, widget, file] as const,
       );
       await t.beat(600);
-      const mi = await t.addNode("WP Model Info", { x: 700, y: 200 });
+      const mi = await t.addNode("WP Model Info", { x: 640, y: 200 });
       await t.wire(load, "MODEL", mi, "model");
       await t.beat(800);
       await t.waitVoice();
@@ -67,7 +67,7 @@ tutorial(
 
     const ctx = await t.h.step("A list that follows it", async () => {
       await t.say("Quality per model has one line of quality words for each model, tagged pony, illustrious or klein. Put it in a Context after Model Info, with Role and Setting.");
-      const ctx = await t.addNode("WP Context", { x: 1200, y: 200 });
+      const ctx = await t.addNode("WP Context", { x: 1330, y: 200 });
       await t.wire(nodes.mi, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Role", "Setting", "Quality per model"]);
       await t.waitVoice();
@@ -102,12 +102,12 @@ tutorial(
 
     await t.h.step("Run it", async () => {
       await t.say("Write the template, and run it. The model loads, and the prompt gets Klein's words.");
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1200, y: 640 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1330, y: 700 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $setting. $quality", { cps: 16 });
       await t.beat(600);
-      const text = await t.addNode("Preview as Text", { x: 1700, y: 640 });
+      const text = await t.addNode("Preview as Text", { x: 1740, y: 700 });
       await t.wire(asm, "prompt", text, "source");
       await t.run();
       await t.callout("out", t.node(text), "Klein's quality words", 6);
