@@ -55,6 +55,10 @@ export const nodeCollapseConfig: WeakMap<object, unknown> = new WeakMap();
  *  syncer. Replaces the previous string property `_wpBadge`. */
 export const nodeBadge: WeakMap<object, unknown> = new WeakMap();
 
+/** The badge getter `badge-slot.ts` puts in a SubgraphNode's `badges`
+ *  once, so Nodes 2.0 sees badges that appear later. */
+export const nodeBadgeSlot: WeakMap<object, () => unknown> = new WeakMap();
+
 /** Last computed severity for the subgraph badge — used to skip
  *  unnecessary repaints when the inner-graph conflict scan returns
  *  the same severity twice in a row. Replaces `_wpBadgeSeverity`. */

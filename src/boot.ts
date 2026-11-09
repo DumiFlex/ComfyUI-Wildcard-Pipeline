@@ -50,6 +50,7 @@ export * as nodeToolbarMod from "./extension/node-toolbar";
 export { stripControlInputs } from "./extension/toggle-control";
 export * as imageFilterMod from "./extension/image-filter";
 export * as graphEventsMod from "./extension/graph-events";
+export * as badgeSlotMod from "./extension/badge-slot";
 export * as graphMod from "./extension/graph";
 export * as assemblerVarsMod from "./extension/assembler-vars";
 export * as toastStoreMod from "./components/shared/toast-store";

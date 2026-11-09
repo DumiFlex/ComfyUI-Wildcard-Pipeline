@@ -240,7 +240,7 @@ function toggleTotalInternal(): void {
       data-test="loop-seeds-btn"
       @click="seedsOpen = true"
     >
-      Per-iteration seeds
+      <span class="wp-loop__seedbtn-text">Per-iteration seeds</span>
       <span class="wp-loop__seedbtn-fill" />
       <span v-if="lockedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-badge">{{ lockedCount }} locked</span>
       <span v-if="bypassedCount" class="wp-loop__seedbtn-badge" data-test="loop-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
@@ -256,7 +256,7 @@ function toggleTotalInternal(): void {
       hint="Run every combination of the wildcards you pick, one frame each."
       @click="sweepOpen = true"
     >
-      Sweep combinations
+      <span class="wp-loop__seedbtn-text">Sweep combinations</span>
       <span class="wp-loop__seedbtn-fill" />
       <span v-if="sweepFrames != null" class="wp-loop__seedbtn-badge" data-test="loop-sweep-badge">{{ sweepFrames }} {{ sweepFrames === 1 ? "frame" : "frames" }}</span>
       <span v-else-if="modelValue.sweep.enabled" class="wp-loop__seedbtn-badge wp-loop__seedbtn-badge--dim" data-test="loop-sweep-badge">on</span>
@@ -402,9 +402,18 @@ function toggleTotalInternal(): void {
 .wp-loop__var-input { display: flex; align-items: center; gap: 4px; }
 .wp-loop__var-input .wp-loop__var-text { flex: 1 1 0; min-width: 0; }
 
+/* The kit Button wraps the slot in an inline label box, so the fill span
+ * can't push the badges and chevron right and the chevron rides the
+ * text's baseline. Make the label the flex row instead; the text keeps
+ * the kit's cap-height trim so it stays level with the icons. */
+.wp-loop__seedbtn :deep(.wp-btn__label) { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-box: normal; }
+.wp-loop__seedbtn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@supports (text-box: trim-both cap alphabetic) {
+  .wp-loop__seedbtn-text { text-box: trim-both cap alphabetic; }
+}
 .wp-loop__seedbtn-fill { flex: 1; }
 .wp-loop__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
-.wp-loop__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-loop__seedbtn-chev { flex: none; color: var(--wp-text-dim, var(--wp-text3)); }
 
 /* Bypass-on visually dims the strategy/override/var rows since the loop
  * is effectively off. The bypass row itself stays bright. */

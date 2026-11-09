@@ -39,6 +39,13 @@ import type { SeedStrategy } from "../components/shared/seed-derive";
 
 const SUBGRAPH_INPUT_NODE_ID = -10;
 const SUBGRAPH_OUTPUT_NODE_ID = -20;
+
+/** Node and link ids are numbers in older litegraph and strings ("-10",
+ *  "4") in current ComfyUI frontends (1.5x), so `=== -10` never matched
+ *  there and every walk stopped at a subgraph's edge. */
+function isNodeId(id: unknown, want: number): boolean {
+  return id === want || (typeof id === "string" && id !== "" && Number(id) === want);
+}
 const BOUNDARY_RECURSION_LIMIT = 32;
 
 export interface LiteLink {
@@ -243,6 +250,13 @@ function graphOf(node: LiteNodeLike, fallback: LiteGraphLike): LiteGraphLike {
  * graph dodges that misalignment.
  */
 export function findRootGraph(start: LiteGraphLike): LiteGraphLike {
+  // Current litegraph gives every graph a `rootGraph` (the root returns
+  // itself) AND gives the root a UUID `id`, so the id test below never
+  // finds it there and the old `_subgraph_node` link doesn't exist: a node
+  // inside a subgraph got the SUBGRAPH back as "root", couldn't step out
+  // through its inputs, and flagged every outside variable as missing.
+  const declared = (start as { rootGraph?: LiteGraphLike }).rootGraph;
+  if (declared && Array.isArray(declared._nodes)) return declared;
   let cur: LiteGraphLike | null = start;
   // Litegraph SubgraphLGraph instances expose `_subgraph_node` pointing
   // at the wrapping SubgraphNode in the parent graph. Climbing through
@@ -351,7 +365,7 @@ function resolveThroughBoundaries(
 ): BoundaryStep | null {
   let cur: BoundaryStep | null = start;
   for (let i = 0; cur && i < BOUNDARY_RECURSION_LIMIT; i++) {
-    if (cur.node.id === SUBGRAPH_INPUT_NODE_ID) {
+    if (isNodeId(cur.node.id, SUBGRAPH_INPUT_NODE_ID)) {
       cur = stepOutOfSubgraph(cur.graph, cur.originSlot, parents);
       continue;
     }
@@ -380,7 +394,7 @@ function pipelineUpstreamOf(
     if (!link) continue;
 
     let step: BoundaryStep | null;
-    if (link.origin_id === SUBGRAPH_INPUT_NODE_ID) {
+    if (isNodeId(link.origin_id, SUBGRAPH_INPUT_NODE_ID)) {
       // Boundary at this very link — step OUT before we can even read origin.
       step = stepOutOfSubgraph(graph, link.origin_slot, parents);
     } else {
@@ -2176,7 +2190,7 @@ function downstreamStep(
   link: LiteLink,
   parents: Map<string, SubgraphParent>,
 ): { graph: LiteGraphLike; node: LiteNodeLike } | null {
-  if (link.target_id === SUBGRAPH_OUTPUT_NODE_ID) {
+  if (isNodeId(link.target_id, SUBGRAPH_OUTPUT_NODE_ID)) {
     // Find which output of the parent SubgraphNode this proxies, then resume.
     const innerSlot = graph.outputNode?.slots[link.target_slot];
     if (!innerSlot || !graph.id) return null;
