@@ -1,5 +1,5 @@
 // Advanced 6: when nothing fits. Companion's empty option ("sometimes none"); the throne room set
-// as Setting's fallback; then on the canvas a forest-only Setting and an inventor-only Role (both
+// as Setting's fallback; then on the canvas a Setting kept to the forests and the throne room and an inventor-only Role (both
 // per-node option overrides) leave nothing live once Role fits the place is dragged up between Role
 // and Setting (it only reaches rows below it), and the fallback stands in.
 import { tutorial } from "../tutorial.js";
@@ -77,9 +77,9 @@ tutorial(
       await t.waitVoice();
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(800);
-      await t.say("And it happens in a forest: in Setting, keep only the two forest places.");
+      await t.say("And it happens out of town: in Setting, keep only the two forests and the throne room.");
       modal = await editItem(ctx, "Setting");
-      for (const where of ["in a torch-lit stone throne room", "on the battlements of a stone castle", "on a crowded cobblestone market street", "in a cluttered workshop full of brass gears"]) {
+      for (const where of ["on the battlements of a stone castle", "on a crowded cobblestone market street", "in a cluttered workshop full of brass gears"]) {
         await t.click(modal.getByLabel(`Use option ${where}`));
         await t.beat(250);
       }
@@ -110,7 +110,7 @@ tutorial(
       if (order.map((n) => n.trim()).join("|") !== "Role|Role fits the place|Setting") throw new Error(`Rows after the drag: ${order.join(", ")}`);
       await t.waitVoice();
       await t.callout("prev", t.node(asm).locator('[data-test="asm-preview"]'), "The fallback stands in", 6);
-      await t.say("Now the badge is gone, and the constraint keeps inventors out of the forest, so nothing is left to pick. The fallback steps in: the throne room, on every seed.");
+      await t.say("Now the badge is gone, and the constraint keeps inventors out of castles and forests, so nothing is left to pick. The fallback steps in: the throne room, on every seed, even though the rule ruled it out. That's its job.");
       for (let i = 0; i < 3; i++) {
         await t.click(plus);
         await t.beat(1000);

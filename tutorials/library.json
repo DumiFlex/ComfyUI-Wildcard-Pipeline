@@ -424,7 +424,7 @@
      "meta": {
       "name": "Role fits the place",
       "library_name": "Role fits the place",
-      "description": "Re-weights Setting by the Role picked upstream: a knight favours the castle, an inventor never goes to the forest."
+      "description": "Re-weights Setting by the Role picked upstream: a knight favours the castle, an inventor stays in town, never in a castle or the forest."
      },
      "entries": [],
      "payload": {
@@ -464,6 +464,10 @@
         "city": {
          "mode": "boost",
          "factor": 4
+        },
+        "castle": {
+         "mode": "exclude",
+         "factor": 0
         },
         "forest": {
          "mode": "exclude",
@@ -2220,7 +2224,7 @@
    "id": "7ff544c2",
    "type": "constraint",
    "name": "Role fits the place",
-   "description": "Re-weights Setting by the Role picked upstream: a knight favours the castle, an inventor never goes to the forest.",
+   "description": "Re-weights Setting by the Role picked upstream: a knight favours the castle, an inventor stays in town, never in a castle or the forest.",
    "payload": {
     "source_wildcard_id": "808878ba",
     "target_wildcard_id": "aa76ada8",
@@ -2258,6 +2262,10 @@
       "city": {
        "mode": "boost",
        "factor": 4
+      },
+      "castle": {
+       "mode": "exclude",
+       "factor": 0
       },
       "forest": {
        "mode": "exclude",

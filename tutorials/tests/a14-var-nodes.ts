@@ -1,4 +1,4 @@
-// Advanced 14: Var nodes. An Injector stands in for WP Model Info and sets $model_family = sdxl; the
+// Advanced 14: Var nodes. WP Model Info, its family pinned to sdxl, sets $model_family; the
 // Settings per model derivation turns that into $size, $sampler and $cfg. Two WP Var → Int read the
 // width and the height out of $size into Empty Latent Image, each with a default, and WP Var → Choice
 // matches $sampler against KSampler (Select)'s list with euler as its fallback. A run shows what each
@@ -25,34 +25,27 @@ tutorial(
     const nodes = await t.h.step("Settings from a rule", async () => {
       await t.go("/");
       await t.say("Rules can set more than words. Settings per model sets a size, a sampler and a CFG for each model family.");
-      const inj = await t.addNode("WP Context Injector", { x: 330, y: 200 });
-      await t.click(t.node(inj).locator('[data-test="inj-add-general"]'));
+      const mi = await t.addNode("WP Model Info", { x: 380, y: 200 });
+      await t.waitVoice();
+      await t.say("WP Model Info reads the model family from your checkpoint. With no model wired here, pin it instead: press the pin on model family and type sdxl.");
+      await t.click(t.node(mi).locator('[data-test="mi-pin-family"]'));
       await t.beat(500);
-      await t.fill(t.node(inj).locator('[data-test="inj-row-binding"] input').last(), "model_family", { cps: 14 });
-      await t.press("Tab");
-      await t.beat(400);
-      await t.click(t.node(inj).locator('[data-test="inj-row-general-tag"]').last(), { right: true });
-      await t.beat(500);
-      await t.click(page.getByRole("menuitem", { name: "Edit" }));
-      await t.beat(800);
-      await t.click(page.locator('[data-test="ibm-template"]').locator('[contenteditable="true"], textarea').first());
-      await t.type("sdxl", { cps: 12 });
-      await t.click(page.locator('[data-test="ibm-save"]'));
+      await t.fill(t.node(mi).locator('input[data-test="mi-pin-input-family"], [data-test="mi-pin-input-family"] input').first(), "sdxl", { cps: 12 });
+      await t.press("Enter");
       await t.beat(700);
       await t.waitVoice();
-      await t.say("Here an Injector says the model is sdxl. In a real workflow, WP Model Info reads it from your checkpoint: that's the next tutorial.");
-      const ctx = await t.addNode("WP Context", { x: 780, y: 200 });
-      await t.wire(inj, "context", ctx, "upstream");
+      const ctx = await t.addNode("WP Context", { x: 860, y: 200 });
+      await t.wire(mi, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Settings per model"]);
       await t.waitVoice();
-      return { inj, ctx };
+      return { mi, ctx };
     });
 
     const num = (node: string, widget: string) => t.node(node).locator(`[data-widget-name="${widget}"]`);
 
     const vars = await t.h.step("Var → Int", async () => {
       await t.say("WP Var → Int takes a number out of a variable. Pick size: eight thirty two by twelve sixteen.");
-      const vw = await t.addNode("WP Var → Int", { x: 1250, y: 150 });
+      const vw = await t.addNode("WP Var → Int", { x: 1360, y: 150 });
       await t.wire(nodes.ctx, "context", vw, "context");
       await pickVar(vw, "size");
       await t.waitVoice();
@@ -67,10 +60,10 @@ tutorial(
       await t.beat(400);
       await t.waitVoice();
       await t.uncallout("def");
-      const lat = await t.addNode("Empty Latent Image", { x: 1690, y: 260 });
+      const lat = await t.addNode("Empty Latent Image", { x: 1765, y: 260 });
       await t.wire(vw, "value", lat, "width");
       await t.say("A second one, with index one, gives the height.");
-      const vh = await t.addNode("WP Var → Int", { x: 1250, y: 420 });
+      const vh = await t.addNode("WP Var → Int", { x: 1360, y: 420 });
       await t.wire(nodes.ctx, "context", vh, "context");
       await pickVar(vh, "size");
       await t.click(num(vh, "index").getByRole("button", { name: "Increment" }));
@@ -85,10 +78,10 @@ tutorial(
 
     const choice = await t.h.step("Var → Choice", async () => {
       await t.say("WP Var → Choice fills a drop-down. Pick sampler, and wire it into a sampler list. It matches loosely, so dpmpp 2m finds the right entry.");
-      const vc = await t.addNode("WP Var → Choice", { x: 1250, y: 690 });
+      const vc = await t.addNode("WP Var → Choice", { x: 1360, y: 690 });
       await t.wire(nodes.ctx, "context", vc, "context");
       await pickVar(vc, "sampler");
-      const ks = await t.addNode("KSamplerSelect", { x: 1690, y: 720 });
+      const ks = await t.addNode("KSamplerSelect", { x: 1765, y: 720 });
       await t.wire(vc, "choice", ks, "sampler_name");
       await t.beat(500);
       await t.waitVoice();

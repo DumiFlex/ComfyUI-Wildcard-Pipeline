@@ -361,11 +361,12 @@ PLACE_FITS = constraint(
         },
         "inventor": {
             "city": {"mode": "boost", "factor": 4},
+            "castle": {"mode": "exclude", "factor": 0},
             "forest": {"mode": "exclude", "factor": 0},
         },
     },
     "Re-weights Setting by the Role picked upstream: a knight favours the castle,"
-    " an inventor never goes to the forest.",
+    " an inventor stays in town, never in a castle or the forest.",
 )
 
 LORA_CHARACTER = derivation(
