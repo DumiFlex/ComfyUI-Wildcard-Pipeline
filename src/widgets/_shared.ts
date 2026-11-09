@@ -3,6 +3,7 @@ import { createApp, effectScope, type App, type Component, type EffectScope } fr
 import { nodeCollapseAnimating } from "../extension/_stashes";
 import { isVueNodes } from "../extension/renderer";
 import { installClipboardShield } from "./clipboard-shield";
+import { registerOverlapClip } from "./dom-clip";
 import { installWheelShield } from "./wheel-shield";
 
 export interface DomWidget {
@@ -303,6 +304,9 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   };
 
   const widget = node.addDOMWidget(widgetName, "wp-dom", host, widgetOpts);
+  // Legacy renderer: hide the parts of this widget that a node drawn above
+  // it covers (ComfyUI's own clipping only cuts out the selected node).
+  const removeOverlapClip = registerOverlapClip(node as unknown as Parameters<typeof registerOverlapClip>[0], host);
   // Force a minimum node width if requested. LoRA Manager docs §4.3 —
   // only way to widen the node from a DOM widget is overriding
   // computeLayoutSize. `minWidth` accepts either a static number or
@@ -625,6 +629,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       () => resizeObserver?.disconnect(),
       () => fillDispose?.(),
       removeWheelShield,
+      removeOverlapClip,
       () => app.unmount(),
       restoreOnRemoved,
     ];
