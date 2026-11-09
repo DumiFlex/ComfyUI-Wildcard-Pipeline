@@ -102,7 +102,8 @@ tutorial(
       await t.say("Dot neg reads it on its own. Here it goes first in the negative box, before the rest.");
       // Open the negative box unless it already is (it starts open or folded depending on its text).
       const negToggle = t.node(nodes.asm).locator('[data-test="neg-template-toggle"]');
-      if ((await negToggle.getAttribute("aria-expanded")) !== "true") await t.click(negToggle);
+      // Click its "negative" label, at the left: the row's centre can sit under a ref's hover card.
+      if ((await negToggle.getAttribute("aria-expanded")) !== "true") await t.click(negToggle.locator(".wp-negbox__label"));
       await t.beat(500);
       await t.click(t.node(nodes.asm).locator('[data-test="neg-template-box"] [contenteditable="true"], [data-test="neg-template-box"] textarea').first());
       await t.press("ControlOrMeta+a");
