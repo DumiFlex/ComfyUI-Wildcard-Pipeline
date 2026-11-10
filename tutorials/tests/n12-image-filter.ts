@@ -282,7 +282,7 @@ tutorial(
       await t.say("Timeout keeps a queue moving while you're away: after it, keep all, keep the first, or stop the branch.");
       await t.waitVoice();
       await t.uncallout("to");
-      await t.callout("ex", t.node(filter).locator('[data-slot-key$="-in-8"], [data-slot-key$="-in-9"]'), "Any type, follows its frame", 6);
+      await t.callout("ex", [t.node(filter).locator('[data-slot-key$="-in-8"]').first(), t.node(filter).locator('[data-slot-key$="-in-9"]').first()], "Any type, follows its frame", 6);
       await t.say("extra one and two take anything, like a ControlNet image, and it follows its frame through the filter.");
       await t.waitVoice();
       await t.uncallout("ex");
