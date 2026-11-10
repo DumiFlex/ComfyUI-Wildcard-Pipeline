@@ -29,6 +29,15 @@ import { isThinking, thinkingChoices } from "../../../utils/ai-thinking";
 import { useAiThinking } from "../../../composables/useAiThinking";
 
 const ui = useUiStore();
+// vue-tsc 3 reads a `//` written in the template as a comment and loses the
+// template's types after it, so the texts with an address in them live here.
+const SEARXNG_PLACEHOLDER = "http://127.0.0.1:8888";
+const CHAT_SERVER_PLACEHOLDER = "http://127.0.0.1:8000/v1";
+const CRAWL4AI_PLACEHOLDER = "http://127.0.0.1:11235";
+const FIRECRAWL_PLACEHOLDER = "https://api.firecrawl.dev";
+const CRAWL4AI_HINT = "Your Crawl4AI server, e.g. http://127.0.0.1:11235.";
+const EMBED_SERVER_HINT =
+  "Where the embedding model runs. Leave empty to use the chat server above. For another server, type its address: an Ollama address (http://host:11434), or an OpenAI-style one ending in /v1, like llama.cpp started with --embeddings, https://api.openai.com/v1 or https://openrouter.ai/api/v1.";
 const { config, error, save } = useAiConfig();
 
 const PROVIDER_ORDER: AiProviderId[] = ["anthropic", "openai", "openrouter", "ollama", "lmstudio", "llamacpp", "custom"];
@@ -760,7 +769,7 @@ const off = computed(() => !config.value?.enabled);
             <Input
               id="ai-address"
               v-model="addressDraft"
-              :placeholder="preset?.base_url || 'http://127.0.0.1:8000/v1'"
+              :placeholder="preset?.base_url || CHAT_SERVER_PLACEHOLDER"
               class="wp-ai-set__fill wp-ai-set__mono"
               aria-label="Server address"
               data-test="ai-address"
@@ -975,7 +984,7 @@ const off = computed(() => !config.value?.enabled);
           <SettingRow
             form
             label="Embedding server"
-            hint="Where the embedding model runs. Leave empty to use the chat server above. For another server, type its address: an Ollama address (http://host:11434), or an OpenAI-style one ending in /v1, like llama.cpp started with --embeddings, https://api.openai.com/v1 or https://openrouter.ai/api/v1."
+            :hint="EMBED_SERVER_HINT"
             setting-key="ai-embed-address"
             for="ai-embed-address"
           >
@@ -1245,7 +1254,7 @@ const off = computed(() => !config.value?.enabled);
             <Input
               id="ai-search-url"
               v-model="searchUrlDraft"
-              placeholder="http://127.0.0.1:8888"
+              :placeholder="SEARXNG_PLACEHOLDER"
               class="wp-ai-set__fill wp-ai-set__mono"
               aria-label="SearXNG address"
               data-test="ai-search-url"
@@ -1297,14 +1306,14 @@ const off = computed(() => !config.value?.enabled);
             v-if="config.reader_engine === 'crawl4ai' || config.reader_engine === 'firecrawl'"
             form
             :label="`${reader?.label ?? 'Reader'} address`"
-            :hint="config.reader_engine === 'crawl4ai' ? 'Your Crawl4AI server, e.g. http://127.0.0.1:11235.' : 'Leave empty for Firecrawl\'s hosted API, or type your own Firecrawl server.'"
+            :hint="config.reader_engine === 'crawl4ai' ? CRAWL4AI_HINT : 'Leave empty for Firecrawl\'s hosted API, or type your own Firecrawl server.'"
             setting-key="ai-reader-url"
             for="ai-reader-url"
           >
             <Input
               id="ai-reader-url"
               v-model="readerUrlDraft"
-              :placeholder="config.reader_engine === 'crawl4ai' ? 'http://127.0.0.1:11235' : 'https://api.firecrawl.dev'"
+              :placeholder="config.reader_engine === 'crawl4ai' ? CRAWL4AI_PLACEHOLDER : FIRECRAWL_PLACEHOLDER"
               class="wp-ai-set__fill wp-ai-set__mono"
               :aria-label="`${reader?.label ?? 'Reader'} address`"
               data-test="ai-reader-url"

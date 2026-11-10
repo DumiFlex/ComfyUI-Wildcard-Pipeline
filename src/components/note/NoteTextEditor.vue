@@ -56,6 +56,9 @@ function remember(): void {
 // Our own stack: the toolbar sets the value from script, which the
 // browser's undo never sees (note-hist.ts).
 const hist = new TextHistory();
+// vue-tsc 3 reads a `//` written in the template as a comment, so a URL
+// placeholder lives here.
+const URL_PLACEHOLDER = "https://…";
 // Bumped on every history change so the buttons re-read it.
 const steps = ref(0);
 const canUndo = computed(() => steps.value >= 0 && hist.canUndo);
@@ -485,7 +488,7 @@ function insertIcon(name: string): void {
         <Input v-model="pack" size="sm" aria-label="Community pack" placeholder="owner/pack, or paste the pack's address" data-test="note-link-pack" @keydown.enter.prevent="insertLink" />
         <p class="wp-note-ed__hint">Opens the pack in the manager's Community tab, where it installs.</p>
       </template>
-      <Input v-else v-model="linkUrl" size="sm" aria-label="Web address" placeholder="https://…" data-test="note-link-url" @keydown.enter.prevent="insertLink" />
+      <Input v-else v-model="linkUrl" size="sm" aria-label="Web address" :placeholder="URL_PLACEHOLDER" data-test="note-link-url" @keydown.enter.prevent="insertLink" />
       <Input v-model="linkText" size="sm" aria-label="Link text" placeholder="Text (optional)" data-test="note-link-text" @keydown.enter.prevent="insertLink" />
       <div class="wp-note-ed__row">
         <WpSegmented
@@ -664,12 +667,12 @@ function insertIcon(name: string): void {
 .wp-note-ed__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
 .wp-note-ed__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note-ed { display: flex; flex-direction: column; gap: 6px; }
-/* One row at the editor's width (360 px): 24 px buttons, the preview
-   toggle pushed to the end. A narrower node wraps it rather than spill. */
+/* One row at the editor's narrowest (340 px): 24 px buttons, the preview
+   toggle pushed to the end. */
 .wp-note-ed__bar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 1px;
   padding: 3px;
   border: 1px solid var(--wp-border);
