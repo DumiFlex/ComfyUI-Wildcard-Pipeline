@@ -482,6 +482,19 @@ export class Tutor {
       if (stuck >= 3) break;
       last = now;
     }
+    // The wheel can land on something that doesn't scroll the page (a fixed bar, a field that
+    // keeps it): then scroll the part's own scrolling box, smoothly, so it still ends up in view.
+    const end = await target.boundingBox();
+    if (end && Math.abs(end.y - view.height * at) > 60) {
+      await target.evaluate((el, at) => {
+        let box: HTMLElement | null = el.parentElement;
+        while (box && !(box.scrollHeight > box.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+        const scroller = box ?? document.scrollingElement ?? document.documentElement;
+        const dy = el.getBoundingClientRect().top - window.innerHeight * at;
+        scroller.scrollBy({ top: dy, behavior: "smooth" });
+      }, at);
+      await sleep(700);
+    }
     await sleep(400);
   }
 

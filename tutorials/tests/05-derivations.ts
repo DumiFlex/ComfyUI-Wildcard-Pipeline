@@ -46,7 +46,9 @@ tutorial(
       await t.press("Escape");
       await t.uncallout("mode");
       await t.beat(400);
-      await t.callout("neg", page.locator('[data-test="act-block-0-0-1"]'), "…and add to its negatives", 6);
+      const neg = page.locator('[data-test="act-block-0-0-1"]');
+      await t.scrollTo(neg, { at: 0.3 });
+      await t.callout("neg", neg, "…and add to its negatives", 6);
       await t.say("This branch has a second action, Add to negative, so a night scene keeps away from harsh sunlight.");
       await t.waitVoice();
       await t.uncallout("neg");
@@ -56,7 +58,7 @@ tutorial(
       await t.click(page.locator('[data-test="toggle-branch-0-1"]'));
       await t.beat(600);
       const sunset = page.locator('[data-test="branch-0-1"]');
-      await t.scrollTo(sunset);
+      await t.scrollTo(sunset, { at: 0.15, force: true });
       await t.callout("sunset", sunset, "ELSE IF at sunset", 6);
       await t.say("A second branch is checked only when the first doesn't match: at sunset, warm orange rim light.");
       await t.waitVoice();
@@ -64,7 +66,7 @@ tutorial(
       await t.click(page.locator('[data-test="toggle-branch-else-0"]'));
       await t.beat(600);
       const other = page.locator('[data-test="branch-else-0"]');
-      await t.scrollTo(other);
+      await t.scrollTo(other, { at: 0.15, force: true });
       await t.callout("else", other, "ELSE soft morning light", 6);
       await t.say("Any other time, which is dawn here, gets soft morning light.");
       await t.waitVoice();
