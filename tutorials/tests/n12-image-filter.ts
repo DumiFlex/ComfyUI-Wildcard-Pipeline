@@ -238,8 +238,9 @@ tutorial(
       });
 
       await t.h.step("Tuck it away", async () => {
-        await t.say("Need the canvas? Escape tucks the picker away. The run keeps waiting, and this pill opens it again. A chime and a dot in the tab's title tell you when a picker is waiting.");
-        await t.press("Escape");
+        await t.say("Need the canvas? The minus button tucks the picker away, or Escape from the grid. The run keeps waiting, and this pill opens it again. A chime and a dot in the tab's title tell you when a picker is waiting.");
+        // Escape in Detail goes back to the grid first: the minus button tucks it from anywhere.
+        await t.click(page.locator('[data-test="image-filter-minimize"]'));
         await t.beat(900);
         const pill = page.locator('[data-test="image-filter-pill"]');
         await t.callout("pill", pill, "Still waiting", 4);
