@@ -111,4 +111,12 @@ const emit = defineEmits<{ "toggle-fallback": [] }>();
 tr:hover .wc-fallback-toggle,
 .wc-fallback-toggle:focus-visible { opacity: 0.8; }
 .wc-fallback-toggle:hover { opacity: 1; color: var(--wp-accent-500); text-decoration: underline; }
+/* Pressed ("unset"), the kit draws the toggle as a box: give its text the
+   chip's room so the two sit side by side at one height. */
+.wc-fallback-toggle[aria-pressed="true"] {
+  padding: 1px 6px;
+  line-height: normal;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  text-decoration: none;
+}
 </style>

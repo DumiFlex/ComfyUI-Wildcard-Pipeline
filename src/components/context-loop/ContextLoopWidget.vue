@@ -407,7 +407,9 @@ function toggleTotalInternal(): void {
  * text's baseline. Make the label the flex row instead; the text keeps
  * the kit's cap-height trim so it stays level with the icons. */
 .wp-loop__seedbtn :deep(.wp-btn__label) { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-box: normal; }
-.wp-loop__seedbtn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Room for g, p, q and y: the line is trimmed to the baseline and the
+   clip (for the ellipsis) would cut them. */
+.wp-loop__seedbtn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-block: 0.3em; margin-block: -0.3em; }
 @supports (text-box: trim-both cap alphabetic) {
   .wp-loop__seedbtn-text { text-box: trim-both cap alphabetic; }
 }

@@ -634,7 +634,9 @@ registerPageNote(() => {
 
 .wp-health__item { max-width: 100%; font-weight: 600; }
 .wp-health__bundle { display: inline-flex; align-items: center; gap: var(--wp-space-2, 8px); font-weight: 600; }
-.wp-health__item :deep(.wp-btn__label) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Room for g, p, q and y: the line is trimmed to the baseline and the
+   clip (for the ellipsis) would cut them. */
+.wp-health__item :deep(.wp-btn__label) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-block: 0.3em; margin-block: -0.3em; }
 .wp-health__item[data-kind="wildcard"] :deep(.pi) { color: var(--wp-kind-wildcard); }
 .wp-health__item[data-kind="fixed_values"] :deep(.pi) { color: var(--wp-kind-fixed); }
 .wp-health__item[data-kind="combine"] :deep(.pi) { color: var(--wp-kind-combine); }
