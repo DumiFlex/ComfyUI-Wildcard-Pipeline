@@ -239,8 +239,9 @@ voiced.forEach((c, i) => {
 graph.push(`anullsrc=r=48000:cl=stereo,atrim=0:${total.toFixed(3)}[bed]`);
 // Loudness: -19 LUFS (--loudness). -16 sat a few dB over most tutorials, since a voice-only track
 // has no quiet music to average it down, and YouTube only turns loud videos down, never quiet ones up.
+// loudnorm upsamples to 192 kHz to find true peaks, so the track is brought back to 48 kHz.
 const LUFS = Number(opt("loudness", "-19"));
-graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=${LUFS}:TP=-1.5:LRA=11[aout]`);
+graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=${LUFS}:TP=-1.5:LRA=11,aresample=48000[aout]`);
 
 const mp4 = path.join(out, `${name}.mp4`);
 const args = [
