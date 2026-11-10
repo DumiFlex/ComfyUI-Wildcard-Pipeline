@@ -38,7 +38,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@v6
         with:
           # Explicit version because both checkouts land in subdirs
           # (head/, base/) so there's no package.json at the runner's CWD
