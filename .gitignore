@@ -83,4 +83,5 @@ theme-audit-out/
 # Tutorial videos: the voice model, spoken lines and rendered videos are made locally
 tutorials/voice/cache/
 tutorials/voice/models/
+tutorials/voice/ref/
 tutorials/out/
