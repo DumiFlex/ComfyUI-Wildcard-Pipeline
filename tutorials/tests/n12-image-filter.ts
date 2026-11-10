@@ -41,6 +41,30 @@ tutorial(
           ),
         { type, title },
       );
+    // Glides the canvas so these nodes all fit in the free part of the screen (no zoom past 0.8).
+    const fit = async (ids: string[]) => {
+      const view = page.viewportSize() ?? { width: 1920, height: 1080 };
+      const area = { x: 340, y: 120, w: view.width - 400, h: view.height - 360 };
+      const target = await page.evaluate(
+        ({ ids, area }) => {
+          const g = (window.app as unknown as { graph: { getNodeById(i: string | number): { pos: [number, number]; size: [number, number] } | null } }).graph;
+          const boxes = ids.map((id) => g.getNodeById(id) ?? g.getNodeById(Number(id))).filter((n) => !!n);
+          if (!boxes.length) return null;
+          const l = Math.min(...boxes.map((n) => n.pos[0]));
+          const tp = Math.min(...boxes.map((n) => n.pos[1] - 34));
+          const r = Math.max(...boxes.map((n) => n.pos[0] + n.size[0]));
+          const b = Math.max(...boxes.map((n) => n.pos[1] + n.size[1]));
+          const scale = Math.min(0.8, area.w / (r - l), area.h / (b - tp));
+          // Screen = (graph + offset) * scale: centre the box in the area.
+          const ox = (area.x + (area.w - (r - l) * scale) / 2) / scale - l;
+          const oy = (area.y + (area.h - (b - tp) * scale) / 2) / scale - tp;
+          return { scale, offset: [ox, oy] as [number, number] };
+        },
+        { ids, area },
+      );
+      if (target) await t.setView(target);
+      await t.beat(300);
+    };
     // A stroke with the button held, through several points, at a hand's pace.
     const stroke = async (pts: { x: number; y: number }[]) => {
       const [first, ...rest] = pts;
@@ -86,15 +110,18 @@ tutorial(
         const grid = await find("WP_LabelGrid");
         if (!up || !refine || !grid) throw new StepError("The example's refine pass or grid wasn't found.");
         await t.say("Two more wires. A Set Latent Noise Mask in front of the refine pass, so it only changes what you paint.");
-        await t.zoomOn(refine, { scale: 0.8 });
+        // Both ends of every wire on screen at once, clear of the bookmark dock on the left and the
+        // caption at the bottom: a wire dragged to a node off screen drops on empty canvas.
+        await fit([filter, up, refine]);
         const box = await t.node(refine).boundingBox();
-        const mask = await t.addNode("Set Latent Noise Mask", { x: (box?.x ?? 900) - 40, y: (box?.y ?? 300) - 170 });
+        const mask = await t.addNode("Set Latent Noise Mask", { x: (box?.x ?? 900) + 120, y: (box?.y ?? 300) + (box?.height ?? 300) + 90 });
+        await fit([filter, up, refine, mask]);
         await t.wire(up, "LATENT", mask, "samples");
         await t.wire(mask, "LATENT", refine, "latent_image");
-        await t.zoomOn(filter, { scale: 0.8 });
         await t.wire(filter, "masks", mask, "mask");
         await t.waitVoice();
         await t.say("And the filter's labels output into Label and Grid, so the grid prints the names you give the picks.");
+        await fit([filter, grid]);
         await t.wire(filter, "labels", grid, "labels");
         await t.beat(600);
         await t.waitVoice();
