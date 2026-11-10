@@ -1,10 +1,10 @@
-// Nodes 3: WP Note. A Role Context to explain; a Step card with a docs button and an add-to-library
+// Nodes 14: WP Note. A Role Context to explain; a Step card with a docs button and an add-to-library
 // button; a Sticky warning with an icon; a Label with a shipped picture, read by hovering it; double
 // click to edit again; "Also a bookmark" pointed at.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
-  "N03",
+  "N14",
   {
     title: "WP Note",
     description: "Explain a workflow on the canvas: numbered steps, warnings, labels, links into the docs, pictures, and a button that adds the workflow's items to a library.",

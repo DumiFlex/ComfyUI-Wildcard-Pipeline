@@ -54,7 +54,7 @@ export default pack({
     exampleCheckpoint: {
       type: "string",
       default: "juggernautXL_ragnarokBy",
-      description: "The SDXL checkpoint the example workflows (E1-E4, N01, N02) load, since they are built on a checkpoint loader. The `checkpoint` param wins when it is set.",
+      description: "The SDXL checkpoint the example workflows (E1-E4, N12, N13) load, since they are built on a checkpoint loader. The `checkpoint` param wins when it is set.",
     },
     steps: { type: "number", default: 12, description: "Sampler steps for the showcase (Klein: 8 to 16)." },
     cfg: { type: "number", default: 1, description: "CFG for the showcase (1 for Klein; about 5 for an SDXL checkpoint)." },
