@@ -26,12 +26,12 @@ tutorial(
       await t.type("A painting of $role with $hair_color hair.");
       await t.beat(800);
       await t.waitVoice();
+      await t.normalSpeed();
       return { ctx, asm };
     });
 
     const plus = t.node(nodes.ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
 
-      await t.normalSpeed();
     await t.h.step("Pick two or three", async () => {
       await t.say("Right-click Hair colors and open Edit.");
       await t.click(t.moduleRow(nodes.ctx, "Hair colors").locator(".wp-module-name"), { right: true });
@@ -84,10 +84,12 @@ tutorial(
       await t.click(modal.locator('[data-test="row-value"] [contenteditable="true"], [data-test="row-value"] textarea').first());
       await t.press("ControlOrMeta+a");
       await t.waitVoice();
+      await t.callout("inline", modal.locator('[data-test="row-value"]').first(), "{count$$joiner$$choices}", 6);
       await t.say("Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.");
       await t.type("A {2$$ and $$watercolor|ink|oil paint|charcoal} painting.", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
+      await t.uncallout("inline");
       await t.click(modal.locator('[data-test="fvm-save"]'));
       await t.beat(900);
       await t.say("Then print it in the template.");

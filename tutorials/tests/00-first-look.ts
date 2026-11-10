@@ -21,6 +21,9 @@ tutorial(
       await t.waitVoice();
       await t.say("Before we build anything, a quick look around. Wildcard Pipeline adds a button to ComfyUI's top bar that opens the manager, where your library lives.");
       await t.hover(button);
+      await t.beat(400);
+      // Off the button again, so ComfyUI's own tooltip doesn't sit beside the label.
+      await t.moveTo(await t.centre(button, { y: 140 }));
       await t.callout("btn", button, "Opens the manager", 6);
       await t.waitVoice();
       await t.uncallout("btn");

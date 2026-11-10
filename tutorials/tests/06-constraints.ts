@@ -24,7 +24,8 @@ tutorial(
       await t.uncallout("pair");
       const grid = page.locator('[data-test="matrix-grid"]');
       await t.scrollTo(grid);
-      await t.callout("grid", grid, "Role's tags × Setting's tags", 6);
+      // The grid itself, not the card around it (two thirds of it empty space).
+      await t.callout("grid", grid.locator("table").first(), "Role's tags × Setting's tags", 6);
       await t.say("Rows are the role's tags, columns the setting's tags.");
       await t.waitVoice();
       await t.uncallout("grid");
@@ -44,7 +45,10 @@ tutorial(
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 260 });
       await t.pickModules(ctx, ["Role", "Role fits the place", "Setting"]);
+      await t.callout("order", ["Role", "Role fits the place", "Setting"].map((n) => t.moduleRow(ctx, n)), "Top to bottom", 4);
       await t.say("Order matters here too. Rows run top to bottom: the constraint reads a Role that has already rolled, and only changes Settings that roll after it. Put it above the Role, or below the Setting, and it does nothing.");
+      await t.waitVoice();
+      await t.uncallout("order");
       await t.waitVoice();
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 260 });
       await t.wire(ctx, "context", asm, "context");

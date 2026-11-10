@@ -48,7 +48,9 @@ tutorial(
 
     await t.h.step("Hidden in between", async () => {
       await t.say("Time, setting and lighting only feed the scene. Hide them with their globe buttons, and on the character Context, hide what Subject already holds.");
+      await t.callout("globes", ["Time of day", "Setting", "Lighting from time"].map((n) => t.moduleRow(nodes.b, n).locator('[data-test="row-action-internal"]')), "Globe: hide from the prompt", 6);
       await t.hide(nodes.b, ["Time of day", "Setting", "Lighting from time"]);
+      await t.uncallout("globes");
       await t.hide(nodes.a, ["Role", "Eyes"]);
       await t.waitVoice();
       await t.callout("vars", t.node(nodes.asm), "Fewer chips, same scene", 4);
@@ -80,7 +82,7 @@ tutorial(
 
     await t.h.step("Roll", async () => {
       const plus = t.node(nodes.a).getByRole("button", { name: /increment|increase|\+/i }).first();
-      await t.say("Roll a few seeds. A later Context can also set a variable again: the last one wins, and the node shows a small note when it does.");
+      await t.say("Roll a few seeds: each part rolls on its own node, and the Assembler joins them.");
       for (let i = 0; i < 4; i++) {
         await t.click(plus);
         await t.beat(1000);

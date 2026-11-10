@@ -93,8 +93,14 @@ tutorial(
       const bm2 = await t.addNode("WP Bookmark", { x: 1500, y: 860 });
       await t.beat(600);
       await t.fill(titleOf(bm2), "Output", { cps: 14 });
-      await t.click(t.node(bm2).locator('[data-test="bm-done"]'));
+      const done2 = t.node(bm2).locator('[data-test="bm-done"]');
+      await t.click(done2);
       await t.beat(900);
+      // The first click can go to the title field's blur: make sure the editor closed.
+      if (await done2.isVisible().catch(() => false)) {
+        await t.click(done2);
+        await t.beat(900);
+      }
       await t.say("With several, previous and next in the dock step through them in order, like slides. Good for showing a workflow to someone.");
       await t.callout("nav", [page.locator('[data-test="bm-dock-prev"]'), page.locator('[data-test="bm-dock-next"]')], "Previous and next", 4);
       await t.click(page.locator('[data-test="bm-dock-next"]'));

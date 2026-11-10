@@ -36,7 +36,7 @@ tutorial(
       await t.click(page.locator('[data-test^="health-ignore-unset_read"]').first());
       await t.beat(900);
       await t.say("The badge in the sidebar counts the problems left, so you see it from any page.");
-      await t.callout("badge", page.locator('[data-test="health-badge"]'), "Problems left", 4);
+      await t.callout("badge", page.locator('[data-test="health-badge"]').locator("xpath=.."), "Problems left", 4);
       await t.waitVoice();
       await t.uncallout("badge");
     });

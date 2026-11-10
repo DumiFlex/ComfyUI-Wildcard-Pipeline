@@ -113,8 +113,9 @@ tutorial(
 
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
-        await t.say("Now press Run a few times. Randomize gives each run a new seed, no clicking needed.");
+        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
+        await t.say("Now press Run a few times. Randomize gives each run a new seed, no clicking needed.");
         await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 } });
         await t.callout("picks", t.node(dbg), "What this picture rolled");
         await t.say("Debug shows what each run rolled. No clockwork inventor, on this node.");

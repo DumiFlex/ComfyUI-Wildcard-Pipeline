@@ -119,7 +119,7 @@ tutorial(
       }
       await t.waitVoice();
       await t.uncallout("prev");
-      await t.say("Without one, the setting would come out empty. WP Debug says fallback used when it kicks in, so you can spot rules that box a pick in.");
+      await t.say("Without one, the setting would come out empty, so a fallback keeps a rule from boxing a pick in.");
       await t.waitVoice();
     });
 

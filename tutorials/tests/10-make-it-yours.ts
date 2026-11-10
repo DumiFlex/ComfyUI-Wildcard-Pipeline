@@ -88,10 +88,14 @@ tutorial(
       await t.callout("node", t.node(ctx), "Compact, icons, vivid, dots", 6);
       await t.waitVoice();
       await t.uncallout("node");
-      await t.say("Changed your mind? Reset all to defaults puts everything back.");
       await openSettings(t);
       await openPlayground(t);
-      await t.click(page.getByRole("button", { name: "Reset all to defaults" }));
+      const reset = page.getByRole("button", { name: "Reset all to defaults" });
+      await t.callout("reset", reset, "Back to how it came", 6);
+      await t.say("Changed your mind? Reset all to defaults puts everything back.");
+      await t.waitVoice();
+      await t.uncallout("reset");
+      await t.click(reset);
       await t.beat(900);
       await t.click(page.getByRole("button", { name: "Done" }));
       await t.beat(500);

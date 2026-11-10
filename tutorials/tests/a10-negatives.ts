@@ -59,8 +59,10 @@ tutorial(
       await t.say("The negative preview colors each word like the variable it came from: the armor's words, and the night lighting's. Hover a word to see its variable.");
       await t.waitVoice();
       await t.uncallout("neg");
+      await t.callout("hide", t.moduleRow(ctx, "Outfit").locator('[data-test="row-action-internal"]'), "Hide: its words stay out", 6);
       await t.say("Only variables the prompt prints send their negatives. Hide a variable, and its words stay out.");
       await t.waitVoice();
+      await t.uncallout("hide");
       // Open the negative box unless it already is (it starts open or folded depending on its text).
       const negToggle = t.node(asm).locator('[data-test="neg-template-toggle"]');
       if ((await negToggle.getAttribute("aria-expanded")) !== "true") await t.click(negToggle);

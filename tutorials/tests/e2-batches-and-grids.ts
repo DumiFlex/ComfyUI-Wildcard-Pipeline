@@ -30,7 +30,12 @@ tutorial(
 
     await t.h.step("The steps", async () => {
       await stop(1);
+      const sweep = page.locator('[data-test="loop-sweep-badge"]').first();
+      const showSweep = await sweep.isVisible().catch(() => false);
+      if (showSweep) await t.callout("sweep", sweep, "Shot × Light: nine frames", 6);
       await t.say("The Context Loop runs everything after it once per frame. Sweep combinations walks Shot against Light: nine frames. Hold other picks keeps the person, outfit and place the same, so only the swept lists change.");
+      await t.waitVoice();
+      if (showSweep) await t.uncallout("sweep");
       await t.waitVoice();
       await stop(2);
       await t.say("The Assembler writes each frame's prompt. A second one writes its label, shot and light, which become the grid's rows and columns.");

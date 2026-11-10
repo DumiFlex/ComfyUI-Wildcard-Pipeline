@@ -83,7 +83,12 @@ tutorial(
       await t.say("Only the inventor's row changes. An exception beats the matrix for its pair.");
       await t.waitVoice();
       await t.uncallout("inv");
-      await t.say("And when a list has an accepts group, its tags can be the rows or the columns too. Save.");
+      await t.scrollTo(T("matrix-grid"), { at: 0.2, force: true });
+      await t.callout("grid", T("matrix-grid").locator("table").first(), "Tags, or accepts groups", 6);
+      await t.say("And when a list has an accepts group, its tags can be the rows or the columns too.");
+      await t.waitVoice();
+      await t.uncallout("grid");
+      await t.say("Save.");
       await t.click(T("save-btn"));
       await t.beat(1500);
     });

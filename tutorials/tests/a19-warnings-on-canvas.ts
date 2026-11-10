@@ -22,7 +22,7 @@ tutorial(
       await t.callout("miss", badge, "Nothing sets $time", 5);
       await t.say("Its row gets an amber dot and a label: missing var. Hover it for the whole message.");
       await t.hover(badge);
-      await t.beat(1500);
+      await t.beat(2500);
       await t.waitVoice();
       await t.uncallout("miss");
       return { ctx };
@@ -56,7 +56,20 @@ tutorial(
     });
 
     await t.h.step("Never in the way", async () => {
+      // ComfyUI's Settings, Wildcard Pipeline, the Validation strictness row.
+      await t.click(t.page.getByRole("button", { name: /^settings/i }).first());
+      await t.beat(900);
+      const dialog = t.page.getByRole("dialog").last();
+      await t.click(dialog.getByText("Wildcard Pipeline", { exact: true }).first());
+      await t.beat(800);
+      const strict = dialog.getByText("Validation strictness", { exact: true }).first();
+      await strict.scrollIntoViewIfNeeded();
+      await t.beat(400);
+      await t.callout("strict", strict, "What the canvas shows", 8);
       await t.say("None of this stops a run. In ComfyUI's settings, Validation strictness picks what shows: everything, no blue notes, or nothing. After a run, WP Debug lists what actually happened.");
+      await t.waitVoice();
+      await t.uncallout("strict");
+      await t.press("Escape");
       await t.waitVoice();
     });
 

@@ -64,10 +64,13 @@ tutorial(
       await t.callout("prev", page.locator('[data-test="ibm-preview"]'), "What $look will be", 6);
       await t.waitVoice();
       await t.uncallout("prev");
+      const negField = page.locator('[data-test="ibm-negative"]');
+      if (await negField.isVisible().catch(() => false)) await t.callout("negf", negField, "Its own negative", 6);
       await t.say("It also takes a negative, like any other source.");
+      await t.waitVoice();
+      await t.uncallout("negf");
       await t.click(page.locator('[data-test="ibm-save"]'));
       await t.beat(700);
-      await t.waitVoice();
     });
 
     await t.h.step("Into a Context", async () => {

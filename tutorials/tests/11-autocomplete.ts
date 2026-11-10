@@ -41,7 +41,8 @@ tutorial(
         .catch(() => undefined);
       await t.waitVoice();
       await t.callout("status", sw("tagac-status"), "Installed", 4);
-      await t.beat(1200);
+      await t.say("Installed, with the number of tags in it.");
+      await t.waitVoice();
       await t.uncallout("status");
       await t.say("Each source has two switches. Manager is for these pages, Canvas is for the nodes in ComfyUI. Turn tags on for both.");
       await setSwitch(t, sw("settings-tag-autocomplete"), true);
@@ -107,9 +108,14 @@ tutorial(
       await t.say("On the canvas it works in the node text boxes, like an Assembler's template.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 900, y: 300 });
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("1girl, red_ey", { cps: 10 });
+      // Keep the suggestion list open: it's what this step shows.
+      await t.type("1girl, red_ey", { cps: 10, rest: false });
       await t.beat(900);
       await t.waitVoice();
+      await t.callout("canvas-list", page.getByRole("listbox").last(), "The same suggestions", 6);
+      await t.say("The same list, on the node. Enter picks red eyes.");
+      await t.waitVoice();
+      await t.uncallout("canvas-list");
       await t.press("Enter");
       await t.beat(900);
     });

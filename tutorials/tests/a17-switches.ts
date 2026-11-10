@@ -33,10 +33,10 @@ tutorial(
       const text = await t.addNode("Preview as Text", { x: 900, y: 600 });
       await t.wire(asm, "prompt", text, "source");
       await t.waitVoice();
+      await t.normalSpeed();
       return { ctx1, ctx2, asm, text };
     });
 
-      await t.normalSpeed();
     const tg = await t.h.step("WP Toggles", async () => {
       await t.say("WP Toggles holds on and off switches. Select it and press the pencil to edit it.");
       const tg = await t.addNode("WP Toggles", { x: 300, y: 170 });

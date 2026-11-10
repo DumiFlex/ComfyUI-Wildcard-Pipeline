@@ -36,10 +36,10 @@ tutorial(
       const text = await t.addNode("Preview as Text", { x: 1620, y: 640 });
       await t.wire(asm, "prompt", text, "source");
       await t.waitVoice();
+      await t.normalSpeed();
       return { up, ctx, asm, text };
     });
 
-      await t.normalSpeed();
     await t.h.step("Make a subgraph", async () => {
       await t.say("Select the second Context and the Assembler, and press Convert to subgraph in the toolbar.");
       await t.click(await titleBar(nodes.ctx));
@@ -48,7 +48,11 @@ tutorial(
       await t.click(await titleBar(nodes.asm));
       await page.keyboard.up("Shift");
       await t.beat(700);
-      await t.click(page.getByRole("button", { name: "Convert Selection to Subgraph" }));
+      const convert = page.getByRole("button", { name: "Convert Selection to Subgraph" });
+      await t.callout("convert", convert, "Convert to subgraph", 6);
+      await t.beat(900);
+      await t.uncallout("convert");
+      await t.click(convert);
       await t.beat(1500);
       await t.moveTo({ x: 960, y: 950 });
       await t.waitVoice();
