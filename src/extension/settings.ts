@@ -26,6 +26,7 @@ import "../components/shared/rich-text-canvas.css";
 import { pushToast } from "../components/shared/toast-store";
 import { setCanvasColorsMode, watchPalette, type CanvasColorsMode } from "./comfy-palette";
 import { watchRootTheme } from "./theme-detector";
+import { markOverlayScrollbars } from "@/kit/overlay-scrollbars";
 import { notifyCompletionSettingsChanged } from "../manager/utils/tagSetting";
 import { openPlayground } from "../components/settings/playground-store";
 import {
@@ -734,6 +735,8 @@ export function applyDisplayPrefs(app: AppLike): void {
   setCanvasColorsMode(asCanvasColors(app.extensionManager?.setting?.get(SETTING_ID_CANVAS_COLORS)));
   watchPalette(app);
   watchRootTheme(app);
+  // Room for scrollbars drawn over the content (Firefox, macOS): kit `--wp-bar-room`.
+  markOverlayScrollbars();
 }
 
 function asCanvasColors(v: unknown): CanvasColorsMode {

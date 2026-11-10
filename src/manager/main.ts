@@ -1,4 +1,5 @@
 import { createApp } from "vue";
+import { markOverlayScrollbars } from "@/kit/overlay-scrollbars";
 import { createPinia } from "pinia";
 import "primeicons/primeicons.css";
 import "@/kit/theme/tokens.css";
@@ -37,3 +38,5 @@ if (!FRAMED) installStartPage(router, __APP_VERSION__);
 // A tab woken after a server restart or rebuild may ask for chunks that are gone.
 installChunkRecovery(router);
 app.mount("#app");
+// Room for scrollbars drawn over the content (Firefox, macOS): kit `--wp-bar-room`.
+markOverlayScrollbars();

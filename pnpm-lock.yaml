@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@dumiflex/wp-kit':
-        specifier: ^0.15.2
-        version: 0.15.2(primeicons@7.0.0)(vue@3.5.44(typescript@5.9.3))
+        specifier: ^0.15.3
+        version: 0.15.3(primeicons@7.0.0)(vue@3.5.44(typescript@5.9.3))
       pinia:
         specifier: ^2.2.6
         version: 2.3.1(typescript@5.9.3)(vue@3.5.44(typescript@5.9.3))
@@ -281,8 +281,8 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@dumiflex/wp-kit@0.15.2':
-    resolution: {integrity: sha512-NbOfyBeMhEXeKd7KFuP20Ve0eGq1b/0eMkSmrbTfPJdDQe1Z63uJYXsAViZCc+GB9woby0r/r6zUryRrOweW0Q==}
+  '@dumiflex/wp-kit@0.15.3':
+    resolution: {integrity: sha512-tIvLLq3FCdFfyrp8yhw7BjwQRD9kKR6mGYqiVQn2hFqQvAATr/IwpeLYZpkphCLRfqQenx4jhWhqD9itt8/4mw==}
     engines: {node: '>=22'}
     peerDependencies:
       primeicons: ^7.0.0 || ^8.0.0
@@ -2444,7 +2444,7 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@dumiflex/wp-kit@0.15.2(primeicons@7.0.0)(vue@3.5.44(typescript@5.9.3))':
+  '@dumiflex/wp-kit@0.15.3(primeicons@7.0.0)(vue@3.5.44(typescript@5.9.3))':
     dependencies:
       primeicons: 7.0.0
       vue: 3.5.44(typescript@5.9.3)
