@@ -30,20 +30,20 @@ tutorial(
     const n = await t.h.step("A wired value becomes a variable", async () => {
       await t.go("/");
       await t.speedUp();
-      const cloak = await t.addNode("Text (Multiline)", { x: 200, y: 190 });
+      const cloak = await t.addNode("Text (Multiline)", { x: 260, y: 190 });
       await t.click(t.node(cloak).locator("textarea").first());
       await t.type("hooded travelling cloak", { cps: 30 });
-      const time = await t.addNode("Text (Multiline)", { x: 200, y: 470 });
+      const time = await t.addNode("Text (Multiline)", { x: 260, y: 470 });
       await t.click(t.node(time).locator("textarea").first());
       await t.type("at night", { cps: 30 });
-      const steps = await t.addNode("Int", { x: 200, y: 760 });
+      const steps = await t.addNode("Int", { x: 260, y: 760 });
       await page.evaluate((id) => {
         const node = window.app?.graph?.getNodeById(Number(id)) as { widgets?: { name: string; value: unknown }[] } | null | undefined;
         const w = node?.widgets?.find((x) => x.name === "value");
         if (w) w.value = 30;
         window.app?.canvas?.setDirty(true, true);
       }, steps);
-      const inj = await t.addNode("WP Context Injector", { x: 620, y: 190 });
+      const inj = await t.addNode("WP Context Injector", { x: 860, y: 190 });
       await t.normalSpeed();
       await t.say("Two text boxes and an Int number, as stand-ins for anything another node gives you: a caption, a setting, a model name.");
       await t.waitVoice();
@@ -64,7 +64,7 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("names");
       await t.say("Add WP Debug after it, and Run.");
-      const dbg = await t.addNode("WP Debug", { x: 620, y: 720 });
+      const dbg = await t.addNode("WP Debug", { x: 860, y: 720 });
       await page.evaluate((id) => {
         const node = window.app?.graph?.getNodeById(Number(id)) as { size: [number, number] } | null | undefined;
         if (node) node.size = [520, 300];
@@ -138,18 +138,25 @@ tutorial(
     });
 
     const m = await t.h.step("Before a Context", async () => {
+      // Slide the canvas left, so the Context, the Assembler and the previews fit beside the Injector.
+      await page.evaluate(() => {
+        const c = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] }; setDirty(a: boolean, b: boolean): void } }).canvas;
+        c.ds.offset[0] -= 560 / c.ds.scale;
+        c.setDirty(true, true);
+      });
+      await t.beat(500);
       await t.say("Wire the Injector into a Context's upstream. The Context starts with every injected variable, so its own items can read them.");
-      const ctx = await t.addNode("WP Context", { x: 1180, y: 190 });
+      const ctx = await t.addNode("WP Context", { x: 900, y: 190 });
       await t.wire(n.inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Role", "Setting", "Lighting from time"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 600 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 900, y: 620 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $outfit, $setting $time, $lighting", { cps: 16 });
       await t.beat(500);
-      const out = await t.addNode("Preview as Text", { x: 1640, y: 190 });
+      const out = await t.addNode("Preview as Text", { x: 1450, y: 190 });
       await t.wire(asm, "prompt", out, "source");
-      const neg = await t.addNode("Preview as Text", { x: 1640, y: 560 });
+      const neg = await t.addNode("Preview as Text", { x: 1450, y: 560 });
       await t.wire(asm, "negative", neg, "source");
       await t.waitVoice();
       await t.say("Lighting from time follows the time variable. Here time comes from the text box, not from a wildcard. Run.");
