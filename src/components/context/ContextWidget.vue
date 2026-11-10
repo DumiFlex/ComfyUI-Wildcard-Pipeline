@@ -15,6 +15,7 @@ import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleFrame from "./bundles/BundleFrame.vue";
 import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
+import { bundleAlerts, bundleDescendants, isHiddenInCollapsedBundle } from "./bundles/bundle-alerts";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import {
@@ -601,9 +602,16 @@ const {
 // Base 380 covers the footer's two "+ Add module" / "+ Add Bundle"
 // buttons side-by-side, which is the widest mandatory element. Per-
 // badge bumps give the name room to breathe.
-const hasAnyConflict = computed(() => Object.keys(conflictsByModule.value).length > 0);
+// Only rows in sight count: a row inside a collapsed bundle hides its chips,
+// so they must not widen the node (the collapsed header shows a dot instead).
+const visibleModules = computed(() =>
+  value.value.modules.filter((m) => !isHiddenInCollapsedBundle(m, value.value.bundles)),
+);
+const hasAnyConflict = computed(() =>
+  visibleModules.value.some((m) => (conflictsByModule.value[m._uid ?? m.id]?.length ?? 0) > 0),
+);
 const hasAnyStateBadge = computed(() =>
-  value.value.modules.some((m) => isModified(m) || isDrifted(m) || isMissingFromLibrary(m)),
+  visibleModules.value.some((m) => isModified(m) || isDrifted(m) || isMissingFromLibrary(m)),
 );
 
 const requiredMinWidth = computed(() => {
@@ -709,6 +717,15 @@ const bundleFrameCtx: BundleFrameCtx = {
   // have diverged from, so MOD would be diffing against a ghost.
   isBundleSnapshotModified: (b: BundleInstance) =>
     !isBundleUnlinked(b) && bundleSnapshotModified(b, value.value.modules),
+  bundleAlerts: (b: BundleInstance) => bundleAlerts(
+    bundleDescendants(b, value.value.modules, value.value.bundles),
+    {
+      severityFor: conflictRowCtx.severityFor,
+      conflictLabel: conflictRowCtx.conflictBadgeText,
+      isMissingFromLibrary,
+      isTypeConflict,
+    },
+  ),
   ...bundleOpsFrameCtx,
   openBundleContextMenu,
   ...dragFrameCtx,

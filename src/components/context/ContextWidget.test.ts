@@ -2702,3 +2702,51 @@ describe("ContextWidget bulk toolbar — bundle-aware", () => {
     wrapper.unmount();
   });
 });
+
+describe("ContextWidget collapsed bundles", () => {
+  const json = (collapsed: boolean): string => JSON.stringify({
+    version: 1,
+    modules: [{
+      id: "dddddddd", type: "wildcard", enabled: true, meta: { name: "Lost" }, entries: [],
+      payload: { var_binding: "v", options: [{ id: "o1", value: "x", weight: 1 }] },
+      payload_hash: "h1", bundle_origin: "buidcollapse1",
+    }],
+    bundles: [{
+      _uid: "buidcollapse1", library_id: "bn_c", start_idx: 0, end_idx: 0,
+      enabled: true, collapsed, inserted_at_hash: "h", name: "Box", color: null,
+    }],
+  });
+
+  it("hidden rows don't widen the node; the header shows their dot", async () => {
+    const { hashes } = await import("./drift-store");
+    hashes.value = {}; // library loaded, the row's id isn't in it → missing
+    try {
+      const widths: number[] = [];
+      mount(ContextWidget, {
+        attachTo: document.body,
+        props: {
+          nodeId: 401, initialJson: json(true), upstreamVars: [], onChange: () => {},
+          onRequestMinWidth: (w: number) => widths.push(w),
+        },
+      });
+      await flushPromises();
+      expect(widths[widths.length - 1]).toBe(380);
+      const dots = document.querySelectorAll("[data-test=bundle-alerts] .wp-bundle-alert");
+      expect(Array.from(dots).map((d) => d.getAttribute("data-alert"))).toEqual(["missing"]);
+
+      const open: number[] = [];
+      mount(ContextWidget, {
+        attachTo: document.body,
+        props: {
+          nodeId: 402, initialJson: json(false), upstreamVars: [], onChange: () => {},
+          onRequestMinWidth: (w: number) => open.push(w),
+        },
+      });
+      await flushPromises();
+      expect(open[open.length - 1]).toBe(440);
+      expect(document.querySelectorAll("[data-bundle-uid=buidcollapse1] [data-test=bundle-alerts]").length).toBe(1);
+    } finally {
+      resetDriftStore();
+    }
+  });
+});

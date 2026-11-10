@@ -1,5 +1,6 @@
 import type { InjectionKey, Ref } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
+import type { BundleAlerts } from "./bundle-alerts";
 
 /** Shared state + handlers ContextWidget provides for any BundleFrame
  *  descendant to inject. Keeps the recursive frame component free of
@@ -40,6 +41,9 @@ export interface BundleFrameCtx {
    *  per-module MOD dot, but at bundle scope. False when no
    *  fingerprint is stored yet (backfill case). */
   isBundleSnapshotModified: (b: BundleInstance) => boolean;
+  /** Worst conflict + library state among the rows the bundle holds. A
+   *  collapsed header shows them as dots, so trouble inside stays visible. */
+  bundleAlerts: (b: BundleInstance) => BundleAlerts;
   recentDropUids: Ref<Set<string>>;
   pulseDelayFor: (uid: string | null | undefined) => string;
   toggleBundleCollapsed: (uid: string) => void;
