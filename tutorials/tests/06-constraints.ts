@@ -44,12 +44,16 @@ tutorial(
       await t.say("On the canvas, the constraint goes between the two lists: Role, the constraint, then Setting.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 260 });
+      await t.waitVoice();
+      // Said while the hand works, so the render doesn't speed this build up as a silent stretch.
+      await t.say("Add module, and tick them in that order. A constraint is added like any other item.");
       await t.pickModules(ctx, ["Role", "Role fits the place", "Setting"]);
       await t.callout("order", ["Role", "Role fits the place", "Setting"].map((n) => t.moduleRow(ctx, n)), "Top to bottom", 4);
       await t.say("Order matters here too. Rows run top to bottom: the constraint reads a Role that has already rolled, and only changes Settings that roll after it. Put it above the Role, or below the Setting, and it does nothing.");
       await t.waitVoice();
       await t.uncallout("order");
       await t.waitVoice();
+      await t.say("Then an Assembler, with the role and the setting in its template.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 260 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
