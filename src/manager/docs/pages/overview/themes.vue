@@ -55,9 +55,30 @@ import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
       </p>
       <Banner tone="info" note>
         Themes change the manager, and the Community tab follows them: it takes the colour theme, the look
-        and light or dark, and changes with them. The canvas nodes keep ComfyUI's colours, so they sit well
-        next to other nodes.
+        and light or dark, and changes with them. The canvas nodes follow ComfyUI's colour palette instead (below), so they sit
+        well next to other nodes.
       </Banner>
+    </DocSection>
+
+    <DocSection title="On the canvas">
+      <p>
+        WP nodes on the canvas follow ComfyUI's <b>Color Palette</b> (ComfyUI Settings › Appearance). On
+        Dark and Light they use their own dark and light colours. On any other palette (Solarized, Arc,
+        Nord, Github, a palette another extension adds such as Obsidian or Milk White, or one you
+        imported) their rows, fields, borders and text take the palette's node, widget and text colours,
+        so a WP node looks like the nodes around it. A palette that is light counts as light even when it
+        doesn't say so.
+      </p>
+      <p>
+        Text always stays readable: when a palette's text is too faint on its own widget colour, WP nodes
+        use a stronger one. The accent, module kind colours, variable colours and warnings keep their
+        meaning on every palette, in their dark or light shades. High contrast still wins over the palette.
+      </p>
+      <p>
+        To keep the WP colours on every palette, set <b>Wildcard Pipeline › Sizing › Canvas colors</b>
+        (also in the Display playground and in the manager's Settings › Canvas) to
+        <b>Wildcard Pipeline colors</b>.
+      </p>
     </DocSection>
   </DocPage>
 </template>

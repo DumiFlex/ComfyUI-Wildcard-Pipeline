@@ -25,6 +25,7 @@ export const SETTING_ID_ROW_ACTIONS = "wildcardPipeline.display.rowActions";
 export const SETTING_ID_KIND_STYLE = "wildcardPipeline.display.kindStyle";
 export const SETTING_ID_COLLAPSE_MODE = "wildcardPipeline.display.collapseMode";
 export const SETTING_ID_COLOR_INTENSITY = "wildcardPipeline.display.colorIntensity";
+export const SETTING_ID_CANVAS_COLORS = "wildcardPipeline.display.canvasColors";
 
 export const SETTING_ID_VALIDATION = "wildcardPipeline.behavior.validation";
 export const SETTING_ID_TOAST_LIFETIME = "wildcardPipeline.behavior.toastLifetime";
@@ -35,6 +36,15 @@ export const SETTING_ID_IMAGE_FILTER_NOTIFY = "wildcardPipeline.behavior.imageFi
 export const SETTING_ID_CONFIRM_DESTRUCTIVE_BUNDLE = "wildcardPipeline.behavior.confirmDestructiveBundle";
 export const SETTING_ID_BUNDLE_MASTER_OFF_BEHAVIOR = "wildcardPipeline.behavior.bundleMasterOffBehavior";
 export const SETTING_ID_BUNDLE_COLLAPSED = "wildcardPipeline.display.bundleCollapsedByDefault";
+
+export const CANVAS_COLORS_OPTIONS = [
+  { text: "Follow ComfyUI palette (default)", value: "follow" },
+  { text: "Wildcard Pipeline colors", value: "own" },
+];
+
+export const CANVAS_COLORS_TOOLTIP =
+  "Which colors WP widgets use on a ComfyUI color palette other than Dark or Light (Nord, Solarized, an imported one…). " +
+  "Follow takes the palette's node, widget and text colors; Wildcard Pipeline keeps our own dark or light colors.";
 
 export const MOTION_OPTIONS = [
   { text: "Match system (prefers-reduced-motion)", value: "auto" },
@@ -171,6 +181,8 @@ export const CANVAS_SETTINGS: CanvasSettingMeta[] = [
     tooltip: "Gradients & shadows. Off = flat (weak GPU / remote desktop).", group: "look" },
   { id: SETTING_ID_COLOR_INTENSITY, name: "Color intensity", type: "combo", options: COLOR_INTENSITY_OPTIONS, defaultValue: "standard",
     tooltip: "How saturated accent / kind / status colors render. Muted reduces chroma for a calmer palette; vivid bumps it for pop.", group: "look" },
+  { id: SETTING_ID_CANVAS_COLORS, name: "Canvas colors", type: "combo", options: CANVAS_COLORS_OPTIONS, defaultValue: "follow",
+    tooltip: CANVAS_COLORS_TOOLTIP, group: "look" },
   { id: SETTING_ID_KIND_STYLE, name: "Type style", type: "combo", options: KIND_STYLE_OPTIONS, defaultValue: "chip",
     tooltip: "How the kind indicator shows on module rows AND bundle headers: chip text, icon glyph, or both.", group: "look" },
   { id: SETTING_ID_INDICATOR, name: "State indicator style", type: "combo", options: INDICATOR_OPTIONS, defaultValue: "badge",

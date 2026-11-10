@@ -48,6 +48,7 @@ export type DisplayKey =
   | "bundleCollapsedByDefault"
   | "collapseMode"
   | "colorIntensity"
+  | "canvasColors"
   | "focusMode"
   | "rowActions";
 
