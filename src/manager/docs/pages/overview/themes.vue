@@ -28,6 +28,16 @@ import { LOOK_OPTIONS, PALETTE_OPTIONS } from "../../../stores/tweaksStore";
         Module kind colours (wildcard, fixed value, combine and the rest), variable colours and the teal
         of a picked option stay the same in every theme, so they always mean the same thing.
       </p>
+      <p>
+        <b>ComfyUI palette</b> dresses the manager in the colour palette ComfyUI is using (ComfyUI
+        Settings › Appearance › Color Palette), imported palettes and ones other extensions add included.
+        On Dark and Light it wears Native, ComfyUI's own greys; on any other palette the pages, cards,
+        borders and text come from the palette's node and text colours, with the text kept readable.
+        The palette also decides dark or light, so the Mode setting and the top bar's theme button rest
+        while it is the colour theme. Switch the palette in ComfyUI and an open manager tab follows at
+        once; with no canvas open, it catches up when you come back to the tab. On <b>Theme's own</b>
+        the accent is the palette's own when it has one that reads well, else indigo.
+      </p>
     </DocSection>
 
     <DocSection title="Look">

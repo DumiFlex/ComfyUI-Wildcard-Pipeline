@@ -323,11 +323,19 @@ export const useUiStore = defineStore("ui", () => {
     }
   }
 
+  /** Set while a colour theme decides dark or light itself (the ComfyUI
+   *  palette theme follows the palette's). `null` = the Theme setting. */
+  const schemeOverride = ref<"dark" | "light" | null>(null);
+  function setSchemeOverride(v: "dark" | "light" | null): void {
+    schemeOverride.value = v;
+  }
+
   /** Resolved theme — `"auto"` collapsed to dark/light via OS preference. */
   const resolvedTheme = computed<"dark" | "light">(() =>
-    themeMode.value === "auto"
-      ? (systemPrefersDark() ? "dark" : "light")
-      : themeMode.value,
+    schemeOverride.value
+      ?? (themeMode.value === "auto"
+        ? (systemPrefersDark() ? "dark" : "light")
+        : themeMode.value),
   );
 
   function applyThemeToDocument(mode: "dark" | "light") {
@@ -434,7 +442,7 @@ export const useUiStore = defineStore("ui", () => {
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       const onChange = () => {
-        if (themeMode.value === "auto") applyThemeToDocument(resolvedTheme.value);
+        if (themeMode.value === "auto" && !schemeOverride.value) applyThemeToDocument(resolvedTheme.value);
       };
       mq.addEventListener("change", onChange);
     }
@@ -458,6 +466,8 @@ export const useUiStore = defineStore("ui", () => {
   return {
     themeMode,
     resolvedTheme,
+    schemeOverride,
+    setSchemeOverride,
     density,
     sidebarCollapsed,
     setSidebarCollapsed,
