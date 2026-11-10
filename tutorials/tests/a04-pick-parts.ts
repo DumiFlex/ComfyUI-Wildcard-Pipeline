@@ -31,6 +31,8 @@ tutorial(
       await t.say("Pick Role, Travel gear and Hair colors, then the rule that fits the outfit to the role, and Outfit.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Travel gear", "Hair colors", "Outfit fits the role", "Outfit"]);
+      await t.waitVoice();
+      await t.say("Then a Prompt Assembler, wired to the Context.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.waitVoice();

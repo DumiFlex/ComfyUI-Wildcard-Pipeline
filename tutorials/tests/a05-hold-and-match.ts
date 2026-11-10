@@ -89,9 +89,12 @@ tutorial(
       await t.press("Tab");
       await t.beat(500);
       await t.waitVoice();
+      await t.say("Into a Context's upstream, with Role, Time of day and Lighting from time.");
       const ctx = await t.addNode("WP Context", { x: 1010, y: 200 });
       await t.wire(inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Role", "Time of day", "Lighting from time"]);
+      await t.waitVoice();
+      await t.say("Then an Assembler that prints the role, the time and the light.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());

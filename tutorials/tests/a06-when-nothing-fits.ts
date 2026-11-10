@@ -62,6 +62,8 @@ tutorial(
       await t.say("On the canvas, pick Role, Setting and the Role fits the place constraint.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Setting", "Role fits the place"]);
+      await t.waitVoice();
+      await t.say("Then a Prompt Assembler for the role and the setting.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());

@@ -70,6 +70,8 @@ tutorial(
       await t.say("On the canvas, pick scene in a Context. Its references to creature and weather became wildcard references, so they roll too.");
       const ctx = await t.addNode("WP Context", { x: 400, y: 200 });
       await t.pickModules(ctx, ["scene"]);
+      await t.waitVoice();
+      await t.say("Then an Assembler that prints the scene, in oil paint.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1000, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());

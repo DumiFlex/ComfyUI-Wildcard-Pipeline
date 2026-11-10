@@ -68,6 +68,8 @@ tutorial(
       await t.say("On the canvas, a Context node picks Role, the two rules that keep the outfit and the item fitting the role, Outfit, Held item, Style, and the new Outfit line. The rules get their own video later.");
       await t.beat(600);
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
+      await t.waitVoice();
+      await t.say("Add module, and tick them from top to bottom: the rules go before the lists they change.");
       await t.pickModules(ctx, ["Role", "Outfit fits the role", "Item fits the role", "Outfit", "Held item", "Style", "Outfit line"]);
       await t.waitVoice();
       await t.say("A combine reads what was rolled above it in the node, or upstream in an earlier Context, so the order matters.");

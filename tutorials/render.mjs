@@ -145,6 +145,9 @@ if (end > at) parts.push({ a: at, b: end, speed: 1 });
 const SILENT_MAX = Number(opt("silent-max", "12"));
 const HOLD = 2.5;
 const SQUEEZE = 4;
+const HAND_MAX = 2;
+// When the hand acted, in video seconds (cues.json `acts`, from the Tutor).
+const acts = (take.acts ?? []).map((ms) => vt(ms));
 if (!argv.includes("--no-squeeze")) {
   // Voice-free stretches, in video seconds.
   const said = [...(take.cues ?? [])].sort((x, y) => x.at - y.at).map((c) => [vt(c.at), vt(c.at + c.ms + 400)]);
@@ -168,7 +171,10 @@ if (!argv.includes("--no-squeeze")) {
       if (b < a + 2 || (!lead && b - a + 2 * HOLD <= SILENT_MAX) || (lead && b - a < 3)) continue;
       if (a > cur) out.push({ a: cur, b: a, speed: 1 });
       // A cut pushes nothing, as for a speed-0 fast-forward.
-      if (!lead) out.push({ a, b, speed: Math.min(8, Math.max(2, (b - a) / SQUEEZE)) });
+      // A stretch where the hand works (clicks, drags, types) plays at most HAND_MAX: faster, the
+      // hand looks rushed and the viewer can't follow it. Takes from before `acts` squeeze as before.
+      const busy = acts.some((x) => x >= a && x <= b);
+      if (!lead) out.push({ a, b, speed: Math.min(busy ? HAND_MAX : 8, Math.max(2, (b - a) / SQUEEZE)) });
       squeezed++;
       cur = b;
     }

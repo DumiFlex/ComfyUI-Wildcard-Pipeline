@@ -43,6 +43,8 @@ tutorial(
       const c3 = await t.addNode("WP Context", { x: 1000, y: 560 });
       await t.wire(c2, "context", c3, "upstream");
       await t.pickModules(c3, ["Setting"]);
+      await t.waitVoice();
+      await t.say("Edit the third one's Setting, and change its variable to later, so the two settings don't overwrite each other.");
       modal = await editItem(c3, "Setting");
       const binding = modal.getByLabel("Variable binding");
       await t.fill(binding, "later", { cps: 12 });

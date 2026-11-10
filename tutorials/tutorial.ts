@@ -108,6 +108,8 @@ export class Tutor {
   private caption: { text: string; until: number } | null = null;
   readonly cues: Cue[] = [];
   readonly fast: FastRange[] = [];
+  /** When the hand clicked, dragged, typed or pressed a key (ms): render.mjs plays those parts at most 2x. */
+  readonly acts: number[] = [];
   /** Where the video starts showing the tutorial (after the canvas has loaded). */
   startAt = 0;
   /** When the sync mark went up (render.mjs finds it in the video). */
@@ -195,7 +197,7 @@ export class Tutor {
     const missing = this.cues.filter((c) => !c.voiced).length;
     await this.syncMark();
     if (missing) this.h.note(`${missing} line(s) have no voice yet: run python tutorials/voice/speak.py and record again.`);
-    await this.h.file("cues.json", JSON.stringify({ t0: this.t0, mark: this.markAt, start: this.startAt, cues: this.cues, fast: this.fast, marks: this.marks, ended: this.now() }, null, 1), "application/json");
+    await this.h.file("cues.json", JSON.stringify({ t0: this.t0, mark: this.markAt, start: this.startAt, cues: this.cues, fast: this.fast, acts: this.acts, marks: this.marks, ended: this.now() }, null, 1), "application/json");
   }
 
   /** Marks the start of the tutorial: the video before it (loading the page) is cut. */
@@ -304,6 +306,7 @@ export class Tutor {
     await this.moveTo(at);
     await sleep(140);
     const button = right ? "right" : "left";
+    this.acts.push(this.now());
     await this.page.mouse.down({ button });
     await sleep(70);
     await this.page.mouse.up({ button });
@@ -337,6 +340,7 @@ export class Tutor {
   async drag(from: Point, to: Point): Promise<void> {
     await this.moveTo(from);
     await sleep(160);
+    this.acts.push(this.now());
     await this.page.mouse.down();
     await sleep(120);
     await this.moveTo(to, { speed: 0.8 });
@@ -348,7 +352,9 @@ export class Tutor {
   /** Types like a person: one key at a time. */
   async type(text: string, { cps = 22, rest = true }: { cps?: number; rest?: boolean } = {}): Promise<void> {
     await this.lead();
+    this.acts.push(this.now());
     await this.page.keyboard.type(text, { delay: Math.round(1000 / cps) });
+    this.acts.push(this.now());
     await sleep(300);
     if (this.inManager() || !rest) return;
     // A suggestion list still open after the last word (a $name, its `.neg`) would stay over the
@@ -424,6 +430,7 @@ export class Tutor {
   async press(key: string): Promise<void> {
     await this.lead();
     await sleep(120);
+    this.acts.push(this.now());
     await this.page.keyboard.press(key);
     await sleep(250);
   }

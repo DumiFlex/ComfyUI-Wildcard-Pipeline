@@ -60,6 +60,8 @@ tutorial(
       await t.click(t.node(note).locator('[data-test="note-look-sticky"]'));
       await t.click(t.node(note).locator('[data-test="note-color-warning"]'));
       await t.beat(300);
+      await t.waitVoice();
+      await t.say("Give it a title and a line of text, then Done.");
       await t.fill(title(note), "Same seed, same picture", { cps: 14 });
       await t.fill(textArea(note), "Change the seed on the Context to roll something new.", { cps: 20 });
       await t.beat(400);
@@ -74,6 +76,8 @@ tutorial(
       await t.beat(600);
       await t.click(t.node(note).locator('[data-test="note-look-label"]'));
       await t.click(t.node(note).locator('[data-test="note-tone-plain"]'));
+      await t.waitVoice();
+      await t.say("This one has a picture in its text, a small one from the node's toolbar.");
       await t.fill(title(note), "Need help?", { cps: 14 });
       await t.fill(textArea(note), "Every node's ? button opens its help.\n\n![The ? button](wp:asset/toolbar-help){width=90%}", { cps: 22 });
       await t.beat(400);

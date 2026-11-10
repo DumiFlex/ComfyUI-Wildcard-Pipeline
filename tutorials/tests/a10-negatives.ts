@@ -40,6 +40,8 @@ tutorial(
       await t.say("On the canvas, pick Role, the rule that fits the outfit to the role, Outfit, Time of day and Lighting from time.");
       const ctx = await t.addNode("WP Context", { x: 340, y: 170 });
       await t.pickModules(ctx, ["Role", "Outfit fits the role", "Outfit", "Time of day", "Lighting from time"]);
+      await t.waitVoice();
+      await t.say("Then an Assembler. The template repeats masterpiece on purpose, for the Cleaner at the end.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 890, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
