@@ -155,7 +155,7 @@ tutorial(
       await t.click(t.moduleRow(n.ctx, "Role").locator('[data-test="row-action-lock"]'));
       await t.beat(700);
       await t.waitVoice();
-      await t.callout("grey", [t.moduleRow(n.ctx, "Role").locator('[data-test="row-action-internal"]')], "All frames only", 4);
+      await t.callout("grey", [t.moduleRow(n.ctx, "Role").locator('[data-test="row-action-internal"]')], undefined, 4);
       await t.say("Hide from prompt and Hold across run are greyed out on a frame: they always apply to every frame.");
       await t.waitVoice();
       await t.uncallout("grey");
@@ -241,7 +241,8 @@ tutorial(
     });
 
     await t.h.step("Skip and lock from the chips", async () => {
-      await t.callout("hint", t.node(n.loop).locator('[data-test="loop-frames-hint"]'), "Alt locks, Ctrl skips", 4);
+      // No label: it would sit on the chips the line is about.
+      await t.callout("hint", t.node(n.loop).locator('[data-test="loop-frames-hint"]'), undefined, 4);
       await t.say("The chips have two shortcuts, written under them. Ctrl-click a frame to skip it. Ctrl-click four.");
       await t.waitVoice();
       await t.uncallout("hint");
@@ -304,10 +305,13 @@ tutorial(
       const sl = await t.addNode("WP Seed List", { x: 790, y: 760 });
       await t.wire(n.loop, "loop_config", sl, "loop_config");
       await t.beat(600);
+      // It lands low, under the caption: bring it up into view while it's talked about.
+      const back = await t.zoomOn(sl, { scale: 0.9 });
       await t.callout("ovr", t.node(sl).locator('[data-test="seedlist-override-count-toggle"]'), "Count and strategy follow the loop", 5);
       await t.say("Its count and strategy follow the loop by themselves, so frame one goes with seed one, frame two with seed two.");
       await t.waitVoice();
       await t.uncallout("ovr");
+      await t.setView(back);
       await t.say("Hold across run, on a row's menu, rolls once per run and keeps that pick on every frame. Hold Setting, and all three frames share one place.");
       await t.click(t.moduleRow(n.ctx, "Setting").locator(".wp-module-name"), { right: true });
       await t.beat(600);

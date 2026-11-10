@@ -57,6 +57,8 @@ tutorial(
       await t.wire(steps, "INT", inj, "input_2");
       await t.fill(binding(inj, 2), "steps", { cps: 14 });
       await t.press("Tab");
+      // Off the rows, so the globe's tooltip doesn't stay up beside them.
+      await t.moveTo({ x: 560, y: 640 });
       await t.beat(500);
       await t.waitVoice();
       await t.callout("names", t.node(inj).locator('[data-test="inj-row-binding"]').first(), "Letters, digits, underscores", 4);
@@ -148,12 +150,18 @@ tutorial(
       await t.say("Wire the Injector into a Context's upstream. The Context starts with every injected variable, so its own items can read them.");
       const ctx = await t.addNode("WP Context", { x: 900, y: 190 });
       await t.wire(n.inj, "context", ctx, "upstream");
+      await t.waitVoice();
+      await t.say("Pick Role, Setting and Lighting from time.");
       await t.pickModules(ctx, ["Role", "Setting", "Lighting from time"]);
+      await t.waitVoice();
+      await t.say("Then an Assembler. Its template prints the role, the outfit row, the setting, the time and the light.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 900, y: 620 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $outfit, $setting $time, $lighting", { cps: 16 });
       await t.beat(500);
+      await t.waitVoice();
+      await t.say("And two Preview as Text nodes: one for the prompt, one for the negative.");
       const out = await t.addNode("Preview as Text", { x: 1450, y: 190 });
       await t.wire(asm, "prompt", out, "source");
       const neg = await t.addNode("Preview as Text", { x: 1450, y: 560 });
