@@ -464,13 +464,16 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
   .lg-node:has(.wp-note--label:not(.wp-note--editing)) [class*="resize"] { display: none !important; }
   /* The widget wrappers take pointer events and would eat the press that
      drags the node; the canvas handles it instead. The note's own buttons
-     and its edit form take events back. */
+     and its edit form take events back: those selectors must stay more
+     specific than the `none` one (the :not() inside :has() counts). */
   .lg-node:has(.wp-note:not(.wp-note--editing)) .lg-node-widgets,
   .lg-node:has(.wp-note:not(.wp-note--editing)) .lg-node-widgets * { pointer-events: none !important; }
-  .lg-node:has(.wp-note) .wp-note__form,
-  .lg-node:has(.wp-note) .wp-note__form *,
-  .lg-node:has(.wp-note) .wp-note-md a,
-  .lg-node:has(.wp-note) .wp-note-md button { pointer-events: auto !important; }
+  .lg-node:has(.wp-note) .lg-node-widgets .wp-note__form,
+  .lg-node:has(.wp-note) .lg-node-widgets .wp-note__form *,
+  .lg-node:has(.wp-note) .lg-node-widgets .wp-note-md a,
+  .lg-node:has(.wp-note) .lg-node-widgets .wp-note-md a *,
+  .lg-node:has(.wp-note) .lg-node-widgets .wp-note-md button,
+  .lg-node:has(.wp-note) .lg-node-widgets .wp-note-md button * { pointer-events: auto !important; }
 
   .wp-note-md p { margin: 0 0 6px; }
   .wp-note-md p:last-child { margin-bottom: 0; }
