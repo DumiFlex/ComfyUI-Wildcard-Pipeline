@@ -2,7 +2,7 @@
 /**
  * Turns a recorded tutorial take into the finished video.
  *
- *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60]
+ *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60] [--loudness -19]
  *
  * The attempt folder is the take's folder in Watchwright's data folder
  * (runs/<run>/<test>/attempt-N, with video-p1.webm and files/cues.json). It writes:
@@ -227,7 +227,10 @@ voiced.forEach((c, i) => {
 });
 // Silence the length of the video under the voice, so the audio track covers it all.
 graph.push(`anullsrc=r=48000:cl=stereo,atrim=0:${total.toFixed(3)}[bed]`);
-graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`);
+// Loudness: -19 LUFS (--loudness). -16 sat a few dB over most tutorials, since a voice-only track
+// has no quiet music to average it down, and YouTube only turns loud videos down, never quiet ones up.
+const LUFS = Number(opt("loudness", "-19"));
+graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=${LUFS}:TP=-1.5:LRA=11[aout]`);
 
 const mp4 = path.join(out, `${name}.mp4`);
 const args = [
