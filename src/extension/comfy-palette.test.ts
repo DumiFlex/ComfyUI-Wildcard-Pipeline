@@ -5,6 +5,7 @@ import {
   contrast,
   derivePaletteTokens,
   paletteIsLight,
+  paletteMessage,
   paletteSheet,
   parseColor,
   readPaletteBase,
@@ -209,5 +210,31 @@ describe("reading and applying", () => {
     // Only our own style write above; the sync itself touched nothing.
     expect(writes).toBe(1);
     document.documentElement.style.removeProperty("--fg-color");
+  });
+  it("tells the manager what it reads, once per change and again when asked", async () => {
+    const posted: unknown[] = [];
+    const box: { onmessage: ((e: MessageEvent<unknown>) => void) | null } = { onmessage: null };
+    class FakeChannel {
+      set onmessage(fn: ((e: MessageEvent<unknown>) => void) | null) { box.onmessage = fn; }
+      postMessage(m: unknown): void { posted.push(m); }
+      close(): void { /* nothing */ }
+    }
+    const real = globalThis.BroadcastChannel;
+    (globalThis as { BroadcastChannel: unknown }).BroadcastChannel = FakeChannel;
+    try {
+      (globalThis as G).LiteGraph = { ...PALETTES.nord?.lg };
+      const app = appWith({ id: "nord", colors: { theme: { primary: "#5e81ac" } } });
+      expect(paletteMessage(app)).toEqual({
+        type: "palette", id: "nord", light: false, primary: "#5e81ac",
+        base: { surface: "#2e3440", node: "#161b22", text: "#bcc2c8", text2: "#999999", canvas: "#212732" },
+      });
+      watchPalette(app);
+      watchPalette(app);
+      expect(posted).toHaveLength(1);
+      box.onmessage?.({ data: { type: "ask" } } as MessageEvent<unknown>);
+      expect(posted).toHaveLength(2);
+    } finally {
+      (globalThis as { BroadcastChannel: unknown }).BroadcastChannel = real;
+    }
   });
 });

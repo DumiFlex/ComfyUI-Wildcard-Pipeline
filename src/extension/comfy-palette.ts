@@ -136,7 +136,7 @@ export function isLightSurface(c: Rgb): boolean {
 
 /** Move `fg` toward `toward` in small steps until it reaches `min` contrast
  *  on `bg` (or `toward` itself). */
-function ensureContrast(fg: Rgb, bg: Rgb, min: number, toward: Rgb): Rgb {
+export function ensureContrast(fg: Rgb, bg: Rgb, min: number, toward: Rgb): Rgb {
   let c = fg;
   for (let i = 0; i < 20 && contrast(c, bg) < min; i++) {
     c = mix(c, toward, 0.15);
@@ -258,7 +258,7 @@ interface LiteGraphColors {
 interface PaletteLike {
   id?: unknown;
   light_theme?: unknown;
-  colors?: { litegraph_base?: LiteGraphColors };
+  colors?: { litegraph_base?: LiteGraphColors; theme?: { primary?: unknown } };
 }
 
 interface AppLike {
@@ -410,6 +410,60 @@ export function syncPalette(app: AppLike | undefined, mode: CanvasColorsMode): b
   return true;
 }
 
+// ── Telling the manager ───────────────────────────────────────────────────
+
+/** The manager's "ComfyUI palette" colour theme listens here for what the
+ *  canvas reads, so it switches the moment ComfyUI's palette does. */
+export const COMFY_PALETTE_CHANNEL = "wp-comfy-palette";
+
+/** What the canvas tells the manager: the palette's base colours as hex. */
+export interface PaletteMessage {
+  type: "palette";
+  id: string | undefined;
+  light: boolean;
+  base: { surface: string; node: string; text: string; text2: string; canvas: string };
+  /** The palette's own accent (`colors.theme.primary`, newer frontends). */
+  primary: string | undefined;
+}
+
+export function paletteMessage(app: AppLike | undefined): PaletteMessage | null {
+  const r = readPaletteBase(app);
+  if (!r.base) return null;
+  const b = r.base;
+  const primary = resolveColor(activePalette(app)?.colors?.theme?.primary);
+  return {
+    type: "palette",
+    id: r.id,
+    light: r.lightFlag === true || isLightSurface(b.surface),
+    base: { surface: toHex(b.surface), node: toHex(b.node), text: toHex(b.text), text2: toHex(b.text2), canvas: toHex(b.canvas) },
+    primary: primary ? toHex(primary) : undefined,
+  };
+}
+
+let channel: BroadcastChannel | null = null;
+let lastSent = "";
+
+function announcePalette(app: AppLike | undefined, force = false): void {
+  if (typeof BroadcastChannel === "undefined") return;
+  const msg = paletteMessage(app);
+  if (!msg) return;
+  const text = JSON.stringify(msg);
+  if (!force && text === lastSent) return;
+  lastSent = text;
+  try {
+    if (!channel) {
+      channel = new BroadcastChannel(COMFY_PALETTE_CHANNEL);
+      channel.onmessage = (e: MessageEvent<unknown>) => {
+        const d = e.data;
+        if (d && typeof d === "object" && "type" in d && d.type === "ask") announcePalette(currentApp, true);
+      };
+    }
+    channel.postMessage(msg);
+  } catch {
+    /* no channel: the manager falls back to ComfyUI's settings */
+  }
+}
+
 let watching: MutationObserver | null = null;
 let currentMode: CanvasColorsMode = "follow";
 let currentApp: AppLike | undefined;
@@ -428,11 +482,13 @@ export function setCanvasColorsMode(mode: CanvasColorsMode): void {
 export function watchPalette(app: AppLike | undefined): void {
   currentApp = app;
   syncPalette(currentApp, currentMode);
+  announcePalette(currentApp);
   if (watching || typeof MutationObserver === "undefined" || typeof document === "undefined") return;
   const root = document.documentElement;
   if (!root) return;
   watching = new MutationObserver(() => {
     syncPalette(currentApp, currentMode);
+    announcePalette(currentApp);
   });
   watching.observe(root, { attributes: true, attributeFilter: ["style", "class"] });
 }
@@ -444,6 +500,9 @@ export function _resetPaletteForTests(): void {
   currentMode = "follow";
   currentApp = undefined;
   lastSheet = "";
+  lastSent = "";
+  channel?.close();
+  channel = null;
   probe = null;
   if (typeof document !== "undefined") {
     document.getElementById(STYLE_ID)?.remove();

@@ -40,7 +40,27 @@ const ONLY_PALETTES = opt("palettes", "")?.split(",").filter(Boolean);
 // Kept in step with LOOK_OPTIONS / PALETTE_OPTIONS (tweaksStore.ts); the
 // vitest guard theme-audit-ids.test.ts fails when they drift.
 export const LOOKS = ["orbit", "crisp", "soft", "terminal", "editorial", "compact", "tui"];
-export const PALETTES = ["orbit", "native", "nebula", "tide", "ember", "contrast"];
+export const PALETTES = ["orbit", "native", "nebula", "tide", "ember", "contrast", "comfyui"];
+
+/** serve.py runs no ComfyUI, so the "ComfyUI palette" theme gets its
+ *  `/api/settings` from here: a dark imported palette (teal, like a user's
+ *  own) and Easy-Use's Milk White, light with no `light_theme` flag. */
+const COMFY_SETTINGS = {
+  dark: {
+    "Comfy.ColorPalette": "aurora_test",
+    "Comfy.CustomColorPalettes": { aurora_test: { id: "aurora_test", name: "Aurora", colors: { litegraph_base: {
+      NODE_DEFAULT_BGCOLOR: "#0f3d3e", WIDGET_BGCOLOR: "#0b2e2f", WIDGET_TEXT_COLOR: "#d8f3ef",
+      WIDGET_SECONDARY_TEXT_COLOR: "#8fbfb8", CLEAR_BACKGROUND_COLOR: "#082222",
+    } } } },
+  },
+  light: {
+    "Comfy.ColorPalette": "milk_white",
+    "Comfy.CustomColorPalettes": { milk_white: { id: "milk_white", name: "Milk White", colors: { litegraph_base: {
+      NODE_DEFAULT_BGCOLOR: "#F5F5F5", WIDGET_BGCOLOR: "#D4D4D4", WIDGET_TEXT_COLOR: "#222",
+      WIDGET_SECONDARY_TEXT_COLOR: "#555",
+    } } } },
+  },
+};
 
 /** Ids from bench/bench-library.json, which serve.py seeds. */
 const SCREENS = [
@@ -378,8 +398,12 @@ async function run() {
 
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   let current = "";
+  let comfySettings = COMFY_SETTINGS.dark;
+  await context.route((url) => url.pathname === "/api/settings", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify(comfySettings) }));
   const page = await context.newPage();
   for (const r of runs) {
+    comfySettings = COMFY_SETTINGS[r.mode];
     const key = `${r.look}|${r.palette}|${r.mode}`;
     if (key !== current) {
       current = key;

@@ -1,6 +1,7 @@
 ### New
 
 - **WP nodes follow your ComfyUI color palette.** On Solarized, Arc, Nord, Github, palettes other extensions add (Obsidian, Milk White …) or one you imported, WP nodes now take the palette's node, widget and text colors instead of staying grey, so they match the nodes around them. Text is kept readable whatever the palette, and the accent, module kind and variable colors keep their meaning. A light palette that doesn't mark itself light (like Milk White) now gets the light colors instead of dark ones. Dark and Light look as before. To keep the WP colors everywhere, set **Wildcard Pipeline › Sizing › Canvas colors** to **Wildcard Pipeline colors**.
+- **The manager can wear your ComfyUI palette too.** Settings › Appearance › Colours has a new **ComfyUI palette** theme: the manager takes the colour palette ComfyUI is using, imported ones included, and switches the moment you change it in ComfyUI. Dark and Light wear Native; other palettes give the pages, cards and text their colours, kept readable, and decide dark or light themselves.
 - **Export as plain wildcard files.** Import / Export → Export has a new **Wildcard files (.zip)** button: the picks become `.txt` wildcard files for Dynamic Prompts, Impact Pack, Prompt-PostProcessor, Easy-Use and A1111/Forge, so you can share a pack with people who don't use Wildcard Pipeline. References and `$variables` become `__folder/name__`, uneven weights become repeated lines, and a README in the zip lists what had no plain form (rules, tags, the chance of nothing, negatives).
 
 ### Wildcards

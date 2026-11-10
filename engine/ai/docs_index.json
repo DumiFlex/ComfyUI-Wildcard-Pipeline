@@ -185,7 +185,7 @@
    "sections": [
     {
      "title": "Colours",
-     "text": "- Orbit: Logo indigo on cool ink. The default.\n- Native: ComfyUI's own greys.\n- Nebula: Violet-tinted night with a violet accent.\n- Tide: Deep slate blue with a sky accent.\n- Ember: Warm charcoal and paper with a copper accent.\n- High contrast: Black and white, solid borders, a yellow focus ring.\nModule kind colours (wildcard, fixed value, combine and the rest), variable colours and the teal of a picked option stay the same in every theme, so they always mean the same thing."
+     "text": "- Orbit: Logo indigo on cool ink. The default.\n- Native: ComfyUI's own greys.\n- Nebula: Violet-tinted night with a violet accent.\n- Tide: Deep slate blue with a sky accent.\n- Ember: Warm charcoal and paper with a copper accent.\n- High contrast: Black and white, solid borders, a yellow focus ring.\n- ComfyUI palette: Your ComfyUI color palette, imported ones too. Switches when it does.\nModule kind colours (wildcard, fixed value, combine and the rest), variable colours and the teal of a picked option stay the same in every theme, so they always mean the same thing.\nComfyUI palette dresses the manager in the colour palette ComfyUI is using (ComfyUI Settings › Appearance › Color Palette), imported palettes and ones other extensions add included. On Dark and Light it wears Native, ComfyUI's own greys; on any other palette the pages, cards, borders and text come from the palette's node and text colours, with the text kept readable. The palette also decides dark or light, so the Mode setting and the top bar's theme button rest while it is the colour theme. Switch the palette in ComfyUI and an open manager tab follows at once; with no canvas open, it catches up when you come back to the tab. On Theme's own the accent is the palette's own when it has one that reads well, else indigo."
     },
     {
      "title": "Look",
@@ -2711,7 +2711,7 @@
     },
     {
      "title": "Appearance",
-     "text": "How the manager looks on this device.\n- Colours: The colour theme: Orbit, Native, Nebula, Tide, Ember or High contrast.\n- Look: Corners, type, borders and selection: Orbit, Crisp, Soft, Terminal, Editorial, Compact or TUI.\n- Mode: Dark, light, or follow the system.\n- Accent color: The highlight color used for buttons, links and selection. Theme's own follows the colour theme.\n- Density: Spacing and control height across the manager.\n- Sidebar: Show the navigation with labels, or as icons only.\n- Start page: What the manager opens to.\n- Reduce motion: Turn animations and transitions off in the manager."
+     "text": "How the manager looks on this device.\n- Colours: The colour theme: Orbit, Native, Nebula, Tide, Ember, High contrast or your ComfyUI palette.\n- Look: Corners, type, borders and selection: Orbit, Crisp, Soft, Terminal, Editorial, Compact or TUI.\n- Mode: Dark, light, or follow the system.\n- Accent color: The highlight color used for buttons, links and selection. Theme's own follows the colour theme.\n- Density: Spacing and control height across the manager.\n- Sidebar: Show the navigation with labels, or as icons only.\n- Start page: What the manager opens to.\n- Reduce motion: Turn animations and transitions off in the manager."
     },
     {
      "title": "Editing",
