@@ -296,6 +296,9 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
      No padding: the node is exactly the panel, so its selection outline hugs it. */
   pointer-events: none;
 }
+/* Editing, the note is a form: nothing above it may be pointer-events: none,
+   or Firefox's overlay scrollbars inside it ignore the pointer until a click. */
+.wp-note--editing { pointer-events: auto; }
 
 /* ── panel looks ─────────────────────────────────────────────────── */
 .wp-note__panel {
@@ -462,8 +465,8 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
   /* The widget wrappers take pointer events and would eat the press that
      drags the node; the canvas handles it instead. The note's own buttons
      and its edit form take events back. */
-  .lg-node:has(.wp-note) .lg-node-widgets,
-  .lg-node:has(.wp-note) .lg-node-widgets * { pointer-events: none !important; }
+  .lg-node:has(.wp-note:not(.wp-note--editing)) .lg-node-widgets,
+  .lg-node:has(.wp-note:not(.wp-note--editing)) .lg-node-widgets * { pointer-events: none !important; }
   .lg-node:has(.wp-note) .wp-note__form,
   .lg-node:has(.wp-note) .wp-note__form *,
   .lg-node:has(.wp-note) .wp-note-md a,
