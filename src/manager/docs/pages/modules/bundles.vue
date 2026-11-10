@@ -20,7 +20,10 @@ import DocRef from "../../../components/docs/DocRef.vue";
       <p>
         A bundle is a saved group of modules: a character, a wardrobe, a whole pack. Drop it into a
         WP Context and all its modules arrive at once, in order. In the stack it shows as one frame
-        you can collapse to keep long setups tidy.
+        you can collapse to keep long setups tidy. A collapsed bundle still warns you: when a row
+        inside has a problem (a missing variable, a conflict, a module gone from the library), its
+        header shows that row's coloured dot, and hovering the dot names the rows. Hidden rows never
+        make the node wider.
       </p>
       <p>
         When the pipeline runs, a bundle's modules run exactly as if they sat in the stack on their

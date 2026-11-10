@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
+import type { BundleAlerts } from "./bundle-alerts";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import DragHandle from "@/kit/DragHandle.vue";
@@ -64,8 +65,12 @@ const props = withDefaults(
     /** A sub-bundle. An example sub-bundle shows no chip: its top bundle's
      *  chip already says the whole group came with the workflow. */
     nested?: boolean;
+    /** Trouble in the rows a COLLAPSED bundle hides (null while expanded:
+     *  the rows show their own chips then). Drawn as dots only, so it
+     *  fits beside EXAMPLE / MISSING on a narrow node. */
+    alerts?: BundleAlerts | null;
   }>(),
-  { example: false, nested: false, color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
+  { alerts: null, example: false, nested: false, color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
 );
 
 const emit = defineEmits<{
@@ -167,6 +172,18 @@ const summary = computed(() => {
          subtitle ("N drifted") since each child row already carries
          its own dot — re-stacking them at the bundle level would be
          visual noise. -->
+    <!-- Rows hidden by the collapse: one dot for the worst conflict, one
+         for the worst library state. Own classes (not .wp-mod-dot /
+         .wp-conflict-dot) so the "badges only" indicator style can't hide
+         the one sign a collapsed bundle gives. -->
+    <span v-if="alerts && (alerts.conflict || alerts.state)" class="wp-bundle-alerts"
+      data-test="bundle-alerts" :title="alerts.title" role="img"
+      :aria-label="alerts.title">
+      <span v-if="alerts.conflict" class="wp-bundle-alert"
+        :class="`wp-conflict-dot--${alerts.conflict}`" :data-alert="alerts.conflict"></span>
+      <span v-if="alerts.state" class="wp-bundle-alert"
+        :class="`wp-mod-dot--${alerts.state}`" :data-alert="alerts.state"></span>
+    </span>
     <span v-if="libraryMissing || libraryDrifted || snapshotModified" class="wp-mod-dots">
       <!-- Visual hierarchy: MISSING (no live library entry) is the most severe
            and shows first; LIBRARY UPDATED (drift) dominates next; MOD
@@ -352,6 +369,24 @@ const summary = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* Dots for trouble inside a collapsed bundle. Same 7px circle as the row
+ * dots; the colour comes from the shared `.wp-conflict-dot--*` /
+ * `.wp-mod-dot--*` modifier rules. Never shrinks, so a narrow node still
+ * shows them while the name ellipsises. */
+.wp-bundle-alerts {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  cursor: help;
+}
+.wp-bundle-alert {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  flex-shrink: 0;
 }
 /* Child-count / drift summary. Was 10px in --wp-text-dim (#666 on the dark
  * theme), which sat right at the edge of legibility against the bundle frame
