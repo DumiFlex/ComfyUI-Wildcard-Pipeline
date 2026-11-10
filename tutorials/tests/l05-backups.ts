@@ -1,5 +1,6 @@
 // Library 5: backups. Settings › Library & data: automatic backups (daily, how many to keep), Back up
-// now with a note, a change (Role loses "a clockwork inventor"), Restore of the noted backup (live, no
+// now with a note, a change (Role loses "a clockwork inventor"), the item's own History (last three
+// saves), Restore of the noted backup (live, no
 // restart, with its own "Before restore" backup), pins, then the database's location and
 // maintenance, and exporting settings (Advanced). Backups the recording's own lifecycle made are
 // hidden from the list so it shows only this video's.
@@ -10,7 +11,7 @@ tutorial(
   {
     title: "Backups",
     description: "Keep your library safe: automatic backups, a backup before a big change, restoring one without a restart, and where the library lives.",
-    learn: "Automatic and manual backups, notes and pins, live restore, the database location and maintenance, exporting your settings.",
+    learn: "Automatic and manual backups, notes and pins, an item's own version history, live restore, the database location and maintenance, exporting your settings.",
   },
   async (t) => {
     const page = t.page;
@@ -71,7 +72,21 @@ tutorial(
       await t.beat(900);
       await t.click(page.locator('[data-test="save-btn"]'));
       await t.beat(1200);
-      await t.say("Changed your mind? Back in Library and data, press Restore on the backup.");
+      // Each save keeps the version before it in the item's own history (the last three).
+      await t.say("Each save also keeps the version before it. Open Role again: History, at the bottom of the editor, holds its last three versions.");
+      await t.go("/wp/wildcards/808878ba/edit");
+      await t.beat(900);
+      await t.callout("histbtn", page.locator('[data-test="history-btn"]'), "Up to three earlier versions", 3);
+      await t.click(page.locator('[data-test="history-btn"]'));
+      await t.uncallout("histbtn");
+      await t.beat(900);
+      await t.callout("hist", page.locator('[data-test="history-panel"]'), "This item's earlier versions", 6);
+      await t.say("Pick one to see it, and Restore this version brings back just this item. For one item, that's the quick way back.");
+      await t.waitVoice();
+      await t.uncallout("hist");
+      await t.press("Escape");
+      await t.beat(600);
+      await t.say("A backup goes further: it brings back the whole library. Back in Library and data, press Restore on the backup.");
       await t.go("/wp/settings/library");
       await hideOld();
       await t.scrollTo(list, { at: 0.4 });

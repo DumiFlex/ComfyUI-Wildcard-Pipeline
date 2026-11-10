@@ -602,7 +602,8 @@ function text(ev: Event): string {
 .wp-lg__area { margin-left: 54px; width: calc(100% - 54px); }
 .wp-lg__grow, .wp-lg__select, .wp-lg__font { flex: 1; min-width: 0; }
 .wp-lg__num { width: 84px; flex: none; }
-.wp-lg__num--wide { width: 112px; }
+/* Room for the "keep size" placeholder plus its px suffix. */
+.wp-lg__num--wide { width: 132px; }
 .wp-lg__reset { margin-left: auto; }
 
 .wp-lg__presets { display: flex; flex-wrap: wrap; gap: 4px; }
