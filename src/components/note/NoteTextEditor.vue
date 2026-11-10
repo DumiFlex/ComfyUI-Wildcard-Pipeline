@@ -664,12 +664,12 @@ function insertIcon(name: string): void {
 .wp-note-ed__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
 .wp-note-ed__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note-ed { display: flex; flex-direction: column; gap: 6px; }
-/* One row at the editor's narrowest (340 px): 24 px buttons, the preview
-   toggle pushed to the end. */
+/* One row at the editor's width (360 px): 24 px buttons, the preview
+   toggle pushed to the end. A narrower node wraps it rather than spill. */
 .wp-note-ed__bar {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 1px;
   padding: 3px;
   border: 1px solid var(--wp-border);

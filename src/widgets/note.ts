@@ -61,7 +61,7 @@ function wireDblClick(): void {
 
 /** The narrowest a card note gets, and the width a label opens its editor at. */
 const CARD_MIN_WIDTH = 160;
-const FORM_WIDTH = 340;
+const FORM_WIDTH = 360;
 
 /** Mounts the note's one widget. Its value is the JSON NoteConfig. */
 export function mountNote(node: NoteNode) {
@@ -198,8 +198,10 @@ export function mountNote(node: NoteNode) {
     const w = isLabel() ? want[0] : Math.max(size[0], want[0]);
     const h = want[1];
     if (Math.abs(w - size[0]) <= 1 && Math.abs(h - size[1]) <= 1) return;
-    size[0] = w;
-    size[1] = h;
+    // setSize, not the array in place: Nodes 2.0 keeps its own copy of the
+    // node's size and only hears about it through setSize / onResize.
+    if (node.setSize) node.setSize([w, h]);
+    else { size[0] = w; size[1] = h; }
     node.setDirtyCanvas?.(true, true);
   }
   const sizeObserver = new ResizeObserver(() => applySize());
