@@ -1,6 +1,8 @@
 // Tutorial 10: the look. ComfyUI's Settings › Wildcard Pipeline holds how the nodes look on the
-// canvas, and its Display playground shows every change live. The manager has its own Appearance
-// page. Everything is put back to the defaults at the end, so the next videos look the same.
+// canvas, and its Display playground shows every change live. WP nodes follow ComfyUI's colour
+// palette (Canvas colors turns that off), and the manager has its own Appearance page with a
+// ComfyUI palette theme. Everything is put back to the defaults at the end, so the next videos
+// look the same.
 import type { Locator } from "playwright";
 import { tutorial, type Tutor } from "../tutorial.js";
 
@@ -26,8 +28,8 @@ tutorial(
   "T10",
   {
     title: "Make it look your way",
-    description: "The Wildcard Pipeline settings in ComfyUI, the Display playground with its live preview, and the manager's own Appearance page.",
-    learn: "Where the canvas look lives, trying it out live in the playground, and the manager's colour themes and looks.",
+    description: "The Wildcard Pipeline settings in ComfyUI, the Display playground with its live preview, ComfyUI's colour palettes on the canvas and in the manager, and the manager's own Appearance page.",
+    learn: "Where the canvas look lives, trying it out live in the playground, following ComfyUI's palette, and the manager's colour themes and looks.",
   },
   async (t) => {
     const page = t.page;
@@ -88,8 +90,52 @@ tutorial(
       await t.callout("node", t.node(ctx), "Compact, icons, vivid, dots", 6);
       await t.waitVoice();
       await t.uncallout("node");
+    });
+
+    await t.h.step("ComfyUI's palettes", async () => {
+      await t.say("ComfyUI has colour palettes of its own, under Settings, Appearance. Wildcard Pipeline follows them. Pick Nord.");
+      await t.click(page.getByRole("button", { name: /^settings/i }).first());
+      await t.beat(900);
+      const dialog = page.getByRole("dialog").last();
+      await t.click(dialog.getByText("Appearance", { exact: true }).first());
+      await t.beat(800);
+      const row = dialog.getByText("Color Palette", { exact: true }).first();
+      await row.scrollIntoViewIfNeeded().catch(() => undefined);
+      await t.callout("pal", row, "ComfyUI's palette", 8);
+      // The palette drop-down beside the label; if it can't be worked by hand, set it directly.
+      let picked = false;
+      const combo = row.locator("xpath=ancestor::*[.//*[@role='combobox']][1]").getByRole("combobox").first();
+      if (await combo.isVisible().catch(() => false)) {
+        await t.click(combo);
+        await t.beat(500);
+        const nord = page.getByRole("option", { name: /^nord$/i }).first();
+        if (await nord.isVisible().catch(() => false)) {
+          await t.click(nord);
+          picked = true;
+        } else {
+          await t.press("Escape");
+        }
+      }
+      if (!picked) await page.evaluate(() => window.app?.extensionManager?.setting?.set("Comfy.ColorPalette", "nord"));
+      await t.beat(1200);
+      await t.waitVoice();
+      await t.uncallout("pal");
+      await t.press("Escape");
+      await t.beat(900);
+      await t.callout("nord", t.node(ctx), "The same node, in Nord", 6);
+      await t.say("The node takes the palette's colours, so it sits with the rest of your graph. The kind colours keep their meaning.");
+      await t.waitVoice();
+      await t.uncallout("nord");
       await openSettings(t);
       await openPlayground(t);
+      const canvasColors = page.locator('[data-test="playground-controls"] label.wp-pg__row').filter({ hasText: "Canvas colors" }).first();
+      await t.callout("cc", canvasColors, "Follow the palette, or not", 6);
+      await t.say("Rather keep Wildcard Pipeline's own colours? Canvas colors switches that.");
+      await t.waitVoice();
+      await t.uncallout("cc");
+    });
+
+    await t.h.step("Back to the defaults", async () => {
       const reset = page.getByRole("button", { name: "Reset all to defaults" });
       await t.callout("reset", reset, "Back to how it came", 6);
       await t.say("Changed your mind? Reset all to defaults puts everything back.");
@@ -121,13 +167,25 @@ tutorial(
       await t.click(page.locator('[data-test="look-terminal"]'));
       await t.waitVoice();
       await t.beat(800);
+      await t.click(page.locator('[data-test="look-orbit"]'));
+      const comfy = page.locator('[data-test="palette-comfyui"]');
+      await t.callout("comfy", comfy, "Your ComfyUI palette", 6);
+      await t.say("And one colour theme takes its colours from ComfyUI: ComfyUI palette. It wears Nord now, and switches when you change the palette in ComfyUI.");
+      await t.click(comfy);
+      await t.waitVoice();
+      await t.uncallout("comfy");
+      await t.beat(800);
       await t.say("There is light mode, your own accent color, density, and an icons-only sidebar too. I'll go back to the defaults.");
+      await t.click(page.locator('[data-test="palette-orbit"]'));
+      await t.beat(600);
       await t.click(page.locator('[data-test="settings-theme-light"]'));
       await t.beat(1500);
       await t.click(page.locator('[data-test="settings-theme-dark"]'));
       await t.click(page.locator('[data-test="look-orbit"]'));
       await t.click(page.locator('[data-test="palette-orbit"]'));
       await t.waitVoice();
+      // Off camera: ComfyUI's palette back to Dark for the next videos.
+      await t.h.api("/api/settings/Comfy.ColorPalette", { method: "POST", body: "dark" }).catch(() => undefined);
     });
 
     await t.h.step("Outro", async () => {
