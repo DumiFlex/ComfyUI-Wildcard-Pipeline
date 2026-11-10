@@ -1,6 +1,7 @@
 // Tutorial 3: make your own wildcard. A Weather wildcard in the manager: name and variable, two
 // options by hand, three more with Bulk add, a lower weight on two of them with Bulk edit, then
 // used on the canvas next to Role.
+import { StepError } from "watchwright";
 import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
@@ -63,9 +64,19 @@ tutorial(
 
     await t.h.step("Bulk edit", async () => {
       await t.say("Snow and the thunderstorm should be rare. Tick both rows.");
-      await t.click(page.locator('[data-test="wc-opt-check-3"]'));
-      await t.click(page.locator('[data-test="wc-opt-check-4"]'));
-      await t.beat(500);
+      // The selection bar slides in after the first tick and moves the rows: tick one at a time and
+      // check each took, or the second click lands where its row used to be.
+      for (const i of [3, 4]) {
+        const box = page.locator(`[data-test="wc-opt-check-${i}"]`);
+        const ticked = () =>
+          box.evaluate((el) => (el.querySelector("input") as HTMLInputElement | null)?.checked ?? el.getAttribute("aria-checked") === "true");
+        for (let tries = 0; tries < 3 && !(await ticked()); tries++) {
+          await t.click(box);
+          await t.beat(700);
+        }
+        if (!(await ticked())) throw new StepError(`Row ${i + 1} didn't tick.`);
+      }
+      await t.beat(300);
       const bar = page.locator(".wpc-seltoolbar").first();
       await t.callout("bar", bar, "Change every ticked row at once", 4);
       await t.say("This bar changes every ticked row at once: tags, weight, negatives, order, or delete.");
