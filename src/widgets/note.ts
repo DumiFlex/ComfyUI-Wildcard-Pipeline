@@ -1,4 +1,4 @@
-import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { reactiveFromGraph } from "../extension/reactive";
 import { defaultNoteConfig, noteColorCss, parseNoteConfig, type NoteConfig } from "../extension/note";
@@ -233,8 +233,10 @@ export function mountNote(node: NoteNode) {
   editTargets.add(editTarget);
   host.onCleanup(() => editTargets.delete(editTarget));
 
-  // Keep ComfyUI's wrapper letting clicks through (see _frameless.ts).
-  keepPassThrough(node, host);
+  // Keep ComfyUI's wrapper letting clicks through (see _frameless.ts), except
+  // while editing: the form owns the pointer then, scrollbars included.
+  const refreshPass = keepPassThrough(node, host, () => !editing.value);
+  host.onCleanup(watch(editing, refreshPass, { flush: "post" }));
   // Double-click anywhere on the note (it reaches the canvas) edits it.
   const prevDbl = node.onDblClick;
   node.onDblClick = function (this: NoteNode, ...args: unknown[]) {
