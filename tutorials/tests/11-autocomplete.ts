@@ -88,6 +88,8 @@ tutorial(
         await t.beat(900);
         await t.callout("loras", page.getByRole("listbox").last(), "Your LoRAs", 4);
         await t.waitVoice();
+        // Keep the box up long enough to read, whenever the list opened.
+        await t.beat(1500);
         await t.uncallout("loras");
         await t.press("Enter");
       } else {

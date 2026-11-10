@@ -57,7 +57,8 @@ tutorial(
     await t.h.step("The playground", async () => {
       await openPlayground(t);
       const preview = page.locator('[data-test="playground-preview"]');
-      await t.callout("preview", preview, "Live preview", 6);
+      // Hug the preview list, not the whole column.
+      await t.callout("preview", preview.locator(".wp-pg-mockup").first(), "Live preview", 6);
       await t.say("On the left are the controls; on the right, a live preview with every kind of row and marker.");
       await t.waitVoice();
       await t.uncallout("preview");
@@ -175,6 +176,8 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("comfy");
       await t.beat(800);
+      // The accent and density rows sit low: bring them above the caption first.
+      await t.scrollTo(page.locator('[data-test="settings-theme-light"]'), { at: 0.3 });
       await t.say("There is light mode, your own accent color, density, and an icons-only sidebar too. I'll go back to the defaults.");
       await t.click(page.locator('[data-test="palette-orbit"]'));
       await t.beat(600);

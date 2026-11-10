@@ -171,18 +171,21 @@ tutorial(
     });
 
     await t.h.step("Help on every node", async () => {
-      await t.say("Lost? Select any Wildcard Pipeline node and press the question mark above it.");
+      // Select first, so the question mark and its box are up while the line names them.
       const box = await t.node(nodes.ctx).boundingBox();
       if (box) await t.click({ x: box.x + box.width / 2, y: box.y + 14 });
       await t.beat(600);
       const help = page.locator(".wp-tb-icon--help").first().locator("xpath=ancestor::button[1]");
       await t.callout("help", help, "This node's help", 6);
+      await t.say("Lost? Select any Wildcard Pipeline node and press the question mark above it.");
+      await t.waitVoice();
       await t.click(help);
       await t.uncallout("help");
       await t.beat(1500);
       await t.say("Its help page opens right over the canvas.");
       await t.waitVoice();
       await t.press("Escape");
+      await t.deselect();
     });
 
     await t.h.step("Outro", async () => {

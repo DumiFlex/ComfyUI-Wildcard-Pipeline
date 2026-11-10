@@ -2,7 +2,7 @@
 // pauses at the filter, the picker (Grid, Detail with its Values and Prompt, Zoom), two picks kept, and
 // only those are refined and laid out by Label & Grid. The run needs a model, so without showcase the
 // video only walks the steps.
-import { openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
+import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
 
 tutorial(
   "N01",
@@ -14,9 +14,9 @@ tutorial(
   async (t) => {
     const page = t.page;
     const picker = page.locator('[data-test="image-filter-picker"]');
+    // Each step's jump zooms in to a readable size and boxes the step's note.
     const stop = async (row: number) => {
-      await t.click(page.locator(`[data-test="bm-dock-row-${row}"]`));
-      await t.beat(1200);
+      await jumpTo(t, row);
     };
     const queueEmpty = async () => {
       const end = await t.h.waitUntil(

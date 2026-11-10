@@ -20,7 +20,7 @@ tutorial(
       await t.say("The Context Injector turns any value on the canvas into a variable. Here, a text box. It could as well be a caption from an LLM node, a LoRA name or a number.");
       const txt = await t.addNode("Text (Multiline)", { x: 470, y: 560 });
       await t.click(t.node(txt).locator("textarea").first());
-      await t.type("a hooded travelling cloak", { cps: 16 });
+      await t.type("hooded travelling cloak", { cps: 16 });
       await t.beat(500);
       const inj = await t.addNode("WP Context Injector", { x: 475, y: 200 });
       await t.waitVoice();
@@ -89,6 +89,8 @@ tutorial(
       await t.wire(asm, "prompt", text, "source");
       await t.run();
       await t.beat(800);
+      // The Assembler's own preview shows only the Injector's placeholders: keep it out of the frame.
+      await t.zoomOn(text, { top: 110 });
       await t.callout("prev", t.node(text), "Your text, inside the rolled prompt", 6);
       await t.waitVoice();
       await t.say("The role and the place still roll. The cloak is whatever the text boxes say, so change a text and the prompt follows.");

@@ -110,6 +110,9 @@ tutorial(
       const text = await t.addNode("Preview as Text", { x: 1740, y: 700 });
       await t.wire(asm, "prompt", text, "source");
       await t.run();
+      await t.beat(600);
+      // Both sit low on the screen, under the caption: bring them up to the middle.
+      await t.zoomOn(asm);
       await t.callout("out", t.node(text), "Klein's quality words", 6);
       await t.waitVoice();
       await t.uncallout("out");

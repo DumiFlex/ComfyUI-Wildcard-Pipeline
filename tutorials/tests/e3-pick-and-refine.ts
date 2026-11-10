@@ -1,6 +1,6 @@
 // Example 3: a tour of the "Pick and refine" example: four looks of one held person drafted fast, the
 // run pauses at the Image Filter (Keep all here; N01 shows picking), the picks refined at 1.5×.
-import { openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
+import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
 
 tutorial(
   "E3",
@@ -11,9 +11,9 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
+    // Each step's jump zooms in to a readable size and boxes the step's note.
     const stop = async (row: number) => {
-      await t.click(page.locator(`[data-test="bm-dock-row-${row}"]`));
-      await t.beat(1200);
+      await jumpTo(t, row);
     };
 
     await t.h.step("Open it", async () => {

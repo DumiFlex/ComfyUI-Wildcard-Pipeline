@@ -46,11 +46,15 @@ tutorial(
       return { txt, inj, bool, toggle };
     });
 
-    const prev = await t.h.step("The swap", async () => {
-      await t.say("Now a Context with the role, hair and eyes, the Subject combine, and the Character LoRA rule from the LoRA swaps bundle, after the combine it replaces.");
+    const { prev, textId } = await t.h.step("The swap", async () => {
+      // Build first, then name what's on screen.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 1010, y: 200 });
       await t.wire(nodes.inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Role", "Hair", "Eyes", "Subject", "Character LoRA"]);
+      await t.normalSpeed();
+      await t.say("Now a Context with the role, hair and eyes, the Subject combine, and the Character LoRA rule from the LoRA swaps bundle, after the combine it replaces.");
+      await t.waitVoice();
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
@@ -64,20 +68,29 @@ tutorial(
       await t.wire(asm, "prompt", text, "source");
       await t.run();
       await t.beat(800);
+      // The Assembler's own preview shows only the Injector's placeholders: keep it out of the frame.
+      await t.zoomOn(text, { top: 110 });
       const prev = t.node(text);
       await t.callout("prev", prev, "The LoRA's words, not a roll", 6);
       await t.say("While the Boolean is on, the rule puts the trigger words in place of the whole subject, so the rolled role, hair and eyes don't fight the LoRA.");
       await t.waitVoice();
       await t.uncallout("prev");
-      return prev;
+      return { prev, textId: text };
     });
 
     await t.h.step("Off again", async () => {
-      await t.say("Switch the Boolean off and run again: the rolled subject comes back.");
+      // Back to the Boolean (the last view left it above the frame), switch it off, then say so.
+      await t.zoomOn(nodes.bool);
       await t.click(nodes.toggle);
       await t.beat(600);
+      if ((await nodes.toggle.getAttribute("aria-checked").catch(() => null)) === "true") {
+        await nodes.toggle.evaluate((el) => (el as HTMLElement).click()).catch(() => undefined);
+        await t.beat(400);
+      }
+      await t.say("Switch the Boolean off and run again: the rolled subject comes back.");
       await t.run();
       await t.beat(800);
+      await t.zoomOn(textId, { top: 110 });
       await t.callout("prev", prev, "Rolled again", 6);
       await t.waitVoice();
       await t.uncallout("prev");

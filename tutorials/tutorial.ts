@@ -145,6 +145,7 @@ export class Tutor {
     // A line ends a sped-up part: it plays at normal speed.
     if (this.ffOpen) await this.normalSpeed();
     await this.waitVoice();
+    await this.clearTooltip();
     const id = lineId(text);
     const known = this.lines[id];
     const ms = known?.ms ?? estimate(spoken ?? text);
@@ -353,14 +354,38 @@ export class Tutor {
     // A suggestion list still open after the last word (a $name, its `.neg`) would stay over the
     // nodes around through the next lines: close it.
     const listOpen = await this.page
-      // Only in a node's own field: Escape in a dialog would close the dialog.
-      .evaluate(() => !!document.activeElement?.closest("[data-node-id]") && !document.activeElement.closest('[role="dialog"]') && [...document.querySelectorAll('[role="listbox"]')].some((el) => (el as HTMLElement).checkVisibility()))
+      // Only in a node's own field (on a Vue node, or in ComfyUI's DOM-widget layer on a classic
+      // one): Escape in a dialog would close the dialog.
+      .evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body || el.closest('[role="dialog"]')) return false;
+        if (!el.closest("[data-node-id], .dom-widget, .comfy-multiline-input, .lg-node")) return false;
+        return [...document.querySelectorAll('[role="listbox"]')].some((l) => (l as HTMLElement).checkVisibility());
+      })
       .catch(() => false);
     if (listOpen) {
       await this.page.keyboard.press("Escape");
       await sleep(200);
     }
     await this.restOffField();
+  }
+
+  /**
+   * A tooltip the hand left up (ComfyUI's for a widget it clicked, a WP button's hint) would sit
+   * over what the next line is about: on the canvas the hand moves off to empty canvas, which
+   * closes it.
+   */
+  private async clearTooltip(): Promise<void> {
+    if (this.inManager()) return;
+    const up = await this.page
+      .evaluate(() =>
+        [...document.querySelectorAll('.p-tooltip, [role="tooltip"], .wp-tooltip, .comfy-tooltip, .litegraph-tooltip')].some((el) => {
+          const r = (el as HTMLElement).getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden" && getComputedStyle(el).opacity !== "0";
+        }),
+      )
+      .catch(() => false);
+    if (up) await this.restOffField();
   }
 
   /**
@@ -381,6 +406,18 @@ export class Tutor {
     }, this.pos);
     if (!spot) return;
     await this.moveTo(spot);
+    await sleep(250);
+  }
+
+  /** Clears the canvas selection, so ComfyUI's selection toolbar doesn't stay up through later lines. */
+  async deselect(): Promise<void> {
+    await this.page
+      .evaluate(() => {
+        const c = (window.app as unknown as { canvas?: { deselectAll?: () => void; setDirty(a: boolean, b: boolean): void } }).canvas;
+        c?.deselectAll?.();
+        c?.setDirty(true, true);
+      })
+      .catch(() => undefined);
     await sleep(250);
   }
 
@@ -766,25 +803,28 @@ export class Tutor {
 
   /**
    * Glides the canvas so node `id` sits in the middle of the upper screen at `scale` (≥ 0.8 keeps a
-   * node's text readable at 1080p), and returns the view it left, for `setView`.
+   * node's text readable at 1080p), and returns the view it left, for `setView`. `top` puts the
+   * node's title at that screen y instead (nodes above it, like an Assembler's preview, leave the frame).
    */
-  async zoomOn(id: string, { scale = 1 }: { scale?: number } = {}): Promise<{ scale: number; offset: [number, number] }> {
+  async zoomOn(id: string, { scale = 1, top }: { scale?: number; top?: number } = {}): Promise<{ scale: number; offset: [number, number] }> {
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     const before = await this.page.evaluate(() => {
       const ds = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] } } }).canvas.ds;
       return { scale: ds.scale, offset: [ds.offset[0], ds.offset[1]] as [number, number] };
     });
     const target = await this.page.evaluate(
-      ({ id, scale, w, h }) => {
+      ({ id, scale, w, h, top }) => {
         const g = (window.app as unknown as { graph: { getNodeById(i: string | number): { pos: [number, number]; size: [number, number] } | null } }).graph;
         const n = g.getNodeById(id) ?? g.getNodeById(Number(id));
         if (!n) return null;
         const cx = n.pos[0] + n.size[0] / 2;
         const cy = n.pos[1] + n.size[1] / 2;
         // Screen = (graph + offset) * scale: centre it across, and in the upper 45 % (above the caption).
+        // With `top`, the node's title sits at that screen y instead, so nodes above it leave the frame.
+        if (top !== null) return { scale, offset: [w / 2 / scale - cx, top / scale - n.pos[1] + 34] as [number, number] };
         return { scale, offset: [w / 2 / scale - cx, (h * 0.45) / scale - cy] as [number, number] };
       },
-      { id, scale, w: view.width, h: view.height },
+      { id, scale, w: view.width, h: view.height, top: top ?? null },
     );
     if (target) await this.setView(target);
     return before;
@@ -1265,6 +1305,40 @@ export async function hideOtherPacks(entry: Locator): Promise<void> {
  * ComfyUI-Wildcard-Pipeline) and closes the missing-model card it raises when its checkpoint isn't
  * installed.
  */
+/**
+ * Jumps to an example's step through its Bookmarks dock row, then, when the bookmark lands zoomed
+ * out (an overview a 1080p video can't read), zooms in to `scale` around the step's note, which
+ * stays where it landed, and boxes it until the next jump.
+ */
+export async function jumpTo(t: Tutor, row: number, { scale = 0.85, box = true }: { scale?: number; box?: boolean } = {}): Promise<string | null> {
+  const page = t.page;
+  await t.uncallout("step");
+  const dockRow = page.locator(`[data-test="bm-dock-row-${row}"]`);
+  const title = ((await dockRow.getAttribute("aria-label").catch(() => null)) ?? "").replace(/^Jump to /, "");
+  await t.click(dockRow);
+  await sleep(1200);
+  const found = await page.evaluate(
+    ({ title, scale }) => {
+      type N = { id: number | string; title?: string; type: string; pos: [number, number] };
+      const c = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] } } }).canvas;
+      const nodes = ((window.app?.graph?.nodes ?? []) as unknown as N[]).filter((n) => /^WP_(Note|Bookmark)$/.test(n.type));
+      const n = nodes.find((x) => x.title === title);
+      if (!n) return null;
+      const { scale: s, offset: o } = c.ds;
+      if (s >= scale - 0.05) return { id: String(n.id), view: null };
+      // Keep the note's top-left where it landed: screen = (graph + offset) * scale.
+      const px = (n.pos[0] + o[0]) * s;
+      const py = (n.pos[1] + o[1]) * s;
+      return { id: String(n.id), view: { scale, offset: [px / scale - n.pos[0], py / scale - n.pos[1]] as [number, number] } };
+    },
+    { title, scale },
+  ).catch(() => null);
+  if (!found) return null;
+  if (found.view) await t.setView(found.view);
+  if (box) await t.callout("step", t.node(found.id), undefined, 6).catch(() => undefined);
+  return found.id;
+}
+
 export async function openExample(t: Tutor, title: string): Promise<void> {
   const page = t.page;
   await t.click(page.getByText("Templates", { exact: true }).first());

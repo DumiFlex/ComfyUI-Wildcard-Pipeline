@@ -96,11 +96,12 @@ tutorial(
       await t.callout("hint", modal.locator('[data-test="reach-hint"]'), "Only the next Setting", 6);
       await t.waitVoice();
       await t.uncallout("hint");
-      await t.say("Next N covers the next few, by a count.");
       await t.click(modal.locator('[data-test="reach-mode-next"]'));
-      await t.beat(300);
+      await t.beat(500);
       await t.callout("next", section, "Next N: a count", 6);
-      await t.beat(1200);
+      await t.say("Next N covers the next few, by a count.");
+      await t.waitVoice();
+      await t.beat(600);
       await t.uncallout("next");
       await t.click(modal.locator('[data-test="reach-mode-first"]'));
       await t.beat(400);
@@ -118,13 +119,13 @@ tutorial(
     });
 
     await t.h.step("Pick", async () => {
-      await t.say("Pick lists every Setting the constraint can reach, with its node, so you tick exactly the ones it covers.");
       const modal = await editItem(nodes.c1, "Role fits the place");
       await t.scrollTo(modal.locator('[data-test="reach-section"]'), { at: 0.5 });
       await t.click(modal.locator('[data-test="reach-mode-pick"]'));
       await t.beat(700);
       const list = modal.locator('[data-test="reach-picklist"]');
       await t.callout("list", list, "Each Setting, on its node", 6);
+      await t.say("Pick lists every Setting the constraint can reach, with its node, so you tick exactly the ones it covers.");
       const boxes = list.getByRole("checkbox");
       await t.click(boxes.last());
       await t.beat(600);

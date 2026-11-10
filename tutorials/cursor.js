@@ -81,6 +81,13 @@
       if (bottom > vh - BAND) low = true;
       if (top < BAND) high = true;
     }
+    // An open list or menu (a mode dropdown, a picker) counts too: the viewer is reading it.
+    for (const el of document.querySelectorAll('[role="listbox"], [role="menu"], .p-select-overlay, .p-autocomplete-overlay')) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || getComputedStyle(el).visibility === "hidden") continue;
+      if (r.bottom > vh - BAND) low = true;
+      if (r.top < BAND) high = true;
+    }
     if (low && !high) {
       caption.style.bottom = "";
       caption.style.top = "72px";
@@ -213,4 +220,6 @@
     },
   };
   document.addEventListener("DOMContentLoaded", () => layer());
+  // Lists open and close without a callout changing, so the caption checks its place on a timer.
+  setInterval(() => { if (caption && caption.textContent) placeCaption(); }, 250);
 })();
