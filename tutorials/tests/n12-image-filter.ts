@@ -77,7 +77,9 @@ tutorial(
     };
     // Points on the detail image, as fractions of its box.
     const onImage = async (fx: number, fy: number) => {
-      const box = await page.locator('[data-test="image-filter-detail-img"]').boundingBox();
+      // While painting, the mask painter takes the image's place.
+      const img = page.locator('[data-test="image-filter-mask"] .wp-ifm__canvas, [data-test="image-filter-detail-img"]').first();
+      const box = await img.boundingBox({ timeout: 5_000 }).catch(() => null);
       if (!box) throw new StepError("The detail image isn't on screen.");
       return { x: box.x + box.width * fx, y: box.y + box.height * fy };
     };
