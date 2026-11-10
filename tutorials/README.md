@@ -20,8 +20,8 @@ After the take, `render.mjs` adds a text-to-speech voice and writes the finished
 ## Make a video
 
 1. **Voice.** Run `pip install kokoro-onnx soundfile` once, then `python tutorials/voice/speak.py`. The first run downloads the model (~350 MB) into `voice/models/`. It speaks only lines that are new or changed. `--voice` picks another voice (`af_heart` is the default; others are `af_bella`, `am_michael`, `bf_emma` and `bm_george`). Run it before recording, because each line's length decides how long the hands wait for the voice.
-2. **Record.** Start ComfyUI with this extension on port 8189, or a clean one (see below). Add this folder as a pack in Watchwright, then start a run with the tutorials you want. Each take's video and `files/cues.json` land in its attempt folder.
-3. **Render.** Run `node tutorials/render.mjs <attempt folder>`. It needs a full ffmpeg with libx264 and aac on `PATH` (or pass `--ffmpeg <path>`); Playwright's own ffmpeg can't do it. The finished files go to `tutorials/out/`.
+2. **Record.** Start ComfyUI with this extension on port 8189, or a clean one (see below). Add this folder as a pack in Watchwright (0.16 or newer), then start a run with the tutorials you want. Each take's video and `files/cues.json` land in its attempt folder. The pack asks for High quality at 60 frames a second, following the tab in front (`run` in `pack.ts`). Watchwright encodes each video after its take (the attempt page says **Finishing this video…**), and until then it keeps the raw frames, about 1 GB for three minutes, so leave room on the drive.
+3. **Render.** Once the video is finished, run `node tutorials/render.mjs <attempt folder>`. It needs a full ffmpeg with libx264 and aac on `PATH` (or pass `--ffmpeg <path>`); Playwright's own ffmpeg can't do it, and one with zimg (`zscale`, in the usual full builds) converts the colours exactly. It writes 60 fps (`--fps 30` for smaller files) and turns Watchwright's full-range video into the limited range players expect. The finished files go to `tutorials/out/`.
 
 ### Record on a clean ComfyUI
 

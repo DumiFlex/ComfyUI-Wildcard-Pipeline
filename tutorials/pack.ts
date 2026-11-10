@@ -61,8 +61,13 @@ export default pack({
     width: { type: "number", default: 1024, description: "Image width for the showcase." },
     height: { type: "number", default: 1280, description: "Image height for the showcase." },
   },
-  // One take per tutorial, every take keeps its video, no robot labels in the picture.
-  run: { video: "always", showActions: false, chapters: false, frameQuality: 92, trace: "problems", pauseLimitMinutes: 5, testTimeout: 15 * 60_000 },
+  // One take per tutorial, every take keeps its video, no robot labels in the picture. High quality
+  // (Watchwright 0.16+): JPEG 100 frames, every frame kept, encoded after the take; 60 fps so the
+  // pointer (moved every 16 ms) glides; followVideo keeps the picture on whichever tab is in front.
+  run: {
+    video: "always", videoQuality: "high", videoFps: 60, followVideo: true,
+    showActions: false, chapters: false, trace: "problems", pauseLimitMinutes: 5, testTimeout: 15 * 60_000,
+  },
   helpers: benchHelpers,
 
   async setup(ctx) {
