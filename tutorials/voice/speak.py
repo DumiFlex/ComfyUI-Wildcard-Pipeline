@@ -1,17 +1,25 @@
 """Speaks every narration line of the tutorials with a local text-to-speech model.
 
-    python tutorials/voice/speak.py [--voice af_heart] [--speed 1.0] [--only T01]
+    python tutorials/voice/speak.py [--engine qwen3|kokoro] [--voice af_heart] [--only T01]
 
 Reads each `t.say("caption")` / `t.say("caption", "spoken")` line from tutorials/tests/*.ts
 and speaks the spoken text (else the caption through `spoken_text`), writes one WAV per line into
 voice/cache/<id>.wav (the id is tutorial.ts's lineId: the first 12 hex of the line's SHA-1) and
 voice/lines.json, which tells the recording how long each line takes, so the hands wait for the
-voice. Lines already spoken with the same voice and speed are kept.
+voice. Lines already spoken with the same engine, voice and speed are kept.
 
-The model is Kokoro-82M (Apache-2.0) through kokoro-onnx, which runs on the CPU at a few times
-real time. Its two files (~350 MB) download into voice/models/ on the first run.
+Two engines:
 
-Needs: pip install kokoro-onnx soundfile
+- qwen3 (the narrator): Qwen3-TTS 1.7B Base (Apache-2.0) on a CUDA GPU, cloning a reference
+  that Kokoro speaks once (voice/ref/<voice>.wav, REF_TEXT). It sounds the most human but now and
+  then drifts on one line (runs on, mumbles, stops early), so every take is checked by its length
+  (and by its words when faster-whisper is installed) and spoken again with another seed; a line
+  that fails every try is spoken by Kokoro and listed at the end. About 3-4x slower than real
+  time without flash-attn (~1 hour for every line). Needs: pip install qwen-tts soundfile
+  kokoro-onnx, plus a CUDA build of torch. The model (~4.5 GB) downloads from Hugging Face.
+- kokoro: Kokoro-82M (Apache-2.0) through kokoro-onnx, on the CPU at a few times real time.
+  Its two files (~350 MB) download into voice/models/ on the first run.
+  Needs: pip install kokoro-onnx soundfile
 """
 
 from __future__ import annotations
@@ -29,6 +37,7 @@ TESTS = HERE.parent / "tests"
 CACHE = HERE / "cache"
 MODELS = HERE / "models"
 LINES = HERE / "lines.json"
+REFS = HERE / "ref"
 RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 
@@ -148,12 +157,179 @@ def synth(kokoro, spoken: str, voice: str, speed: float):
     return kokoro.create(spoken, voice=voice, speed=speed, lang="en-us")
 
 
+# ---- Qwen3-TTS ---------------------------------------------------------------------------------
+
+QWEN_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+# What Kokoro says for the reference the Qwen3 voice is cloned from (~8 s with af_heart).
+REF_TEXT = (
+    "Wildcard Pipeline builds prompts from lists you make yourself. "
+    "Each run rolls new picks, and the rules keep them making sense together."
+)
+TRIES = 4
+# Speaking rate of the narrator, words per second, for the length check (af_heart clone: ~2.6).
+WPS = 2.6
+QUIET = 0.01
+
+
+def trim(samples, rate: int):
+    """The take without the silence before and after it (50 ms kept each side)."""
+    import numpy as np
+
+    loud = np.flatnonzero(np.abs(samples) > QUIET)
+    if loud.size == 0:
+        return samples[:0]
+    pad = int(rate * 0.05)
+    return samples[max(loud[0] - pad, 0) : loud[-1] + pad]
+
+
+def longest_gap(samples, rate: int) -> float:
+    """The longest quiet stretch inside the take, in seconds."""
+    import numpy as np
+
+    step = int(rate * 0.01)
+    if len(samples) < step * 2:
+        return 0.0
+    env = np.abs(samples[: len(samples) // step * step]).reshape(-1, step).max(axis=1)
+    best = run = 0
+    for q in env < QUIET:
+        run = run + 1 if q else 0
+        best = max(best, run)
+    return best * 0.01
+
+
+def take_problem(seconds: float, gap: float, spoken: str) -> str | None:
+    """Why a take sounds drifted, from its length alone, or None when it looks right."""
+    words = max(len(re.findall(r"[\w']+", spoken)), 1)
+    expected = words / WPS
+    if seconds < 0.3:
+        return "empty"
+    if seconds > max(expected * 1.9, expected + 2.5):
+        return f"too long ({seconds:.1f} s for ~{expected:.1f} s)"
+    if words >= 4 and seconds < expected * 0.45:
+        return f"too short ({seconds:.1f} s for ~{expected:.1f} s)"
+    if gap > 1.2:
+        return f"a {gap:.1f} s gap"
+    return None
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9']+", text.lower())
+
+
+def word_match(heard: str, spoken: str) -> float:
+    """How much of the spoken text the transcript holds (0..1), letters run together."""
+    want = "".join(_words(spoken))
+    got = "".join(_words(heard))
+    if not want:
+        return 1.0
+    from difflib import SequenceMatcher
+
+    return SequenceMatcher(None, want, got, autojunk=False).ratio()
+
+
+class Qwen3:
+    def __init__(self, ref_wav: Path, ref_text: str) -> None:
+        import torch
+        from qwen_tts import Qwen3TTSModel
+
+        if not torch.cuda.is_available():
+            raise RuntimeError("Qwen3-TTS needs a CUDA GPU (use --engine kokoro on the CPU)")
+        self.torch = torch
+        self.model = Qwen3TTSModel.from_pretrained(
+            QWEN_MODEL, device_map="cuda:0", dtype=torch.bfloat16
+        )
+        self.prompt = self.model.create_voice_clone_prompt(
+            ref_audio=str(ref_wav), ref_text=ref_text
+        )
+        self.whisper = None
+        try:
+            from faster_whisper import WhisperModel
+
+            self.whisper = WhisperModel("small.en", device="cuda", compute_type="float16")
+        except Exception:  # optional: the length check alone still catches most drift
+            print("faster-whisper not available: checking takes by length only")
+
+    def heard(self, samples, rate: int) -> str | None:
+        if self.whisper is None:
+            return None
+        import numpy as np
+
+        audio = samples.astype(np.float32)
+        if rate != 16000:
+            idx = np.arange(0, len(audio), rate / 16000)
+            audio = np.interp(idx, np.arange(len(audio)), audio).astype(np.float32)
+        segments, _ = self.whisper.transcribe(audio, language="en", beam_size=1)
+        return " ".join(s.text for s in segments)
+
+    def once(self, spoken: str, seed: int):
+        import numpy as np
+
+        self.torch.manual_seed(seed)
+        words = max(len(spoken.split()), 1)
+        # 12 codec frames a second: room for twice the expected length, so a run-on stops early.
+        cap = int(12 * max(words / WPS * 2.2, 4.0)) + 24
+        try:
+            wavs, rate = self.model.generate_voice_clone(
+                text=spoken,
+                language="English",
+                voice_clone_prompt=self.prompt,
+                max_new_tokens=cap,
+            )
+        except TypeError:
+            wavs, rate = self.model.generate_voice_clone(
+                text=spoken, language="English", voice_clone_prompt=self.prompt
+            )
+        return np.asarray(wavs[0], dtype=np.float32), rate
+
+    def speak(self, spoken: str, lid: str):
+        """The first take that passes the checks, else (None, reason) after TRIES takes."""
+        best = None
+        reason = ""
+        for n in range(TRIES):
+            samples, rate = self.once(spoken, seed=int(lid[:8], 16) + n)
+            samples = trim(samples, rate)
+            seconds = len(samples) / rate
+            problem = take_problem(seconds, longest_gap(samples, rate), spoken)
+            if problem is None:
+                heard = self.heard(samples, rate)
+                score = 1.0 if heard is None else word_match(heard, spoken)
+                if score >= 0.8:
+                    return (samples, rate), n + 1, None
+                problem = f"words off ({score:.2f}): {heard!r}"
+                # Right length but a word or two off: keep the closest in case none pass.
+                if best is None or score > best[0]:
+                    best = (score, (samples, rate))
+            reason = problem
+            print(f"  take {n + 1}: {problem}")
+        if best is not None:
+            return best[1], TRIES, f"kept the closest take ({reason})"
+        return None, TRIES, reason
+
+
+def ensure_ref(kokoro, voice: str) -> Path:
+    """The reference the Qwen3 voice clones: Kokoro speaking REF_TEXT, made once."""
+    import soundfile as sf
+
+    REFS.mkdir(parents=True, exist_ok=True)
+    wav = REFS / f"{voice}.wav"
+    if not wav.exists():
+        samples, rate = kokoro.create(REF_TEXT, voice=voice, speed=1.0, lang="en-us")
+        sf.write(wav, samples, rate)
+    return wav
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
+        "--engine",
+        choices=("qwen3", "kokoro"),
+        default="qwen3",
+        help="qwen3 (the narrator, CUDA GPU) or kokoro (CPU)",
+    )
+    ap.add_argument(
         "--voice",
         default="af_heart",
-        help="a Kokoro voice (af_heart, af_bella, am_michael, bf_emma …)",
+        help="a Kokoro voice (af_heart, af_bella, am_michael, bf_emma …); qwen3 clones it",
     )
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument(
@@ -180,17 +356,26 @@ def main() -> int:
 
     ensure_models()
     kokoro = Kokoro(str(MODELS / FILES[0]), str(MODELS / FILES[1]))
+    qwen = None
+    if args.engine == "qwen3":
+        try:
+            qwen = Qwen3(ensure_ref(kokoro, args.voice), REF_TEXT)
+        except ImportError:
+            print("needs: pip install qwen-tts (and a CUDA build of torch)", file=sys.stderr)
+            return 1
+    voice = f"qwen3:{args.voice}" if qwen else args.voice
     CACHE.mkdir(parents=True, exist_ok=True)
     known: dict[str, dict] = json.loads(LINES.read_text(encoding="utf-8")) if LINES.exists() else {}
 
     made = 0
+    fell_back: list[str] = []
     for text, spoken in texts.items():
         lid = line_id(text)
         wav = CACHE / f"{lid}.wav"
         old = known.get(lid)
         same = (
             old
-            and old.get("voice") == args.voice
+            and old.get("voice") == voice
             and old.get("speed") == args.speed
             # A line spoken before its spoken text changed (a new rule, a new override) is redone.
             and old.get("spoken") == spoken
@@ -198,23 +383,42 @@ def main() -> int:
         )
         if same and wav.exists() and not args.force:
             continue
-        samples, rate = synth(kokoro, spoken, args.voice, args.speed)
+        note = ""
+        if qwen is not None:
+            take, tries, problem = qwen.speak(spoken, lid)
+            if take is None:
+                # Every take drifted: Kokoro speaks it, and the line is spoken again next run.
+                samples, rate = synth(kokoro, spoken, args.voice, args.speed)
+                fell_back.append(f"{lid}  {text}  ({problem})")
+                note = "  [kokoro]"
+            else:
+                samples, rate = take
+                if problem:
+                    fell_back.append(f"{lid}  {text}  ({problem})")
+                if tries > 1:
+                    note = f"  [take {tries}]"
+        else:
+            samples, rate = synth(kokoro, spoken, args.voice, args.speed)
         sf.write(wav, samples, rate)
         known[lid] = {
             "text": text,
             "spoken": spoken,
             "method": METHOD,
             "ms": round(len(samples) / rate * 1000),
-            "voice": args.voice,
+            # A Kokoro stand-in keeps a voice that never matches, so the next run tries Qwen again.
+            "voice": voice if note != "  [kokoro]" else f"{args.voice} (stand-in)",
             "speed": args.speed,
         }
         made += 1
-        print(f"{lid}  {known[lid]['ms']:>5} ms  {text}")
+        print(f"{lid}  {known[lid]['ms']:>5} ms  {text}{note}")
 
     LINES.write_text(
         json.dumps(known, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     print(f"{made} line(s) spoken, {len(texts)} in the tests, lines.json has {len(known)}.")
+    if fell_back:
+        print(f"\n{len(fell_back)} line(s) to listen to (Kokoro stand-in or closest take):")
+        print("\n".join(fell_back))
     return 0
 
 
