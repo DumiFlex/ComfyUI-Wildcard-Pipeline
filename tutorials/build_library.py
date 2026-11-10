@@ -317,7 +317,10 @@ STYLE = {
             {
                 "id": "9af7bf95",
                 "name": "style",
-                "value": "A digital painting, painterly brush strokes, illustration, sharp focus and rich color.",
+                "value": (
+                    "A digital painting, painterly brush strokes, illustration,"
+                    " sharp focus and rich color."
+                ),
                 "negative": "photo, photorealistic, 3d render, blurry",
             }
         ]
