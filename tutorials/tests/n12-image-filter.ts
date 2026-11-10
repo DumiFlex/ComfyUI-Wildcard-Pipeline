@@ -217,6 +217,9 @@ tutorial(
       });
 
       await t.h.step("Compare and zoom", async () => {
+        // The hand last clicked the mask view switch, which keeps the arrow keys: give the keys back to the picker.
+        const focusPicker = () => page.locator('[data-test="image-filter-picker"]').evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }));
+        await focusPicker();
         await t.say("C pins this image. Step to another with the arrow key, and the two sit side by side. C again to stop.");
         await t.press("c");
         await t.beat(500);
@@ -228,6 +231,7 @@ tutorial(
         await t.say("Z is Zoom, only the picture: fit, a hundred or two hundred percent with the number keys, and a mini-map while you're in close.");
         await t.press("z");
         await t.beat(800);
+        await focusPicker();
         await t.press("2");
         await t.beat(1500);
         await t.press("0");

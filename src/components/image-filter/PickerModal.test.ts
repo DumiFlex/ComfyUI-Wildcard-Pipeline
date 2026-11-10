@@ -54,6 +54,17 @@ describe("PickerModal", () => {
     expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 3]], labels: { "0:1": "#1 · 2", "0:3": "#1 · 4" } });
   });
 
+  it("a mode change that removes the focused control hands focus back to the picker", async () => {
+    const w = mount(PickerModal, { props: { request: request([3]) }, global: { stubs: { teleport: true } }, attachTo: document.body });
+    await w.find('[data-test="image-filter-mode-detail"]').trigger("click");
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
+    await w.find('[data-test="image-filter-mode-zoom"]').trigger("click");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(document.activeElement).toBe(w.find('[data-test="image-filter-picker"]').element);
+    w.unmount();
+  });
+
   it("clicking a frame opens Detail on its first image; clicking an image only picks it", async () => {
     const w = mk(request([2, 2], { labels: [{ loop_index: 0 }, { loop_index: 1 }] }));
     await w.find('[data-test="image-filter-tile-1-1"]').trigger("click");
