@@ -33,7 +33,13 @@ function scrollableUnder(
   while (el) {
     const style = getComputedStyle(el);
     const overflow = horizontal ? style.overflowX : style.overflowY;
-    if (overflow === "auto" || overflow === "scroll") {
+    // A textarea scrolls its own text whatever its computed overflow says
+    // (Firefox can report `visible` for one), so only `hidden` rules it out.
+    const scrolls =
+      overflow === "auto" ||
+      overflow === "scroll" ||
+      (el instanceof HTMLTextAreaElement && overflow !== "hidden");
+    if (scrolls) {
       const scrollSize = horizontal ? el.scrollWidth : el.scrollHeight;
       const clientSize = horizontal ? el.clientWidth : el.clientHeight;
       // Matching the host's own check: scrollable at all, not "scrollable
