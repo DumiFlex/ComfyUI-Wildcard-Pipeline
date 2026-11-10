@@ -22,19 +22,20 @@ tutorial(
 
     const nodes = await t.h.step("Two Contexts", async () => {
       await t.go("/");
-      await t.say("A big prompt reads better in parts. One Context for the character: Role, Hair, Eyes, and the Subject combine that joins them.");
-      // The setup earlier videos taught: sped up.
+      // The setup earlier videos taught: sped up, and each line comes once its part is on screen.
       await t.speedUp();
       const a = await t.addNode("WP Context", { x: 340, y: 170 });
       await t.pickModules(a, ["Role", "Hair", "Eyes", "Subject"]);
-      await t.waitVoice();
       await t.normalSpeed();
-      await t.say("A second Context for the scene, wired into the first one's upstream: Time of day, Setting, the lighting rule and the Scene combine.");
+      await t.say("A big prompt reads better in parts. One Context for the character: Role, Hair, Eyes, and the Subject combine that joins them.");
+      await t.speedUp();
       const b = await t.addNode("WP Context", { x: 1000, y: 170 });
       await t.wire(a, "context", b, "upstream");
       await t.pickModules(b, ["Time of day", "Setting", "Lighting from time", "Scene"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 170 });
       await t.wire(b, "context", asm, "context");
+      await t.normalSpeed();
+      await t.say("A second Context for the scene, wired into the first one's upstream: Time of day, Setting, the lighting rule and the Scene combine.");
       await t.waitVoice();
       await t.callout("vars", t.node(asm), "Variables from both Contexts", 4);
       await t.say("Everything set upstream flows down the chain. The Assembler offers variables from both Contexts.");

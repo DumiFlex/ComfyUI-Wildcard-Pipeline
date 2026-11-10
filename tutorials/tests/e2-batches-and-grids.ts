@@ -1,7 +1,7 @@
 // Example 2: a tour of the "Batches and grids" example workflow: a Context Loop sweeping Shot × Light
 // into nine frames, a label per frame, Quick / Full toggles, and Label & Grid's XY sheet. Run when the
 // pack makes real images (showcase).
-import { openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
+import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
 
 tutorial(
   "E2",
@@ -12,9 +12,9 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
+    // Each step's jump zooms in to a readable size and boxes the step's note.
     const stop = async (row: number) => {
-      await t.click(page.locator(`[data-test="bm-dock-row-${row}"]`));
-      await t.beat(1200);
+      await jumpTo(t, row);
     };
 
     await t.h.step("Open it", async () => {

@@ -82,7 +82,7 @@ tutorial(
       const text = await t.addNode("Preview as Text", { x: 1410, y: 560 });
       await t.wire(cl, "prompt", text, "source");
       await t.waitVoice();
-      await t.callout("mode", t.node(cl), "Gentle, Balanced or Aggressive", 4);
+      await t.callout("mode", ["gentle", "balanced", "aggressive"].map((m) => t.node(cl).locator(`[data-test="cleaner-intensity-${m}"]`)), "Gentle, Balanced or Aggressive", 4);
       await t.say("Balanced is a safe default: it removes empty brackets, stray commas and repeated tags.");
       await t.waitVoice();
       await t.uncallout("mode");

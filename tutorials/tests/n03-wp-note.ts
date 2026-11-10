@@ -101,6 +101,11 @@ tutorial(
         await t.click(done);
         await t.beat(800);
       }
+      // Still open (the button can sit under the window edge): press it directly.
+      if (await done.isVisible().catch(() => false)) {
+        await done.evaluate((el) => (el as HTMLElement).click()).catch(() => undefined);
+        await t.beat(800);
+      }
       await t.waitVoice();
     });
 

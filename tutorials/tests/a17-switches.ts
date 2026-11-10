@@ -17,8 +17,7 @@ tutorial(
 
     const nodes = await t.h.step("A workflow with a part to switch", async () => {
       await t.go("/");
-      await t.say("Here's a role at a time of day, and a second Context that adds the lighting rule.");
-      // The setup earlier videos taught: sped up.
+      // The setup earlier videos taught: sped up, then the line over what it built.
       await t.speedUp();
       const ctx1 = await t.addNode("WP Context", { x: 900, y: 170 });
       await t.pickModules(ctx1, ["Role", "Time of day"]);
@@ -32,8 +31,10 @@ tutorial(
       await t.beat(500);
       const text = await t.addNode("Preview as Text", { x: 900, y: 600 });
       await t.wire(asm, "prompt", text, "source");
-      await t.waitVoice();
       await t.normalSpeed();
+      await t.moveTo({ x: 1200, y: 960 });
+      await t.say("Here's a role at a time of day, and a second Context that adds the lighting rule.");
+      await t.waitVoice();
       return { ctx1, ctx2, asm, text };
     });
 
@@ -64,6 +65,7 @@ tutorial(
       await t.beat(400);
       await t.click(t.node(tg).locator('[data-test="tg-edit-done"]'));
       await t.beat(800);
+      await t.deselect();
       await t.waitVoice();
       return tg;
     });

@@ -41,7 +41,7 @@ tutorial(
     });
 
     await t.h.step("Make a subgraph", async () => {
-      await t.say("Select the second Context and the Assembler, and press Convert to subgraph in the toolbar.");
+      await t.say("Select the second Context and the Assembler.");
       await t.click(await titleBar(nodes.ctx));
       await t.beat(300);
       await page.keyboard.down("Shift");
@@ -49,8 +49,10 @@ tutorial(
       await page.keyboard.up("Shift");
       await t.beat(700);
       const convert = page.getByRole("button", { name: "Convert Selection to Subgraph" });
+      await t.waitVoice();
       await t.callout("convert", convert, "Convert to subgraph", 6);
-      await t.beat(900);
+      await t.say("Then press Convert to subgraph in the toolbar.");
+      await t.waitVoice();
       await t.uncallout("convert");
       await t.click(convert);
       await t.beat(1500);

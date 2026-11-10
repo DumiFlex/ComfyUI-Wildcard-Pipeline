@@ -119,9 +119,10 @@ tutorial(
       await t.callout("db", [page.locator('[data-test="database-file"]'), page.locator('[data-test="database-run-integrity"]')], "The file, and its upkeep", 5);
       await t.waitVoice();
       await t.uncallout("db");
-      await t.say("And where it's kept: per ComfyUI install, shared by every install on this PC, or inside the plugin's folder.");
-      await t.scrollTo(page.locator('[data-test="location-option-user"]'), { at: 0.4 });
+      // The last option (Root) must clear the caption: scroll by it, box all three, then say them.
+      await t.scrollTo(page.locator('[data-test="location-option-root"]'), { at: 0.5, force: true });
       await t.callout("loc", [page.locator('[data-test="location-option-user"]'), page.locator('[data-test="location-option-root"]')], "Per install is the default", 5);
+      await t.say("And where it's kept: per ComfyUI install, shared by every install on this PC, or inside the plugin's folder.");
       await t.waitVoice();
       await t.uncallout("loc");
     });

@@ -2,7 +2,7 @@
 /**
  * Turns a recorded tutorial take into the finished video.
  *
- *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60] [--loudness -19] [--no-clean]
+ *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60] [--loudness -19] [--no-clean] [--no-squeeze] [--silent-max 12]
  *
  * The attempt folder is the take's folder in Watchwright's data folder
  * (runs/<run>/<test>/attempt-N, with video-p1.webm and files/cues.json). It writes:
@@ -27,7 +27,7 @@ const opt = (name, dflt) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : dflt;
 };
-const FLAGS = new Set(["--no-clean"]); // options that take no value
+const FLAGS = new Set(["--no-clean", "--no-squeeze"]); // options that take no value
 const attempt = argv.find((a, i) => !a.startsWith("--") && !(argv[i - 1]?.startsWith("--") && !FLAGS.has(argv[i - 1])));
 if (!attempt) {
   console.error("usage: node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file>]");
@@ -137,6 +137,46 @@ for (const f of [...(take.fast ?? [])].sort((a, b) => a.from - b.from)) {
   at = b;
 }
 if (end > at) parts.push({ a: at, b: end, speed: 1 });
+
+// Long silences play faster: a stretch of the take with no voice line (a build the earlier videos
+// taught, a model loading) that would sit silent on screen for over SILENT_MAX seconds keeps
+// HOLD seconds at each end at normal speed and plays the middle so it lasts about SQUEEZE seconds
+// (2-8x). Parts the take already sped up or cut are left as they are. --no-squeeze turns it off.
+const SILENT_MAX = Number(opt("silent-max", "12"));
+const HOLD = 2.5;
+const SQUEEZE = 4;
+if (!argv.includes("--no-squeeze")) {
+  // Voice-free stretches, in video seconds.
+  const said = [...(take.cues ?? [])].sort((x, y) => x.at - y.at).map((c) => [vt(c.at), vt(c.at + c.ms + 400)]);
+  const quiet = [];
+  let from = start;
+  for (const [a, b] of said) {
+    if (a > from) quiet.push([from, a]);
+    from = Math.max(from, b);
+  }
+  if (end > from) quiet.push([from, end]);
+  const out = [];
+  let squeezed = 0;
+  for (const p of parts) {
+    if (p.speed !== 1) { out.push(p); continue; }
+    let cur = p.a;
+    for (const [qa, qb] of quiet) {
+      // Before the first line nothing has been shown yet: keep a moment of the page, cut the rest.
+      const lead = qa === start;
+      const a = Math.max(qa, p.a) + (lead ? 1.5 : HOLD);
+      const b = Math.min(qb, p.b) - (lead ? 0.5 : HOLD);
+      if (b < a + 2 || (!lead && b - a + 2 * HOLD <= SILENT_MAX) || (lead && b - a < 3)) continue;
+      if (a > cur) out.push({ a: cur, b: a, speed: 1 });
+      // A cut pushes nothing, as for a speed-0 fast-forward.
+      if (!lead) out.push({ a, b, speed: Math.min(8, Math.max(2, (b - a) / SQUEEZE)) });
+      squeezed++;
+      cur = b;
+    }
+    if (p.b > cur) out.push({ a: cur, b: p.b, speed: 1 });
+  }
+  parts.splice(0, parts.length, ...out);
+  if (squeezed) console.log(`squeezed ${squeezed} silent stretch(es) over ${SILENT_MAX} s`);
+}
 
 /** Final-video seconds for a video time. */
 function ft(t) {

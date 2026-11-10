@@ -88,6 +88,8 @@ tutorial(
       await t.wire(vc, "choice", ks, "sampler_name");
       await t.beat(500);
       await t.waitVoice();
+      // Its match and fallback rows sit under the caption: lift the node up for them, then back.
+      const wide = await t.zoomOn(vc);
       const fb = t.node(vc).locator('[data-widget-name="fallback"]');
       await t.callout("fb", fb, "When nothing matches", 4);
       await t.say("Fallback is the entry it picks when the variable is missing or matches nothing. Choose euler.");
@@ -97,6 +99,7 @@ tutorial(
       await t.beat(500);
       await t.waitVoice();
       await t.uncallout("fb");
+      await t.setView(wide);
       return { vc, ks };
     });
 

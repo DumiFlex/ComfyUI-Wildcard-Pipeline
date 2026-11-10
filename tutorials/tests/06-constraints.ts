@@ -69,10 +69,12 @@ tutorial(
 
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
-        await t.say("And here they are as pictures. The odds lean, so most land where they belong, and now and then one doesn't.");
         await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
         await showcase(t, { from: nodes.asm, preview: { x: 1560, y: 440, width: 340, height: 500 }, chain: { x: 1820, y: 960 }, between: () => t.click(plus) });
+        // Said once the pictures are on screen, not before them.
+        await t.say("And here they are as pictures. The odds lean, so most land where they belong, and now and then one doesn't.");
+        await t.waitVoice();
         await t.callout("picks", t.node(dbg), "What this picture rolled");
         await t.say("Debug shows the picks behind the last picture, so you can see the prompt change from run to run.");
         await t.waitVoice();

@@ -15,9 +15,13 @@ tutorial(
 
     const dbg = await t.h.step("Debug after a Context", async () => {
       await t.go("/");
-      await t.say("A Context with Role, Setting, Time of day, Lighting from time, and the constraint Role fits the place, put last on purpose.");
+      // Build first (sped up), then name what's on screen.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 480, y: 170 });
       await t.pickModules(ctx, ["Role", "Setting", "Time of day", "Lighting from time", "Role fits the place"]);
+      await t.normalSpeed();
+      await t.say("A Context with Role, Setting, Time of day, Lighting from time, and the constraint Role fits the place, put last on purpose.");
+      await t.waitVoice();
       await t.say("Wire WP Debug after it. It changes nothing; it shows what reached that point.");
       const dbg = await t.addNode("WP Debug", { x: 1300, y: 170 });
       await t.page.evaluate((id) => {
@@ -76,11 +80,14 @@ tutorial(
     });
 
     await t.h.step("Raw and copy", async () => {
-      await t.say("Raw is the whole run as data. Copy puts the open tab on the clipboard as JSON, handy for a bug report.");
       await t.click(view().locator('[data-test="dbg-tab-raw"]'));
-      await t.beat(900);
-      await t.callout("copy", view().locator('[data-test="dbg-copy"]'), "Copy this tab", 4);
+      await t.beat(700);
+      await t.say("Raw is the whole run as data.");
       await t.waitVoice();
+      await t.callout("copy", view().locator('[data-test="dbg-copy"]'), "Copy this tab", 4);
+      await t.say("Copy puts the open tab on the clipboard as JSON, handy for a bug report.");
+      await t.waitVoice();
+      await t.beat(500);
       await t.uncallout("copy");
       await t.click(view().locator('[data-test="dbg-tab-vars"]'));
       await t.beat(500);

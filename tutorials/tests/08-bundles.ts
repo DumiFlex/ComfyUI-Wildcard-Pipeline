@@ -31,9 +31,11 @@ tutorial(
 
     const nodes = await t.h.step("Add bundles to a Context", async () => {
       await t.go("/");
-      await t.say("On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.");
-      await t.beat(600);
+      // Place the node first: the node search would sit over the line.
       const ctx = await t.addNode("WP Context", { x: 520, y: 110 });
+      await t.beat(400);
+      await t.say("On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.");
+      await t.waitVoice();
       for (const id of ["7e3d3ec2", "86360bc3"]) {
         await t.click(t.node(ctx).locator('[data-testid="open-bundle-picker"]').first());
         await t.beat(700);

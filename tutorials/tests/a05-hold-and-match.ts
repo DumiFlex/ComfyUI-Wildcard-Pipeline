@@ -117,10 +117,13 @@ tutorial(
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
       await t.run();
       await t.beat(600);
+      // The Assembler's own preview can't see the matched time yet: keep it out of the frame.
+      await t.zoomOn(text, { top: 110 });
       await t.callout("prev", t.node(text), "Always night, always moonlight", 6);
       await t.say("Now time is night on every seed. And Lighting, which reads time, gives moonlight every time: a matched pick drives the rules and constraints after it.");
       for (let i = 0; i < 2; i++) {
-        await t.click(plus);
+        // The Context is out of the frame now: step its seed without the hand.
+        await plus.evaluate((el) => (el as HTMLElement).click()).catch(() => undefined);
         await t.beat(400);
         await t.run();
         await t.beat(900);

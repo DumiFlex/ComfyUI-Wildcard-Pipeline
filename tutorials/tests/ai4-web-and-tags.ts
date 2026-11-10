@@ -1,6 +1,7 @@
 // AI 4: web search and tag lookup. Settings › AI assistant: a search engine (SearXNG or a key), the
 // Danbooru tag lookup (turned on here, off again at the end), "Don't ask before web calls" left off,
 // the delete and auto-apply permissions. Then a chat ask that looks a tag up, after Allow.
+import { StepError } from "watchwright";
 import { aiWait, tutorial } from "../tutorial.js";
 
 const field = (id: string) => `textarea[data-test="${id}"], [data-test="${id}"] textarea, input[data-test="${id}"], [data-test="${id}"] input`;
@@ -77,6 +78,12 @@ tutorial(
         await aiWait(t);
       }
       const reply = page.locator('[data-test="ai-chat-reply"]').last();
+      // The line says it found the tag: a lookup Danbooru refused (or a network that blocks it)
+      // fails the take instead of narrating an error.
+      const said = (await reply.innerText().catch(() => "")).toLowerCase();
+      if (/danbooru (refused|is rate-limiting|answered \d)|network|couldn.t reach/.test(said)) {
+        throw new StepError(`The Danbooru lookup failed on this machine: ${said.slice(0, 200)}`);
+      }
       await t.callout("ans", reply, "The tag, from Danbooru", 5);
       await t.say("And here's what it found: the tag as Danbooru writes it, ready to paste into an option.");
       await t.waitVoice();

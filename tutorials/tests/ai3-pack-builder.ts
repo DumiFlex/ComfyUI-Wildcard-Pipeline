@@ -13,6 +13,7 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
+    let clean = true;
     const shows = (id: string) => page.locator(`[data-test="${id}"]:visible`).first().isVisible().catch(() => false);
 
     await t.h.step("Describe it", async () => {
@@ -58,21 +59,40 @@ tutorial(
       await t.click(page.locator('[data-test="pack-build"]'));
       await aiWait(t, { timeout: 90 * 60_000, quiet: 5000 });
       await t.waitVoice();
-      // A small model's pack often comes back with findings: say what they are, not just show them.
-      const findings = page.locator('[data-test="pack-finding"]');
-      const n = await findings.count();
-      if (n > 0) {
-        await t.callout("found", findings.first(), n > 1 ? `${n} things to look at` : "One thing to look at", 5);
-        await t.say("Anything the check finds is listed here, with a Fix button for each. Fix them, or install as it is and change it later.");
+      // The test run's warnings ("reads $subject, which no run set", a broken rule): Fix all with AI
+      // rebuilds those items and tests again, up to twice. The take says what's left, never that a
+      // pack with warnings passed.
+      const problems = page.locator('[data-test="pack-problems"]:visible');
+      for (let round = 0; round < 2 && (await problems.isVisible().catch(() => false)); round++) {
+        const fixAll = page.locator('[data-test="pack-problems-fix-all"]:visible');
+        if (!(await fixAll.isVisible().catch(() => false))) break;
+        if (round === 0) {
+          await t.callout("found", problems, "What the test run found", 5);
+          await t.say("The test run lists anything that doesn't roll right. Fix all with AI rebuilds those items and tests again.");
+          await t.waitVoice();
+          await t.uncallout("found");
+        }
+        await t.click(fixAll);
+        await aiWait(t, { timeout: 60 * 60_000, quiet: 5000 });
+      }
+      clean = !(await problems.isVisible().catch(() => false));
+      const ok = page.locator('[data-test="pack-ok"]:visible');
+      if (clean && (await ok.isVisible().catch(() => false))) {
+        await t.callout("ok", ok, "No warnings", 5);
+        await t.say("No warnings now: every variable is set and the rules hold.");
         await t.waitVoice();
-        await t.uncallout("found");
+        await t.uncallout("ok");
       }
     });
 
     await t.h.step("Install", async () => {
       const install = page.locator('[data-test="pack-install"]');
       if (await install.isEnabled().catch(() => false)) {
-        await t.say("Install puts it in your library as one bundle, ready for a Context.");
+        // Install sits low on the page: bring it up out of the caption's band first.
+        await t.scrollTo(install, { at: 0.45 });
+        await t.say(clean
+          ? "Install puts it in your library as one bundle, ready for a Context."
+          : "A warning or two can stay: Install puts it in your library as one bundle, and you fix the rest in its editors.");
         await t.click(install);
         await aiWait(t, { quiet: 2000 });
         await t.callout("undo", page.locator('[data-test="pack-undo"]'), "One Undo takes it all back", 4);

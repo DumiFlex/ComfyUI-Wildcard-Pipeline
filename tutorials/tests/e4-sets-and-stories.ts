@@ -1,7 +1,7 @@
 // Example 4: a tour of the "Sets and stories" example: three ways to run one loop (every frame
 // different, a photo shoot, a storyboard), chosen with WP Toggles in Pick one mode; the photo shoot is
 // run (showcase) and kept whole at its Image Filter.
-import { openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
+import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
 
 tutorial(
   "E4",
@@ -12,9 +12,9 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
+    // Each step's jump zooms in to a readable size and boxes the step's note.
     const stop = async (row: number) => {
-      await t.click(page.locator(`[data-test="bm-dock-row-${row}"]`));
-      await t.beat(1200);
+      await jumpTo(t, row);
     };
 
     await t.h.step("Open it", async () => {

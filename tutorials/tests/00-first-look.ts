@@ -81,11 +81,12 @@ tutorial(
       await t.beat(900);
       await t.waitVoice();
       await t.click(page.locator("table").getByText("Role", { exact: true }).first());
-      await t.say("Role is a list of who the picture is about: a knight, a battle mage, a forest ranger and a clockwork inventor. Its editor shows the options.");
-      await t.beat(1200);
-      await t.waitVoice();
+      await t.beat(800);
+      // Bring the options table up before the line that names it, clear of the caption.
       const options = page.locator('[data-test^="wc-opt-row-"]');
       await t.scrollTo(page.getByText(/^Options \(\d+\)$/).first());
+      await t.say("Role is a list of who the picture is about: a knight, a battle mage, a forest ranger and a clockwork inventor. Its editor shows the options.");
+      await t.waitVoice();
       await t.callout("opts", [options.first(), options.last()], "Options, weights and chances", 4);
       await t.say("Every option has a weight. The chance column shows how often each one rolls.");
       await t.waitVoice();
@@ -103,10 +104,12 @@ tutorial(
       await t.say("Documentation explains every node, editor and setting, with pictures.");
       await t.beat(1500);
       await t.waitVoice();
-      await t.click(page.locator('[data-test="topbar-settings"]'));
+      await t.callout("gear", page.locator('[data-test="topbar-settings"]'), "Settings", 6);
       await t.say("The gear opens the settings.");
-      await t.beat(1200);
       await t.waitVoice();
+      await t.uncallout("gear");
+      await t.click(page.locator('[data-test="topbar-settings"]'));
+      await t.beat(1200);
       const sections = page.locator('[data-test^="settings-nav-"]');
       await t.callout("sections", [sections.first(), sections.last()], "Settings", 4);
       await t.say("Besides the look of the manager, they cover how editors and autocomplete behave, the nodes on the canvas, the test runner, the AI assistant, your database and its backups, and moving settings to another machine.");

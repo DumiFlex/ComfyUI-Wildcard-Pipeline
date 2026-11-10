@@ -64,8 +64,12 @@ tutorial(
     });
 
     await t.h.step("A seed per frame", async () => {
+      const seedsBtn = t.node(nodes.loop).locator('[data-test="loop-seeds-btn"]');
+      await t.callout("btn", seedsBtn, "Seeds", 4);
       await t.say("Each frame rolls on its own seed. The seeds button lists them.");
-      await t.click(t.node(nodes.loop).locator('[data-test="loop-seeds-btn"]'));
+      await t.waitVoice();
+      await t.uncallout("btn");
+      await t.click(seedsBtn);
       await t.beat(900);
       const modal = page.locator('[data-test="seed-modal"]').last();
       await t.callout("seeds", modal, "One seed per frame", 5);

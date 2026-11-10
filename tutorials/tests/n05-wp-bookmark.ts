@@ -90,7 +90,7 @@ tutorial(
 
     await t.h.step("Step through them", async () => {
       await t.say("Add a second one, by the Assembler.");
-      const bm2 = await t.addNode("WP Bookmark", { x: 1500, y: 860 });
+      const bm2 = await t.addNode("WP Bookmark", { x: 1400, y: 740 });
       await t.beat(600);
       await t.fill(titleOf(bm2), "Output", { cps: 14 });
       const done2 = t.node(bm2).locator('[data-test="bm-done"]');
@@ -100,6 +100,11 @@ tutorial(
       if (await done2.isVisible().catch(() => false)) {
         await t.click(done2);
         await t.beat(900);
+      }
+      // Still open (the button can sit under the window edge): press it directly.
+      if (await done2.isVisible().catch(() => false)) {
+        await done2.evaluate((el) => (el as HTMLElement).click()).catch(() => undefined);
+        await t.beat(800);
       }
       await t.say("With several, previous and next in the dock step through them in order, like slides. Good for showing a workflow to someone.");
       await t.callout("nav", [page.locator('[data-test="bm-dock-prev"]'), page.locator('[data-test="bm-dock-next"]')], "Previous and next", 4);

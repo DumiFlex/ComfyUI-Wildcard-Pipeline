@@ -29,10 +29,11 @@ tutorial(
 
     await t.h.step("Every cell", async () => {
       await t.go("/wp/constraints/7ff544c2/edit");
-      await t.say("Back to Role fits the place. Each cell of the matrix holds one rule for a pair of tags.");
       await t.scrollTo(T("matrix-grid"), { at: 0.3 });
       await t.callout("grid", T("matrix-grid"), "Rows: the role's tags. Columns: the setting's.", 6);
+      await t.say("Back to Role fits the place. Each cell of the matrix holds one rule for a pair of tags.");
       await t.waitVoice();
+      await t.beat(600);
       await t.uncallout("grid");
       await t.say("Boost and reduce multiply the chance by a factor. Exclude sets it to zero. Neutral leaves it alone.");
       await t.waitVoice();
