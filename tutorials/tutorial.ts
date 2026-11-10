@@ -500,7 +500,7 @@ export class Tutor {
         boxes = await measure();
         if (!boxes.length) return;
       } else {
-        console.warn(`[tutorial] callout "${id}" ends at y ${Math.round(bottom)}, under the caption (limit ${limit}): lay the take out higher.`);
+        this.h.log(`callout "${id}" ends at y ${Math.round(bottom)}, under the caption (limit ${limit}): lay the take out higher.`);
       }
     }
     const x = Math.min(...boxes.map((b) => b.x)) - pad;

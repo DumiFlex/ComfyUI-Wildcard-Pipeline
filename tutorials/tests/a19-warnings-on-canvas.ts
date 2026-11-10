@@ -44,7 +44,7 @@ tutorial(
 
     await t.h.step("In the template", async () => {
       await t.say("The Assembler checks its template too. Type a mood nothing sets.");
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1480, y: 170 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 540 });
       await t.wire(nodes.ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $time, $lighting, $mood", { cps: 16 });
