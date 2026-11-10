@@ -29,8 +29,12 @@
     // Padding is the same on both sides of an axis: near an edge (a top-bar button) it shrinks on
     // both, so the box stays centred on its part instead of losing only the side at the edge.
     const room = (lo, hi, max) => Math.max(2, Math.min(8, lo - EDGE, max - EDGE - hi));
-    const padX = room(rect.x, rect.x + rect.width, vw);
-    const padY = room(rect.y, rect.y + rect.height, vh);
+    // And the same on every side: a top-bar button only has a few pixels above it, and a box with
+    // 8 px at the sides but 2 px above and below read as off-centre (wide and squat round a square
+    // button), so the tighter axis sets both.
+    const pad = Math.min(room(rect.x, rect.x + rect.width, vw), room(rect.y, rect.y + rect.height, vh));
+    const padX = pad;
+    const padY = pad;
     const left = Math.max(EDGE, rect.x - padX);
     const top = Math.max(EDGE, rect.y - padY);
     const right = Math.min(vw - EDGE, rect.x + rect.width + padX);
