@@ -36,7 +36,7 @@ const LOOK_SHAPE: Record<LookName, { radius: string; pill: string; font: string;
 const choices = computed<ChoiceCardOption[]>(() => {
   if (props.kind === "palette") {
     return PALETTE_OPTIONS.map((p) => {
-      const [page, card, accent] = p.swatch[ui.resolvedTheme];
+      const [page, card, accent] = tweaks.swatchFor(p.id, ui.resolvedTheme) ?? p.swatch[ui.resolvedTheme];
       return { value: p.id, label: p.label, hint: p.hint, style: { "--sw-page": page, "--sw-card": card, "--sw-accent": accent } };
     });
   }

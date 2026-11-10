@@ -1,6 +1,15 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import { useUiStore, type DensityMode } from "./uiStore";
+import {
+  comfyPalette,
+  deriveManagerTokens,
+  managerSheet,
+  primaryRamp,
+  startComfyPalette,
+  stopComfyPalette,
+  writeManagerSheet,
+} from "../utils/comfy-palette-theme";
 
 /**
  * Runtime tweaks store — colour theme, look, accent palette and sidebar mode. Density is a
@@ -20,7 +29,7 @@ export type PresetAccent = "violet" | "indigo" | "teal" | "rose" | "amber";
 export type AccentName  = PresetAccent | "theme" | "custom";
 /** Colour theme: surfaces, borders, text and a default accent. `data-wp-palette`
  *  on <html>; the rules live in kit/theme/palettes.css. */
-export type PaletteName = "orbit" | "native" | "nebula" | "tide" | "ember" | "contrast";
+export type PaletteName = "orbit" | "native" | "nebula" | "tide" | "ember" | "contrast" | "comfyui";
 /** Look: everything that is not colour (shape, type, borders, depth).
  *  `data-wp-look` on <html>; the rules live in kit/theme/looks.css. */
 export type LookName    = "orbit" | "crisp" | "soft" | "terminal" | "editorial" | "compact" | "tui";
@@ -133,6 +142,8 @@ export interface PaletteOption {
   swatch: { dark: [string, string, string]; light: [string, string, string] };
   /** Keeps its own accent; the accent picker is off. */
   locksAccent?: boolean;
+  /** Decides dark or light itself; the Theme setting is set aside. */
+  ownScheme?: boolean;
 }
 
 /** Values mirror kit/theme/palettes.css. */
@@ -149,6 +160,9 @@ export const PALETTE_OPTIONS: PaletteOption[] = [
     swatch: { dark: ["#110d0b", "#251d19", "#c2410c"], light: ["#faf7f4", "#e9e0d7", "#c2410c"] } },
   { id: "contrast", label: "High contrast", hint: "Black and white, solid borders, a yellow focus ring.",
     swatch: { dark: ["#000000", "#262626", "#3730a3"], light: ["#ffffff", "#dedede", "#3730a3"] }, locksAccent: true },
+  // Swatch until the palette is read; ThemeChoices shows the live one.
+  { id: "comfyui",  label: "ComfyUI palette", hint: "Your ComfyUI color palette, imported ones too. Switches when it does.",
+    swatch: { dark: ["#18181a", "#353535", "#4f46e5"], light: ["#f3f3f3", "#ffffff", "#4f46e5"] }, ownScheme: true },
 ];
 
 export interface LookOption { id: LookName; label: string; hint: string }
@@ -322,21 +336,67 @@ export const useTweaksStore = defineStore("tweaks", () => {
     accentPicked.value = true;
     accent.value = name;
     applyAccent(name);
+    if (palette.value === "comfyui") applyComfyPalette();
+  }
+
+  /** The ComfyUI palette theme: core Dark / Light (or a palette not read
+   *  yet) wear Native; any other palette gets its derived sheet. */
+  const comfyAttr = computed<PaletteName>(() => (comfyPalette.value?.base ? "comfyui" : "native"));
+
+  /** The ComfyUI palette option's live swatch [page, card, accent], or
+   *  `null` while it wears Native (its static swatch then). */
+  const comfySwatch = computed<[string, string, string] | null>(() => {
+    const info = comfyPalette.value;
+    if (!info?.base) return null;
+    const tokens = deriveManagerTokens(info.base, info.light);
+    const ramp = primaryRamp(info.primary, tokens, info.light, paletteFromHex);
+    return [tokens["--wp-bg"] ?? "", tokens["--wp-bg-2"] ?? "", ramp?.["--wp-accent-600"] ?? ACCENT_PALETTES.indigo["--wp-accent-600"]];
+  });
+
+  /** A palette's [page, card, accent] as its picker swatch shows it now. */
+  function swatchFor(id: PaletteName, mode: "dark" | "light"): [string, string, string] | undefined {
+    if (id === "comfyui" && comfySwatch.value) return comfySwatch.value;
+    return PALETTE_OPTIONS.find((p) => p.id === id)?.swatch[mode];
+  }
+
+  function applyComfyPalette() {
+    if (palette.value !== "comfyui") {
+      writeManagerSheet("");
+      ui.setSchemeOverride(null);
+      return;
+    }
+    const info = comfyPalette.value;
+    ui.setSchemeOverride(info ? (info.light ? "light" : "dark") : null);
+    if (!info?.base) {
+      writeManagerSheet("");
+      return;
+    }
+    const tokens = deriveManagerTokens(info.base, info.light);
+    const ramp = accent.value === "theme" ? primaryRamp(info.primary, tokens, info.light, paletteFromHex) : null;
+    writeManagerSheet(managerSheet(tokens, ramp));
   }
 
   function applyThemeAttrs() {
     if (!hasDocument()) return;
     const root = document.documentElement;
-    if (palette.value === "orbit") root.removeAttribute("data-wp-palette");
-    else root.setAttribute("data-wp-palette", palette.value);
+    const attr = palette.value === "comfyui" ? comfyAttr.value : palette.value;
+    if (attr === "orbit") root.removeAttribute("data-wp-palette");
+    else root.setAttribute("data-wp-palette", attr);
     if (look.value === "orbit") root.removeAttribute("data-wp-look");
     else root.setAttribute("data-wp-look", look.value);
+  }
+
+  function followComfy() {
+    if (palette.value === "comfyui") startComfyPalette();
+    else stopComfyPalette();
+    applyComfyPalette();
   }
 
   function setPalette(name: PaletteName) {
     palette.value = name;
     applyThemeAttrs();
     applyAccent(accent.value);
+    followComfy();
   }
 
   function setLook(name: LookName) {
@@ -376,6 +436,7 @@ export const useTweaksStore = defineStore("tweaks", () => {
     palette.value = "orbit";
     look.value = "orbit";
     applyThemeAttrs();
+    followComfy();
     accent.value = DEFAULT_ACCENT;
     accentPicked.value = false;
     customHex.value = DEFAULT_CUSTOM_HEX;
@@ -393,10 +454,18 @@ export const useTweaksStore = defineStore("tweaks", () => {
   function initialize() {
     applyThemeAttrs();
     applyAccent(accent.value);
+    followComfy();
     // Re-applies (and, for a value still only in the legacy tweaks blob,
     // persists under the ui store's own key).
     ui.setDensity(ui.density);
   }
+
+  // A palette read (or switched in ComfyUI) re-derives the sheet and scheme.
+  watch(comfyPalette, () => {
+    if (palette.value !== "comfyui") return;
+    applyThemeAttrs();
+    applyComfyPalette();
+  });
 
   // Persist on every change to a tracked field.
   watch(
@@ -414,6 +483,8 @@ export const useTweaksStore = defineStore("tweaks", () => {
     palette,
     look,
     accentLocked,
+    comfyPalette,
+    swatchFor,
     setPalette,
     setLook,
     customHex,

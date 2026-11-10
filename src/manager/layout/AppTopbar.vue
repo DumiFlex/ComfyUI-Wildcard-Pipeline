@@ -72,13 +72,15 @@ function openUpdateDialog(): void { updateDialogOpen.value = true; }
 
 /** Theme button icon — mirrors prototype (current state, not next). */
 const themeIcon = computed(() => {
-  switch (ui.themeMode) {
+  // The ComfyUI palette theme decides dark or light: show what it picked.
+  switch (ui.schemeOverride ?? ui.themeMode) {
     case "light": return "pi-sun";
     case "dark":  return "pi-moon";
     default:      return "pi-desktop";
   }
 });
-const themeLabel = computed(() => `Theme: ${ui.themeMode}`);
+const themeLabel = computed(() =>
+  ui.schemeOverride ? `Theme: ${ui.schemeOverride}, set by your ComfyUI palette` : `Theme: ${ui.themeMode}`);
 
 const router = useRouter();
 const { canGoBack } = useBrowserHistory();
@@ -216,6 +218,7 @@ function openPalette(): void {
       variant="ghost"
       :icon="themeIcon"
       :aria-label="themeLabel"
+      :disabled="ui.schemeOverride !== null"
       data-test="topbar-theme"
       @click="ui.cycleTheme"
     />
