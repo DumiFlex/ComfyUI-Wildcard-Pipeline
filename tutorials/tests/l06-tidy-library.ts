@@ -97,7 +97,7 @@ tutorial(
     });
 
     await t.h.step("Filters", async () => {
-      await t.say("Filters narrow the table by kind, category, favourites, tags, and content rating: safe for work, or eighteen plus. Each item's editor sets its rating.");
+      await t.say("Filters narrow the table by kind, category, favourites, tags, and content rating: SFW or 18+. Each item's editor sets its rating.", "Filters narrow the table by kind, category, favourites, tags, and content rating: safe for work, or eighteen plus. Each item's editor sets its rating.");
       await t.click(page.getByRole("button", { name: "Filters" }));
       await t.beat(700);
       await t.click(page.getByRole("checkbox", { name: /Favorites only/ }).first());

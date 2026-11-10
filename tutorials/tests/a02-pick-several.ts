@@ -85,7 +85,7 @@ tutorial(
       await t.press("ControlOrMeta+a");
       await t.waitVoice();
       await t.callout("inline", modal.locator('[data-test="row-value"]').first(), "{count$$joiner$$choices}", 6);
-      await t.say("Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.");
+      await t.say("{ a count, $$, the joiner, $$, then the choices }", "Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.");
       await t.type("A {2$$ and $$watercolor|ink|oil paint|charcoal} painting.", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();

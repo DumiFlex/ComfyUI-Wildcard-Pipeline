@@ -2,7 +2,8 @@
 
     python tutorials/voice/speak.py [--voice af_heart] [--speed 1.0] [--only T01]
 
-Reads each `t.say("...")` line from tutorials/tests/*.ts, writes one WAV per line into
+Reads each `t.say("caption")` / `t.say("caption", "spoken")` line from tutorials/tests/*.ts
+and speaks the spoken text (else the caption through `spoken_text`), writes one WAV per line into
 voice/cache/<id>.wav (the id is tutorial.ts's lineId: the first 12 hex of the line's SHA-1) and
 voice/lines.json, which tells the recording how long each line takes, so the hands wait for the
 voice. Lines already spoken with the same voice and speed are kept.
@@ -31,8 +32,16 @@ LINES = HERE / "lines.json"
 RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 
-# t.say("…") / t.say('…') / t.say(`…`) with no ${} inside: the line as written.
-SAY = re.compile(r"""\.say\(\s*(?P<q>["'`])(?P<text>(?:\\.|(?!(?P=q)).)*)(?P=q)\s*\)""", re.S)
+# t.say("caption") or t.say("caption", "spoken"), each "…", '…' or `…` with no ${} inside.
+_STR = r"""(?P<q{n}>["'`])(?P<{name}>(?:\\.|(?!(?P=q{n})).)*)(?P=q{n})"""
+SAY = re.compile(
+    r"\.say\(\s*"
+    + _STR.format(n=1, name="text")
+    + r"(?:\s*,\s*"
+    + _STR.format(n=2, name="spoken")
+    + r")?\s*,?\s*\)",
+    re.S,
+)
 
 
 def line_id(text: str) -> str:
@@ -43,16 +52,18 @@ def unescape(text: str) -> str:
     return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), text)
 
 
-def lines_in(files: list[Path]) -> list[str]:
-    out: list[str] = []
+def lines_in(files: list[Path]) -> dict[str, str]:
+    """Each caption, with what the voice reads for it (its own spoken text, else the rules)."""
+    out: dict[str, str] = {}
     for f in files:
         for m in SAY.finditer(f.read_text(encoding="utf-8")):
             text = unescape(m.group("text"))
-            if m.group("q") == "`" and "${" in text:
+            spoken = unescape(m.group("spoken")) if m.group("spoken") is not None else None
+            if "${" in text or (spoken and "${" in spoken):
                 print(f"skipped a line with ${{}} in {f.name}: {text[:60]}", file=sys.stderr)
                 continue
             if text not in out:
-                out.append(text)
+                out[text] = spoken if spoken is not None else spoken_text(text)
     return out
 
 
@@ -74,11 +85,19 @@ def spoken_text(text: str) -> str:
     def var(m: re.Match[str]) -> str:
         return (m.group(1) + m.group(2).replace(".", " dot ")).replace("_", " ").lower()
 
-    t = re.sub(r"\$(\w+)((?:\.\w+)*)", var, text)
+    # A file name says its dot: "library.json" as "library dot json".
+    t = re.sub(r"\b(\w+)\.(json|txt|png|csv|yaml|zip|md)\b", r"\1 dot \2", text)
+    t = re.sub(r"\$(\w+)((?:\.\w+)*)", var, t)
     t = re.sub(r"\bWP\b", "W P", t)
     # Spelled the way it's said: "LoRA" letter by letter sounds wrong, "lora" reads as one word.
     t = re.sub(r"\bLoRA(s?)\b", r"lora\1", t)
     t = re.sub(r"\bComfyUI\b", "Comfy U I", t)
+    # A version as people say it: "2.22" as "two twenty-two", not "two point two two".
+    t = re.sub(r"\b(\d+)\.(\d{2})\b", r"\1 \2", t)
+    # Names the model spells out wrong.
+    t = re.sub(r"\bdpmpp\b", "D P M P P", t)
+    t = re.sub(r"\b(\d)m\b", r"\1 M", t)
+    t = re.sub(r"\bSearXNG\b", "searx N G", t)
     return t
 
 
@@ -118,19 +137,24 @@ def main() -> int:
     known: dict[str, dict] = json.loads(LINES.read_text(encoding="utf-8")) if LINES.exists() else {}
 
     made = 0
-    for text in texts:
+    for text, spoken in texts.items():
         lid = line_id(text)
         wav = CACHE / f"{lid}.wav"
         old = known.get(lid)
-        same = old and old.get("voice") == args.voice and old.get("speed") == args.speed
+        same = (
+            old
+            and old.get("voice") == args.voice
+            and old.get("speed") == args.speed
+            # A line spoken before its spoken text changed (a new rule, a new override) is redone.
+            and old.get("spoken") == spoken
+        )
         if same and wav.exists() and not args.force:
             continue
-        samples, rate = kokoro.create(
-            spoken_text(text), voice=args.voice, speed=args.speed, lang="en-us"
-        )
+        samples, rate = kokoro.create(spoken, voice=args.voice, speed=args.speed, lang="en-us")
         sf.write(wav, samples, rate)
         known[lid] = {
             "text": text,
+            "spoken": spoken,
             "ms": round(len(samples) / rate * 1000),
             "voice": args.voice,
             "speed": args.speed,
