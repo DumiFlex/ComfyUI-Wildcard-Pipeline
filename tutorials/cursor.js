@@ -24,13 +24,17 @@
    */
   const EDGE = 6;
   function placeCallout(box, rect) {
-    const pad = 8;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const left = Math.max(EDGE, rect.x - pad);
-    const top = Math.max(EDGE, rect.y - pad);
-    const right = Math.min(vw - EDGE, rect.x + rect.width + pad);
-    const bottom = Math.min(vh - EDGE, rect.y + rect.height + pad);
+    // Padding is the same on both sides of an axis: near an edge (a top-bar button) it shrinks on
+    // both, so the box stays centred on its part instead of losing only the side at the edge.
+    const room = (lo, hi, max) => Math.max(2, Math.min(8, lo - EDGE, max - EDGE - hi));
+    const padX = room(rect.x, rect.x + rect.width, vw);
+    const padY = room(rect.y, rect.y + rect.height, vh);
+    const left = Math.max(EDGE, rect.x - padX);
+    const top = Math.max(EDGE, rect.y - padY);
+    const right = Math.min(vw - EDGE, rect.x + rect.width + padX);
+    const bottom = Math.min(vh - EDGE, rect.y + rect.height + padY);
     box.style.left = `${left}px`;
     box.style.top = `${top}px`;
     box.style.width = `${Math.max(0, right - left)}px`;

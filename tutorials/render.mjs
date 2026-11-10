@@ -50,7 +50,7 @@ mkdirSync(out, { recursive: true });
 
 // ---- line the take's clock up with the video ------------------------------------------------------
 
-/** Every time (s) the sync mark comes up in the top-right corner, and the colour under it. */
+/** Every time (s) the sync mark comes up in the top-right corner, and when it goes off. */
 function findMarks() {
   const r = spawnSync(
     FFMPEG,
@@ -66,20 +66,18 @@ function findMarks() {
   // to its off time keeps it out of the finished video.
   const offs = [];
   let on = false;
-  let under = null;
   for (let i = 0; i < times.length; i++) {
     const [red, green, blue] = [px[i * 3], px[i * 3 + 1], px[i * 3 + 2]];
     const lit = red > 200 && green < 90 && blue > 200;
     if (lit && !on) found.push(times[i]);
     if (!lit && on) offs.push(times[i]);
-    if (!lit && under === null && times[i] > 0.5) under = [red, green, blue];
     on = lit;
   }
   if (offs.length < found.length) offs.push((times[times.length - 1] ?? 0) + 0.1);
-  return { found, offs, under: under ?? [24, 24, 27] };
+  return { found, offs };
 }
 
-const { found, offs, under } = findMarks();
+const { found, offs } = findMarks();
 if (!found.length) console.warn("No sync mark found; assuming the video starts with the take's clock.");
 // Pair each mark the take flashed with the one seen in the video, nearest to where it should be. The
 // recorder's clock drifts from the page's under load, so the voice is lined up between pairs.
@@ -205,12 +203,19 @@ const space = zimg || src709 ? ["bt709", "bt709", "bt709"] : ["smpte170m", "smpt
 
 const inputs = ["-i", video];
 const graph = [];
-// Paint the sync marks out with the colour under them.
-const hex = under.map((c) => c.toString(16).padStart(2, "0")).join("");
+// Paint the sync marks out with the pixels just below them: the two rows under the 20 px corner,
+// stretched over it. One fixed colour left a visible square wherever the corner wasn't that colour
+// (the manager, another palette) or when the encoder's range made it a shade off.
 const paint = found.map((t, i) => `between(t,${(t - 0.1).toFixed(3)},${(Math.max(t + 0.7, (offs[i] ?? t + 0.7) + 0.1)).toFixed(3)})`).join("+");
 // The recorder writes a frame only when the page changes (gaps of seconds), and `trim` ends a part at
 // its last frame, so make it constant frame rate first or every still stretch at a cut drops out.
-graph.push(`[0:v]fps=${FPS},${paint ? `drawbox=x=iw-20:y=0:w=20:h=20:color=0x${hex}:t=fill:enable='${paint}',` : ""}split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
+if (paint) {
+  graph.push(`[0:v]fps=${FPS},split=2[base][src]`);
+  graph.push(`[src]crop=20:2:iw-20:20,scale=20:20:flags=neighbor:in_range=${range}:out_range=${range}[patch]`);
+  graph.push(`[base][patch]overlay=W-20:0:enable='${paint}',split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
+} else {
+  graph.push(`[0:v]fps=${FPS},split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
+}
 parts.forEach((p, i) => {
   graph.push(`[s${i}]trim=start=${p.a.toFixed(3)}:end=${p.b.toFixed(3)},setpts=(PTS-STARTPTS)/${p.speed}[v${i}]`);
 });
