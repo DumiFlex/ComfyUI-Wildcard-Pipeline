@@ -17,7 +17,7 @@ tutorial(
     const page = t.page;
     const pickVar = async (node: string, name: string) => {
       await t.click(t.node(node).getByRole("combobox", { name: "Variable" }).first());
-      await t.type(name, { cps: 14 });
+      await t.type(name, { cps: 14, rest: false });
       await t.beat(500);
       await t.click(page.getByRole("option", { name: new RegExp(`^\\$?${name}\\b`) }).first());
       await t.beat(500);
