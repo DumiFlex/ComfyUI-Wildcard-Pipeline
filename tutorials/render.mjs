@@ -37,7 +37,9 @@ const FPS = Number(opt("fps", "60"));
 
 const result = JSON.parse(readFileSync(path.join(attempt, "result.json"), "utf8"));
 const take = JSON.parse(readFileSync(path.join(attempt, "files", "cues.json"), "utf8"));
-if (existsSync(path.join(attempt, "video.finishing"))) {
+// Watchwright encodes a high-quality take after it ends: from its raw capture (video.capture.mkv;
+// earlier 0.16 builds also left a video.finishing marker), which is removed once video.webm is done.
+if (["video.finishing", "video.capture.mkv"].some((f) => existsSync(path.join(attempt, f)))) {
   console.error(`Watchwright is still encoding this take's video (the attempt page says "Finishing this video…"). Try again when it's done.`);
   process.exit(1);
 }
