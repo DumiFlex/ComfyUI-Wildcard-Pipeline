@@ -2,7 +2,7 @@
 /**
  * Turns a recorded tutorial take into the finished video.
  *
- *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60] [--loudness -19]
+ *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60] [--loudness -19] [--no-clean]
  *
  * The attempt folder is the take's folder in Watchwright's data folder
  * (runs/<run>/<test>/attempt-N, with video-p1.webm and files/cues.json). It writes:
@@ -27,7 +27,8 @@ const opt = (name, dflt) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : dflt;
 };
-const attempt = argv.find((a, i) => !a.startsWith("--") && !argv[i - 1]?.startsWith("--"));
+const FLAGS = new Set(["--no-clean"]); // options that take no value
+const attempt = argv.find((a, i) => !a.startsWith("--") && !(argv[i - 1]?.startsWith("--") && !FLAGS.has(argv[i - 1])));
 if (!attempt) {
   console.error("usage: node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file>]");
   process.exit(1);
@@ -222,17 +223,25 @@ parts.forEach((p, i) => {
   graph.push(`[s${i}]trim=start=${p.a.toFixed(3)}:end=${p.b.toFixed(3)},setpts=(PTS-STARTPTS)/${p.speed}[v${i}]`);
 });
 graph.push(`${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0,fps=${FPS},${TO_TV}[vout]`);
+// Each line is cleaned before it's placed: Qwen3-TTS takes carry a fizz on every word (about
+// 5-12 kHz) and audible breaths in the pauses. Rumble cut, light denoise, a gate that turns the
+// pauses down by 20 dB (ducks rather than mutes, so word endings aren't chopped), and a de-esser.
+// --no-clean renders the lines as they are.
+const CLEAN = argv.includes("--no-clean")
+  ? ""
+  : "highpass=f=70,afftdn=nr=10:nf=-50,agate=threshold=0.01:ratio=2:range=0.1:attack=5:release=120,deesser=i=0.4:m=0.5:f=0.5:s=o,";
 voiced.forEach((c, i) => {
   inputs.push("-i", path.join(HERE, "voice", "cache", `${c.id}.wav`));
   const delay = Math.round(ft(vt(c.at)) * 1000);
-  graph.push(`[${i + 1}:a]aresample=48000,adelay=${delay}|${delay}[a${i}]`);
+  graph.push(`[${i + 1}:a]${CLEAN}aresample=48000,adelay=${delay}|${delay}[a${i}]`);
 });
 // Silence the length of the video under the voice, so the audio track covers it all.
 graph.push(`anullsrc=r=48000:cl=stereo,atrim=0:${total.toFixed(3)}[bed]`);
 // Loudness: -19 LUFS (--loudness). -16 sat a few dB over most tutorials, since a voice-only track
 // has no quiet music to average it down, and YouTube only turns loud videos down, never quiet ones up.
+// loudnorm upsamples to 192 kHz to find true peaks, so the track is brought back to 48 kHz.
 const LUFS = Number(opt("loudness", "-19"));
-graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=${LUFS}:TP=-1.5:LRA=11[aout]`);
+graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=${LUFS}:TP=-1.5:LRA=11,aresample=48000[aout]`);
 
 const mp4 = path.join(out, `${name}.mp4`);
 const args = [
