@@ -65,7 +65,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $setting.", { cps: 16 });
+      await t.type("A painting of $role $setting", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       await t.say("This scene needs an inventor. Edit Role on this node and untick everyone else. The library keeps all four.");
@@ -119,7 +119,7 @@ tutorial(
       }
       await t.waitVoice();
       await t.uncallout("prev");
-      await t.say("Without one, the setting would come out empty. WP Debug says fallback used when it kicks in, so you can spot rules that box a pick in.");
+      await t.say("Without one, the setting would come out empty, so a fallback keeps a rule from boxing a pick in.");
       await t.waitVoice();
     });
 

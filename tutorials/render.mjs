@@ -2,12 +2,12 @@
 /**
  * Turns a recorded tutorial take into the finished video.
  *
- *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>]
+ *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60]
  *
  * The attempt folder is the take's folder in Watchwright's data folder
  * (runs/<run>/<test>/attempt-N, with video-p1.webm and files/cues.json). It writes:
  *
- * - <name>.mp4: H.264 + AAC, 30 fps, the page load cut off, fast-forward parts sped up, the voice
+ * - <name>.mp4: H.264 + AAC, 60 fps (the pack records at 60; --fps 30 for smaller files), the page load cut off, fast-forward parts sped up, the voice
  *   lines (voice/cache/<id>.wav from voice/speak.py) at their cues, chapters inside the file;
  * - <name>.srt: the narration as subtitles (YouTube, Discord and players take it);
  * - <name>.chapters.txt: the chapter list for a YouTube description (from the test's steps).
@@ -33,12 +33,16 @@ if (!attempt) {
   process.exit(1);
 }
 const FFMPEG = opt("ffmpeg", "ffmpeg");
-const FPS = 30;
+const FPS = Number(opt("fps", "60"));
 
 const result = JSON.parse(readFileSync(path.join(attempt, "result.json"), "utf8"));
 const take = JSON.parse(readFileSync(path.join(attempt, "files", "cues.json"), "utf8"));
+if (existsSync(path.join(attempt, "video.finishing"))) {
+  console.error(`Watchwright is still encoding this take's video (the attempt page says "Finishing this video…"). Try again when it's done.`);
+  process.exit(1);
+}
 const video = ["video-p1.webm", "video.webm"].map((f) => path.join(attempt, f)).find((f) => existsSync(f));
-if (!video) throw new Error(`No video in ${attempt}. Was the take recorded with video on?`);
+if (!video) throw new Error(`No video in ${attempt}. Was the take recorded with video on, or is Watchwright still finishing it?`);
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const name = opt("name", `${result.test.id}-${slug(result.test.title)}`);
 const out = path.resolve(opt("out", path.join(HERE, "out")));
@@ -57,19 +61,25 @@ function findMarks() {
   const times = [...String(r.stderr).matchAll(/pts_time:\s*([\d.]+)/g)].map((m) => Number(m[1]));
   const px = r.stdout;
   const found = [];
+  // When each mark goes off again: the first unlit frame after a lit run. A busy page writes no
+  // new frame for a while, so a mark can stay on screen well past its 0.8 s; painting it out up
+  // to its off time keeps it out of the finished video.
+  const offs = [];
   let on = false;
   let under = null;
   for (let i = 0; i < times.length; i++) {
     const [red, green, blue] = [px[i * 3], px[i * 3 + 1], px[i * 3 + 2]];
     const lit = red > 200 && green < 90 && blue > 200;
     if (lit && !on) found.push(times[i]);
+    if (!lit && on) offs.push(times[i]);
     if (!lit && under === null && times[i] > 0.5) under = [red, green, blue];
     on = lit;
   }
-  return { found, under: under ?? [24, 24, 27] };
+  if (offs.length < found.length) offs.push((times[times.length - 1] ?? 0) + 0.1);
+  return { found, offs, under: under ?? [24, 24, 27] };
 }
 
-const { found, under } = findMarks();
+const { found, offs, under } = findMarks();
 if (!found.length) console.warn("No sync mark found; assuming the video starts with the take's clock.");
 // Pair each mark the take flashed with the one seen in the video, nearest to where it should be. The
 // recorder's clock drifts from the page's under load, so the voice is lined up between pairs.
@@ -177,20 +187,34 @@ chapters.forEach((c, i) => {
 const metaFile = path.join(out, `${name}.ffmeta`);
 writeFileSync(metaFile, meta.join("\n") + "\n");
 
+// Watchwright's own videos (0.16+) are full range (0-255, BT.601, from JPEG frames). A plain
+// format=yuv420p squeezes nothing and players read the MP4 as limited range, so blacks crush
+// (#171717 came out #080808). Convert to limited range BT.709 with zscale (exact); an ffmpeg without
+// zimg converts the range only and tags the file BT.601 (swscale's matrix change tints greys green).
+const probe = spawnSync(FFMPEG.replace(/ffmpeg(\.exe)?$/, "ffprobe$1"), ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=color_range,color_space", "-of", "default=nw=1", video], { encoding: "utf8" });
+const full = /color_range=pc/.test(probe.stdout ?? "");
+const src709 = /color_space=bt709/.test(probe.stdout ?? "");
+const zimg = /\bzscale\b/.test(spawnSync(FFMPEG, ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout ?? "");
+const range = full ? "full" : "limited";
+const TO_TV = zimg
+  ? `zscale=rangein=${range}:range=limited:matrixin=${src709 ? "709" : "470bg"}:matrix=709,format=yuv420p`
+  : `scale=in_range=${range}:out_range=limited,format=yuv420p`;
+const space = zimg || src709 ? ["bt709", "bt709", "bt709"] : ["smpte170m", "smpte170m", "smpte170m"];
+
 // ---- the ffmpeg graph -----------------------------------------------------------------------------
 
 const inputs = ["-i", video];
 const graph = [];
 // Paint the sync marks out with the colour under them.
 const hex = under.map((c) => c.toString(16).padStart(2, "0")).join("");
-const paint = found.map((t) => `between(t,${(t - 0.1).toFixed(3)},${(t + 0.7).toFixed(3)})`).join("+");
+const paint = found.map((t, i) => `between(t,${(t - 0.1).toFixed(3)},${(Math.max(t + 0.7, (offs[i] ?? t + 0.7) + 0.1)).toFixed(3)})`).join("+");
 // The recorder writes a frame only when the page changes (gaps of seconds), and `trim` ends a part at
 // its last frame, so make it constant frame rate first or every still stretch at a cut drops out.
 graph.push(`[0:v]fps=${FPS},${paint ? `drawbox=x=iw-20:y=0:w=20:h=20:color=0x${hex}:t=fill:enable='${paint}',` : ""}split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
 parts.forEach((p, i) => {
   graph.push(`[s${i}]trim=start=${p.a.toFixed(3)}:end=${p.b.toFixed(3)},setpts=(PTS-STARTPTS)/${p.speed}[v${i}]`);
 });
-graph.push(`${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0,fps=${FPS},format=yuv420p[vout]`);
+graph.push(`${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0,fps=${FPS},${TO_TV}[vout]`);
 voiced.forEach((c, i) => {
   inputs.push("-i", path.join(HERE, "voice", "cache", `${c.id}.wav`));
   const delay = Math.round(ft(vt(c.at)) * 1000);
@@ -209,6 +233,7 @@ const args = [
   "-map", "[vout]", "-map", "[aout]",
   "-map_metadata", String(voiced.length + 1), "-map_chapters", String(voiced.length + 1),
   "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+  "-color_range", "tv", "-colorspace", space[0], "-color_primaries", space[1], "-color_trc", space[2],
   "-c:a", "aac", "-b:a", "160k",
   "-movflags", "+faststart",
   mp4,

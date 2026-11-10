@@ -22,7 +22,7 @@ tutorial(
       await t.callout("miss", badge, "Nothing sets $time", 5);
       await t.say("Its row gets an amber dot and a label: missing var. Hover it for the whole message.");
       await t.hover(badge);
-      await t.beat(1500);
+      await t.beat(2500);
       await t.waitVoice();
       await t.uncallout("miss");
       return { ctx };
@@ -44,10 +44,10 @@ tutorial(
 
     await t.h.step("In the template", async () => {
       await t.say("The Assembler checks its template too. Type a mood nothing sets.");
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 640 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 540 });
       await t.wire(nodes.ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $time, $lighting, $mood.", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting, $mood", { cps: 16 });
       await t.beat(900);
       await t.callout("mood", t.node(asm).locator('[data-test="asm-chip-mood"]'), "Prints nothing", 5);
       await t.say("Mood is flagged as missing, so it would print nothing.");
@@ -56,7 +56,20 @@ tutorial(
     });
 
     await t.h.step("Never in the way", async () => {
+      // ComfyUI's Settings, Wildcard Pipeline, the Validation strictness row.
+      await t.click(t.page.getByRole("button", { name: /^settings/i }).first());
+      await t.beat(900);
+      const dialog = t.page.getByRole("dialog").last();
+      await t.click(dialog.getByText("Wildcard Pipeline", { exact: true }).first());
+      await t.beat(800);
+      const strict = dialog.getByText("Validation strictness", { exact: true }).first();
+      await strict.scrollIntoViewIfNeeded();
+      await t.beat(400);
+      await t.callout("strict", strict, "What the canvas shows", 8);
       await t.say("None of this stops a run. In ComfyUI's settings, Validation strictness picks what shows: everything, no blue notes, or nothing. After a run, WP Debug lists what actually happened.");
+      await t.waitVoice();
+      await t.uncallout("strict");
+      await t.press("Escape");
       await t.waitVoice();
     });
 

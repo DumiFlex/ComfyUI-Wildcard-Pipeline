@@ -23,9 +23,12 @@ tutorial(
     const nodes = await t.h.step("Two Contexts", async () => {
       await t.go("/");
       await t.say("A big prompt reads better in parts. One Context for the character: Role, Hair, Eyes, and the Subject combine that joins them.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const a = await t.addNode("WP Context", { x: 340, y: 170 });
       await t.pickModules(a, ["Role", "Hair", "Eyes", "Subject"]);
       await t.waitVoice();
+      await t.normalSpeed();
       await t.say("A second Context for the scene, wired into the first one's upstream: Time of day, Setting, the lighting rule and the Scene combine.");
       const b = await t.addNode("WP Context", { x: 1000, y: 170 });
       await t.wire(a, "context", b, "upstream");
@@ -38,14 +41,16 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("vars");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $subject $scene.", { cps: 16 });
+      await t.type("A painting of $subject $scene", { cps: 16 });
       await t.beat(600);
       return { a, b, asm };
     });
 
     await t.h.step("Hidden in between", async () => {
       await t.say("Time, setting and lighting only feed the scene. Hide them with their globe buttons, and on the character Context, hide what Subject already holds.");
+      await t.callout("globes", ["Time of day", "Setting", "Lighting from time"].map((n) => t.moduleRow(nodes.b, n).locator('[data-test="row-action-internal"]')), "Globe: hide from the prompt", 6);
       await t.hide(nodes.b, ["Time of day", "Setting", "Lighting from time"]);
+      await t.uncallout("globes");
       await t.hide(nodes.a, ["Role", "Eyes"]);
       await t.waitVoice();
       await t.callout("vars", t.node(nodes.asm), "Fewer chips, same scene", 4);
@@ -77,7 +82,7 @@ tutorial(
 
     await t.h.step("Roll", async () => {
       const plus = t.node(nodes.a).getByRole("button", { name: /increment|increase|\+/i }).first();
-      await t.say("Roll a few seeds. A later Context can also set a variable again: the last one wins, and the node shows a small note when it does.");
+      await t.say("Roll a few seeds: each part rolls on its own node, and the Assembler joins them.");
       for (let i = 0; i < 4; i++) {
         await t.click(plus);
         await t.beat(1000);

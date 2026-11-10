@@ -1,7 +1,7 @@
 // Tutorial 12: where to find help. The ? over a selected node, the example workflows in ComfyUI's
 // Templates, the button that opens the manager, the built-in docs, the shortcut sheet and command
 // palette, and What's new after an update.
-import { tutorial } from "../tutorial.js";
+import { tutorial, hideOtherPacks } from "../tutorial.js";
 
 tutorial(
   "T12",
@@ -40,6 +40,8 @@ tutorial(
       await t.beat(1200);
       const dialog = page.getByRole("dialog").last();
       const ours = dialog.getByText("ComfyUI-Wildcard-Pipeline", { exact: true });
+      await ours.waitFor({ state: "attached", timeout: 15_000 });
+      await hideOtherPacks(ours);
       // It sits at the bottom of the list, below the window's edge on a 1080p screen.
       await t.moveTo({ x: 370, y: 700 });
       await ours.scrollIntoViewIfNeeded();

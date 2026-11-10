@@ -22,7 +22,7 @@ tutorial(
       const dbg = await t.addNode("WP Debug", { x: 1300, y: 170 });
       await t.page.evaluate((id) => {
         const n = window.app?.graph?.getNodeById(Number(id)) as { size: [number, number] } | null | undefined;
-        if (n) n.size = [680, 760];
+        if (n) n.size = [680, 640];
         window.app?.canvas?.setDirty(true, true);
       }, dbg);
       await t.beat(400);

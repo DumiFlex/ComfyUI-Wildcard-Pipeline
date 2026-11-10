@@ -40,7 +40,7 @@ tutorial(
         await t.click(page.locator('[data-test="io-tab-import"]'));
         await t.beat(800);
         await t.waitVoice();
-        await t.say("Choose the file.");
+        await t.say("Choose WP Tutorials library dot json.");
         const chooser = page.waitForEvent("filechooser");
         await t.click(page.locator('[data-test="import-file-btn"]'));
         await (await chooser).setFiles(fixture);
@@ -70,6 +70,13 @@ tutorial(
         await t.say("The wildcards, rules and bundles are in your library now, and every tutorial can use them.");
         await t.beat(1500);
         await t.waitVoice();
+        const health = page.locator('[data-test="dashboard-health"]');
+        if (await health.isVisible().catch(() => false)) {
+          await t.callout("health", health, "One expected note", 6);
+          await t.say("Library health notes one problem: a LoRA rule reads a variable no list sets. That's expected. The LoRA video sets it from the canvas.");
+          await t.waitVoice();
+          await t.uncallout("health");
+        }
         await t.say("The example workflows carry their lists too. Their first note has an Add to my library button that saves them, if you'd rather start there.");
         await t.waitVoice();
       });

@@ -48,7 +48,9 @@ tutorial(
         await t.say("Run. When the picker opens, keep them all this time.");
         await t.click(page.getByRole("button", { name: "Run", exact: true }).first());
         await t.fastForward(() => picker.waitFor({ state: "visible", timeout: 10 * 60_000 }), 8);
-        await t.beat(1500);
+        await t.callout("picker", picker, "The picker", 6);
+        await t.beat(2000);
+        await t.uncallout("picker");
         await t.click(page.locator('[data-test="image-filter-keep-all"]'));
         await t.fastForward(async () => {
           await t.h.waitUntil(

@@ -80,7 +80,7 @@ tutorial(
       });
 
       await t.h.step("Keep the picks", async () => {
-        await t.callout("keep", [page.locator('[data-test="image-filter-stop"]'), page.locator('[data-test="image-filter-keep-picked"]')], "Stop, keep all, or keep the picks", 4);
+        await t.callout("keep", [page.locator('[data-test="image-filter-stop"]'), page.locator('[data-test="image-filter-keep-picked"]')], "Three ways on", 4);
         await t.say("Keep picked sends only those on. Keep all sends everything, and Stop branch skips what's after the filter.");
         await t.waitVoice();
         await t.uncallout("keep");
@@ -95,10 +95,13 @@ tutorial(
     await t.h.step("Its modes", async () => {
       await stop(4);
       const filter = await page.evaluate(() => String(((window.app?.graph?.nodes ?? []) as unknown as { type: string; id: number }[]).find((n) => n.type === "WP_ImageFilter")?.id ?? ""));
+      // The example is laid out small: zoom in so the mode control can be read.
+      const back = await t.zoomOn(filter, { scale: 1 });
       await t.callout("mode", t.node(filter).locator('[data-test="image-filter-widget"]'), "Pause, reuse, or pass all", 5);
       await t.say("On the node, Pause and pick is the default. Reuse last picks repeats your choice without asking, and Pass all lets everything through. A timeout keeps an unattended queue moving.");
       await t.waitVoice();
       await t.uncallout("mode");
+      await t.setView(back);
     });
 
     await t.h.step("Outro", async () => {

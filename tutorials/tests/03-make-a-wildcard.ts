@@ -100,7 +100,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role standing in $weather.");
+      await t.type("A painting of $role standing in $weather");
       await t.beat(1000);
       await t.say("Change the seed, and the weather rolls with the role.");
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();

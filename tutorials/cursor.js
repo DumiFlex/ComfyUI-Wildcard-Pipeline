@@ -57,6 +57,31 @@
   let x = -100;
   let y = -100;
 
+  /**
+   * The caption sits at the bottom, unless a callout reaches down into its band (a canvas node or a
+   * dialog's footer that can't be scrolled up) and none sits at the top: then it moves up there.
+   */
+  const BAND = 200;
+  function placeCaption() {
+    if (!caption) return;
+    const vh = window.innerHeight;
+    let low = false;
+    let high = false;
+    for (const box of callouts.values()) {
+      const top = parseFloat(box.style.top) || 0;
+      const bottom = top + (parseFloat(box.style.height) || 0);
+      if (bottom > vh - BAND) low = true;
+      if (top < BAND) high = true;
+    }
+    if (low && !high) {
+      caption.style.bottom = "";
+      caption.style.top = "72px";
+    } else {
+      caption.style.top = "";
+      caption.style.bottom = "44px";
+    }
+  }
+
   function layer() {
     if (root && root.isConnected) return root;
     if (!document.body) return null;
@@ -124,7 +149,7 @@
       const m = document.createElement("div");
       m.style.cssText = "position:absolute;right:0;top:0;width:16px;height:16px;background:#ff00ff;";
       r.appendChild(m);
-      setTimeout(() => m.remove(), ms);
+      setTimeout(() => requestAnimationFrame(() => m.remove()), ms);
     },
     caption(text) {
       layer();
@@ -157,17 +182,20 @@
       placeCallout(box, rect);
       requestAnimationFrame(() => (box.style.opacity = "1"));
       callouts.set(id, box);
+      placeCaption();
     },
     /** Moves a callout to a new rect (its part moved or changed size). */
     recallout(id, rect) {
       const box = callouts.get(id);
       if (!box) return;
       placeCallout(box, rect);
+      placeCaption();
     },
     uncallout(id) {
       const old = callouts.get(id);
       if (!old) return;
       callouts.delete(id);
+      placeCaption();
       old.style.opacity = "0";
       setTimeout(() => old.remove(), 320);
     },

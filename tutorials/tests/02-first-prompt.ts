@@ -34,8 +34,9 @@ tutorial(
       await t.say("Each one rolls one option and keeps it in a variable: role, hair and setting.");
       await t.waitVoice();
       await t.uncallout("mods");
-      const seedButtons = t.node(ctx).getByRole("button", { name: /increment|decrement|increase|decrease/i });
-      await t.callout("seed", [seedButtons.first(), seedButtons.last()], "The seed", 8);
+      // The whole field with its buttons: at seed 0 only the + button matches, which boxed a square.
+      const seedRow = t.node(ctx).locator('[data-widget-name="seed"]').first();
+      await t.callout("seed", seedRow, "The seed", 6);
       await t.say("The seed at the top decides what they roll. The same seed always gives the same picks.");
       await t.waitVoice();
       await t.uncallout("seed");
@@ -54,7 +55,7 @@ tutorial(
     await t.h.step("Write the template", async () => {
       await t.say("Type a template. Each dollar-sign name is replaced by what its list rolled.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role with $hair, $setting.");
+      await t.type("A painting of $role with $hair, $setting");
       await t.beat(1200);
       await t.callout("preview", t.node(asm), "A live preview of the prompt");
       await t.say("The Assembler shows the prompt it will write, before you run anything.");

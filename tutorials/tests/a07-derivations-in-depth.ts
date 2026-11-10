@@ -39,7 +39,7 @@ tutorial(
         await t.click(T("toggle-branch-0-0"));
         await t.beat(500);
       }
-      await t.scrollTo(T("branch-0-0"));
+      await t.scrollTo(T("branch-0-0"), { at: 0.15, force: true });
       await t.waitVoice();
       await t.say("When role matches knight or mage. Matches takes a regular expression: the bar means or.");
       await varField("cond-var-0-0", "role");
@@ -47,7 +47,9 @@ tutorial(
       await t.click(T("cond-value-0-0"));
       await t.type("knight|mage", { cps: 14 });
       await t.beat(500);
+      await t.callout("regex", T("cond-value-0-0"), "The bar means or", 6);
       await t.waitVoice();
+      await t.uncallout("regex");
       await t.say("Add a second condition. Setting contains forest, and switch on NOT.");
       await t.click(T("cond-add-0-0"));
       await t.beat(600);
@@ -104,12 +106,14 @@ tutorial(
     await t.h.step("On the canvas", async () => {
       await t.go("/");
       await t.say("On the canvas, pick Role, Hair, Setting and the new rule, which goes after the lists it reads.");
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Hair", "Setting", "Royal guard"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
+      await t.normalSpeed();
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role with $hair, $setting.", { cps: 16 });
+      await t.type("A painting of $role with $hair, $setting", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       const prev = t.node(asm).locator('[data-test="asm-preview"]');

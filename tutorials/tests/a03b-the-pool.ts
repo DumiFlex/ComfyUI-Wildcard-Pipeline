@@ -17,14 +17,17 @@ tutorial(
     const nodes = await t.h.step("A list to narrow", async () => {
       await t.go("/");
       await t.say("Setting has six places, each tagged castle, forest or city. On this node, we only want some of them.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Setting"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $setting.", { cps: 16 });
+      await t.type("A painting of $role $setting", { cps: 16 });
       await t.beat(800);
       await t.waitVoice();
+      await t.normalSpeed();
       return { ctx, asm };
     });
 
@@ -58,6 +61,13 @@ tutorial(
       await t.callout("eff", eff, "The filter they make", 6);
       await t.waitVoice();
       await t.uncallout("eff");
+      const byVar = modal.locator('[data-test="pool-vars"]');
+      if (await byVar.isVisible().catch(() => false)) {
+        await t.callout("byvar", byVar, "Follow a variable", 6);
+        await t.say("The Pool also has By variable, which keeps the options tagged with a variable's value as the prompt runs. Model-aware prompts uses it to follow the loaded model.");
+        await t.waitVoice();
+        await t.uncallout("byvar");
+      }
       return modal;
     });
 
@@ -68,11 +78,11 @@ tutorial(
       await t.waitVoice();
       const expr = modal.locator('[data-test="expr-input"]');
       await t.say("Write not forest instead. That keeps everything without a forest tag.");
-      await t.fill(expr, "not forest", { cps: 10 });
+      await t.fill(expr, "not forest", { cps: 30 });
       await t.beat(800);
       await t.callout("reads", [modal.locator('[data-test="expr-reads-as"]'), modal.locator('[data-test="expr-match-count"]')], "How it reads, and what it keeps", 6);
       await t.waitVoice();
-      await t.say("Below it, reads as says how the filter is understood, and the count says how many options it keeps: four of six. And, or, not and brackets all work, and the chips underneath type a tag for you.");
+      await t.say("The line below it says how the filter is read, and the count says how many options it keeps: four of six. And, or, not and brackets all work, and the chips underneath type a tag for you.");
       await t.waitVoice();
       await t.uncallout("reads");
       await t.click(modal.locator('[data-test="wcm-save"]'));
@@ -90,8 +100,6 @@ tutorial(
       }
       await t.waitVoice();
       await t.uncallout("prev");
-      await t.say("The Pool also has By variable, which keeps the options tagged with a variable's value as the prompt runs. Model-aware prompts uses it to follow the loaded model.");
-      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {

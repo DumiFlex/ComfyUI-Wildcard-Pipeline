@@ -16,9 +16,9 @@ tutorial(
 
     await t.h.step("A list inside a list", async () => {
       await t.go("/wp/wildcards/4facf8ce/edit");
-      await t.say("An option can hold another wildcard. Hair's options read the Hair colors list: each purple chip rolls a color.");
       await t.scrollTo(page.getByText(/^Options \(\d+\)$/).first());
       await t.callout("chips", [value(0), value(1)], "A roll of Hair colors", 6);
+      await t.say("An option can hold another wildcard. Hair's options read the Hair colors list: each purple chip rolls a color.");
       await t.waitVoice();
       await t.uncallout("chips");
       await t.say("So short hair can be short silver hair, or short copper red hair, without writing every pair.");
@@ -69,10 +69,12 @@ tutorial(
     const nodes = await t.h.step("On the canvas", async () => {
       await t.go("/");
       await t.say("On the canvas, pick Role and Cold weather wear. Outfit and Travel gear don't need to be on the node: a reference finds them in the library.");
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Cold weather wear"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
+      await t.normalSpeed();
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role wearing $cold_weather_wear in falling snow.");
       await t.waitVoice();

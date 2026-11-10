@@ -93,8 +93,14 @@ tutorial(
       if (!box) throw new Error("The note's panel isn't on screen.");
       await t.click({ x: box.x + box.width * 0.6, y: box.y + 16 }, { double: true });
       await t.beat(1000);
-      await t.click(t.node(step).locator('[data-test="note-done"]'));
+      const done = t.node(step).locator('[data-test="note-done"]');
+      await t.click(done);
       await t.beat(800);
+      // The review saw the editor still open in the outro: make sure Done took.
+      if (await done.isVisible().catch(() => false)) {
+        await t.click(done);
+        await t.beat(800);
+      }
       await t.waitVoice();
     });
 

@@ -18,13 +18,16 @@ tutorial(
       await t.go("/");
       await t.say("So far we rolled by clicking plus. The Context node can roll for you.");
       await t.beat(600);
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Hair", "Setting"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role with $hair, $setting.");
+      await t.type("A painting of $role with $hair, $setting");
       await t.beat(800);
+      await t.normalSpeed();
       const mode = t.node(ctx).getByRole("button", { name: /^(Randomize|Fixed|Increment|Decrement) Value$/ }).first();
       await t.callout("mode", mode, "What happens after a run", 6);
       await t.say("This button sets what the seed does after each run.");
@@ -110,8 +113,9 @@ tutorial(
 
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
-        await t.say("Now press Run a few times. Randomize gives each run a new seed, no clicking needed.");
+        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
+        await t.say("Now press Run a few times. Randomize gives each run a new seed, no clicking needed.");
         await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 } });
         await t.callout("picks", t.node(dbg), "What this picture rolled");
         await t.say("Debug shows what each run rolled. No clockwork inventor, on this node.");

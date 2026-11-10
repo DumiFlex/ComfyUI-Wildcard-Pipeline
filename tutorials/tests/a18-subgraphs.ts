@@ -21,6 +21,8 @@ tutorial(
     const nodes = await t.h.step("A small pipeline", async () => {
       await t.go("/");
       await t.say("One Context sets the time of day. The next adds a role and the lighting rule, which reads the time, into an Assembler.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const up = await t.addNode("WP Context", { x: 360, y: 170 });
       await t.pickModules(up, ["Time of day"]);
       const ctx = await t.addNode("WP Context", { x: 1010, y: 170 });
@@ -29,11 +31,12 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1010, y: 640 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $time, $lighting.", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting", { cps: 16 });
       await t.beat(500);
       const text = await t.addNode("Preview as Text", { x: 1620, y: 640 });
       await t.wire(asm, "prompt", text, "source");
       await t.waitVoice();
+      await t.normalSpeed();
       return { up, ctx, asm, text };
     });
 
@@ -45,7 +48,11 @@ tutorial(
       await t.click(await titleBar(nodes.asm));
       await page.keyboard.up("Shift");
       await t.beat(700);
-      await t.click(page.getByRole("button", { name: "Convert Selection to Subgraph" }));
+      const convert = page.getByRole("button", { name: "Convert Selection to Subgraph" });
+      await t.callout("convert", convert, "Convert to subgraph", 6);
+      await t.beat(900);
+      await t.uncallout("convert");
+      await t.click(convert);
       await t.beat(1500);
       await t.moveTo({ x: 960, y: 950 });
       await t.waitVoice();

@@ -51,6 +51,7 @@ tutorial(
       await t.go("/");
       await t.say("On the canvas, pick Role and Travel gear.");
       await t.beat(600);
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Travel gear"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });

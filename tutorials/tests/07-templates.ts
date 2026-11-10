@@ -17,12 +17,17 @@ tutorial(
       await t.go("/");
       await t.say("A template is the sentence the Assembler fills in. Once you like one, keep it in your library.");
       await t.beat(600);
-      const ctx = await t.addNode("WP Context", { x: 400, y: 300 });
-      await t.pickModules(ctx, ["Role", "Hair", "Setting"]);
-      const asm = await t.addNode("WP Prompt Assembler", { x: 1050, y: 300 });
-      await t.wire(ctx, "context", asm, "context");
+      // The Context and Assembler are the earlier videos' steps: sped up.
+      const { ctx, asm } = await t.fastForward(async () => {
+        const c = await t.addNode("WP Context", { x: 400, y: 300 });
+        await t.pickModules(c, ["Role", "Hair", "Setting"]);
+        const a = await t.addNode("WP Prompt Assembler", { x: 1050, y: 300 });
+        await t.wire(c, "context", a, "context");
+        return { ctx: c, asm: a };
+      });
+      await t.say("Here's a Context with Role, Hair and Setting, wired to an Assembler. Type the template.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role with $hair, $setting.");
+      await t.type("A painting of $role with $hair, $setting");
       await t.beat(800);
       await t.say("Open the negative box under it, too. A template keeps its negative with it.");
       // Open the negative box unless it already is (it starts open or folded depending on its text).

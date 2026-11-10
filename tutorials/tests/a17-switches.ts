@@ -18,6 +18,8 @@ tutorial(
     const nodes = await t.h.step("A workflow with a part to switch", async () => {
       await t.go("/");
       await t.say("Here's a role at a time of day, and a second Context that adds the lighting rule.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const ctx1 = await t.addNode("WP Context", { x: 900, y: 170 });
       await t.pickModules(ctx1, ["Role", "Time of day"]);
       const ctx2 = await t.addNode("WP Context", { x: 1550, y: 170 });
@@ -26,11 +28,12 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1550, y: 600 });
       await t.wire(ctx2, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("A painting of $role $time, $lighting.", { cps: 16 });
+      await t.type("A painting of $role $time, $lighting", { cps: 16 });
       await t.beat(500);
       const text = await t.addNode("Preview as Text", { x: 900, y: 600 });
       await t.wire(asm, "prompt", text, "source");
       await t.waitVoice();
+      await t.normalSpeed();
       return { ctx1, ctx2, asm, text };
     });
 
@@ -123,7 +126,7 @@ tutorial(
 
     await t.h.step("WP Mode Relay", async () => {
       await t.say("WP Mode Relay chains mutes and bypasses. It watches the nodes wired into it, and when they're muted or bypassed, it does the same to the node group its output goes into.");
-      const relay = await t.addNode("WP Mode Relay", { x: 650, y: 880 });
+      const relay = await t.addNode("WP Mode Relay", { x: 620, y: 700 });
       await t.wire(nodes.ctx2, "context", relay, "node_1");
       await t.beat(800);
       await t.callout("relay", t.node(relay), "Mute a sampler, and its save branch follows", 6);

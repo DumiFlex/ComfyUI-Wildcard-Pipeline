@@ -25,8 +25,11 @@ tutorial(
       await useCheckpoint(t);
       await t.waitVoice();
       await stop(5);
-      const node = t.node(await lg());
+      const lgId = await lg();
+      const node = t.node(lgId);
       await t.say("WP Label and Grid takes the images and their labels. A label can have parts, split by a dot.");
+      // The example is laid out small: zoom in so its fields can be read, and back out for the run.
+      const back = await t.zoomOn(lgId, { scale: 1 });
       await t.waitVoice();
       await t.callout("rc", [node.locator('[data-test="lg-rows-from"]'), node.locator('[data-test="lg-columns-from"]')], "Rows: part 1. Columns: part 2.", 6);
       await t.say("Rows come from part one, the shot, and columns from part two, the light. That's an XY plot, with each value as a header.");
@@ -36,6 +39,7 @@ tutorial(
       await t.say("A title goes over the whole sheet.");
       await t.waitVoice();
       await t.uncallout("title");
+      await t.setView(back);
     });
 
     if (showcasing(t)) {
@@ -50,11 +54,14 @@ tutorial(
     }
 
     await t.h.step("Presets", async () => {
-      const node = t.node(await lg());
+      const lgId = await lg();
+      const node = t.node(lgId);
+      const back = await t.zoomOn(lgId, { scale: 1 });
       await t.callout("arr", node.locator('[data-test="lg-arrange"]'), "How the grid is laid out", 5);
       await t.say("Arrange picks the layout: fit the run, a sheet, side by side, a row per frame, an XY plot, or labels only. After a run the panel suggests the one that fits.");
       await t.waitVoice();
       await t.uncallout("arr");
+      await t.setView(back);
     });
 
     await t.h.step("Outro", async () => {

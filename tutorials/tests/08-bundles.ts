@@ -33,7 +33,7 @@ tutorial(
       await t.go("/");
       await t.say("On the canvas, a Context node takes a bundle just like a module. Click Add Bundle.");
       await t.beat(600);
-      const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
+      const ctx = await t.addNode("WP Context", { x: 520, y: 110 });
       for (const id of ["7e3d3ec2", "86360bc3"]) {
         await t.click(t.node(ctx).locator('[data-testid="open-bundle-picker"]').first());
         await t.beat(700);
@@ -52,7 +52,7 @@ tutorial(
       await t.expandBundles(ctx, "Character");
       await t.waitVoice();
       await t.callout("character", t.bundleFrame(ctx, "Character"), "Role, Subject and three sub-bundles", 4);
-      await t.say("Character brings the Role list, the Shared lists with the hair colors, Look with the hair and eyes, the Subject combine that joins them, and Outfit with the clothes, the held item and the two rules that make them fit the role.");
+      await t.say("Character brings Role, the Shared lists, Look with hair and eyes, the Subject combine, and Outfit with the clothes and the rules that fit them to the role.");
       await t.waitVoice();
       await t.uncallout("character");
       await t.say("Hair colors is switched off, because Hair reads it through a reference. And Subject already holds the role, hair and eyes, so hide those three with their globe buttons. Then fold the frame.");

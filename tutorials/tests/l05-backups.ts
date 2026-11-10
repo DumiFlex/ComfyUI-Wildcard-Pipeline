@@ -62,10 +62,14 @@ tutorial(
       await t.go("/wp/wildcards/808878ba/edit");
       await t.beat(900);
       const row = page.locator('[data-test="wc-opt-row-3"]');
+      await t.scrollTo(row, { at: 0.35, force: true });
+      await t.callout("gone", row, "The clockwork inventor", 4);
+      await t.waitVoice();
+      await t.uncallout("gone");
       await t.hover(row);
       await t.beat(400);
       await t.click(row.getByRole("button", { name: "Remove option" }));
-      await t.beat(500);
+      await t.beat(900);
       await t.click(page.locator('[data-test="save-btn"]'));
       await t.beat(1200);
       // Each save keeps the version before it in the item's own history (the last three).

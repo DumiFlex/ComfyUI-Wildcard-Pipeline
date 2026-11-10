@@ -121,7 +121,7 @@ tutorial(
         const dbg = await addDebugUnder(t, nodes.ctx);
         await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, between: () => t.click(nodes.plus) });
         await t.callout("parts", t.node(dbg), "Each pick, its tags and negatives");
-        await t.say("Debug shows each pick with its tags and its negative.");
+        await t.say("Debug shows each pick with its tags, and its negative when it has one.");
         await t.waitVoice();
         await t.uncallout("parts");
       });
