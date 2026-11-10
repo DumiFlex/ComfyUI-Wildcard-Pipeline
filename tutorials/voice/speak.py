@@ -212,8 +212,21 @@ def take_problem(seconds: float, gap: float, spoken: str) -> str | None:
     return None
 
 
+_NUMBER_WORDS = set(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+    "fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty "
+    "ninety hundred thousand million point".split()
+)
+
+
 def _words(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9']+", text.lower())
+    # Whisper writes numbers as digits ("832 by 1216" for "eight thirty two by twelve sixteen"),
+    # so numbers are left out on both sides rather than matched.
+    return [
+        w
+        for w in re.findall(r"[a-z']+|\d+", text.lower().replace("-", " "))
+        if not w.isdigit() and w not in _NUMBER_WORDS
+    ]
 
 
 def word_match(heard: str, spoken: str) -> float:
