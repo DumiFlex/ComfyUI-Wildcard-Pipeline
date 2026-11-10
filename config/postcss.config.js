@@ -1,10 +1,10 @@
-// Path is relative to the directory PostCSS runs from. Vite always
-// invokes PostCSS with `cwd` = repo root (where `vite.config.mts`
-// lives), so this string resolves against the root regardless of
-// where this config file itself lives.
+// Tailwind v4 runs as its PostCSS plugin. Its config lives in CSS now
+// (`src/manager/styles/tailwind.css`: `@theme` + `@source`), so there is no
+// tailwind.config.js. Autoprefixer stays for the canvas extension's own CSS,
+// which Tailwind never touches.
 export default {
   plugins: {
-    tailwindcss: { config: "config/tailwind.config.js" },
+    "@tailwindcss/postcss": {},
     autoprefixer: {},
   },
 };
