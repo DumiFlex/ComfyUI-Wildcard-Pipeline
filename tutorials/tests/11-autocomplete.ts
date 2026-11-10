@@ -83,7 +83,7 @@ tutorial(
       await t.beat(800);
       await t.click(value(1));
       if (loras) {
-        await t.say("Start a LoRA with angle bracket, lora, colon, and the list shows your LoRAs.");
+        await t.say("Start a LoRA with <lora: and the list shows your LoRAs.", "Start a lora with angle bracket, lora, colon, and the list shows your loras.");
         await t.type("<lora:", { cps: 10 });
         await t.beat(900);
         await t.callout("loras", page.getByRole("listbox").last(), "Your LoRAs", 4);

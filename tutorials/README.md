@@ -52,7 +52,7 @@ tutorial("T07", { title: "Your next tutorial" }, async (t) => {
 });
 ```
 
-- `t.say(line)` shows the caption and returns right away, so the hands work while the voice speaks. The next `say` waits until the line has been spoken. Use `t.waitVoice()` to wait on purpose, for example to keep a callout up until its line ends. Each line must be a plain string literal so `speak.py` can find it. In a line, `$role` is read as "role" and "WP" as "W P".
+- `t.say(line)` shows the caption and returns right away, so the hands work while the voice speaks. The next `say` waits until the line has been spoken. Use `t.waitVoice()` to wait on purpose, for example to keep a callout up until its line ends. Each line must be a plain string literal so `speak.py` can find it. Write the caption the way it looks on screen (`library.json`, `$gear.SHOES`, `<lora:`): the voice reads it through `speak.py`'s `spoken_text` rules (`$role` as "role", "WP" as "W P", "LoRAs" as "loras", `library.json` as "library dot json", "2.22" as "two twenty-two"). When those don't fit, give the spoken words as a second string: `t.say("$gear.SHOES prints the shoe.", "Dollar gear dot shoes prints the shoe.")`. A line whose spoken text changes is spoken again.
 - Every `t.h.step` becomes a chapter.
 - `t.addNode(search, {x, y})` drops the node centred on that point. Leave the bottom 140 px free for the caption.
 - Wrap a long wait in `t.fastForward(() => …)`, such as a model run. The video plays that part 6× faster.

@@ -30,7 +30,7 @@ tutorial(
         await t.go("/wp/");
         await t.say("The library from the tour is the one every tutorial uses: a role, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.");
         await t.waitVoice();
-        await t.say("So first, bring the tutorial library in. The file, WP Tutorials library dot json, comes with the videos.");
+        await t.say("So first, bring the tutorial library in. The file, WP Tutorials library.json, comes with the videos.");
         await t.waitVoice();
       });
 
@@ -40,7 +40,7 @@ tutorial(
         await t.click(page.locator('[data-test="io-tab-import"]'));
         await t.beat(800);
         await t.waitVoice();
-        await t.say("Choose WP Tutorials library dot json.");
+        await t.say("Choose WP Tutorials library.json.");
         const chooser = page.waitForEvent("filechooser");
         await t.click(page.locator('[data-test="import-file-btn"]'));
         await (await chooser).setFiles(fixture);

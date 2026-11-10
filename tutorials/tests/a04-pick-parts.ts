@@ -34,7 +34,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.waitVoice();
-      await t.say("Dollar gear prints the gear. Dollar gear dot SHOES prints the shoe it rolled, in the group's name, in capitals.");
+      await t.say("$gear prints the gear. $gear.SHOES prints the shoe it rolled: the group's name, in capitals.", "Dollar gear prints the gear. Dollar gear dot shoes prints the shoe it rolled: the group's name, in capitals.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role in $gear and $gear.SHOES", { cps: 16 });
       await t.beat(800);
@@ -66,7 +66,7 @@ tutorial(
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(900);
       await t.waitVoice();
-      await t.say("Dollar hair color prints both. Dot zero is the first pick, dot one the second. Use one for the hair and one for its streaks.");
+      await t.say("$hair_color prints both. .0 is the first pick, .1 the second. Use one for the hair and one for its streaks.", "Dollar hair color prints both. Dot zero is the first pick, dot one the second. Use one for the hair and one for its streaks.");
       await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("End");
       await t.type(", with $hair_color.0 hair and $hair_color.1 streaks", { cps: 16 });
@@ -99,7 +99,7 @@ tutorial(
       await t.say("Plate armor carries a negative, and it lands in the negative prompt by itself.");
       await t.waitVoice();
       await t.uncallout("neg");
-      await t.say("Dot neg reads it on its own. Here it goes first in the negative box, before the rest.");
+      await t.say(".neg reads it on its own. Here it goes first in the negative box, before the rest.", "Dot neg reads it on its own. Here it goes first in the negative box, before the rest.");
       // Open the negative box unless it already is (it starts open or folded depending on its text).
       const negToggle = t.node(nodes.asm).locator('[data-test="neg-template-toggle"]');
       // Click its "negative" label, at the left: the row's centre can sit under a ref's hover card.
@@ -110,7 +110,7 @@ tutorial(
       await t.type("$outfit.neg, $negatives, lowres", { cps: 16 });
       await t.beat(1000);
       await t.callout("neg", neg, "Each word once", 6);
-      await t.say("Each word still comes once. Dot neg works in combines and derivations too.");
+      await t.say("Each word still comes once. .neg works in combines and derivations too.", "Each word still comes once. Dot neg works in combines and derivations too.");
       await t.waitVoice();
       await t.uncallout("neg");
     });
@@ -128,7 +128,7 @@ tutorial(
     }
 
     await t.h.step("Outro", async () => {
-      await t.say("Dot a group's name for a tag, dot a number for one pick, dot neg for the negative. Next: holding a value, and matching one.");
+      await t.say(".GROUP for a tag, .0 for one pick, .neg for the negative. Next: holding a value, and matching one.", "Dot a group's name for a tag, dot a number for one pick, dot neg for the negative. Next: holding a value, and matching one.");
     });
   },
 );

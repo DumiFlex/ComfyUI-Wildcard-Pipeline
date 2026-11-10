@@ -135,14 +135,19 @@ export class Tutor {
 
   // ---- narration ---------------------------------------------------------------------------
 
-  /** Shows a narration line and starts its voice; returns while it is spoken. */
-  async say(text: string): Promise<void> {
+  /**
+   * Shows a narration line and starts its voice; returns while it is spoken. `text` is the caption
+   * and subtitle, written the way it looks on screen (`library.json`, `$gear.SHOES`, `<lora:`).
+   * `spoken`, when given, is what the voice reads instead (voice/speak.py); without it the voice
+   * reads the caption through speak.py's `spoken_text` rules. Both must be plain string literals.
+   */
+  async say(text: string, spoken?: string): Promise<void> {
     // A line ends a sped-up part: it plays at normal speed.
     if (this.ffOpen) await this.normalSpeed();
     await this.waitVoice();
     const id = lineId(text);
     const known = this.lines[id];
-    const ms = known?.ms ?? estimate(text);
+    const ms = known?.ms ?? estimate(spoken ?? text);
     const at = this.now();
     this.cues.push({ id, text, at, ms, voiced: !!known });
     // Each line also flashes the sync mark (render.mjs paints it out), so the voice can't drift from the picture.
