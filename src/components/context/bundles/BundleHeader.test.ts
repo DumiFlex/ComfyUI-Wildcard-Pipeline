@@ -152,3 +152,27 @@ describe("BundleHeader — EXAMPLE chip", () => {
     expect(w.find('[data-test="bundle-example"]').exists()).toBe(false);
   });
 });
+
+describe("BundleHeader alerts", () => {
+  it("draws a dot per alert kind beside the example chip", () => {
+    const w = mount(BundleHeader, {
+      props: {
+        instance: instance({ collapsed: true }), name: "x", childCount: 2,
+        libraryMissing: true, example: true,
+        alerts: { conflict: "warning", state: "missing", title: "Inside this bundle:\nA: missing var" },
+      },
+    });
+    const box = w.find("[data-test=bundle-alerts]");
+    expect(box.exists()).toBe(true);
+    expect(box.attributes("title")).toContain("A: missing var");
+    expect(box.findAll(".wp-bundle-alert").map((d) => d.attributes("data-alert"))).toEqual(["warning", "missing"]);
+    expect(w.find("[data-test=bundle-example]").exists()).toBe(true);
+  });
+  it("draws nothing without alerts", () => {
+    const w = mount(BundleHeader, {
+      props: { instance: instance({ collapsed: true }), name: "x", childCount: 2,
+        alerts: { conflict: null, state: null, title: "" } },
+    });
+    expect(w.find("[data-test=bundle-alerts]").exists()).toBe(false);
+  });
+});
