@@ -101,6 +101,53 @@ def spoken_text(text: str) -> str:
     return t
 
 
+# Kokoro reads a very short line ("Save it.", "Run.") as if more were coming: its pitch rises at
+# the end. Spoken after a lead-in sentence it ends like a statement, so short lines are spoken
+# that way and the lead-in is cut off at the pause between the two sentences.
+SHORT_WORDS = 5
+# Bump when how lines are spoken changes, so every line is spoken again.
+METHOD = 2
+LEAD = "That's it for this part."
+
+
+def _after_lead(samples, rate: int):
+    """The part after the longest pause past the lead-in, or None when no clear pause is found."""
+    import numpy as np
+
+    step = int(rate * 0.01)
+    env = np.array(
+        [np.abs(samples[i : i + step]).max() for i in range(0, len(samples) - step, step)]
+    )
+    quiet = env < 0.01
+    best = (0, 0)
+    i = 30  # the lead-in itself lasts well over 0.3 s
+    while i < len(quiet):
+        if not quiet[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(quiet) and quiet[j]:
+            j += 1
+        if j - i > best[1] - best[0] and j < len(quiet) - 10:
+            best = (i, j)
+        i = j
+    if best[1] - best[0] < 8:  # under 80 ms: not the sentence break
+        return None
+    start = max(best[1] * step - int(rate * 0.03), 0)
+    lead_in = np.zeros(int(rate * 0.05), dtype=samples.dtype)
+    return np.concatenate([lead_in, samples[start:]])
+
+
+def synth(kokoro, spoken: str, voice: str, speed: float):
+    """Speaks one line; a short one after a lead-in that is then cut off."""
+    if len(spoken.split()) <= SHORT_WORDS:
+        samples, rate = kokoro.create(f"{LEAD} {spoken}", voice=voice, speed=speed, lang="en-us")
+        cut = _after_lead(samples, rate)
+        if cut is not None and len(cut) > rate * 0.25:
+            return cut, rate
+    return kokoro.create(spoken, voice=voice, speed=speed, lang="en-us")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
@@ -147,14 +194,16 @@ def main() -> int:
             and old.get("speed") == args.speed
             # A line spoken before its spoken text changed (a new rule, a new override) is redone.
             and old.get("spoken") == spoken
+            and old.get("method") == METHOD
         )
         if same and wav.exists() and not args.force:
             continue
-        samples, rate = kokoro.create(spoken, voice=args.voice, speed=args.speed, lang="en-us")
+        samples, rate = synth(kokoro, spoken, args.voice, args.speed)
         sf.write(wav, samples, rate)
         known[lid] = {
             "text": text,
             "spoken": spoken,
+            "method": METHOD,
             "ms": round(len(samples) / rate * 1000),
             "voice": args.voice,
             "speed": args.speed,
