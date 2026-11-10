@@ -35,10 +35,16 @@
     const pad = Math.min(room(rect.x, rect.x + rect.width, vw), room(rect.y, rect.y + rect.height, vh));
     const padX = pad;
     const padY = pad;
-    const left = Math.max(EDGE, rect.x - padX);
-    const top = Math.max(EDGE, rect.y - padY);
-    const right = Math.min(vw - EDGE, rect.x + rect.width + padX);
-    const bottom = Math.min(vh - EDGE, rect.y + rect.height + padY);
+    // Clamped to the window, a side can still lose padding (a top-bar button sits closer to the
+    // top than EDGE): take the same off the opposite side, so the box stays centred on the part.
+    const cut = (lo, hi, p, max) => Math.min(p, lo - EDGE, max - EDGE - hi);
+    // Still the same on every side, for the reason above.
+    const px = Math.min(cut(rect.x, rect.x + rect.width, padX, vw), cut(rect.y, rect.y + rect.height, padY, vh));
+    const py = px;
+    const left = rect.x - px;
+    const top = rect.y - py;
+    const right = rect.x + rect.width + px;
+    const bottom = rect.y + rect.height + py;
     box.style.left = `${left}px`;
     box.style.top = `${top}px`;
     box.style.width = `${Math.max(0, right - left)}px`;
