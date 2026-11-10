@@ -30,7 +30,7 @@ tutorial(
       }
       const model = page.locator('[data-test="ai-model"], [data-test="ai-model-input"]').first();
       await t.callout("who", [page.locator('[data-test="ai-provider"]'), model], "Where the model runs, and which", 6);
-      await t.say("Pick where the model runs: a local server like LM Studio or Ollama, or a cloud provider with a key. Then pick the model. This one is a nine billion parameter model on this PC.");
+      await t.say("Pick where the model runs: a local server like LM Studio or Ollama, or a cloud provider with a key. Then pick the model. This one is Claude, a cloud model, with my key.");
       await t.waitVoice();
       await t.uncallout("who");
       await t.say("Test connection checks it answers.");
@@ -41,7 +41,7 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("ok");
       await t.callout("priv", page.locator('[data-test="ai-privacy"]'), "Where your data goes", 4);
-      await t.say("This card says where your data goes. With a local model, nothing leaves your PC.");
+      await t.say("This card says where your data goes. A cloud model sends your requests to its provider; with a local model, nothing leaves your PC.");
       await t.waitVoice();
       await t.uncallout("priv");
     });
