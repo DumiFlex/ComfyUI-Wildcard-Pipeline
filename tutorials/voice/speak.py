@@ -243,11 +243,24 @@ class Qwen3:
         )
         self.whisper = None
         try:
+            import numpy as np
             from faster_whisper import WhisperModel
-
-            self.whisper = WhisperModel("small.en", device="cuda", compute_type="float16")
-        except Exception:  # optional: the length check alone still catches most drift
-            print("faster-whisper not available: checking takes by length only")
+        except ImportError:  # optional: the length check alone still catches most drift
+            print("faster-whisper not installed: checking takes by length only")
+            return
+        # The GPU build needs CUDA 12's cuBLAS, which a CUDA 13 torch doesn't ship, and the model
+        # only loads its libraries on the first transcribe: try one there, else run on the CPU.
+        for device, compute in (("cuda", "float16"), ("cpu", "int8")):
+            try:
+                model = WhisperModel("small.en", device=device, compute_type=compute)
+                list(model.transcribe(np.zeros(16000, dtype=np.float32), language="en")[0])
+            except Exception as err:
+                print(f"faster-whisper on {device} failed ({err})")
+                continue
+            self.whisper = model
+            print(f"checking takes by their words too (faster-whisper on {device})")
+            return
+        print("checking takes by length only")
 
     def heard(self, samples, rate: int) -> str | None:
         if self.whisper is None:
