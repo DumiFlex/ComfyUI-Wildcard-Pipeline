@@ -6,6 +6,7 @@
  * `$name.AXIS` reads they answer.
  */
 import Button from "@/kit/Button.vue";
+import Chip from "@/kit/Chip.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
@@ -139,6 +140,8 @@ function nodeNote(sec: Section, v: VarRow): string {
       return v.name.endsWith("_value") ? "value line" : v.name.endsWith("_total") ? "frames" : "frame";
     case "model":
       return step?.source ?? "";
+    case "injector":
+      return step?.isTemplate ? "template" : "wired in";
     default:
       return "";
   }
@@ -273,13 +276,15 @@ const nameWidth = computed(() => {
         <span v-if="v.writeCount > 1" class="wp-dbg-var-row__count" :title="`Written ${v.writeCount} times; the last write wins`">×{{ v.writeCount }}</span>
       </div>
       <div class="wp-dbg-var-row__value" :class="{ 'is-model': v.writerKind === 'model' }">
-        <span
+        <Chip
           v-if="isSwitch(v)"
           class="wp-dbg-var-row__switch"
           :class="switchOf(v) ? 'is-on' : 'is-off'"
+          :color="switchOf(v) ? kindColor('toggle') : null"
+          dot
           :title="hasToggleValue(v) ? `$${v.name}.bool = ${switchOf(v)}` : `$${v.name} = ${v.value}`"
           data-test="dbg-node-switch"
-        ><span class="wp-dbg-var-row__knob" aria-hidden="true" />{{ switchOf(v) ? "ON" : "OFF" }}</span>
+        >{{ switchOf(v) ? "ON" : "OFF" }}</Chip>
         <template v-if="isSwitch(v) && !hasToggleValue(v)" />
         <ol v-else-if="v.items" class="wp-dbg-var-row__items" data-test="dbg-var-items">
           <li v-for="(it, i) in v.items" :key="i">
@@ -331,7 +336,7 @@ const nameWidth = computed(() => {
         @click="emit('goto-step', v.writerKey)"
       >
         <i :class="['wp-dbg-var-row__src-icon', KIND_ICONS[v.writerKind ?? 'unknown']]" aria-hidden="true" />
-        <span v-if="injectorType(v)" class="wp-dbg-var-row__type" data-test="dbg-node-type">{{ injectorType(v) }}</span>
+        <Chip v-if="injectorType(v)" :color="kindColor('injector')" class="wp-dbg-var-row__type" data-test="dbg-node-type">{{ injectorType(v) }}</Chip>
         <span class="wp-dbg-var-row__src-name" :data-test="nodeKindOf(v) ? 'dbg-node-source' : undefined">{{ nodeKindOf(v) ? nodeNote(sec, v) || writerLabel(v) : writerLabel(v) }}</span>
       </Button>
       <span v-else class="wp-dbg-var-row__src wp-dbg-var-row__src--upstream" title="Came in from upstream, no module in this trace wrote it">upstream</span>
@@ -420,28 +425,7 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__model { overflow-wrap: anywhere; }
 .wp-dbg-var-row__pick { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
 .wp-dbg-var-row__radio { font-size: 9px; color: var(--wp-dbg-kind); }
-.wp-dbg-var-row__value:has(> .wp-dbg-var-row__switch + :not(.wp-dbg-var-row__neg, .wp-dbg-var-row__extra)) .wp-dbg-var-row__switch { margin-right: 8px; }
-.wp-dbg-var-row__switch { display: inline-flex; align-items: center; gap: 5px; font: 700 10px/1.5 var(--wp-font-sans); letter-spacing: 0.04em; color: var(--wp-text-dim); }
-.wp-dbg-var-row__switch.is-on { color: var(--wp-dbg-kind); }
-.wp-dbg-var-row__knob {
-  position: relative; width: 18px; height: 10px; flex: none;
-  border-radius: min(5px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-4, var(--wp-border-strong));
-}
-.wp-dbg-var-row__knob::after {
-  content: ""; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px;
-  border-radius: min(50%, var(--wp-radius-cap, 999px));
-  background: var(--wp-text-dim);
-}
-.wp-dbg-var-row__switch.is-on .wp-dbg-var-row__knob { background: color-mix(in oklab, var(--wp-dbg-kind) 70%, transparent); }
-.wp-dbg-var-row__switch.is-on .wp-dbg-var-row__knob::after { left: 10px; background: var(--wp-bg); }
-.wp-dbg-var-row__type {
-  font: 600 9px/1 var(--wp-font-mono);
-  padding: 2px 4px;
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
-  color: var(--wp-dbg-kind);
-  background: color-mix(in oklab, var(--wp-dbg-kind) 14%, transparent);
-}
+.wp-dbg-var-row__switch { margin-right: 8px; vertical-align: 1px; }
 .wp-dbg-vsec__frame {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
   padding: 3px 6px;
