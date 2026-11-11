@@ -115,7 +115,11 @@ tutorial(
     // The pack at work: its bundle on a Context, its template in an Assembler, and a picture.
     if (installed && showcasing(t)) await t.h.step("Use it", async () => {
       const after = await t.h.library();
-      const bundle = after.bundles.find((x) => !had.has(x.id));
+      // A pack with sections installs a bundle per section inside the pack's own bundle: pick the
+      // top one, the new bundle no other new bundle holds (the first new one can be a section).
+      const fresh = after.bundles.filter((x) => !had.has(x.id));
+      const held = (id: string) => fresh.some((o) => o.id !== id && JSON.stringify((o as { children?: unknown }).children ?? []).includes(`"${id}"`));
+      const bundle = fresh.find((x) => !held(x.id)) ?? fresh[0];
       const tpl = after.templates.find((x) => !had.has(x.id));
       if (!bundle) throw new StepError("Install made no new bundle.");
       await t.go("/");
