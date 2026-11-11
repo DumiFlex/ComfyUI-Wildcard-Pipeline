@@ -47,15 +47,46 @@ describe("ToggleRow internal button", () => {
   });
 });
 
-describe("ToggleRow style in Pick one", () => {
-  it("is disabled while Pick one is on", () => {
+describe("ToggleRow fields in Pick one", () => {
+  it("hides Style and Needs while Pick one is on", () => {
     const one = mountRow(base, { pickOne: true, editing: true });
-    expect(one.find('[aria-label="Style"]').attributes("aria-disabled") ?? one.find('[aria-label="Style"] button').attributes("disabled")).toBeDefined();
-    expect(one.text()).toContain("not used while Pick one is on");
+    expect(one.find('[aria-label="Style"]').exists()).toBe(false);
+    expect(one.find('[data-test="tg-needs"]').exists()).toBe(false);
     one.unmount();
     const any = mountRow(base, { editing: true });
-    expect(any.find('[aria-label="Style"] button').attributes("disabled")).toBeUndefined();
+    expect(any.find('[aria-label="Style"]').exists()).toBe(true);
+    expect(any.find('[data-test="tg-needs"]').exists()).toBe(true);
     any.unmount();
+  });
+});
+
+describe("ToggleRow looks", () => {
+  it("draws the icon and hands its colours to the row", () => {
+    const w = mountRow({ ...base, icon: "sun", icon_color: "#ffcc00", text_color: "#ff0000", tint: "#00aaff" }, {});
+    const row = w.find(`[data-test="tg-row-${base.id}"]`);
+    expect(row.find(".pi-sun").exists()).toBe(true);
+    const style = row.attributes("style") ?? "";
+    expect(style).toContain("--wp-tg-icon: #ffcc00");
+    expect(style).toContain("--wp-tg-text: #ff0000");
+    expect(style).not.toContain("--wp-accent");
+    expect(w.find(".wp-tgr__ctl").attributes("style")).toContain("--wp-accent: #00aaff");
+    expect(row.classes()).toContain("has-icon-color");
+    w.unmount();
+  });
+
+  it("keeps the theme's look with no colours set", () => {
+    const w = mountRow(base, {});
+    expect(w.find(`[data-test="tg-row-${base.id}"]`).attributes("style") ?? "").not.toContain("--wp-accent");
+    w.unmount();
+  });
+
+  it("offers edit, globe and remove on the row in the editor", async () => {
+    const w = mountRow(base, { editable: true });
+    expect(w.find(`[data-test="tg-edit-${base.id}"]`).exists()).toBe(true);
+    expect(w.find(`[data-test="tg-internal-${base.id}"]`).exists()).toBe(true);
+    await w.find(`[data-test="tg-remove-${base.id}"]`).trigger("click");
+    expect(w.emitted("remove")).toHaveLength(1);
+    w.unmount();
   });
 });
 

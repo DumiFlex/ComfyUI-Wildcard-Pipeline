@@ -6,14 +6,14 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 ## On the node
 
 - **upstream (in)** `context`: Optional Context to extend. Only nodes after this one see the toggle variables. It can also set toggles (see below).
-- **Pencil (toolbar)**: Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit view: the mode, the grips to reorder, a pencil per row, Add toggle and Add label. Done goes back to the clean view, which shows only the switches.
+- **Pencil (toolbar)**: Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit window: the editor on the left, a live preview of the node on the right. Done saves your changes, Cancel or Escape drops them. The node itself only shows the switches. An empty node has an Add toggles button that opens it too.
 - **Any on / Pick one**: Any on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons.
 - **writes (Pick one)**: Optional variable that also gets the picked toggle's value (or its name), so one rule can branch on it.
-- **Globe (row)**: Edit view only. On (the default) keeps the toggle's variable internal: rules read it, the Assembler doesn't offer it and it never prints. Turn it off to use the variable in a prompt. Same in Any on and Pick one.
+- **Globe (row)**: Edit window only. On (the default) keeps the toggle's variable internal: rules read it, the Assembler doesn't offer it and it never prints. Turn it off to use the variable in a prompt. Same in Any on and Pick one.
 - **Show in Assembler (Pick one)**: The picked variable shows in the Assembler and can print in the prompt. Off, it is internal.
 - **Style (Pick one)**: How every row looks in Pick one: Radio (a round dot, the default), Chip (the name across the row, lit when picked), Switch or Check. Turning one on turns the others off.
-- **Pencil (row)**: Opens the toggle's edit panel: name, variable, style, needs, what off mutes or bypasses, group and its output.
-- **Add toggle / Add label**: A new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it. Drag a toggle's grip under a label to move it into that group; a dragged label takes its toggles along.
+- **Pencil, globe, trash (row)**: Each row in the edit window has three buttons: the pencil opens the toggle's edit panel (name, variable, looks, style, needs, what off mutes or bypasses, group and its output), the globe keeps its variable internal, the trash removes it.
+- **Add toggle / Add label**: A new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it; its icon and colour buttons pick any icon and any colour. Drag a toggle's grip under a label to move it into that group; a dragged label takes its toggles along.
 - **control dots (in)**: A toggle that mutes or bypasses has a dot at the left of its row: wire the nodes it drives into it.
 - **context (out)** `context`: The Context with every toggle variable added. Internal ones (the globe) are for rules only; the rest show in the Assembler.
 - **toggle outputs** `BOOLEAN`: One BOOLEAN per toggle that has an output, at the right of its row. Up to 16.
@@ -22,9 +22,10 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 
 - **Name**: Shown on the row and on its output.
 - **Variable**: Gets true or false. It follows the name until you change it. Internal until you turn off the row's globe. Show puts it under the name.
-- **Style**: Switch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name). Greyed out in Pick one, where the Style in the top bar sets every row's look.
+- **Looks**: An icon before the name, and colours for the icon, the name and the control (switch, check, radio, chip or buttons), so Day can be yellow and Night blue. None keeps the theme's colour.
+- **Style**: Switch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name). Any on only: in Pick one the Style in the top bar sets every row's look.
 - **Value (Pick one)**: What the picked variable gets when this toggle is picked, instead of its name. A text box like the Assembler's: $ lists every variable upstream (Context Injector ones included) and the toggles' own, and tag, LoRA and embedding autocomplete work when they are on. A $name nothing upstream sets is flagged under the box and in WP Debug. Inline {a|b} picks need a seed, so they print as written; roll them in a wildcard instead. Drag the corner to make it taller.
-- **Needs**: Another toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on.
+- **Needs**: Any on only. Another toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on.
 - **When off**: Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run. When several toggles drive one node, off wins: it runs only while all of them let it (Mute beats Bypass).
 - **Invert**: Mute or bypass while the toggle is ON instead, for a node used only as a switchboard.
 - **Canvas groups**: Groups on the canvas whose nodes When off also covers, by title. No wires needed.

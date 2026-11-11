@@ -60,11 +60,21 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </Banner>
     </DocSection>
 
+    <DocSection title="Icons and colours">
+      <p>
+        Give a toggle an icon and its own colours under <b>Looks</b> in its edit panel: one for the
+        icon, one for the name and one for the control itself, so Day can glow yellow and Night blue.
+        A label's icon and colour buttons do the same for the group, and its toggles wear that
+        colour on their left edge. The preview beside the editor shows each change before you
+        press Done.
+      </p>
+    </DocSection>
+
     <DocSection title="Use a toggle in the prompt">
       <p>
         A toggle's variable is internal by default: rules read it, but the Assembler doesn't offer
         it, since <code>true</code> or <code>false</code> rarely belongs in a prompt. To print it, open
-        the edit view and turn off the globe on its row. In Pick one, <b>Show in Assembler</b> does the
+        the edit window and turn off the globe on its row. In Pick one, <b>Show in Assembler</b> does the
         same for the picked variable, so <VarToken>$time</VarToken> can print the picked toggle's
         <b>Value</b>.
       </p>
@@ -98,8 +108,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
         names (with <b>Upstream can pick</b>), then the first toggle upstream set to a yes word,
         then the first one you switched on. The picked variable gets the toggle's
         <b>Value</b>, or its name; it is internal unless <b>Show in Assembler</b> is on. All rows share one look here:
-        the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, and
-        each row's own Style is greyed out.
+        the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, so a
+        toggle's own Style and Needs are hidden.
       </p>
     </DocSection>
 

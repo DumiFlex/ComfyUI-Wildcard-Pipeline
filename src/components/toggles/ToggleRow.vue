@@ -15,6 +15,8 @@ import WpSwitch from "@/kit/WpSwitch.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import Combobox from "@/kit/Combobox.vue";
+import ColorField from "@/kit/ColorField.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
 import { computed, defineAsyncComponent } from "vue";
@@ -112,6 +114,32 @@ const missingNote = computed(() => {
     : `${list}: nothing upstream sets this, so it prints nothing`;
 });
 
+/** The row's icon and name colours as CSS variables (absent: the theme's). */
+const looks = computed(() => {
+  const s: Record<string, string> = {};
+  if (props.t.icon_color) s["--wp-tg-icon"] = props.t.icon_color;
+  if (props.t.text_color) s["--wp-tg-text"] = props.t.text_color;
+  return s;
+});
+/** `tint` stands in for the accent the control is drawn with. Set on the
+ *  control only, so the row's own buttons (globe) keep the theme's. */
+const tintStyle = computed(() => {
+  const c = props.t.tint;
+  if (!c) return undefined;
+  const s: Record<string, string> = {};
+  for (const k of ["--wp-accent", "--wp-accent-text", "--wp-accent-500", "--wp-accent-600", "--check-on"]) s[k] = c;
+  return s;
+});
+/** A colour field's value: the colour, or `none`. */
+function colorValue(v: string | undefined): string {
+  return v ?? "none";
+}
+/** A colour field's pick as a stored colour (`none` clears it). */
+function pickColor(v: string): string | undefined {
+  const c = v.slice(0, 7).toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(c) ? c : undefined;
+}
+
 /** The control this row draws: Pick one's shared look, else its own style. */
 const look = computed<ToggleStyle | "radio">(() => (props.pickOne ? props.pickStyle ?? "radio" : props.t.style));
 
@@ -144,18 +172,20 @@ function flip(): void {
   <div class="wp-tgr" :style="indent ? { marginLeft: `${indent}px` } : undefined">
     <div
       class="wp-tgr__row"
-      :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing }"
+      :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing, 'has-icon-color': !!t.icon_color, 'has-text-color': !!t.text_color }"
       :data-wp-out="t.pin && t.out ? `toggle_${t.out}` : undefined"
       :data-wp-socket="t.control ? ctlInputName(t.id) : undefined"
       :data-test="`tg-row-${t.id}`"
+      :style="looks"
     >
       <template v-if="look === 'chip'">
-        <span v-tooltip="blocked ? blockedHint() : t.var ? `$${t.var}` : ''" class="wp-tgr__chip">
+        <span v-tooltip="blocked ? blockedHint() : t.var ? `$${t.var}` : ''" class="wp-tgr__chip" :style="tintStyle">
           <WpSwitch
             :model-value="shownOn"
             variant="chip"
             size="sm"
             :label="t.name"
+            :icon="t.icon ? `pi-${t.icon}` : undefined"
             :disabled="blocked"
             :data-test="`tg-ctl-${t.id}`"
             @update:model-value="(v: boolean) => emit('set-on', v)"
@@ -173,6 +203,7 @@ function flip(): void {
       </template>
       <span v-else class="wp-tgr__name">
         <span class="wp-tgr__title">
+          <i v-if="t.icon" class="pi wp-tgr__icon" :class="`pi-${t.icon}`" aria-hidden="true" />
           <b>{{ t.name }}</b>
           <i
             v-if="controlState"
@@ -195,30 +226,39 @@ function flip(): void {
         role="img"
         :aria-label="problem"
       />
-      <WpIconButton
-        v-if="editable && t.var"
-        icon="pi-globe"
-        tone="accent"
-        :pressed="!t.visible"
-        :label="t.visible ? 'Mark internal' : 'Unmark internal'"
-        :hint="internalHint()"
-        :data-test="`tg-internal-${t.id}`"
-        @click="emit('patch', { visible: t.visible ? undefined : true })"
-      />
-      <WpIconButton
-        v-if="editable"
-        icon="pi-pencil"
-        :pressed="editing"
-        :label="`Edit ${t.name}`"
-        :data-test="`tg-edit-${t.id}`"
-        @click="emit('edit')"
-      />
+      <span v-if="editable" class="wp-tgr__btns">
+        <WpIconButton
+          icon="pi-pencil"
+          :pressed="editing"
+          :label="`Edit ${t.name}`"
+          :data-test="`tg-edit-${t.id}`"
+          @click="emit('edit')"
+        />
+        <WpIconButton
+          v-if="t.var"
+          icon="pi-globe"
+          tone="accent"
+          :pressed="!t.visible"
+          :label="t.visible ? 'Mark internal' : 'Unmark internal'"
+          :hint="internalHint()"
+          :data-test="`tg-internal-${t.id}`"
+          @click="emit('patch', { visible: t.visible ? undefined : true })"
+        />
+        <WpIconButton
+          icon="pi-trash"
+          tone="danger"
+          :label="`Remove ${t.name}`"
+          :data-test="`tg-remove-${t.id}`"
+          @click="emit('remove')"
+        />
+      </span>
       <template v-if="look === 'radio'">
         <span
           v-tooltip="shownOn ? 'Picked' : 'Pick this one'"
           role="radio"
           tabindex="0"
           class="wp-tgr__radio"
+          :style="tintStyle"
           :class="{ 'is-on': shownOn }"
           :aria-checked="shownOn"
           :aria-label="t.name"
@@ -228,7 +268,7 @@ function flip(): void {
           @keydown.enter.prevent.stop="flip"
         />
       </template>
-      <span v-else-if="look === 'checkbox'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+      <span v-else-if="look === 'checkbox'" v-tooltip="blockedHint()" class="wp-tgr__ctl" :style="tintStyle">
         <Checkbox
           :model-value="shownOn"
           :disabled="blocked"
@@ -237,7 +277,7 @@ function flip(): void {
           @update:model-value="(v: boolean) => emit('set-on', v)"
         />
       </span>
-      <span v-else-if="look === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+      <span v-else-if="look === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl" :style="tintStyle">
         <WpSegmented
           :model-value="t.on ? 'on' : 'off'"
           :options="[{ value: 'on', label: t.on_label || 'On' }, { value: 'off', label: t.off_label || 'Off' }]"
@@ -248,7 +288,7 @@ function flip(): void {
           @update:model-value="(v: string) => emit('set-on', v === 'on')"
         />
       </span>
-      <span v-else-if="look === 'switch'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+      <span v-else-if="look === 'switch'" v-tooltip="blockedHint()" class="wp-tgr__ctl" :style="tintStyle">
         <WpSwitch
           :model-value="shownOn"
           size="sm"
@@ -298,6 +338,31 @@ function flip(): void {
         </span>
         </span>
       </label>
+      <div class="wp-tgr__field">
+        <span>Looks <em>icon and colours; None keeps the theme's</em></span>
+        <span class="wp-tgr__looks">
+          <IconPicker
+            :model-value="t.icon ?? null"
+            all
+            :color="t.icon_color"
+            aria-label="Icon"
+            data-test="tg-icon"
+            @update:model-value="(v: string | null) => emit('patch', { icon: v || undefined })"
+          />
+          <span class="wp-tgr__look">
+            <ColorField :model-value="colorValue(t.icon_color)" allow-none presets compact aria-label="Icon colour" data-test="tg-icon-color" @update:model-value="(v: string) => emit('patch', { icon_color: pickColor(v) })" />
+            Icon
+          </span>
+          <span class="wp-tgr__look">
+            <ColorField :model-value="colorValue(t.text_color)" allow-none presets compact aria-label="Name colour" data-test="tg-text-color" @update:model-value="(v: string) => emit('patch', { text_color: pickColor(v) })" />
+            Name
+          </span>
+          <span class="wp-tgr__look">
+            <ColorField :model-value="colorValue(t.tint)" allow-none presets compact aria-label="Control colour" data-test="tg-tint" @update:model-value="(v: string) => emit('patch', { tint: pickColor(v) })" />
+            Control
+          </span>
+        </span>
+      </div>
       <div v-if="pickOne" class="wp-tgr__field">
         <span>Value <em>picked variable gets this, not the name</em></span>
         <RichTextInput
@@ -321,14 +386,13 @@ function flip(): void {
           <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ INLINE_PICKS_NOTE }}
         </p>
       </div>
-      <div class="wp-tgr__field">
-        <span>Style <em v-if="pickOne">Pick one sets every row's look at the top</em></span>
+      <div v-if="!pickOne" class="wp-tgr__field">
+        <span>Style</span>
         <WpSegmented
           :model-value="t.style"
           :options="STYLES"
           size="sm"
           block
-          :disabled="pickOne"
           aria-label="Style"
           test-prefix="tg-style"
           @update:model-value="(v: ToggleStyle) => emit('patch', { style: v })"
@@ -344,14 +408,13 @@ function flip(): void {
           <Input size="sm" :model-value="t.off_label ?? ''" placeholder="Off" data-test="tg-off-label" @keydown.stop @change="emit('patch', { off_label: value($event) || undefined })" />
         </label>
       </div>
-      <div class="wp-tgr__field">
-        <span>Needs <em>{{ pickOne ? "not used while Pick one is on" : "only on while that toggle is on" }}</em></span>
+      <div v-if="!pickOne" class="wp-tgr__field">
+        <span>Needs <em>only on while that toggle is on</em></span>
         <WpSelect
           :model-value="t.needs ?? ''"
           :options="needsOptions"
           aria-label="Needs"
           data-test="tg-needs"
-          :disabled="pickOne"
           @update:model-value="(v: string) => emit('patch', { needs: v || undefined })"
         />
       </div>
@@ -423,7 +486,6 @@ function flip(): void {
           <span aria-hidden="true">BOOLEAN output</span>
         </span>
         <span class="wp-tgr__foot-btns">
-          <Button variant="ghost" size="sm" icon="pi-trash" data-test="tg-delete" @click="emit('remove')">Remove</Button>
           <Button variant="primary" size="sm" icon="pi-check" data-test="tg-done" @click="emit('edit')">Done</Button>
         </span>
       </div>
@@ -491,6 +553,14 @@ function flip(): void {
 .wp-tgr__sub.is-warn { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__sub.is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tgr__title { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.wp-tgr__icon { flex: none; font-size: 12px; color: var(--wp-tg-icon, var(--wp-text-muted, var(--wp-text2))); }
+.wp-tgr__name b { color: var(--wp-tg-text, inherit); }
+/* Own colours win over the chip's lit accent, so a yellow sun stays yellow. */
+.wp-tgr__row.has-icon-color .wp-tgr__chip :deep(.wp-switch--chip .wp-switch__icon) { color: var(--wp-tg-icon); }
+.wp-tgr__row.has-text-color .wp-tgr__chip :deep(.wp-switch--chip .wp-switch__label) { color: var(--wp-tg-text); }
+.wp-tgr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.wp-tgr__looks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.wp-tgr__look { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--wp-text-muted, var(--wp-text2)); }
 /* Mute / bypass icon: dim while it isn't acting, coloured while it is
  * (bypass in the host's bypass violet, mute in amber). */
 .wp-tgr__ctlicon { flex: none; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); opacity: 0.7; }

@@ -276,3 +276,21 @@ describe("dragRow (edit view drag across groups)", () => {
     expect(ids(dragRow(f, 1, 3))).toEqual(["a", "L2", "d", "L1", "b"]);
   });
 });
+
+describe("parseTogglesConfig looks", () => {
+  it("keeps icons and #rrggbb colours, drops anything else", () => {
+    const cfg = parseTogglesConfig({
+      rows: [
+        { id: "l1", kind: "label", name: "G", color: 3, hex: "#FFAA00", icon: "pi-clock" },
+        { id: "l2", kind: "label", name: "H", color: 3, hex: "red", icon: "<b>" },
+        { id: "t1", name: "Day", var: "day", icon: "sun", icon_color: "#ffcc00", text_color: "#123456", tint: "#00AAFF" },
+        { id: "t2", name: "Night", var: "night", icon: "", icon_color: "blue", tint: "#12345" },
+      ],
+    });
+    expect(cfg.rows[0]).toMatchObject({ hex: "#ffaa00", icon: "clock" });
+    expect(cfg.rows[1]).not.toHaveProperty("hex");
+    expect(cfg.rows[1]).not.toHaveProperty("icon");
+    expect(cfg.rows[2]).toMatchObject({ icon: "sun", icon_color: "#ffcc00", text_color: "#123456", tint: "#00aaff" });
+    for (const k of ["icon", "icon_color", "text_color", "tint"]) expect(cfg.rows[3]).not.toHaveProperty(k);
+  });
+});

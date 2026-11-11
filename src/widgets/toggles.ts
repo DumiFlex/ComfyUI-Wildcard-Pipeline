@@ -120,7 +120,7 @@ export function create(node: TogglesHostNode, inputName: string) {
   const ctlNames: string[] = [];
   const ctlNode = node as unknown as CtlNode;
   /** Bumped by the pencil in ComfyUI's selection toolbar
-   *  (extension/node-toolbar.ts); the widget flips its edit view. */
+   *  (extension/node-toolbar.ts); the widget opens its edit window. */
   const editRequest = ref(0);
   nodeEditors.set(node, () => {
     editRequest.value += 1;
@@ -238,6 +238,7 @@ export function create(node: TogglesHostNode, inputName: string) {
           controls,
           canvasGroups: canvasGroups.value,
           editRequest: editRequest.value,
+          nodeTitle: (node as { title?: string }).title ?? "",
           upstreamVars: upstreamVars.value,
           varProducers: varProducers.value,
           "onUpdate:modelValue": onUpdate,
