@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Banner from "@/kit/Banner.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { textareaEl } from "../utils/kit-field-el";
 import Button from "@/kit/Button.vue";
@@ -508,14 +509,11 @@ function onApply(): void {
       </div>
     </div>
 
-    <p v-if="exprVars.length" class="wp-subcat-picker__vars" data-test="vars-note">
-      <i class="pi pi-bolt" aria-hidden="true" />
-      <span>
+    <Banner v-if="exprVars.length" tone="neutral" size="sm" icon="pi-bolt" note data-test="vars-note">
         {{ exprVars.map((v) => `$${v}`).join(", ") }} {{ exprVars.length > 1 ? "are" : "is" }} read
         when the prompt runs: options tagged with the value stay, as do options with no tag in
         that value's group. The count is before {{ exprVars.length > 1 ? "them" : "it" }}.
-      </span>
-    </p>
+    </Banner>
 
     <!-- Valid, and matches nothing. Not an error — the expression is
          well-formed over declared tags, it just happens that no option carries
@@ -741,15 +739,6 @@ function onApply(): void {
 .wp-subcat-tok--term { color: var(--wp-accent-300); }
 .wp-subcat-tok--op { color: var(--wp-info); }
 .wp-subcat-tok--var { color: var(--wp-var-3); }
-.wp-subcat-picker__vars {
-  display: flex;
-  gap: 6px;
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--wp-text-dim, var(--wp-text3));
-}
-.wp-subcat-picker__vars .pi { padding-top: 2px; color: var(--wp-var-3); }
 .wp-subcat-tok--paren { color: var(--wp-text-dim, var(--wp-text3)); }
 /* Marked as you type, before the validator has finished the sentence. */
 .wp-subcat-tok--bad {

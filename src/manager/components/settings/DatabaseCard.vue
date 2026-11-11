@@ -8,6 +8,7 @@
  * lives beside this card on the Library & data section.
  */
 import { computed, onMounted, ref } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Stat from "@/kit/Stat.vue";
 import Button from "@/kit/Button.vue";
 import Card from "@/kit/Card.vue";
@@ -172,11 +173,10 @@ onMounted(() => {
       />
     </template>
 
-    <div v-if="store.lastError" class="wp-db__error" role="alert">
-      <Icon name="pi-exclamation-triangle" />
-      <span>{{ store.lastError }}</span>
-      <Button variant="link" @click="refresh">Retry</Button>
-    </div>
+    <Banner v-if="store.lastError" tone="danger" size="sm" class="wp-db__error">
+      {{ store.lastError }}
+      <template #actions><Button variant="link" @click="refresh">Retry</Button></template>
+    </Banner>
 
     <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__stats">
       <Skeleton
@@ -362,10 +362,5 @@ onMounted(() => {
   display: inline-flex; align-items: center; gap: var(--wp-space-3);
 }
 .wp-db__op-desc { color: var(--wp-text-dim); font-size: var(--wp-text-xs); margin: 0; }
-.wp-db__error {
-  display: flex; align-items: center; gap: var(--wp-space-4);
-  padding: var(--wp-space-4); color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-}
-.wp-db__error { color: var(--wp-danger-text); }
+.wp-db__error { margin: var(--wp-space-4); }
 </style>

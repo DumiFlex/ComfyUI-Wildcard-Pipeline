@@ -24,6 +24,7 @@
  * they are shrunk in the browser first (`utils/chat-image.ts`).
  */
 import { textareaEl } from "../../utils/kit-field-el";
+import Banner from "@/kit/Banner.vue";
 import Textarea from "@/kit/Textarea.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
@@ -883,7 +884,7 @@ onMounted(() => {
           @click="chat.open.value = false"
         />
       </header>
-      <p v-if="modelNote" class="wp-ai-chat__model-note" role="status" data-test="ai-chat-model-note">{{ modelNote }}</p>
+      <Banner v-if="modelNote" tone="info" size="sm" class="wp-ai-chat__model-note" data-test="ai-chat-model-note">{{ modelNote }}</Banner>
 
       <div v-if="showList" class="wp-ai-chat__body" data-test="ai-chat-list-view">
         <AiChatList :current="chat.chatId.value" @pick="pickChat" @deleted="onDeleted" />
@@ -979,7 +980,7 @@ onMounted(() => {
               @open="openTest(card)"
               @zoom="zoomTest = card"
             />
-            <p v-if="testError" class="wp-ai-chat__warning" role="status">{{ testError }}</p>
+            <Banner v-if="testError" tone="warn" size="sm">{{ testError }}</Banner>
             <AiMessage :text="entry.result.message" :refs="entry.result.refs" />
             <p v-if="goneNames(entry).length" class="wp-ai-chat__note" data-test="ai-chat-gone">
               <i class="pi pi-info-circle" aria-hidden="true" />
@@ -1189,7 +1190,7 @@ onMounted(() => {
                   <Button variant="outline" size="sm" icon="pi-wrench" class="wp-ai-chat__fix" data-test="ai-chat-fix-all" @click="chat.fixAll(entry, p)">Fix all {{ p.fixes!.length }}</Button>
                 </li>
               </ul>
-              <p v-if="entry.errors[p.pid]" class="wp-ai-chat__error" role="alert">{{ entry.errors[p.pid] }}</p>
+              <Banner v-if="entry.errors[p.pid]" tone="danger" size="sm" class="wp-ai-chat__error">{{ entry.errors[p.pid] }}</Banner>
               <div v-if="groupFor(entry, p)" class="wp-ai-chat__actions">
                 <Button
                   v-if="!entry.status[p.pid] && canOpenInEditor(p)"
@@ -1300,7 +1301,7 @@ onMounted(() => {
       </div>
 
       <footer class="wp-ai-chat__foot">
-        <p v-if="chat.error.value" class="wp-ai-chat__error" role="alert" data-test="ai-chat-error">{{ chat.error.value }}</p>
+        <Banner v-if="chat.error.value" tone="danger" size="sm" class="wp-ai-chat__error" data-test="ai-chat-error">{{ chat.error.value }}</Banner>
         <div v-if="chat.attachments.value.length" class="wp-ai-chat__attached" data-test="ai-chat-attached">
           <span v-for="(a, j) in chat.attachments.value" :key="j" class="wp-ai-chat__thumb" :title="`${a.name} · ${a.w}×${a.h}`">
             <img :src="a.url" :alt="a.name" />
@@ -1452,10 +1453,7 @@ onMounted(() => {
   .wp-ai-chat__model { order: 10; flex: 1 1 0; max-width: none; min-width: 0; }
   .wp-ai-chat__think { order: 11; }
 }
-.wp-ai-chat__model-note {
-  margin: 0; padding: 6px 12px; font-size: 12px; color: var(--wp-text-muted);
-  border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2);
-}
+.wp-ai-chat__model-note { margin: 6px 12px; }
 .wp-ai-chat__spacer { flex: 1; }
 .wp-ai-chat__meta {
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px;
@@ -1595,7 +1593,7 @@ onMounted(() => {
 .wp-ai-chat__input { width: 100%; resize: vertical; font-size: 13px; max-height: 40vh; }
 .wp-ai-chat__controls { display: flex; align-items: center; gap: 10px; }
 .wp-ai-chat__hint { flex: 1; font-size: 11px; color: var(--wp-text-dim); }
-.wp-ai-chat__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-chat__error { margin: 0; }
 .wp-ai-chat__drop {
   position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; gap: 8px;
   align-items: center; justify-content: center; padding: 24px; text-align: center; pointer-events: none;
