@@ -376,7 +376,9 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // syntax ride in the note's lazy editor chunk (dev was already ~636.9 KB).
 // RAISED 640 -> 650 KB on 2026-11-10: kit 0.14 -> 0.15.3 (colour picker
 // fixes, PostCard samples, overlay-scrollbar room) put the total at ~640.9 KB.
-const TOTAL_LIMIT = 650 * 1024;     // 650 KB
+// RAISED 650 -> 655 KB on 2026-11-11: WP Debug's newer-node support (node
+// cards in Variables, Show node blink, toggle values/.bool) put it at ~650.04 KB.
+const TOTAL_LIMIT = 655 * 1024;     // 655 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
