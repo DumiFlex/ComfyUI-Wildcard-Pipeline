@@ -1839,6 +1839,7 @@ defineExpose({
             </td>
             <td>
               <WpNumber commit="input"
+                class="opt-weight"
                 :model-value="o.weight"
                 size="sm"
                 :min="0.01"
@@ -2034,6 +2035,9 @@ defineExpose({
   font-size: var(--wp-text-sm);
 }
 .opt-col-weight { width: 90px; }
+/* The field's own input asks for ~20 characters, so without a width the
+ * auto-layout table stretched the box to ~210px for a 1-4 digit weight. */
+.opt-weight { width: 76px; }
 .opt-col-sub { width: 200px; }
 .opt-col-check { width: 34px; text-align: center; }
 .wc-opt-row--selected > td { background: color-mix(in oklab, var(--wp-accent) 8%, transparent); }
