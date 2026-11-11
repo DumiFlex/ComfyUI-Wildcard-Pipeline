@@ -118,3 +118,15 @@ describe("BookmarkWidget", () => {
     w.unmount();
   });
 });
+
+describe("BookmarkWidget drag while editing", () => {
+  it("lets the form's background through: every pass part sits right under another one", () => {
+    const w = make();
+    const form = w.get('[data-test="bm-form"]').element;
+    expect(form.classList.contains("wp-frameless__pass")).toBe(true);
+    const parts = [...form.querySelectorAll(".wp-frameless__pass")];
+    expect(parts.length).toBeGreaterThan(3);
+    for (const p of parts) expect(p.parentElement?.classList.contains("wp-frameless__pass"), p.className).toBe(true);
+    w.unmount();
+  });
+});

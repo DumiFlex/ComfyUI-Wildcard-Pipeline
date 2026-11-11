@@ -131,14 +131,14 @@ function done(): void {
     <!-- Keys typed here never reach ComfyUI's keybindings. -->
     <form
       v-else
-      class="wp-bm__form"
+      class="wp-bm__form wp-frameless__pass"
       data-test="bm-form"
       @submit.prevent="done"
       @keydown.stop
       @keyup.stop
       @keypress.stop
     >
-      <div class="wp-bm__head">
+      <div class="wp-bm__head wp-frameless__pass">
         <Button
           size="sm"
           :icon="`pi-${config.icon}`"
@@ -190,7 +190,7 @@ function done(): void {
         @recording="(on: boolean) => emit('recording', on)"
       />
 
-      <div class="wp-bm__row">
+      <div class="wp-bm__row wp-frameless__pass">
         <WpSwitch
           :model-value="showOnCanvas"
           size="sm"
@@ -206,7 +206,7 @@ function done(): void {
           @update:model-value="(v: boolean) => emit('update:pinned', v)"
         />
       </div>
-      <div class="wp-bm__actions">
+      <div class="wp-bm__actions wp-frameless__pass">
         <span v-if="nested" class="wp-bm__hint">In a subgraph: the jump opens it.</span>
         <span class="wp-bm__spacer"></span>
         <Button size="sm" icon="pi-directions" hint="Try the jump" data-test="bm-go" @click="emit('jump')">Go</Button>
@@ -267,8 +267,9 @@ function done(): void {
 .wp-bm__offtag { color: var(--wp-text-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
 
 /* ── editor card ────────────────────────────────────────────────────── */
+/* Presses on its background go through, so it drags while open
+ * (frameless-node.css: wp-frameless__pass). */
 .wp-bm__form {
-  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -304,11 +305,9 @@ function done(): void {
 
 @layer wp-extension {
   /* Nodes 2.0: the widget wrappers take pointer events and would eat the
-     press that drags the node; the canvas handles it instead. The editor
-     takes events back. */
+     press that drags the node; the canvas handles it instead. The editor's
+     controls take events back (frameless-node.css: wp-frameless__pass). */
   .lg-node:has(.wp-bm) .lg-node-widgets,
   .lg-node:has(.wp-bm) .lg-node-widgets * { pointer-events: none !important; }
-  .lg-node:has(.wp-bm) .wp-bm__form,
-  .lg-node:has(.wp-bm) .wp-bm__form * { pointer-events: auto !important; }
 }
 </style>
