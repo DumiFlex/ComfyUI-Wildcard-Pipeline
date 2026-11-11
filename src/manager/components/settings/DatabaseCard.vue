@@ -8,6 +8,8 @@
  * lives beside this card on the Library & data section.
  */
 import { computed, onMounted, ref } from "vue";
+import Banner from "@/kit/Banner.vue";
+import Stat from "@/kit/Stat.vue";
 import Button from "@/kit/Button.vue";
 import Card from "@/kit/Card.vue";
 import Icon from "@/kit/Icon.vue";
@@ -171,11 +173,10 @@ onMounted(() => {
       />
     </template>
 
-    <div v-if="store.lastError" class="wp-db__error" role="alert">
-      <Icon name="pi-exclamation-triangle" />
-      <span>{{ store.lastError }}</span>
-      <Button variant="link" @click="refresh">Retry</Button>
-    </div>
+    <Banner v-if="store.lastError" tone="danger" size="sm" class="wp-db__error">
+      {{ store.lastError }}
+      <template #actions><Button variant="link" @click="refresh">Retry</Button></template>
+    </Banner>
 
     <div v-else-if="store.loading && !store.info" data-test="database-loading" class="wp-db__stats">
       <Skeleton
@@ -189,10 +190,10 @@ onMounted(() => {
 
     <div v-else-if="store.info">
       <div class="wp-db__stats" data-test="database-stats">
-        <div class="wp-db__stat"><b>{{ formatBytes(store.info.size_bytes) }}</b><span>on disk</span></div>
-        <div class="wp-db__stat"><b>{{ totalRows.toLocaleString() }}</b><span>library rows</span></div>
-        <div class="wp-db__stat"><b>v{{ store.info.migration.current_version }}</b><span>schema · {{ store.info.pragma.journal_mode }}</span></div>
-        <div class="wp-db__stat"><b>{{ formatDate(store.info.mtime_iso) }}</b><span>last modified</span></div>
+        <Stat size="sm" label="on disk" :value="formatBytes(store.info.size_bytes)" />
+        <Stat size="sm" label="library rows" :value="totalRows" />
+        <Stat size="sm" :label="`schema · ${store.info.pragma.journal_mode}`" :value="`v${store.info.migration.current_version}`" />
+        <Stat size="sm" label="last modified" :value="formatDate(store.info.mtime_iso)" />
       </div>
 
       <!-- Reference detail most people never need. <details> rather than v-if
@@ -289,15 +290,6 @@ onMounted(() => {
   gap: var(--wp-space-4);
   margin-bottom: var(--wp-space-5);
 }
-.wp-db__stat {
-  background: var(--wp-bg-3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  padding: var(--wp-space-4) var(--wp-space-5);
-  min-width: 0;
-}
-.wp-db__stat b { display: block; font-size: 15px; color: var(--wp-text); overflow-wrap: anywhere; }
-.wp-db__stat span { font-size: 11.5px; color: var(--wp-text-dim); }
 /* Page area narrower than 520px (usePageWidth; the chat can take the rest). */
 .wp-content[data-lt~="520"] .wp-db__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wp-db__details {
@@ -370,10 +362,5 @@ onMounted(() => {
   display: inline-flex; align-items: center; gap: var(--wp-space-3);
 }
 .wp-db__op-desc { color: var(--wp-text-dim); font-size: var(--wp-text-xs); margin: 0; }
-.wp-db__error {
-  display: flex; align-items: center; gap: var(--wp-space-4);
-  padding: var(--wp-space-4); color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-}
-.wp-db__error { color: var(--wp-danger-text); }
+.wp-db__error { margin: var(--wp-space-4); }
 </style>

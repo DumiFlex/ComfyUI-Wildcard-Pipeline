@@ -7,6 +7,7 @@
  * used. Rename and pin don't move a chat; delete asks inline first.
  */
 import { inputEl } from "../../utils/kit-field-el";
+import Banner from "@/kit/Banner.vue";
 import Input from "@/kit/Input.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -143,7 +144,7 @@ function turnsLabel(n: number): string {
       aria-label="Search chats"
       data-test="ai-chats-search"
     />
-    <p v-if="error" class="wp-ai-chats__error" role="alert">{{ error }}</p>
+    <Banner v-if="error" tone="danger" size="sm">{{ error }}</Banner>
     <Skeleton v-if="!loaded" :lines="5" label="Loading chats" class="wp-ai-chats__skel" data-test="ai-chats-skeleton" />
     <p v-else-if="!chats.length" class="wp-ai-chats__empty" data-test="ai-chats-empty">
       {{ q.trim() ? "No chat mentions that." : "No saved chats yet. Chats are kept once they have an answer." }}
@@ -202,8 +203,7 @@ function turnsLabel(n: number): string {
 <style scoped>
 .wp-ai-chats__skel { padding: var(--wp-space-3) 0; }
 .wp-ai-chats { display: flex; flex-direction: column; gap: 10px; }
-.wp-ai-chats__empty, .wp-ai-chats__error { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
-.wp-ai-chats__error { color: var(--wp-danger); }
+.wp-ai-chats__empty { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
 .wp-ai-chats__group { display: flex; flex-direction: column; gap: 2px; }
 .wp-ai-chats__label {
   margin: 4px 0 2px; font-size: 11px; font-weight: 600; text-transform: uppercase;
