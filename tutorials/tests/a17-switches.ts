@@ -108,8 +108,8 @@ tutorial(
     await t.h.step("A rule reads it", async () => {
       await t.say("Lights on or off is the rule that reads it. Open it.");
       const modal = await editItem(nodes.ctx2, "Lights on or off");
-      // Just the rule's branch, not the whole editor (the dialog-wide box was too wide).
-      await t.callout("rule", modal.locator('[data-test="branch-row-b17a0ff2-0"]'), "When $use_lighting is false: empty $lighting", 6);
+      // Just the rule's head (it shows the condition; the rule opens collapsed), not the whole dialog.
+      await t.callout("rule", modal.locator('[data-test="rule-head-b17a0ff2"]'), "When $use_lighting is false: empty $lighting", 6);
       await t.say("When use lighting equals false, it replaces lighting with nothing.");
       await t.waitVoice();
       await t.uncallout("rule");

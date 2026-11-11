@@ -119,12 +119,15 @@ tutorial(
       const tpl = after.templates.find((x) => !had.has(x.id));
       if (!bundle) throw new StepError("Install made no new bundle.");
       await t.go("/");
-      await t.say("Now use it. On the canvas, a Context takes the whole pack: Add Bundle, and pick it.");
+      await t.say("Now use it. On the canvas, a Context takes the whole pack.");
       const ctx = await t.addNode("WP Context", { x: 420, y: 170 });
+      await t.waitVoice();
       await t.click(t.node(ctx).locator('[data-testid="open-bundle-picker"]').first());
       await t.beat(700);
       const row = page.locator(`[data-testid="bundle-picker-row-${bundle.id}"]`);
+      // The box comes up with its own line (it used to come after the line, in silence).
       await t.callout("row", row, "The pack you just built", 6);
+      await t.say("Add Bundle, and pick the pack you just built.");
       await t.waitVoice();
       await t.click(row);
       await t.uncallout("row");
