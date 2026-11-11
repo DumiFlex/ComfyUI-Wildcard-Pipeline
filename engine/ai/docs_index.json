@@ -2698,7 +2698,7 @@
    "sections": [
     {
      "title": "What's in it",
-     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has in the palette you pick.\n- Controls: buttons, fields, dropdowns, checkboxes and switches, tabs, sliders, tag, date, colour and icon pickers.\n- Display and layout: cards, chips, badges, tables, lists, code blocks, diffs, image grids and split panels.\n- Feedback and overlays: toasts, banners, progress, popovers, menus, tooltips, dialogs and drawers.\nEach of these is one component on both sides: the search box in a node picker and on a manager page is the same box, and so are the number fields, tabs and toasts. The App pieces page here shows the 9 parts only the extension has, because they work with your library: the prompt box, the negative box, the selection bar and a few more."
+     "text": "- Tokens: the colours, type sizes, spacing and corners, with the value each has in the palette you pick.\n- Controls: buttons, fields, dropdowns, checkboxes and switches, tabs, sliders, tag, date, colour and icon pickers.\n- Display and layout: cards, chips, badges, tables, lists, code blocks, diffs, image grids and split panels.\n- Feedback and overlays: toasts, banners, progress, popovers, menus, tooltips, dialogs and drawers.\nEach of these is one component on both sides: the search box in a node picker and on a manager page is the same box, and so are the number fields, tabs and toasts. The App pieces page here shows the 8 parts only the extension has, because they work with your library: the prompt box, the negative box, the selection bar and a few more."
     },
     {
      "title": "Reuse first",

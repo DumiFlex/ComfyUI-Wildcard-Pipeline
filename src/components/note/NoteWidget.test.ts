@@ -52,7 +52,7 @@ describe("NoteWidget edit form", () => {
     area.value = "No pictures now.";
     area.dispatchEvent(new Event("input", { bubbles: true }));
     await flushPromises();
-    document.body.querySelector<HTMLElement>('[data-test="node-edit-done"]')?.click();
+    document.body.querySelector<HTMLElement>('[data-test="note-text-done"]')?.click();
     await flushPromises();
     expect(lastConfig(w)?.text).toBe("No pictures now.");
     expect(lastConfig(w)?.images).toEqual({});

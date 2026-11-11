@@ -48,10 +48,6 @@ export const KIT_ENTRIES: KitEntry[] = [
   },
   // App pieces
   {
-    id: "node-edit-window", name: "NodeEditWindow", group: "pieces", file: "src/components/shared/NodeEditWindow.vue", surfaces: ["canvas"],
-    use: "The window a canvas node opens for an edit too big for the node (WP Note's text): header with the node's title and a chip, the body, Cancel / Done, and a Discard? check when closing with changes. Keep a draft and write it on done.",
-  },
-  {
     id: "rich-text", name: "RichTextInput", group: "pieces", file: "src/manager/components/RichTextInput.vue", surfaces: ["manager"],
     use: "Prompt text: colours $variables, @{references}, {a|b} picks, LoRAs and #tags, and completes them as you type. Every template, combine and option text box uses it.",
     instead: "A Textarea for text that holds prompt syntax.",
@@ -98,7 +94,6 @@ export const KIT_FOLDERS = ["src/components/shared"];
  */
 export const KIT_EXAMPLES: Record<string, string> = {
   "canvas-toast": `pushToast("Copied to the library", { severity: "success" })`,
-  "node-edit-window": `<NodeEditWindow :title="node.title" chip="Note text" :dirty="changed" @done="save" @cancel="open = false">…</NodeEditWindow>`,
   "ai-working": `<AiWorking text="Planning the pack" variant="orbit" />`,
   "rich-text": `<RichTextInput v-model="template" surface="assembler" multiline :var-suggestions="vars" />`,
   "negative-field": `<NegativeField v-model="option.negative" label="option" />`,
