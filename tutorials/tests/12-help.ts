@@ -57,14 +57,19 @@ tutorial(
       await t.uncallout("examples");
       await t.say("The example workflow videos go through each of them.");
       await t.press("Escape");
+      // The closing dialog still covers the toolbar for a moment, and a box drawn over it is taken
+      // for hidden and dropped at once (the "Opens the manager" box flashed for half a second).
+      await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
       await t.waitVoice();
+      await t.beat(400);
     });
 
     await t.h.step("The manager's docs", async () => {
       const open = page.getByRole("button", { name: /Wildcard Pipeline Workspace/ }).first();
       if ((await open.count()) > 0) {
-        await t.callout("open", open, "Opens the manager", 6);
+        // The box comes up with its line and stays for all of it.
         await t.say("This button opens the manager. Its Documentation covers every node and every module, with examples.");
+        await t.callout("open", open, "Opens the manager", 6);
         await t.waitVoice();
         await t.uncallout("open");
       }
