@@ -53,7 +53,7 @@ describe("TogglesWidget toggle window", () => {
     await w.setProps({ editRequest: 1 });
     await w.find('[data-test="tg-edit-00000001"]').trigger("click");
     await settle();
-    expect(q('[data-test="node-edit-window"]')?.textContent).toContain("Light");
+    expect(q('[data-test="modal"]')?.textContent).toContain("Light");
     const name = q('[data-test="tg-name"]') as HTMLInputElement | null;
     if (name) {
       name.value = "Sunrise";
@@ -61,11 +61,11 @@ describe("TogglesWidget toggle window", () => {
     }
     await settle();
     expect(w.emitted("update:modelValue")).toBeUndefined();
-    q('[data-test="node-edit-done"]')?.click();
+    q('[data-test="tg-window-done"]')?.click();
     await settle();
     const row = lastConfig(w)?.rows.find((r): r is ToggleRow => r.id === "00000001" && r.kind === "toggle");
     expect(row).toMatchObject({ name: "Sunrise", var: "sunrise", icon: "sun" });
-    expect(q('[data-test="node-edit-window"]')).toBeNull();
+    expect(q('[data-test="modal"]')).toBeNull();
     w.unmount();
   });
 

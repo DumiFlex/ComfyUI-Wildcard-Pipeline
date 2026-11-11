@@ -22,7 +22,7 @@ function q(sel: string): HTMLElement | null {
   return document.body.querySelector<HTMLElement>(sel);
 }
 function done(w: ReturnType<typeof open>): [Row, string] | undefined {
-  q('[data-test="node-edit-done"]')?.click();
+  q('[data-test="tg-window-done"]')?.click();
   return w.emitted("done")?.[0] as [Row, string] | undefined;
 }
 
@@ -60,7 +60,7 @@ describe("ToggleEditWindow", () => {
 
   it("Cancel without changes closes at once", async () => {
     const w = open(base);
-    q('[data-test="node-edit-cancel"]')?.click();
+    q('[data-test="tg-window-cancel"]')?.click();
     await flushPromises();
     expect(w.emitted("cancel")).toHaveLength(1);
     w.unmount();

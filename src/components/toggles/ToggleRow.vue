@@ -327,6 +327,9 @@ function flip(): void {
   line-height: 16px;
   color: var(--wp-tg-text, inherit);
 }
+/* A name colour carries over to its variable (row line and chip). */
+.wp-tgr__row.has-text-color .wp-tgr__chipvar,
+.wp-tgr__row.has-text-color .wp-tgr__sub:not(.is-linked):not(.is-warn) { color: var(--wp-tg-text); }
 .wp-tgr__chipdot { flex: none; line-height: 16px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tgr__chipvar {
   min-width: 0;

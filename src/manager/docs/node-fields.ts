@@ -257,7 +257,7 @@ export const NODE_FIELDS = {
       { term: "toggle outputs", sockets: ["out:toggle_*"], desc: "One BOOLEAN per toggle that has an output, at the right of its row. Up to 16." },
     ],
     edit: [
-      { term: "Name", desc: "Shown on the row and on its output. A Chip shows Name · $variable (the variable while Show is on)." },
+      { term: "Name", desc: "Shown on the row and on its output. A Chip shows Name · $variable (the variable while Show is on). A name colour also colours its variable." },
       { term: "Variable", desc: "Gets true or false. It follows the name until you change it. Internal until you turn off the row's globe. Show puts it under the name, or after it on a Chip." },
       { term: "Looks", desc: "An icon before the name, and colours for the icon, the name and the control (switch, check, radio, chip or buttons), so Day can be yellow and Night blue. None keeps the theme's colour." },
       { term: "Style", desc: "Switch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name). Any on only: in Pick one the Style in the top bar sets every row's look." },

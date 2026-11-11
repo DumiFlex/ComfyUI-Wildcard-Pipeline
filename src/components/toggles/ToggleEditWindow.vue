@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * One WP Toggles toggle's settings, in a window (`NodeEditWindow`): the node
+ * One WP Toggles toggle's settings, in a kit `Modal`: the node
  * keeps its edit view (mode, order, globe, remove, labels) and the row's
  * pencil opens this. It edits a draft of the row; Done hands the draft and
  * its group back to `TogglesWidget.vue`, which stores it (a name change
@@ -14,10 +14,13 @@ import Checkbox from "@/kit/Checkbox.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import Combobox from "@/kit/Combobox.vue";
 import ColorField from "@/kit/ColorField.vue";
-import IconSwatch from "./IconSwatch.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { vToggleRow } from "@/kit/toggle-row";
-import NodeEditWindow from "../shared/NodeEditWindow.vue";
+import Modal from "@/kit/Modal.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
+import Button from "@/kit/Button.vue";
+import Kbd from "@/kit/Kbd.vue";
 import ToggleRowView from "./ToggleRow.vue";
 import { varColorClass } from "../shared/var-color";
 import type { PickStyle, ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
@@ -120,20 +123,34 @@ const previewOn = computed(() => (props.pickOne ? props.shownOn : d.value.on));
 function previewSet(on: boolean): void {
   if (!props.pickOne) patch({ on });
 }
+
+// Closing with changes (Escape, ×, Cancel) asks first.
+const asking = ref(false);
+function cancel(): void {
+  if (dirty.value) asking.value = true;
+  else emit("cancel");
+}
+function onKey(ev: KeyboardEvent): void {
+  // Ctrl/Cmd+Enter is Done from anywhere in the window.
+  if (!asking.value && ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+    ev.preventDefault();
+    emit("done", d.value, draftGroup.value);
+  }
+}
 </script>
 
 <template>
-  <NodeEditWindow
-    :title="nodeTitle || 'WP Toggles'"
-    chip="Toggle"
-    :sub="d.var ? `${d.name} · $${d.var}` : d.name"
-    icon="sliders-h"
-    :dirty="dirty"
-    :width="520"
-    flush
-    @done="emit('done', d, draftGroup)"
-    @cancel="emit('cancel')"
-  >
+  <Modal :open="true" size="md" @update:open="(v: boolean) => { if (!v) cancel(); }" @keydown="onKey">
+    <template #header="{ titleId }">
+      <i class="pi pi-sliders-h wp-tgw__icon" aria-hidden="true" />
+      <div class="wp-tgw__titles">
+        <div class="wp-tgw__title-row">
+          <h3 :id="titleId" class="wp-tgw__title">{{ nodeTitle || 'WP Toggles' }}</h3>
+          <span class="wp-tgw__chip">Toggle</span>
+        </div>
+        <div class="wp-tgw__sub">{{ d.var ? `${d.name} · $${d.var}` : d.name }}</div>
+      </div>
+    </template>
     <div class="wp-tgw__preview" data-test="tg-window-preview">
       <span class="wp-tgw__cap">ON THE NODE</span>
       <ToggleRowView
@@ -193,14 +210,16 @@ function previewSet(on: boolean): void {
         <div class="wp-tgr__field">
           <span>Looks <em>icon and colours; None keeps the theme's</em></span>
           <span class="wp-tgr__looks">
+            <IconPicker
+              :model-value="d.icon ?? null"
+              all
+              size="sm"
+              :color="d.icon_color"
+              aria-label="Icon"
+              data-test="tg-icon"
+              @update:model-value="(v: string | null) => patch({ icon: v || undefined })"
+            />
             <span class="wp-tgr__look">
-              <IconSwatch
-                :model-value="d.icon ?? null"
-                :color="d.icon_color"
-                aria-label="Icon"
-                data-test="tg-icon"
-                @update:model-value="(v: string | null) => patch({ icon: v || undefined })"
-              />
               <ColorField :model-value="colorValue(d.icon_color)" allow-none presets compact aria-label="Icon colour" data-test="tg-icon-color" @update:model-value="(v: string) => patch({ icon_color: pickColor(v) })" />
               Icon
             </span>
@@ -349,13 +368,56 @@ function previewSet(on: boolean): void {
         </div>
       </div>
     </div>
-  </NodeEditWindow>
+    <template #footer>
+      <span class="wp-tgw__hint"><Kbd keys="Mod+Enter" size="sm" /> Done · Changes save with the node when you press Done.</span>
+      <Button size="sm" data-test="tg-window-cancel" @click="cancel">Cancel</Button>
+      <Button size="sm" variant="primary" data-test="tg-window-done" @click="emit('done', d, draftGroup)">Done</Button>
+    </template>
+  </Modal>
+  <ConfirmModal
+    :open="asking"
+    title="Discard your changes?"
+    body="What you changed in this window isn't on the node yet."
+    confirm-label="Discard"
+    cancel-label="Keep editing"
+    tone="warn"
+    @confirm="asking = false; emit('cancel')"
+    @cancel="asking = false"
+  />
 </template>
 
 <style scoped>
-.wp-tgw__preview { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-deep, var(--wp-bg)); }
+/* The row as the node draws it stays on top while the settings scroll. */
+.wp-tgw__preview {
+  position: sticky;
+  top: calc(-1 * var(--wp-space-5));
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: calc(-1 * var(--wp-space-5)) calc(-1 * var(--wp-space-5)) var(--wp-space-5);
+  padding: 10px var(--wp-space-5);
+  border-bottom: 1px solid var(--wp-border);
+  background: var(--wp-bg-deep, var(--wp-bg));
+}
+.wp-tgw__icon { color: var(--wp-accent); font-size: 14px; }
+.wp-tgw__titles { flex: 1; min-width: 0; }
+.wp-tgw__title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-tgw__title { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-tgw__chip {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--wp-accent) 22%, transparent);
+  color: var(--wp-accent);
+}
+.wp-tgw__sub { margin-top: 3px; font-size: 11px; color: var(--wp-text-dim); }
+.wp-tgw__hint { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 11px; color: var(--wp-text-dim); }
 .wp-tgw__cap { font: 600 9px var(--wp-font-sans, sans-serif); letter-spacing: 0.08em; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-tgw__body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px; }
 /* The window is the panel: no second box around it. */
 .wp-tgw__body .wp-tgr__edit { padding: 0; border: 0; background: none; }
 .wp-tgr__edit { display: flex; flex-direction: column; gap: 10px; }
