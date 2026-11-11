@@ -20,6 +20,7 @@
  * ComfyUI's panel both ways.
  */
 import { computed, onMounted, ref } from "vue";
+import Banner from "@/kit/Banner.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
@@ -225,9 +226,9 @@ onMounted(() => {
     node editors in ComfyUI and is the same setting as ComfyUI › Settings › Wildcard Pipeline, kept in step
     both ways while both are open.
   </p>
-  <p v-if="canvas.error.value" class="wp-set-error" role="alert" data-test="canvas-ac-error">
+  <Banner v-if="canvas.error.value" tone="danger" size="sm" class="wp-set-error" data-test="canvas-ac-error">
     Couldn't reach ComfyUI's settings: {{ canvas.error.value }}
-  </p>
+  </Banner>
   <SettingGroup title="Sources">
     <SettingRow
       label="Booru tags"

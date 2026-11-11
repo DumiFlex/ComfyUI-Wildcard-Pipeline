@@ -18,6 +18,7 @@ import {
 } from "@/manager/parsing/subcatFilter";
 import OptionRow from "./OptionRow.vue";
 import Checkbox from "@/kit/Checkbox.vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
 import Combobox from "@/kit/Combobox.vue";
@@ -417,21 +418,20 @@ const skewedTowards = computed(() => {
     <!-- Quick mode — grouped pills. OR within an axis, AND across axes. -->
     <!-- No tags on any option: nothing to filter by. Say why the pool is
          empty and where tags come from, instead of an empty strip. -->
-    <div
+    <Banner
       v-if="!advanced && poolOpen && pillGroups.length === 0"
+      tone="neutral"
+      size="sm"
+      icon="pi-tags"
+      title="No tags to filter by"
+      note
       class="pool__empty"
       data-test="pool-empty"
     >
-      <i class="pi pi-tags pool__empty-icon" aria-hidden="true" />
-      <div>
-        <div class="pool__empty-title">No tags to filter by</div>
-        <div class="pool__empty-text">
-          None of this wildcard's options have tags yet, so every enabled option can roll.
-          Add tags to the options in the library editor (Sub-Categories) and they show up
-          here as pills: tick some to only roll the options that carry them.
-        </div>
-      </div>
-    </div>
+      None of this wildcard's options have tags yet, so every enabled option can roll.
+      Add tags to the options in the library editor (Sub-Categories) and they show up
+      here as pills: tick some to only roll the options that carry them.
+    </Banner>
     <div v-else-if="!advanced && poolOpen" class="pool__groups">
       <div
         v-for="group in pillGroups"
@@ -758,26 +758,7 @@ const skewedTowards = computed(() => {
   color: var(--wp-text-dim, var(--wp-text3));
 }
 .pool__vars-hint code { font: 11px var(--wp-font-mono); color: var(--wp-text); }
-.pool__empty {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px dashed var(--wp-border);
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text-dim, var(--wp-text3));
-}
-.pool__empty-icon {
-  font-size: 14px;
-  padding-top: 1px;
-}
-.pool__empty-title {
-  font: 600 11px var(--wp-font-sans);
-  color: var(--wp-text);
-  margin-bottom: 2px;
-}
-.pool__empty-text,
+.pool__empty { margin-bottom: 12px; }
 .pool__expr-hint {
   font: 11px/1.45 var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));

@@ -19,6 +19,7 @@
  */
 import { computed, ref, watch, nextTick } from "vue";
 import { RouterLink } from "vue-router";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Card from "@/kit/Card.vue";
 import Skeleton from "@/kit/Skeleton.vue";
@@ -181,15 +182,13 @@ watch(
 
     <div class="wp-editor__body">
       <Transition name="wp-banner">
-        <div
+        <Banner
           v-if="errors.length"
+          tone="danger"
           class="wp-editor__errors"
-          role="alert"
+          :title="`${errors.length} field${errors.length === 1 ? '' : 's'} need${errors.length === 1 ? 's' : ''} attention:`"
           data-test="editor-errors"
         >
-          <div class="wp-editor__errors-title">
-            {{ errors.length }} field{{ errors.length === 1 ? '' : 's' }} need{{ errors.length === 1 ? 's' : '' }} attention:
-          </div>
           <ul>
             <li v-for="e in errors" :key="e.field + ':' + e.label">
               <a :href="`#${e.field}`" @click.prevent="scrollToField(e.field)">{{ e.label }}</a>
@@ -197,7 +196,7 @@ watch(
               <span>{{ e.message }}</span>
             </li>
           </ul>
-        </div>
+        </Banner>
       </Transition>
       <div v-if="loading" class="wp-editor__skeleton" data-test="editor-skeleton">
         <Card>
@@ -342,14 +341,6 @@ watch(
  * surfaces every problem in one place and lets the user jump to
  * each field via underlined anchors. Auto-hides when the user fixes
  * the issues (validation computed re-evaluates). */
-.wp-editor__errors {
-  padding: var(--wp-space-4) var(--wp-space-5);
-  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger) 32%, transparent);
-  border-radius: var(--wp-radius);
-  font-size: var(--wp-text-sm);
-}
-.wp-editor__errors-title { font-weight: 600; margin-bottom: var(--wp-space-3); }
 .wp-editor__errors ul { margin: 0; padding-left: var(--wp-space-5); }
 .wp-editor__errors li { margin-bottom: var(--wp-space-2); }
 .wp-editor__errors a { color: var(--wp-text); text-decoration: underline; }

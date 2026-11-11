@@ -6,6 +6,7 @@
  * (`/wp/api/ai/config`), and the API key is write-only: the page can set or
  * remove it, never read it back.
  */
+import Banner from "@/kit/Banner.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { aiDebugEnabled, setAiDebug } from "../../../api/ai-debug";
@@ -696,8 +697,8 @@ const off = computed(() => !config.value?.enabled);
 </script>
 
 <template>
-  <p v-if="error" class="wp-set-error" role="alert">{{ error }}</p>
-  <p v-if="saveError" class="wp-set-error" role="alert" data-test="ai-save-error">{{ saveError }}</p>
+  <Banner v-if="error" tone="danger" size="sm" class="wp-set-error">{{ error }}</Banner>
+  <Banner v-if="saveError" tone="danger" size="sm" class="wp-set-error" data-test="ai-save-error">{{ saveError }}</Banner>
 
   <div v-if="config" class="wp-ai-set-wrap">
     <div class="wp-ai-set">

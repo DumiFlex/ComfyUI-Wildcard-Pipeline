@@ -9,6 +9,7 @@
  * Nothing is saved until the user presses Save.
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import AiPanelFrame from "./AiPanelFrame.vue";
@@ -200,9 +201,9 @@ function fmtWeight(w: number | undefined): string {
         Works on {{ scopeLabel }}.
         <template v-if="!fromSelection">Select options first to work on just those.</template>
       </p>
-      <p v-if="tooMany" class="wp-ai-edit__error" role="alert" data-test="ai-edit-too-many">
+      <Banner v-if="tooMany" tone="danger" size="sm" class="wp-ai-edit__error" data-test="ai-edit-too-many">
         That's more than {{ MAX_OPTIONS }} options. Select up to {{ MAX_OPTIONS }} and try again.
-      </p>
+      </Banner>
     </template>
     <template v-if="result && result.changes.length">
       <ul class="wp-ai-edit__list" data-test="ai-edit-results">
@@ -278,7 +279,7 @@ function fmtWeight(w: number | undefined): string {
 
 <style scoped>
 .wp-ai-edit__scope { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
-.wp-ai-edit__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-edit__error { margin: 0; }
 .wp-ai-edit__list {
   list-style: none;
   margin: 0;

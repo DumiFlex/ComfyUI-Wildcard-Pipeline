@@ -13,6 +13,7 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
+import Banner from "@/kit/Banner.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
@@ -1713,7 +1714,7 @@ defineExpose({
           @delete-selected="deleteSelected"
           @clear="clearSelection"
         />
-        <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
+        <Banner v-if="bulkNote" tone="warn" size="sm">{{ bulkNote }}</Banner>
       </div>
       </template>
       <!-- Not in the sticky subheader: a tall panel there covered the
@@ -2048,11 +2049,6 @@ defineExpose({
   padding: 12px 16px 14px;
 }
 .wpc-ai-controls { border-bottom: 1px solid var(--wp-border); }
-.wpc-bulk-note {
-  margin: 0;
-  font-size: 12px;
-  color: var(--wp-warn);
-}
 .opt-col-prob { width: 130px; }
 .opt-col-trash { width: 40px; }
 .opt-empty {

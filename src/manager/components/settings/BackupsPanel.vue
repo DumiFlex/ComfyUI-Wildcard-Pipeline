@@ -17,6 +17,7 @@
  * marked and goes at the next backup rather than the moment it's unpinned.
  */
 import { computed, onMounted, ref } from "vue";
+import Banner from "@/kit/Banner.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
@@ -320,7 +321,7 @@ onMounted(() => {
           <Icon name="pi-bookmark-fill" :size="ICON_SM" /> {{ pinnedCount }} pinned
         </span>
       </div>
-      <p v-if="loadError" class="wp-set-error" role="alert">{{ loadError }}</p>
+      <Banner v-if="loadError" tone="danger" size="sm" class="wp-set-error">{{ loadError }}</Banner>
       <Skeleton
         v-else-if="!list"
         shape="row"

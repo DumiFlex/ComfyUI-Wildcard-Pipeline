@@ -4,6 +4,7 @@
  * Pipeline, editable here too (see `useCanvasSettings` for how the two stay
  * in step), plus the one run setting the engine reads from the server.
  */
+import Banner from "@/kit/Banner.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, ref, watch } from "vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
@@ -63,9 +64,9 @@ async function commitDepth(): Promise<void> {
     that is open right now, and is saved for the next one. For a live preview, open the display
     playground from ComfyUI's settings panel.
   </p>
-  <p v-if="canvas.error.value" class="wp-set-error" role="alert" data-test="canvas-settings-error">
+  <Banner v-if="canvas.error.value" tone="danger" size="sm" class="wp-set-error" data-test="canvas-settings-error">
     Couldn't reach ComfyUI's settings: {{ canvas.error.value }}
-  </p>
+  </Banner>
 
   <SettingGroup title="Runs">
     <SettingRow

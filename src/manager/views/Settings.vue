@@ -235,7 +235,7 @@ watch(() => [active.value, route.hash], () => { void revealHash(); }, { immediat
 }
 .wp-set-pill[data-tone="ok"] { color: var(--wp-success); border-color: color-mix(in oklab, var(--wp-success) 40%, transparent); }
 .wp-set-pill[data-tone="warn"] { color: var(--wp-warn); border-color: color-mix(in oklab, var(--wp-warn) 40%, transparent); }
-.wp-set-error { margin: 0 0 var(--wp-space-5); font-size: var(--wp-text-sm); color: var(--wp-danger); }
+.wp-set-error { margin: 0 0 var(--wp-space-5); }
 .wp-set-callout {
   margin: 0 0 var(--wp-space-6);
   padding: var(--wp-space-4) var(--wp-space-5);
