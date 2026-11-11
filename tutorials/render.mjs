@@ -146,6 +146,7 @@ const SILENT_MAX = Number(opt("silent-max", "12"));
 const HOLD = 2.5;
 const SQUEEZE = 4;
 const HAND_MAX = 2;
+const HAND_GAP = 5;
 // When the hand acted, in video seconds (cues.json `acts`, from the Tutor).
 const acts = (take.acts ?? []).map((ms) => vt(ms));
 if (!argv.includes("--no-squeeze")) {
@@ -173,8 +174,10 @@ if (!argv.includes("--no-squeeze")) {
       // A cut pushes nothing, as for a speed-0 fast-forward.
       // A stretch where the hand works (clicks, drags, types) plays at most HAND_MAX: faster, the
       // hand looks rushed and the viewer can't follow it. Takes from before `acts` squeeze as before.
-      // One click (Run, then a wait) isn't hand work to follow: it takes two or more.
-      const busy = acts.filter((x) => x >= a && x <= b).length >= 2;
+      // One click (Run, then a wait) isn't hand work to follow: it takes two or more, at least one
+      // every HAND_GAP seconds on average (a few Run clicks across a long wait are still a wait).
+      const n = acts.filter((x) => x >= a && x <= b).length;
+      const busy = n >= 2 && n * HAND_GAP >= b - a;
       if (!lead) out.push({ a, b, speed: Math.min(busy ? HAND_MAX : 8, Math.max(2, (b - a) / SQUEEZE)) });
       squeezed++;
       cur = b;
