@@ -53,7 +53,8 @@ const clashes = [
         A bookmark has no node frame and can't be resized: it is a small pill with its icon, name and shortcut (a warning
         mark when something else uses the key, a pin when it is pinned). Hover it for where it lands.
         A double-click, or the indigo pencil in ComfyUI's selection toolbar while it is selected, opens the editor, and <b>Done</b>
-        closes it. A new bookmark opens in the editor.
+        closes it. A new bookmark opens in the editor. Drag the editor's background (anywhere that isn't a
+        control) to move it while it is open.
       </p>
     </DocSection>
 

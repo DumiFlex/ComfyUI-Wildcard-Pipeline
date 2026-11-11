@@ -33,7 +33,11 @@ const props = withDefaults(defineProps<{
   hint: string;
   /** The note's saved pictures (NoteConfig.images). */
   images?: Record<string, NoteImage>;
-}>(), { images: () => ({}) });
+  /** Rows of text the box shows before it scrolls. */
+  rows?: number;
+  /** The bar's own Preview switch; off where a preview sits beside the editor. */
+  previewToggle?: boolean;
+}>(), { images: () => ({}), rows: 5, previewToggle: true });
 const emit = defineEmits<{
   (e: "update:modelValue", v: string): void;
   /** A new picture: its data and the text naming it, in one change. */
@@ -419,6 +423,7 @@ function insertIcon(name: string): void {
         @click="openPanel('image')"
       />
       <Button
+        v-if="previewToggle"
         variant="ghost"
         size="sm"
         class="wp-note-ed__fmt wp-note-ed__mode"
@@ -637,7 +642,7 @@ function insertIcon(name: string): void {
       v-show="mode === 'write'"
       :ref="(c) => (area = textareaEl(c))"
       mono
-      :rows="5"
+      :rows="rows"
       :model-value="modelValue"
       :placeholder="hint"
       aria-label="Note text"
