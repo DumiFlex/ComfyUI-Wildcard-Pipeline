@@ -140,11 +140,17 @@ tutorial(
     await t.h.step("Back to the defaults", async () => {
       const reset = page.getByRole("button", { name: "Reset all to defaults" });
       await t.callout("reset", reset, "Back to how it came", 6);
-      await t.say("Changed your mind? Reset all to defaults puts everything back.");
+      // Two lines with the click between, so the reset never starts while a line is still playing
+      // (the one-line "Changed your mind? Reset all…" was cut off after the question).
+      await t.say("If you change your mind, Reset all to defaults puts every setting back.");
       await t.waitVoice();
+      await t.beat(500);
       await t.uncallout("reset");
       await t.click(reset);
       await t.beat(900);
+      await t.say("And everything is back to how it came.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.click(page.getByRole("button", { name: "Done" }));
       await t.beat(500);
       await t.press("Escape");

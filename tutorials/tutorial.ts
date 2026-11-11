@@ -374,6 +374,7 @@ export class Tutor {
       await sleep(200);
     }
     await this.restOffField();
+    await this.blurIfTooltip();
   }
 
   /**
@@ -397,13 +398,27 @@ export class Tutor {
     if (up) await this.restOffField();
   }
 
+  /** A widget's tooltip still up once the hand is off it (ComfyUI keeps it while its field has
+   *  focus, A04/A18/A19): drop the focus. Only for a node's own field, never a dialog's. */
+  private async blurIfTooltip(): Promise<void> {
+    await sleep(500);
+    await this.page
+      .evaluate(() => {
+        const up = [...document.querySelectorAll(".p-tooltip")].some((el) => (el as HTMLElement).checkVisibility({ opacityProperty: true }));
+        const el = document.activeElement as HTMLElement | null;
+        if (!up || !el || el === document.body || el.closest('[role="dialog"]')) return;
+        if (el.closest("[data-node-id], .dom-widget, .comfy-multiline-input, .lg-node")) el.blur();
+      })
+      .catch(() => undefined);
+  }
+
   /**
    * On the canvas, moves the hand off the field it typed into, onto empty canvas near it: a hand
    * left resting on a field keeps ComfyUI's tooltip for it up over the nodes around.
    */
   private async restOffField(): Promise<void> {
     const spot = await this.page.evaluate((p) => {
-      const tries = [[0, -150], [0, 150], [-240, 0], [240, 0], [0, -260], [0, 260], [-240, -150], [240, -150]];
+      const tries = [[0, -150], [0, 150], [-240, 0], [240, 0], [0, -260], [0, 260], [-240, -150], [240, -150], [-420, 0], [420, 0], [0, -400], [-420, -260], [420, -260], [-600, 0], [600, 0]];
       for (const [dx, dy] of tries) {
         const x = p.x + dx;
         const y = p.y + dy;

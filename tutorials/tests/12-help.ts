@@ -23,10 +23,12 @@ tutorial(
       await t.beat(500);
       const help = page.locator(".wp-tb-icon--help").first().locator("xpath=ancestor::button[1]");
       await t.callout("help", help, "This node's help", 6);
+      // The box stays up for the whole line and the click comes after it, so the two line up.
       await t.say("Select it and press the question mark above it.");
+      await t.waitVoice();
+      await t.beat(300);
       await t.click(help);
       await t.uncallout("help");
-      await t.waitVoice();
       await t.say("Its page opens over the canvas: what each part does, with a picture.");
       await t.beat(1500);
       await t.waitVoice();
@@ -55,14 +57,19 @@ tutorial(
       await t.uncallout("examples");
       await t.say("The example workflow videos go through each of them.");
       await t.press("Escape");
+      // The closing dialog still covers the toolbar for a moment, and a box drawn over it is taken
+      // for hidden and dropped at once (the "Opens the manager" box flashed for half a second).
+      await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
       await t.waitVoice();
+      await t.beat(400);
     });
 
     await t.h.step("The manager's docs", async () => {
       const open = page.getByRole("button", { name: /Wildcard Pipeline Workspace/ }).first();
       if ((await open.count()) > 0) {
-        await t.callout("open", open, "Opens the manager", 6);
+        // The box comes up with its line and stays for all of it.
         await t.say("This button opens the manager. Its Documentation covers every node and every module, with examples.");
+        await t.callout("open", open, "Opens the manager", 6);
         await t.waitVoice();
         await t.uncallout("open");
       }
@@ -99,10 +106,11 @@ tutorial(
       const news = page.locator('[data-test="topbar-whats-new"]');
       await t.callout("news", news, "What's new", 6);
       await t.say("After an update, the megaphone gets a dot. It shows what changed in each version.");
+      await t.waitVoice();
+      await t.beat(300);
       await t.click(news);
       await t.uncallout("news");
       await t.beat(1500);
-      await t.waitVoice();
       const discord = page.locator('[data-test="topbar-discord"]');
       if ((await discord.count()) > 0) {
         await t.callout("discord", discord, "Ask on Discord", 4);

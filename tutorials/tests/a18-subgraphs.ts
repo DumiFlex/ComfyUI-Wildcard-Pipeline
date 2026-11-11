@@ -49,6 +49,10 @@ tutorial(
       await page.keyboard.up("Shift");
       await t.beat(700);
       const convert = page.getByRole("button", { name: "Convert Selection to Subgraph" });
+      // The selection toolbar slides in: box the button once it has settled, or the box lands
+      // where it was and goes (last review: it flashed after the line).
+      await convert.waitFor({ state: "visible", timeout: 10_000 });
+      await t.beat(600);
       await t.waitVoice();
       await t.callout("convert", convert, "Convert to subgraph", 6);
       await t.say("Then press Convert to subgraph in the toolbar.");
