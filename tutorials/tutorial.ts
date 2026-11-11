@@ -381,8 +381,11 @@ export class Tutor {
    * over what the next line is about: on the canvas the hand moves off to empty canvas, which
    * closes it.
    */
+  /** True while the picture is about a tooltip or hover card: `say` then leaves the hand where it is. */
+  keepTooltip = false;
+
   private async clearTooltip(): Promise<void> {
-    if (this.inManager()) return;
+    if (this.inManager() || this.keepTooltip) return;
     const up = await this.page
       .evaluate(() =>
         [...document.querySelectorAll('.p-tooltip, [role="tooltip"], .wp-tooltip, .comfy-tooltip, .litegraph-tooltip')].some((el) => {

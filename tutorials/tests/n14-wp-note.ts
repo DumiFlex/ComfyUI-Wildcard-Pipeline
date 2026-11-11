@@ -91,8 +91,11 @@ tutorial(
       // The line is about the picture, so it must be showing (rendered, not the markdown).
       const pic = t.page.locator('[data-test="note-peek"] img').first();
       if (!(await pic.waitFor({ state: "visible", timeout: 4000 }).then(() => true, () => false))) throw new StepError("Hovering the label didn't show its picture.");
+      // A line moves the hand off any open tooltip; this one is the point, so keep it.
+      t.keepTooltip = true;
       await t.say("Hover it, and its text shows, picture and all.");
       await t.waitVoice();
+      t.keepTooltip = false;
       await t.beat(500);
       await t.moveTo({ x: 900, y: 950 });
       await t.beat(600);
