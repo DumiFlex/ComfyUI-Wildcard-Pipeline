@@ -268,7 +268,8 @@ const nameWidth = computed(() => {
         variant="link"
         size="sm"
         class="wp-dbg-vsec__goto"
-        hint="Show in trace"
+        icon="pi-bolt"
+        hint="Show this node's steps in the trace"
         @click="emit('goto-step', sec.firstKey)"
       >trace</Button>
     </header>
@@ -372,7 +373,7 @@ const nameWidth = computed(() => {
           class="wp-dbg-var-row__type"
           data-test="dbg-node-type"
         >{{ injectorType(v) }}</Chip>
-        <span class="wp-dbg-var-row__src-name" :data-test="nodeKindOf(v) ? 'dbg-node-source' : undefined">{{ nodeKindOf(v) ? nodeNote(sec, v) || writerLabel(v) : writerLabel(v) }}</span>
+        <span class="wp-dbg-var-row__src-name" :title="writerLabel(v)" :data-test="nodeKindOf(v) ? 'dbg-node-source' : undefined">{{ nodeKindOf(v) ? nodeNote(sec, v) || writerLabel(v) : writerLabel(v) }}</span>
         <span v-if="!nodeKindOf(v) && moduleFact(v)" class="wp-dbg-var-row__fact" data-test="dbg-var-fact">{{ moduleFact(v) }}</span>
       </Button>
       <span v-else class="wp-dbg-var-row__src wp-dbg-var-row__src--upstream" title="Came in from upstream, no module in this trace wrote it">upstream</span>
@@ -443,15 +444,19 @@ const nameWidth = computed(() => {
 .wp-dbg-vsec__head + .wp-dbg-var-row, .wp-dbg-vsec__frame + .wp-dbg-var-row, .wp-dbg-var-row:first-child { border-top: 0; }
 /* The writer's kind as a small square before the name (none upstream). */
 .wp-dbg-var-row__mark {
-  width: 6px; height: 6px; flex: none; align-self: center;
+  display: inline-block; vertical-align: 1px; margin-right: 6px;
+  width: 6px; height: 6px;
   border-radius: min(2px, var(--wp-radius-cap, 999px));
   background: var(--wp-dbg-kind, var(--wp-border-strong));
 }
 .wp-dbg-var-row[data-kind="upstream"] .wp-dbg-var-row__mark { background: transparent; box-shadow: inset 0 0 0 1px var(--wp-text-dim); }
 .wp-dbg-var-row:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
 .wp-dbg-var-row.is-ctx { outline: 1px solid var(--wp-accent); outline-offset: -1px; }
-.wp-dbg-var-row__name { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.wp-dbg-var-row__name code { overflow-wrap: anywhere; }
+/* Inline flow, not flex: a long name breaks inside itself and the square
+   stays on its first line. */
+.wp-dbg-var-row__name { display: block; min-width: 0; line-height: 1.5; }
+.wp-dbg-var-row__name > .wp-dbg-flag, .wp-dbg-var-row__name > .wp-dbg-var-row__count, .wp-dbg-var-row__name > .wp-dbg-pin { margin: 0 4px; }
+.wp-dbg-var-row__name code { word-break: break-all; }
 .wp-dbg-var-row__name code { font: 600 11.5px/1.5 var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-var-row.is-internal .wp-dbg-var-row__name code { color: var(--wp-text-muted); }
 .wp-dbg-flag { font-size: 9px; color: var(--wp-text-dim); }

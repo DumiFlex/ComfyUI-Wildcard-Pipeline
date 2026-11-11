@@ -174,7 +174,7 @@ function groupTooltip(g: TraceGroup): string {
               <code>${{ refName(s.constraint.target) }}</code>
             </template>
             <template v-else-if="s.writes.length">
-              <code>${{ s.writes[0].variable }}</code>
+              <code class="wp-dbg-step__var" :title="`$${s.writes[0].variable}`">${{ s.writes[0].variable }}</code>
               <span class="wp-dbg-step__arrow">=</span>
               <span class="wp-dbg-step__val">
                 <RichTextPreview
@@ -345,6 +345,8 @@ function groupTooltip(g: TraceGroup): string {
   flex: none;
 }
 .wp-dbg-step__arrow { color: var(--wp-text-dim); flex: none; }
+/* A long name keeps at most half the summary, so the value still shows. */
+.wp-dbg-step__sum code.wp-dbg-step__var { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
 .wp-dbg-step__val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The row is a one-line summary; the full value lives in the detail. */
 .wp-dbg-step__val :deep(*) { white-space: nowrap; }

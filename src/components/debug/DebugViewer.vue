@@ -11,7 +11,7 @@
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
-import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
+import ContextMenu, { type ContextMenuHeader, type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import Button from "@/kit/Button.vue";
 import CopyButton from "@/kit/CopyButton.vue";
@@ -21,6 +21,8 @@ import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";
 import {
   buildModel,
+  KIND_ICONS,
+  kindColor,
   NODE_KINDS,
   parseSnapshot,
   stepSearchText,
@@ -310,7 +312,7 @@ interface MenuState {
   x: number;
   y: number;
   items: ContextMenuItem[];
-  header?: { icon: string; label: string };
+  header?: ContextMenuHeader;
 }
 const menu = ref<MenuState>({ visible: false, x: 0, y: 0, items: [] });
 const ctxActiveKey = ref<string | null>(null);
@@ -337,43 +339,66 @@ function pinItem(key: string): ContextMenuItem {
     icon: on ? "pi-star-fill" : "pi-star",
     subtitle: on ? "Let the filter hide it again" : "Keep it visible while filtering",
     onSelect: () => togglePin(key),
-    divider: true,
   };
+}
+/** Groups of menu items, a divider between non-empty groups (never under
+ *  the header, which draws its own line). */
+function grouped(...groups: ContextMenuItem[][]): ContextMenuItem[] {
+  const out: ContextMenuItem[] = [];
+  for (const g of groups) {
+    if (!g.length) continue;
+    g.forEach((item, i) => out.push(i === 0 && out.length ? { ...item, divider: true } : { ...item, divider: false }));
+  }
+  return out;
 }
 function openVarMenu(ev: MouseEvent, v: VarRow): void {
   const key = `var:${v.name}`;
-  const items: ContextMenuItem[] = [
-    pinItem(key),
+  const go: ContextMenuItem[] = [];
+  if (v.writerKey) {
+    const k = v.writerKey;
+    go.push({ label: "Show in trace", icon: "pi-bolt", onSelect: () => { void gotoStep(k); } });
+  }
+  if (canFocus.value && v.writerNodeId) {
+    go.push({ label: "Show on node", icon: "pi-arrow-up-right", onSelect: () => showVar(v) });
+  }
+  const copy: ContextMenuItem[] = [
     { label: "Copy value", icon: "pi-clone", disabled: !v.value, onSelect: () => { void clipboardWrite(v.value); } },
     { label: `Copy $${v.name}`, icon: "pi-dollar", onSelect: () => { void clipboardWrite(`$${v.name}`); } },
   ];
-  if (v.writerKey) {
-    const k = v.writerKey;
-    items.push({ label: "Show in trace", icon: "pi-bolt", divider: true, onSelect: () => { void gotoStep(k); } });
+  if (v.negatives.length) {
+    const neg = v.negatives.map((n) => n.text).join(", ");
+    copy.push({ label: "Copy negative", icon: "pi-minus-circle", onSelect: () => { void clipboardWrite(neg); } });
   }
-  if (canFocus.value && v.writerNodeId) {
-    items.push({ label: "Show on node", icon: "pi-arrow-up-right", divider: !v.writerKey, onSelect: () => showVar(v) });
-  }
-  openMenu(ev, key, items, { icon: "pi-dollar", label: `Variable · $${v.name}` });
+  const kind = v.writerKind ?? "unknown";
+  openMenu(ev, key, grouped(go, copy, [pinItem(key)]), {
+    icon: v.writerKind ? KIND_ICONS[kind].replace(/^pi\s+/, "") : "pi-arrow-down",
+    iconColor: v.writerKind ? kindColor(kind) : undefined,
+    label: `$${v.name}`,
+  });
 }
 function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   const first = s.writes[0];
-  const items: ContextMenuItem[] = [
-    pinItem(s.key),
+  const go: ContextMenuItem[] = [
     { label: expanded.value.has(s.key) ? "Collapse" : "Expand", icon: "pi-chevron-down", onSelect: () => toggleStep(s.key) },
+  ];
+  if (canFocus.value && s.nodeId) {
+    const id = s.nodeId;
+    go.push({ label: "Show node", icon: "pi-arrow-up-right", onSelect: () => focusNode(id, s) });
+  }
+  const copy: ContextMenuItem[] = [
     { label: "Copy value", icon: "pi-clone", disabled: !first?.value, onSelect: () => { void clipboardWrite(first?.value ?? ""); } },
   ];
   if (s.bindings[0]) {
     const b = s.bindings[0];
-    items.push({ label: `Copy $${b}`, icon: "pi-dollar", onSelect: () => { void clipboardWrite(`$${b}`); } });
+    copy.push({ label: `Copy $${b}`, icon: "pi-dollar", onSelect: () => { void clipboardWrite(`$${b}`); } });
   }
-  if (s.seed) items.push({ label: "Copy seed", icon: "pi-hashtag", onSelect: () => { void clipboardWrite(s.seed); } });
-  if (s.id) items.push({ label: "Copy module id", icon: "pi-id-card", onSelect: () => { void clipboardWrite(s.id); } });
-  if (canFocus.value && s.nodeId) {
-    const id = s.nodeId;
-    items.push({ label: "Show node", icon: "pi-arrow-up-right", divider: true, onSelect: () => focusNode(id, s) });
-  }
-  openMenu(ev, s.key, items, { icon: "pi-bolt", label: `Step ${s.order} · ${s.name || s.kindLabel}` });
+  if (s.seed) copy.push({ label: "Copy seed", icon: "pi-hashtag", onSelect: () => { void clipboardWrite(s.seed); } });
+  if (s.id) copy.push({ label: "Copy module id", icon: "pi-id-card", onSelect: () => { void clipboardWrite(s.id); } });
+  openMenu(ev, s.key, grouped(go, copy, [pinItem(s.key)]), {
+    icon: KIND_ICONS[s.kind].replace(/^pi\s+/, ""),
+    iconColor: kindColor(s.kind),
+    label: `${s.order} · ${s.name || s.kindLabel}`,
+  });
 }
 </script>
 
