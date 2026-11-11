@@ -21,6 +21,7 @@ import Modal from "@/kit/Modal.vue";
 import ConfirmModal from "@/kit/ConfirmModal.vue";
 import Button from "@/kit/Button.vue";
 import Kbd from "@/kit/Kbd.vue";
+import Banner from "@/kit/Banner.vue";
 import ToggleRowView from "./ToggleRow.vue";
 import { varColorClass } from "../shared/var-color";
 import type { PickStyle, ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
@@ -249,12 +250,8 @@ function onKey(ev: KeyboardEvent): void {
             data-test="tg-value"
             @update:model-value="(v: string) => patch({ value: v.trim() ? v : undefined })"
           />
-          <p v-if="missingVars.length" class="wp-tgr__note" data-test="tg-missing-vars">
-            <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ missingNote }}
-          </p>
-          <p v-if="hasInlinePicks(d.value ?? '')" class="wp-tgr__note" data-test="tg-inline-picks">
-            <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ INLINE_PICKS_NOTE }}
-          </p>
+          <Banner v-if="missingVars.length" tone="warn" size="sm" data-test="tg-missing-vars">{{ missingNote }}</Banner>
+          <Banner v-if="hasInlinePicks(d.value ?? '')" tone="warn" size="sm" data-test="tg-inline-picks">{{ INLINE_PICKS_NOTE }}</Banner>
           <NegativeField
             :model-value="d.negative"
             surface="combine"
@@ -429,7 +426,6 @@ function onKey(ev: KeyboardEvent): void {
 .wp-tgr__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .wp-tgr__var-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-tgr__var-row .wp-tgr__var { flex: 1 1 0; min-width: 80px; }
-.wp-tgr__note { margin: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10.5px; line-height: 1.4; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__looks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .wp-tgr__look { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--wp-text-muted, var(--wp-text2)); }
 </style>
