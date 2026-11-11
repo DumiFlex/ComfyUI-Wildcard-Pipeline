@@ -376,7 +376,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // syntax ride in the note's lazy editor chunk (dev was already ~636.9 KB).
 // RAISED 640 -> 650 KB on 2026-11-10: kit 0.14 -> 0.15.3 (colour picker
 // fixes, PostCard samples, overlay-scrollbar room) put the total at ~640.9 KB.
-const TOTAL_LIMIT = 650 * 1024;     // 650 KB
+// RAISED 650 -> 660 KB on 2026-11-12: every docs screenshot can go in a WP
+// Note (note-assets.json + the kit's ImageGrid/SearchInput in the note's lazy
+// editor chunk) put the total at ~652.9 KB.
+const TOTAL_LIMIT = 660 * 1024;     // 660 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

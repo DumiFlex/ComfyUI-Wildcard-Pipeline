@@ -13,6 +13,8 @@ import CATALOG from "../../extension/docs-catalog.json";
 import IconPicker from "@/kit/IconPicker.vue";
 import NoteMarkdown from "./note-markdown";
 import Slider from "@/kit/Slider.vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import ImageGrid from "@/kit/ImageGrid.vue";
 import {
   assetImageTarget, assetUrl, communityTarget, docsTarget, findImages, iconMarkdown, imageMarkdown, insert, libraryTarget,
   linkMarkdown, NOTE_ASSETS, prefixLines, removeImage, savedImageTarget, setImageWidth, wrap, type Edit, type ImageRef,
@@ -297,7 +299,7 @@ async function addFile(file: File | null): Promise<void> {
     if (problem) { pushToast(problem, { severity: "warning" }); return; }
     const id = newImageId(props.images);
     const alt = pictureAlt.value.trim() || file.name.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim() || "Picture";
-    panel.value = "";
+    // The panel stays open: its list now shows the picture with its size.
     pictureAlt.value = "";
     apply(pictureEdit(imageMarkdown(alt, savedImageTarget(id))), before, { ...props.images, [id]: pic });
   } catch (err) {
@@ -312,9 +314,21 @@ function onFile(ev: Event): void {
   input.value = "";
   void addFile(file);
 }
+/** The extension's pictures, narrowed by the search box. */
+const assetQuery = ref("");
+const assetTiles = computed(() => {
+  const q = assetQuery.value.trim().toLowerCase();
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  return NOTE_ASSETS.filter((a) => !q || a.label.toLowerCase().includes(q) || a.id.includes(q))
+    .map((a) => ({ id: a.id, src: assetUrl(a.id, origin) ?? "", alt: a.label, caption: a.label }));
+});
+function onAssetTile(i: number): void {
+  const t = assetTiles.value[i];
+  if (t) insertAsset(t.id, t.alt);
+}
 function insertAsset(id: string, label: string): void {
   const before = { value: sent, start: sel.start, end: sel.end };
-  panel.value = "";
+  // The panel stays open: its list now shows the picture with its size.
   const alt = pictureAlt.value.trim() || label;
   pictureAlt.value = "";
   apply(pictureEdit(imageMarkdown(alt, assetImageTarget(id))), before);
@@ -582,20 +596,27 @@ function insertIcon(name: string): void {
         <input ref="fileInput" class="wp-note-ed__file" type="file" :accept="ACCEPTED_TYPES.join(',')" tabindex="-1" aria-hidden="true" data-test="note-image-input" @change="onFile" />
       </div>
       <span class="wp-note-ed__label">From the extension</span>
-      <div class="wp-note-ed__assets">
-        <Button
-          v-for="a in NOTE_ASSETS"
-          :key="a.id"
-          variant="secondary"
-          size="sm"
-          class="wp-note-ed__asset"
-          :hint="`Insert: ${a.label}`"
-          :data-test="`note-asset-${a.id}`"
-          @click="insertAsset(a.id, a.label)"
-        >
-          <img :src="assetUrl(a.id, '') ?? ''" alt="" :width="a.w" :height="a.h" draggable="false" />
-          <span>{{ a.label }}</span>
-        </Button>
+      <SearchInput
+        v-model="assetQuery"
+        size="sm"
+        placeholder="Find a picture…"
+        aria-label="Find a picture from the extension"
+        :visible="assetTiles.length"
+        :total="NOTE_ASSETS.length"
+        noun="pictures"
+        test-prefix="note-asset-search"
+      />
+      <div class="wp-note-ed__assets" data-test="note-assets">
+        <ImageGrid
+          :images="assetTiles"
+          :lightbox="false"
+          :aspect="2"
+          :min-size="150"
+          gap="sm"
+          aria-label="Pictures from the extension"
+          @open="onAssetTile"
+        />
+        <p v-if="!assetTiles.length" class="wp-note-ed__hint">No picture matches “{{ assetQuery }}”.</p>
       </div>
       <template v-if="shown.length">
         <span class="wp-note-ed__label">In this note</span>
@@ -668,7 +689,7 @@ function insertIcon(name: string): void {
 <style scoped>
 /* The kit picker's list, sized for a node: as wide as the panel, a short
  * scroll area, cells packed by width instead of a fixed 8 columns. */
-.wp-note-ed__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
+.wp-note-ed__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 340px; }
 .wp-note-ed__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
 .wp-note-ed__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note-ed { display: flex; flex-direction: column; gap: 6px; }
@@ -708,29 +729,8 @@ function insertIcon(name: string): void {
 .wp-note-ed__iconpick.wp-btn { font-size: 12px; text-transform: capitalize; }
 .wp-note-ed__chev { font-size: 9px; color: var(--wp-text-dim); }
 .wp-note-ed__file { display: none; }
-.wp-note-ed__assets { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-note-ed__assets { max-height: 300px; overflow-y: auto; padding-right: 2px; }
 /* A kit Button holding a thumbnail: taller than a control, the picture over its name. */
-.wp-note-ed__asset.wp-btn {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  height: auto;
-  max-width: 100%;
-  padding: 4px;
-  font-size: 11px;
-  font-weight: 400;
-  text-align: left;
-  white-space: normal;
-}
-.wp-note-ed__asset :deep(.wp-btn__label) {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow: visible;
-  white-space: normal;
-  line-height: 14px;
-}
-.wp-note-ed__asset img { display: block; width: 100%; max-width: 280px; height: auto; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-note-ed__pics { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .wp-note-ed__pic { display: flex; gap: 8px; align-items: center; }
 .wp-note-ed__thumb {

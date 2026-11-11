@@ -25,7 +25,7 @@ const syntax = [
   { term: "[Get the pack](wp:community/owner/pack)", desc: "Opens that published pack in the manager's Community tab, where it installs." },
   { term: ":pi-heart:  :pi-heart:{#rrggbb}", desc: "An icon, optionally in a colour: a hex code like the custom colour field shows." },
   { term: "![What it shows](wp:image/1a2b3c4d)", desc: "A picture saved in the note: the bar's Pictures panel, a paste or a drop writes it and its id." },
-  { term: "![The ? button](wp:asset/toolbar-help)", desc: "A picture the extension ships." },
+  { term: "![The ? button](wp:asset/toolbar-help)", desc: "A picture the extension ships: the toolbar one, or any docs screenshot, named by its file." },
   { term: "![What it shows](wp:image/1a2b3c4d){width=60%}", desc: "The picture as wide as 60% of the note (10 to 100). Without it, its own size, never wider than the note." },
 ];
 </script>
@@ -111,15 +111,17 @@ const syntax = [
 
     <DocSection title="Pictures">
       <p>
-        A note can show pictures: a screenshot of the step it explains, or the picture the extension ships of
-        the node toolbar with its <b>?</b> button, which opens any node's help page. Open <b>Pictures</b> in
-        the bar and press <b>Add a picture…</b>, or paste or drop a picture straight into the text. Each one
-        goes on a line of its own where the caret is, named by what you type in the box (or the file's name).
+        A note can show pictures: a screenshot of the step it explains, or one the extension ships, such as
+        the node toolbar with its <b>?</b> button or any screenshot from these docs. Open <b>Pictures</b> in
+        the bar and press <b>Add a picture…</b>, paste or drop a picture straight into the text, or pick one
+        under <b>From the extension</b> (the search box finds it by name). Each one goes on a line of its own
+        where the caret is, named by what you type in the box (or the picture's name). The panel stays open
+        after you add one, so you can set its width right away.
       </p>
       <DocImage
         src="images/docs/wp-note-pictures.png"
         ratio="1720 / 860"
-        caption="The text window with the Pictures panel: the picture the extension ships, the note's own pictures with a Width slider, and the preview showing it."
+        caption="The text window with the Pictures panel: the pictures the extension ships, the note's own pictures with a Width slider, and the preview showing it."
       />
       <p>
         A picture is never wider than the note. Its width is a share of the note's, so it grows and shrinks
