@@ -41,7 +41,8 @@ tutorial(
       }
       await t.scrollTo(T("branch-0-0"), { at: 0.15, force: true });
       await t.waitVoice();
-      await t.say("When role matches knight or mage. Matches takes a regular expression: the bar means or.");
+      // A line ending on a lone "or" lost it in the voice, so the sentence ends on other words.
+      await t.say("When role matches knight or mage. Matches takes a regular expression, where a bar between words means either one.");
       await varField("cond-var-0-0", "role");
       await pick("cond-op-0-0", "matches (regex)");
       await t.click(T("cond-value-0-0"));

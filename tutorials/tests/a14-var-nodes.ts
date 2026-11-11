@@ -105,14 +105,25 @@ tutorial(
 
     // Running needs a model behind the KSampler, so the runs are only recorded where one is installed.
     if (showcasing(t)) await t.h.step("Run", async () => {
-      await t.say("Give the KSampler a model and a prompt, folded down here, and run. Each Var node shows what it read, and the picture comes out at eight thirty two by twelve sixteen.");
+      await t.say("Give the KSampler a model and a prompt, folded down here, and run.");
       await showcase(t, { prompt: "A painting of a knight in a torch-lit stone throne room.", sampler: choice.ks, preview: { x: 1640, y: 120, width: 270, height: 400 }, chain: { x: 1820, y: 960 }, runs: 1 });
-      await t.callout("w", t.node(vars.vw).locator('[data-test="var-picker-preview"]'), "832", 6);
-      await t.callout("h", t.node(vars.vh).locator('[data-test="var-picker-preview"]'), "1216", 6);
-      await t.callout("ch", t.node(choice.vc).locator('[data-test="var-picker-preview"]'), "dpmpp 2m, matched", 6);
       await t.waitVoice();
+      // One box per line, each held for its words (all three at once flashed past).
+      await t.say("Each Var node shows what it read.");
+      await t.callout("w", t.node(vars.vw).locator('[data-test="var-picker-preview"]'), "832", 6);
+      await t.say("The width, eight thirty two.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("w");
+      await t.callout("h", t.node(vars.vh).locator('[data-test="var-picker-preview"]'), "1216", 6);
+      await t.say("The height, twelve sixteen.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("h");
+      await t.callout("ch", t.node(choice.vc).locator('[data-test="var-picker-preview"]'), "dpmpp 2m, matched", 6);
+      await t.say("And the sampler, matched to dpmpp 2m.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("ch");
     });
 
@@ -122,10 +133,14 @@ tutorial(
       await t.beat(500);
       await t.fastForward(() => t.run(), 8);
       await t.callout("w", t.node(vars.vw).locator('[data-test="var-picker-preview"]'), "The default: 1024", 6);
-      await t.callout("ch", t.node(choice.vc).locator('[data-test="var-picker-preview"]'), "The fallback: euler", 6);
-      await t.say("The sizes fall back to ten twenty four, and the sampler to euler, so the workflow still runs.");
+      await t.say("The sizes fall back to ten twenty four.");
       await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("w");
+      await t.callout("ch", t.node(choice.vc).locator('[data-test="var-picker-preview"]'), "The fallback: euler", 6);
+      await t.say("And the sampler to euler, so the workflow still runs.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("ch");
       await t.click(t.moduleRow(nodes.ctx, "Settings per model").locator('[data-test="module-enabled"]'));
       await t.beat(400);
