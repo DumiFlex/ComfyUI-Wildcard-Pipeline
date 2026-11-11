@@ -10,6 +10,7 @@
 
 ### Fixes
 
+- **Pop-up panels in the manager have their padding back.** Since the move to Tailwind 4, the manager's pop-up panels (the Test Runner's **Add to stack** picker and others built on the same panel) lost their inner padding, so the search box, kind chips, match count and Sort sat flush against the panel's edges. They have room on every side again.
 - **Empty wildcard pool.** A wildcard whose options have no tags used to open an empty Pool. It now says why: there are no tags to filter by, so every enabled option can roll, and tags added in the library editor (Sub-Categories) show up there as pills. Advanced says the same instead of an empty palette, and the Pool's expand button is no longer highlighted when there is nothing to open.
 - **Subgraphs see the variables around them again.** On current ComfyUI frontends (1.5x) a WP Context or Assembler inside a subgraph never found the variables set outside it, so a `$time` wired in from the parent graph showed as MISSING VAR and the subgraph's badge counted conflicts that weren't there. The walk now crosses a subgraph's edges in both directions, upstream and downstream.
 - **The subgraph badge shows in Nodes 2.0 straight away.** With Nodes 2.0 on, a subgraph's conflict badge only appeared after you entered and left the subgraph, or switched to the legacy nodes and back. It now shows, changes and clears as soon as the problem inside does.
