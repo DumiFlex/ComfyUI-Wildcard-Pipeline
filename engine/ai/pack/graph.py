@@ -174,7 +174,7 @@ GRAPH_SCHEMA: dict[str, Any] = _obj({
 
 def _axis_name(raw: Any) -> str:
     a = _clean(raw, 40).lower().replace(" ", "_").replace("-", "_").lstrip("$.")
-    return a if _AXIS_NAME.match(a) and a != "neg" else ""
+    return a if _AXIS_NAME.match(a) and a not in ("neg", "bool") else ""
 
 
 def _number(raw: Any, default: float) -> float:

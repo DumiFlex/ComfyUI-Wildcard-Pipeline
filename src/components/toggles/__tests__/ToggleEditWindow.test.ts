@@ -77,18 +77,17 @@ describe("ToggleEditWindow", () => {
     any.unmount();
   });
 
-  it("offers a negative beside the Value in Pick one only", async () => {
-    const one = open({ ...base, negative: "night sky" }, { pickOne: true });
-    for (let i = 0; i < 4; i++) {
-      await vi.dynamicImportSettled();
-      await flushPromises();
+  it("offers a Value and a negative in both modes", async () => {
+    for (const pickOne of [true, false]) {
+      const w = open({ ...base, negative: "night sky" }, { pickOne });
+      for (let i = 0; i < 4; i++) {
+        await vi.dynamicImportSettled();
+        await flushPromises();
+      }
+      expect(q('[data-test="tg-value"]'), String(pickOne)).not.toBeNull();
+      expect(q('[data-test="tg-negative"]'), String(pickOne)).not.toBeNull();
+      w.unmount();
     }
-    expect(q('[data-test="tg-negative"]')).not.toBeNull();
-    one.unmount();
-    const any = open(base);
-    await flushPromises();
-    expect(q('[data-test="tg-negative"]')).toBeNull();
-    any.unmount();
   });
 
   it("warns that inline picks print as written", () => {

@@ -53,6 +53,17 @@ describe("matchSuggestions", () => {
     expect(match({ trigger: "$", query: "nope.n" })).toEqual([]);
   });
 
+  it("offers .bool for a toggle variable only", () => {
+    const producers = new Map([...base.varProducers, ["rain", { kind: "toggle", shadowed: 0 }]]);
+    const m = (query: string): string[] => matchSuggestions(
+      "$", query, [...base.varSuggestions, "rain"], base.refSuggestions, base.uuidToName, producers,
+    );
+    expect(m("rain.b")).toEqual(["rain.bool"]);
+    expect(m("rain.")).toEqual(["rain.neg", "rain.bool"]);
+    expect(m("mood.b")).toEqual([]);
+    expect(axisKnownFor({ kind: "var", name: "rain", axis: "bool" }, producers)).toBe(true);
+  });
+
   it("exposes the row cap", () => {
     expect(AC_MAX_ITEMS).toBe(50);
   });

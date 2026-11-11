@@ -66,23 +66,32 @@ class WPToggles(io.ComfyNode):
         values = toggles.resolve(cfg)
         set_vars = {t.var for t in cfg.toggles if t.id in from_upstream}
         group = cfg.group_var if cfg.mode == "one" else ""
-        if group in values and ("$" in values[group] or "{" in values[group]):
-            # A pick's value may read upstream variables and the toggles' own.
-            # Inline {a|b} picks need a seed the node doesn't have, so they
-            # stay as written (the Assembler's seedless surface), like the
-            # Context Injector's templates; the editor warns about them.
-            value_warnings: list = []
-            values[group] = template.resolve_variables(
-                values[group], {**upstream_ctx, **values, "__wp_warnings__": value_warnings},
-            )
-        else:
-            value_warnings = []
-        # The pick's negative goes with the Pick one variable, so an
-        # Assembler that prints it sends it to the negative prompt. Inline
-        # picks stay as written here too (no seed).
-        neg_text = toggles.picked_negative(cfg) if group in values else ""
-        if neg_text and ("$" in neg_text or "{" in neg_text):
-            neg_text = template.resolve_variables(neg_text, {**upstream_ctx, **values})
+        on_off = toggles.bools(cfg)
+        valued = {t.var for t in cfg.toggles if t.value and t.var in values}
+        # A value may read upstream variables and the toggles' own. Inline
+        # {a|b} picks need a seed the node doesn't have, so they stay as
+        # written (the Assembler's seedless surface), like the Context
+        # Injector's templates; the editor warns about them. Toggles first,
+        # then the pick, which may hold a toggle's value.
+        value_warnings: list = []
+        read_ctx = {**upstream_ctx, toggles.BOOLS_KEY: on_off}
+        for name in [*sorted(valued - {group}), *([group] if group in values else [])]:
+            text = values[name]
+            if "$" in text or "{" in text:
+                values[name] = template.resolve_variables(
+                    text, {**read_ctx, **values, "__wp_warnings__": value_warnings},
+                )
+
+        def resolve_neg(text: str) -> str:
+            if "$" in text or "{" in text:
+                text = template.resolve_variables(text, {**read_ctx, **values})
+            return text.strip()
+
+        # Negatives go with their variable, so an Assembler that prints it
+        # sends them to the negative prompt: each toggle's while it is on,
+        # and the pick's with the Pick one variable.
+        own_negs = {k: resolve_neg(v) for k, v in toggles.own_negatives(cfg).items()}
+        neg_text = resolve_neg(toggles.picked_negative(cfg)) if group in values else ""
 
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = upstream.internals if upstream is not None else {}
@@ -99,10 +108,22 @@ class WPToggles(io.ComfyNode):
             out_internals[negatives.NEG_KEY] = {
                 k: v for k, v in neg_table.items() if k not in values
             }
-        if neg_text.strip():
+        filed = {k: v for k, v in own_negs.items() if v}
+        if neg_text:
+            filed[group] = neg_text
+        if filed:
             out_internals[negatives.NEG_KEY] = {
                 **(out_internals.get(negatives.NEG_KEY) or {}),
-                group: [{"text": neg_text.strip(), "pick": None, "source": "WP_Toggles"}],
+                **{
+                    k: [{"text": v, "pick": None, "source": "WP_Toggles"}]
+                    for k, v in filed.items()
+                },
+            }
+        # `$name.bool` reads these, across nodes, whatever the variable holds.
+        if on_off:
+            out_internals[toggles.BOOLS_KEY] = {
+                **(out_internals.get(toggles.BOOLS_KEY) or {}),
+                **on_off,
             }
         # Each toggle chooses whether its variable shows in the Assembler
         # (`visible`); the Pick one variable shows with `group_visible`.
@@ -122,6 +143,9 @@ class WPToggles(io.ComfyNode):
                 "internal": name in hidden_vars,
                 "type": "pick" if name == group else "toggle",
                 "value": value,
+                **({"bool": on_off[name]} if name in on_off and name != group else {}),
+                **({"has_value": True} if name in valued and name != group else {}),
+                **({"negative": filed[name]} if name in filed else {}),
                 **({"source": "upstream"} if name in set_vars else {}),
             }
             for name, value in values.items()

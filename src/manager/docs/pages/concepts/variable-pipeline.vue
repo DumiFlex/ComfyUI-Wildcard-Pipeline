@@ -59,6 +59,11 @@ import DocRef from "../../../components/docs/DocRef.vue";
             <td>The variable's negative words. See <DocRef id="negatives" />.</td>
           </tr>
           <tr>
+            <td><VarToken>$name.bool</VarToken></td>
+            <td>A <DocRef id="wp-toggles" /> variable's switch, <code>true</code> or
+              <code>false</code>, even when the toggle writes its own Value.</td>
+          </tr>
+          <tr>
             <td><VarToken kind="ref">@{…}</VarToken></td>
             <td>A fresh pick from another wildcard. Type <b>@</b> to insert one; it shows as a chip.
               It can narrow the pick to some tags (<code>warm or cool</code>) or leave out the null

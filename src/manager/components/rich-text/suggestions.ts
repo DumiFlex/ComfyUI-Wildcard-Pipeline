@@ -4,7 +4,7 @@
  * arrives as an argument.
  */
 import type { Atom } from "../atomicEditorModel";
-import { NEG_ACCESSOR, varAccessorParts } from "../../../widgets/richTokenize";
+import { BOOL_ACCESSOR, NEG_ACCESSOR, varAccessorParts } from "../../../widgets/richTokenize";
 import { expandVarsWithAxes, type ProducerLike } from "../../utils/suggestion-rows";
 import { varColorIndex } from "../../../components/shared/var-color";
 
@@ -57,6 +57,10 @@ export function matchSuggestions(
     // variable has it; it is offered last, after the variable's own axes.
     if (NEG_ACCESSOR.includes(frag) && (varSuggestions.includes(base) || axes.length)) {
       out.push(`${base}${idx}.${NEG_ACCESSOR}`);
+    }
+    // `.bool` reads a WP Toggles variable's on/off: offered for those only.
+    if (BOOL_ACCESSOR.includes(frag) && !idx && varProducers?.get(base)?.kind === "toggle") {
+      out.push(`${base}.${BOOL_ACCESSOR}`);
     }
     return out;
   }
@@ -141,8 +145,9 @@ export function varTint(name: string): Record<string, string> {
  */
 export function axisKnownFor(atom: Atom, varProducers: AxisProducerMap | undefined): boolean | undefined {
   if (atom.kind !== "var" || !atom.axis) return undefined;
-  // `.neg` is not an axis: every variable has negatives to read.
-  if (atom.axis === NEG_ACCESSOR) return true;
+  // `.neg` is not an axis: every variable has negatives to read. `.bool`
+  // neither: it reads a toggle's on/off.
+  if (atom.axis === NEG_ACCESSOR || atom.axis === BOOL_ACCESSOR) return true;
   const axes = varProducers?.get(atom.name)?.axes;
   if (!axes || axes.length === 0) return undefined;
   return axes.some((a) => a.axis === atom.axis);
@@ -177,7 +182,7 @@ export function varSpanAttrsFor(
   // declared, so a perfectly valid index-first reference got the unknown-axis
   // warning. That is the wavy underline the assembler template showed.
   const { base, axis = "" } = varAccessorParts(name);
-  if (graphAware && axis && axis !== NEG_ACCESSOR) {
+  if (graphAware && axis && axis !== NEG_ACCESSOR && axis !== BOOL_ACCESSOR) {
     // The base resolves but the axis does not: the engine renders that as an
     // empty string, so without a mark the only symptom is a missing word.
     // Only claimed when the producer declares SOME axes — see `axisKnownFor`

@@ -49,9 +49,12 @@ export interface ToggleRow {
   invert?: true;
   /** Clean view: no `$variable` line under the name. */
   hide_var?: true;
-  /** Pick one: what the picked variable gets instead of the name (may read `$vars`). */
+  /** What the variable gets while on, instead of "true" ("" while off); in
+   *  Pick one also what the picked variable gets instead of the name. May
+   *  read `$vars`. `$name.bool` still reads the switch. */
   value?: string;
-  /** Pick one: negative text the picked variable carries (send-to-negative). */
+  /** Negative text the variable carries while on (send-to-negative); in
+   *  Pick one the picked variable carries it too. */
   negative?: string;
   /** The variable shows in the Assembler and prints in a prompt (the
    *  globe "internal" button turned off). Absent: internal, for rules only. */
@@ -316,18 +319,44 @@ export function effectiveToggles(cfg: TogglesConfig): Map<string, boolean> {
   return out;
 }
 
-/** Variable → "true" / "false" (+ the Pick one variable), as the node writes. */
+/** Variable → its value (+ the Pick one variable), as the node writes: a
+ *  toggle with a Value writes it while on and "" while off, one without
+ *  writes "true" / "false". */
 export function resolveToggles(cfg: TogglesConfig): Record<string, string> {
   const eff = effectiveToggles(cfg);
   const values: Record<string, string> = {};
   for (const t of toggleRows(cfg)) {
-    if (t.var && VAR_RE.test(t.var)) values[t.var] = eff.get(t.id) ? "true" : "false";
+    if (!t.var || !VAR_RE.test(t.var)) continue;
+    const on = eff.get(t.id) === true;
+    values[t.var] = t.value ? (on ? t.value : "") : on ? "true" : "false";
   }
   if (cfg.mode === "one" && cfg.group_var && VAR_RE.test(cfg.group_var)) {
     const picked = toggleRows(cfg).find((t) => eff.get(t.id));
     values[cfg.group_var] = picked ? picked.value || picked.name : "";
   }
   return values;
+}
+
+/** Each toggle variable's on/off, what `$name.bool` reads (mirror of
+ *  `engine/toggles.py::bools`); a later row wins. */
+export function toggleBools(cfg: TogglesConfig): Record<string, boolean> {
+  const eff = effectiveToggles(cfg);
+  const out: Record<string, boolean> = {};
+  for (const t of toggleRows(cfg)) if (t.var && VAR_RE.test(t.var)) out[t.var] = eff.get(t.id) === true;
+  return out;
+}
+
+/** Toggle variable → its negative, for toggles that are on and have one
+ *  (mirror of `engine/toggles.py::own_negatives`). */
+export function ownToggleNegatives(cfg: TogglesConfig): Record<string, string> {
+  const eff = effectiveToggles(cfg);
+  const out: Record<string, string> = {};
+  for (const t of toggleRows(cfg)) {
+    if (!t.var || !VAR_RE.test(t.var)) continue;
+    if (eff.get(t.id) && t.negative?.trim()) out[t.var] = t.negative.trim();
+    else delete out[t.var];
+  }
+  return out;
 }
 
 /** Variables the node writes that stay out of the prompt (mirror of

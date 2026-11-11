@@ -5,7 +5,7 @@
  * current state and returns a new value; nothing here mutates its input.
  */
 import { axisHueAt, UNGROUPED_HUE } from "../../../components/shared/axis-color";
-import { NEG_ACCESSOR } from "../../../widgets/richTokenize";
+import { BOOL_ACCESSOR, NEG_ACCESSOR } from "../../../widgets/richTokenize";
 
 export type TagGroups = Record<string, string[]>;
 export type TagGroupKinds = Record<string, "accepts">;
@@ -125,12 +125,20 @@ export function nextGroupName(tagGroups: TagGroups): string {
   return candidate;
 }
 
-/** Why `name` cannot be an `accepts` axis: `"neg"` (reserved by `$var.neg`),
- *  `"ident"` (not an identifier the accessor grammar can parse), or null. */
+/** Why `name` cannot be an `accepts` axis: `"neg"` (a reserved accessor:
+ *  `$var.neg` or `$var.bool`), `"ident"` (not an identifier the accessor
+ *  grammar can parse), or null. */
 export function acceptsNameProblem(name: string): "neg" | "ident" | null {
-  if (name === NEG_ACCESSOR) return "neg";
+  if (name === NEG_ACCESSOR || name === BOOL_ACCESSOR) return "neg";
   if (!AXIS_IDENT.test(name)) return "ident";
   return null;
+}
+
+/** Why a reserved accessor can't name an accepts group. */
+function reservedDetail(name: string): string {
+  return name === BOOL_ACCESSOR
+    ? `$var.${BOOL_ACCESSOR} reads a WP Toggles variable's on/off, so an accepts group can't be called "${BOOL_ACCESSOR}".`
+    : `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`;
 }
 
 /** A refusal to show as a warning toast. */
@@ -147,7 +155,7 @@ export function acceptsPromotionRefusal(axis: string): Refusal | null {
   if (problem === "neg") {
     return {
       summary: `Rename "${axis}" first`,
-      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
+      detail: reservedDetail(axis),
     };
   }
   if (problem === "ident") {
@@ -169,7 +177,7 @@ export function acceptsRenameRefusal(oldAxis: string, name: string): Refusal | n
   if (problem === "neg") {
     return {
       summary: `"${oldAxis}" keeps its name`,
-      detail: `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`,
+      detail: reservedDetail(name),
     };
   }
   if (problem === "ident") {

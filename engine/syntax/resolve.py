@@ -187,6 +187,8 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
         # variable itself: it carries no negatives along (that would echo
         # them) and does not count as rendering `$name`.
         return _resolve_negative(tok, ctx)
+    if axis == BOOL_ACCESSOR:
+        return _resolve_bool(tok, ctx)
     if axis:
         out = _resolve_axis(tok, ctx, str(axis))
         _note_read(ctx, name, tok.meta.get("index"), out)
@@ -218,6 +220,39 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
 #: The accessor that reads a variable's negatives (`$name.neg`,
 #: `$name.K.neg`). Reserved: an `accepts` tag group cannot use this name.
 NEG_ACCESSOR = "neg"
+
+#: The accessor that reads a WP Toggles variable's on/off (`$name.bool`),
+#: whatever value the toggle writes. Reserved like `neg`.
+BOOL_ACCESSOR = "bool"
+
+#: Names an `accepts` tag group may not use: they are accessors.
+RESERVED_ACCESSORS = frozenset({NEG_ACCESSOR, BOOL_ACCESSOR})
+
+
+def _resolve_bool(tok: Token, ctx: ResolveContext) -> str:
+    """Render `$name.bool`: "true" / "false". Not a read of `$name` itself,
+    so it carries no negatives along."""
+    name = str(tok.meta.get("name", ""))
+    getter: Any = getattr(ctx, "get_bool", None)
+    got: Any = getter(name) if callable(getter) else None
+    if got is None:
+        own = ctx.get_var(name)
+        if isinstance(own, str) and own.strip().lower() in ("true", "false"):
+            return own.strip().lower()
+        if own is None:
+            _push_warning(
+                ctx,
+                type="unknown_var",
+                severity="warn",
+                module_id="",
+                source_field="",
+                position=tok.start,
+                token_index=None,
+                detail={"name": name, "surface": ctx.surface},
+                message=f"Unknown variable ${name}",
+            )
+        return ""
+    return str(got)
 
 
 def _resolve_negative(tok: Token, ctx: ResolveContext) -> str:
