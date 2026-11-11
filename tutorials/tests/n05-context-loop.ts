@@ -301,12 +301,13 @@ tutorial(
     });
 
     await t.h.step("With the other nodes", async () => {
-      await t.say("A plain KSampler uses one image seed for every frame. Wire loop config into a WP Seed List, and its seed into the sampler, for one image seed per frame.");
+      await t.say("A plain KSampler uses one image seed for every frame. Add a WP Seed List.");
       const sl = await t.addNode("WP Seed List", { x: 790, y: 760 });
       await t.wire(n.loop, "loop_config", sl, "loop_config");
-      await t.beat(600);
+      await t.beat(400);
       // It lands low, under the caption: bring it up into view while it's talked about.
       const back = await t.zoomOn(sl, { scale: 0.9 });
+      await t.say("Loop config goes into it, and its seed into the sampler, for one image seed per frame.");
       await t.callout("ovr", t.node(sl).locator('[data-test="seedlist-override-count-toggle"]'), "Count and strategy follow the loop", 5);
       await t.say("Its count and strategy follow the loop by themselves, so frame one goes with seed one, frame two with seed two.");
       await t.waitVoice();
@@ -330,8 +331,12 @@ tutorial(
       await t.waitVoice();
       await t.click(t.node(n.loop).locator('[data-test="loop-bypass-toggle"]'));
       await t.beat(500);
-      await t.say("WP Debug after the Context shows each frame's picks, and which frame had an item off. The Debug video goes through it.");
+      // No room for a Debug node on this canvas: point at where it goes instead.
+      const out = t.node(n.ctx).locator('[data-slot-key$="-out-0"]').first();
+      await t.callout("dbg", (await out.count()) ? out : t.node(n.ctx), "WP Debug goes here", 6);
+      await t.say("To see each frame's picks, and which frame had an item off, wire a WP Debug after the Context. The Debug video goes through it.");
       await t.waitVoice();
+      await t.uncallout("dbg");
     });
 
     await t.h.step("Outro", async () => {

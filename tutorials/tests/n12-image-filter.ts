@@ -144,14 +144,17 @@ tutorial(
         await t.beat(1000);
         await t.waitVoice();
         const label = page.locator('[data-test="image-filter-label"]');
-        await t.callout("lab", label, "The labels output carries it", 4);
+        await t.callout("lab", label, "The labels output carries it", 2);
         await t.say("Each image has a label: frame, the swept values and the image number. Click it and call this one hero shot. Clear it to get the default back.");
         await t.click(label.locator("button").first());
         await t.beat(300);
         await page.keyboard.press("Control+A");
         await t.type("hero shot", { cps: 14 });
         await t.press("Enter");
-        await t.beat(600);
+        await t.beat(300);
+        // Off the label, so the hand doesn't sit on the name while the line ends.
+        await t.moveTo({ x: 960, y: 520 });
+        await t.beat(300);
         await t.waitVoice();
         await t.uncallout("lab");
       });
@@ -179,8 +182,9 @@ tutorial(
         await t.press("m");
         await t.beat(700);
         await t.waitVoice();
-        await t.say("The brush paints. Go over the face.");
+        // Brush first, so the line and the first stroke start together.
         await t.click(page.locator('[data-test="image-filter-tool-brush"]'));
+        await t.say("The brush paints. Go over the face.");
         const face = [[0.44, 0.22], [0.56, 0.22], [0.58, 0.32], [0.5, 0.38], [0.42, 0.32], [0.46, 0.27], [0.54, 0.28]] as const;
         await stroke(await Promise.all(face.map(([x, y]) => onImage(x, y))));
         await t.waitVoice();
@@ -266,8 +270,13 @@ tutorial(
         await t.click(page.locator('[data-test="image-filter-keep-picked"]'));
         await t.fastForward(queueEmpty, 8);
         await jumpTo(t, 5);
+        // The bookmark lands on the grid's top: fit the whole grid above the caption.
+        const shown = await find("WP_LabelGrid");
+        if (shown) await fit([shown]);
         await t.say("Only the painted face changed in the refine pass, with the green scarf, and the grid prints hero shot.");
+        if (shown) await t.callout("grid", t.node(shown), "hero shot, with the scarf", 4);
         await t.waitVoice();
+        if (shown) await t.uncallout("grid");
       });
     }
 
@@ -286,6 +295,8 @@ tutorial(
       await t.say("Timeout keeps a queue moving while you're away: after it, keep all, keep the first, or stop the branch.");
       await t.waitVoice();
       await t.uncallout("to");
+      // The node is taller than the screen at this zoom: bring its inputs (top) into view.
+      await t.zoomOn(filter, { scale: 1, top: 140 });
       await t.callout("ex", [t.node(filter).locator('[data-slot-key$="-in-8"]').first(), t.node(filter).locator('[data-slot-key$="-in-9"]').first()], "Any type, follows its frame", 6);
       await t.say("extra one and two take anything, like a ControlNet image, and it follows its frame through the filter.");
       await t.waitVoice();

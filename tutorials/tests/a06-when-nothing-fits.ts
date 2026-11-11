@@ -59,12 +59,13 @@ tutorial(
 
     await t.h.step("For this node only", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Role, Setting and the Role fits the place constraint.");
+      // The node goes in first, so the line plays over it and the picking.
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
+      await t.say("On the canvas, pick Role, Setting and the Role fits the place constraint.");
       await t.pickModules(ctx, ["Role", "Setting", "Role fits the place"]);
       await t.waitVoice();
-      await t.say("Then a Prompt Assembler for the role and the setting.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
+      await t.say("Then a Prompt Assembler for the role and the setting.");
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $setting", { cps: 16 });

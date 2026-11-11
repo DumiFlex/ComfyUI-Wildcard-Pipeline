@@ -112,8 +112,9 @@ tutorial(
 
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
-        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
+        await t.say("WP Debug under the Context shows what every run rolled.");
+        await t.waitVoice();
         await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, between: () => t.click(plus) });
         // Said once the pictures are on screen, not before them.
         await t.say("Here are a few of those scenes, run through a model.");

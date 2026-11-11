@@ -55,11 +55,13 @@ tutorial(
     });
 
     await t.h.step("Hold across run", async () => {
-      await t.say("For a story, the character should stay the same. Right-click Role, Edit, and switch on Hold across run.");
+      await t.say("For a story, the character should stay the same. Right-click Role, and Edit.");
       const modal = await editItem(nodes.ctx, "Role");
       const hold = modal.locator('[data-test="runtime-hold"]');
       await t.scrollTo(hold, { at: 0.6 });
       await t.callout("hold", hold, "One pick for the whole run", 6);
+      // Said once the box is up, so the switch and its line come together.
+      await t.say("Switch on Hold across run: one pick for the whole run.");
       await t.click(hold);
       await t.beat(600);
       await t.waitVoice();
@@ -94,8 +96,8 @@ tutorial(
       await t.wire(inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Role", "Time of day", "Lighting from time"]);
       await t.waitVoice();
-      await t.say("Then an Assembler that prints the role, the time and the light.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
+      await t.say("Then an Assembler that prints the role, the time and the light.");
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $time, $lighting", { cps: 16 });

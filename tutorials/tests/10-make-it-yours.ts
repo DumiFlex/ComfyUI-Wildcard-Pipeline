@@ -94,7 +94,7 @@ tutorial(
     });
 
     await t.h.step("ComfyUI's palettes", async () => {
-      await t.say("ComfyUI has colour palettes of its own, under Settings, Appearance. Wildcard Pipeline follows them. Pick Nord.");
+      await t.say("ComfyUI has colour palettes of its own, under Settings, Appearance.");
       await t.click(page.getByRole("button", { name: /^settings/i }).first());
       await t.beat(900);
       const dialog = page.getByRole("dialog").last();
@@ -103,6 +103,7 @@ tutorial(
       const row = dialog.getByText("Color Palette", { exact: true }).first();
       await row.scrollIntoViewIfNeeded().catch(() => undefined);
       await t.callout("pal", row, "ComfyUI's palette", 8);
+      await t.say("Wildcard Pipeline follows them. Pick Nord.");
       // The palette drop-down beside the label; if it can't be worked by hand, set it directly.
       let picked = false;
       const combo = row.locator("xpath=ancestor::*[.//*[@role='combobox']][1]").getByRole("combobox").first();
@@ -176,8 +177,10 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("comfy");
       await t.beat(800);
-      // The accent and density rows sit low: bring them above the caption first.
-      await t.scrollTo(page.locator('[data-test="settings-theme-light"]'), { at: 0.3 });
+      // The accent and density rows sit low: bring the density row (the lower one) up to mid-screen,
+      // and box both, so the caption moves out of their way.
+      await t.scrollTo(page.locator('[data-test="settings-density-cozy"]'), { at: 0.45, force: true });
+      await t.callout("rows", [page.locator('[data-test="settings-accent-theme"]'), page.locator('[data-test="settings-density-cozy"]')], "Accent, density", 6);
       await t.say("There is light mode, your own accent color, density, and an icons-only sidebar too. I'll go back to the defaults.");
       await t.click(page.locator('[data-test="palette-orbit"]'));
       await t.beat(600);
@@ -187,6 +190,7 @@ tutorial(
       await t.click(page.locator('[data-test="look-orbit"]'));
       await t.click(page.locator('[data-test="palette-orbit"]'));
       await t.waitVoice();
+      await t.uncallout("rows");
       // Off camera: ComfyUI's palette back to Dark for the next videos.
       await t.h.api("/api/settings/Comfy.ColorPalette", { method: "POST", body: "dark" }).catch(() => undefined);
     });

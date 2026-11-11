@@ -65,8 +65,8 @@ tutorial(
       await t.say("A name starts with a letter, then letters, digits or underscores. The row also shows the socket and the type it was given.");
       await t.waitVoice();
       await t.uncallout("names");
-      await t.say("Add WP Debug after it, and Run.");
       const dbg = await t.addNode("WP Debug", { x: 860, y: 720 });
+      await t.say("Add WP Debug after it, and Run.");
       await page.evaluate((id) => {
         const node = window.app?.graph?.getNodeById(Number(id)) as { size: [number, number] } | null | undefined;
         if (node) node.size = [520, 300];

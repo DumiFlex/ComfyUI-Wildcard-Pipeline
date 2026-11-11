@@ -72,9 +72,12 @@ tutorial(
       await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("End");
       await t.type(", with $hair_color.0 hair and $hair_color.1 streaks", { cps: 16 });
+      // Close the suggestion list the last name opened, so it doesn't sit over the preview.
+      await t.press("Escape");
       await t.beat(800);
       await t.waitVoice();
       await t.callout("prev", preview(nodes.asm), "Two colors, never the same", 6);
+      await t.say("Change the seed a few times: the two colors are never the same.");
       for (let i = 0; i < 3; i++) {
         await t.click(nodes.plus);
         await t.beat(1100);

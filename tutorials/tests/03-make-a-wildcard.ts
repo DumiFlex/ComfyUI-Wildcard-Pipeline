@@ -103,12 +103,14 @@ tutorial(
 
     const asm = await t.h.step("Use it in a prompt", async () => {
       await t.go("/");
-      await t.say("Back on the canvas, add a Context node and pick Role and Weather.");
-      await t.beat(800);
+      // Short lines, each said while its node goes in, so the canvas never sits empty under a line.
+      await t.say("Back on the canvas, add a Context node.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 200 });
+      await t.say("Pick Role and Weather.");
       await t.pickModules(ctx, ["Role", "Weather"]);
-      await t.say("Add a Prompt Assembler, wire it up, and write the template.");
+      await t.say("Add a Prompt Assembler.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 200 });
+      await t.say("Wire it up, and write the template.");
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role standing in $weather");
@@ -125,8 +127,9 @@ tutorial(
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
         const plus = t.node(asm.ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
-        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, asm.ctx);
+        await t.say("WP Debug under the Context shows what every run rolled.");
+        await t.waitVoice();
         await showcase(t, { from: asm.asm, preview: { x: 1340, y: 380, width: 420, height: 610 }, chain: { x: 1820, y: 900 }, between: () => t.click(plus) });
         // Said once the pictures are on screen, not before them.
         await t.say("Here's what those prompts make, run through a model.");

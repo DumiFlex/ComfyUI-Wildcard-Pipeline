@@ -105,13 +105,14 @@ tutorial(
 
     await t.h.step("On the canvas", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Role, Hair, Setting and the new rule, which goes after the lists it reads.");
+      // Built fast and silent first, so the line plays over a filled Context, not an empty canvas.
       await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Role", "Hair", "Setting", "Royal guard"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.normalSpeed();
+      await t.say("On the canvas, a Context with Role, Hair, Setting and the new rule, which goes after the lists it reads.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role with $hair, $setting", { cps: 16 });
       await t.beat(600);
