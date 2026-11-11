@@ -37,10 +37,13 @@ tutorial(
 
     const nodes = await t.h.step("Where each word came from", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Role, the rule that fits the outfit to the role, Outfit, Time of day and Lighting from time.");
+      // The node goes in first, so the line plays over it and the picking.
       const ctx = await t.addNode("WP Context", { x: 340, y: 170 });
+      await t.say("On the canvas, pick Role, the rule that fits the outfit to the role, Outfit, Time of day and Lighting from time.");
       await t.pickModules(ctx, ["Role", "Outfit fits the role", "Outfit", "Time of day", "Lighting from time"]);
+      await t.waitVoice();
       const asm = await t.addNode("WP Prompt Assembler", { x: 890, y: 170 });
+      await t.say("Then an Assembler. The template repeats masterpiece on purpose, for the Cleaner at the end.");
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role wearing $outfit $time, $lighting, masterpiece, best quality, masterpiece", { cps: 18 });

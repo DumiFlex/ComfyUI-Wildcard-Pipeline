@@ -78,6 +78,8 @@ tutorial(
       const ctx = await t.addNode("WP Context", { x: 1010, y: 200 });
       await t.wire(nodes.inj, "context", ctx, "upstream");
       await t.pickModules(ctx, ["Role", "Setting"]);
+      await t.waitVoice();
+      await t.say("Pick Role and Setting, then an Assembler that prints the role, the look and the place.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 200 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());

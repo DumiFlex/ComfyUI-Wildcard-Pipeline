@@ -255,6 +255,18 @@ function togglePin(): void {
 }
 
 const painting = ref(false);
+
+// The picker's keys only reach it from inside the modal (its key shield). Switching
+// mode or leaving the painter removes the focused control (the mask view switch, a
+// Detail button), which drops focus to <body>, so G / 0 / 1 / 2 would go to the canvas
+// (bookmark shortcuts) instead. Hand focus back to the picker when that happens.
+const pickerEl = ref<HTMLElement | null>(null);
+function keepFocusInside(): void {
+  const root = pickerEl.value;
+  const at = document.activeElement;
+  if (root && !(at instanceof Node && root.contains(at))) root.focus({ preventScroll: true });
+}
+watch([mode, () => painting.value], () => { void nextTick(keepFocusInside); }, { flush: "post" });
 const tool = ref<MaskTool>("brush");
 const TOOL_OPTIONS: SegmentedOption<MaskTool>[] = [
   { value: "brush", label: "Brush", hint: "Paint with a round brush" },
@@ -535,7 +547,7 @@ const subLine = computed(() => {
 
 <template>
   <ModalShell :visible="true" @close="onClose" @keydown="onKey">
-    <div class="wp-ifp" :class="[`is-${mode}`, { 'is-fit': isFit }]" data-test="image-filter-picker" :data-mode="mode" tabindex="-1">
+    <div ref="pickerEl" class="wp-ifp" :class="[`is-${mode}`, { 'is-fit': isFit }]" data-test="image-filter-picker" :data-mode="mode" tabindex="-1">
       <div class="wp-ifp__head">
         <i class="pi pi-filter wp-ifp__head-icon" aria-hidden="true" />
         <div class="wp-ifp__title-block">

@@ -1,10 +1,11 @@
-// Nodes 3: WP Note. A Role Context to explain; a Step card with a docs button and an add-to-library
+// Nodes 14: WP Note. A Role Context to explain; a Step card with a docs button and an add-to-library
 // button; a Sticky warning with an icon; a Label with a shipped picture, read by hovering it; double
 // click to edit again; "Also a bookmark" pointed at.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
 tutorial(
-  "N03",
+  "N14",
   {
     title: "WP Note",
     description: "Explain a workflow on the canvas: numbered steps, warnings, labels, links into the docs, pictures, and a button that adds the workflow's items to a library.",
@@ -60,6 +61,8 @@ tutorial(
       await t.click(t.node(note).locator('[data-test="note-look-sticky"]'));
       await t.click(t.node(note).locator('[data-test="note-color-warning"]'));
       await t.beat(300);
+      await t.waitVoice();
+      await t.say("Give it a title and a line of text, then Done.");
       await t.fill(title(note), "Same seed, same picture", { cps: 14 });
       await t.fill(textArea(note), "Change the seed on the Context to roll something new.", { cps: 20 });
       await t.beat(400);
@@ -74,14 +77,26 @@ tutorial(
       await t.beat(600);
       await t.click(t.node(note).locator('[data-test="note-look-label"]'));
       await t.click(t.node(note).locator('[data-test="note-tone-plain"]'));
+      await t.waitVoice();
+      await t.say("Give it a title, and text with a picture: a small one from the node's toolbar.");
       await t.fill(title(note), "Need help?", { cps: 14 });
       await t.fill(textArea(note), "Every node's ? button opens its help.\n\n![The ? button](wp:asset/toolbar-help){width=90%}", { cps: 22 });
       await t.beat(400);
       await t.click(t.node(note).locator('[data-test="note-done"]'));
       await t.beat(900);
-      await t.hover(t.node(note).locator('[data-test="note-title-text"]'));
-      await t.beat(1200);
       await t.waitVoice();
+      // No callout here: its label landed on the pill, which ended the hover and closed the peek.
+      // Hover first, so the peek is up for the whole line.
+      await t.hover(t.node(note).locator('[data-test="note-title-text"]'));
+      // The line is about the picture, so it must be showing (rendered, not the markdown).
+      const pic = t.page.locator('[data-test="note-peek"] img').first();
+      if (!(await pic.waitFor({ state: "visible", timeout: 4000 }).then(() => true, () => false))) throw new StepError("Hovering the label didn't show its picture.");
+      // A line moves the hand off any open tooltip; this one is the point, so keep it.
+      t.keepTooltip = true;
+      await t.say("Hover it, and its text shows, picture and all.");
+      await t.waitVoice();
+      t.keepTooltip = false;
+      await t.beat(500);
       await t.moveTo({ x: 900, y: 950 });
       await t.beat(600);
     });

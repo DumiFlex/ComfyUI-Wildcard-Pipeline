@@ -4,6 +4,7 @@
 // restart, with its own "Before restore" backup), pins, then the database's location and
 // maintenance, and exporting settings (Advanced). Backups the recording's own lifecycle made are
 // hidden from the list so it shows only this video's.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -70,13 +71,39 @@ tutorial(
       await t.beat(400);
       await t.click(row.getByRole("button", { name: "Remove option" }));
       await t.beat(900);
-      await t.click(page.locator('[data-test="save-btn"]'));
-      await t.beat(1200);
+      // The History button only shows once the save has stored the version before it: wait for
+      // that, and say what went wrong when it didn't (run 820247b4 reopened Role with none).
+      const history = async () => {
+        const r = await t.h.api("/wp/api/modules/808878ba");
+        const row = (r.json?.data ?? r.json) as { payload?: { history?: unknown } } | undefined;
+        const h = row?.payload?.history;
+        return Array.isArray(h) ? h.length : 0;
+      };
+      const before = await history();
+      const save = page.locator('[data-test="save-btn"]');
+      for (let tries = 0; ; tries++) {
+        await t.click(save);
+        const state = await page
+          .waitForFunction(() => {
+            const s = document.querySelector('[data-test="save-btn"]')?.getAttribute("data-save-state");
+            return s === "saved" || s === "error" ? s : null;
+          }, null, { timeout: 10_000 })
+          .then((h) => h.jsonValue())
+          .catch(() => "no answer");
+        const after = await history();
+        if (after > before || (before >= 3 && state === "saved")) break;
+        if (tries >= 1) throw new StepError(`Saving Role didn't add a history entry (save state: ${state}, history ${before} → ${after}).`);
+        t.h.log(`Saving Role: state ${state}, history ${before} → ${after}; trying Save again.`);
+        await t.beat(800);
+      }
+      await t.beat(600);
       // Each save keeps the version before it in the item's own history (the last three).
-      await t.say("Each save also keeps the version before it. Open Role again: History, at the bottom of the editor, holds its last three versions.");
+      await t.say("Each save also keeps the version before it. Open Role again.");
       await t.go("/wp/wildcards/808878ba/edit");
       await t.beat(900);
       await t.callout("histbtn", page.locator('[data-test="history-btn"]'), "Up to three earlier versions", 3);
+      await t.say("History, at the bottom of the editor, holds its last three versions.");
+      await t.waitVoice();
       await t.click(page.locator('[data-test="history-btn"]'));
       await t.uncallout("histbtn");
       await t.beat(900);

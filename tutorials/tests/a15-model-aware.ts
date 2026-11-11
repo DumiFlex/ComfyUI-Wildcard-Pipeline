@@ -66,9 +66,10 @@ tutorial(
     });
 
     const ctx = await t.h.step("A list that follows it", async () => {
-      await t.say("Quality per model has one line of quality words for each model, tagged pony, illustrious or klein. Put it in a Context after Model Info, with Role and Setting.");
+      await t.say("Quality per model has one line of quality words for each model, tagged pony, illustrious or klein.");
       const ctx = await t.addNode("WP Context", { x: 1330, y: 200 });
       await t.wire(nodes.mi, "context", ctx, "upstream");
+      await t.say("Put it in a Context after Model Info, with Role and Setting.");
       await t.pickModules(ctx, ["Role", "Setting", "Quality per model"]);
       await t.waitVoice();
       await t.say("Right-click it, press Edit, and in its Pool, under By variable, pick model variant.");

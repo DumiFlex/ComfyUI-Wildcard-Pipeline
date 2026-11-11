@@ -1,10 +1,10 @@
-// Nodes 2: WP Label & Grid, on the "Batches and grids" example: its XY plot (rows from label part 1,
+// Nodes 13: WP Label & Grid, on the "Batches and grids" example: its XY plot (rows from label part 1,
 // columns from part 2, a title), then run (showcase) for the nine-image sheet, and the presets.
 // Without showcase the panel is shown without a run.
 import { openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
 
 tutorial(
-  "N02",
+  "N13",
   {
     title: "WP Label & Grid",
     description: "Label images and lay them out as one grid, from a contact sheet to an XY plot with row and column headers.",

@@ -65,9 +65,10 @@ tutorial(
 
     const nodes = await t.h.step("Use them", async () => {
       await t.go("/");
-      await t.say("On the canvas, a Context node picks Role, the two rules that keep the outfit and the item fitting the role, Outfit, Held item, Style, and the new Outfit line. The rules get their own video later.");
-      await t.beat(600);
+      await t.say("On the canvas, add a Context node.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
+      await t.waitVoice();
+      await t.say("Add module, and tick Role, the two rules that keep the outfit and the item fitting the role, Outfit, Held item, Style, and the new Outfit line. Top to bottom: the rules go before the lists they change, and get their own video later.");
       await t.pickModules(ctx, ["Role", "Outfit fits the role", "Item fits the role", "Outfit", "Held item", "Style", "Outfit line"]);
       await t.waitVoice();
       await t.say("A combine reads what was rolled above it in the node, or upstream in an earlier Context, so the order matters.");
@@ -101,8 +102,9 @@ tutorial(
 
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
-        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
+        await t.say("WP Debug under the Context shows what every run rolled.");
+        await t.waitVoice();
         await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, between: () => t.click(nodes.plus) });
         // Said once the pictures are on screen, not before them.
         await t.say("Run through a model, every picture keeps the painted style.");

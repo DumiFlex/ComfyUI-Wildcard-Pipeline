@@ -1,5 +1,5 @@
 // Example 3: a tour of the "Pick and refine" example: four looks of one held person drafted fast, the
-// run pauses at the Image Filter (Keep all here; N01 shows picking), the picks refined at 1.5×.
+// run pauses at the Image Filter (Keep all here; N12 shows picking), the picks refined at 1.5×.
 import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
 
 tutorial(

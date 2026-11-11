@@ -1,11 +1,11 @@
-// Nodes 4: WP Debug in depth. Role, Setting, Time of day, Lighting from time and the constraint "Role
+// Nodes 3: WP Debug in depth. Role, Setting, Time of day, Lighting from time and the constraint "Role
 // fits the place" (last, so it reaches nothing) → WP Debug. Variables (value, who set it, filter),
 // Trace (steps in order, a derivation's rules opened), Warnings (the constraint that never applied),
 // Raw, and Copy.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
-  "N04",
+  "N03",
   {
     title: "WP Debug in depth",
     description: "Read everything a run did: each variable and who set it, every step in order with its rules, and the warnings that explain an odd result.",

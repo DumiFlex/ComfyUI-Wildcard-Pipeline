@@ -46,7 +46,9 @@ tutorial(
       await t.press("Escape");
       await t.uncallout("mode");
       await t.beat(400);
-      await t.callout("neg", page.locator('[data-test="act-block-0-0-1"]'), "…and add to its negatives", 6);
+      const neg = page.locator('[data-test="act-block-0-0-1"]');
+      await t.scrollTo(neg, { at: 0.3 });
+      await t.callout("neg", neg, "…and add to its negatives", 6);
       await t.say("This branch has a second action, Add to negative, so a night scene keeps away from harsh sunlight.");
       await t.waitVoice();
       await t.uncallout("neg");
@@ -56,7 +58,7 @@ tutorial(
       await t.click(page.locator('[data-test="toggle-branch-0-1"]'));
       await t.beat(600);
       const sunset = page.locator('[data-test="branch-0-1"]');
-      await t.scrollTo(sunset);
+      await t.scrollTo(sunset, { at: 0.15, force: true });
       await t.callout("sunset", sunset, "ELSE IF at sunset", 6);
       await t.say("A second branch is checked only when the first doesn't match: at sunset, warm orange rim light.");
       await t.waitVoice();
@@ -64,7 +66,7 @@ tutorial(
       await t.click(page.locator('[data-test="toggle-branch-else-0"]'));
       await t.beat(600);
       const other = page.locator('[data-test="branch-else-0"]');
-      await t.scrollTo(other);
+      await t.scrollTo(other, { at: 0.15, force: true });
       await t.callout("else", other, "ELSE soft morning light", 6);
       await t.say("Any other time, which is dawn here, gets soft morning light.");
       await t.waitVoice();
@@ -73,10 +75,13 @@ tutorial(
 
     const nodes = await t.h.step("On the canvas", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Time of day and Setting, the rule, and Scene, a combine that reads all three.");
-      await t.beat(600);
+      // Built fast and silent first, so the line plays over a filled Context, not an empty canvas.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Time of day", "Setting", "Lighting from time", "Scene"]);
+      await t.normalSpeed();
+      await t.say("On the canvas, a Context with Time of day and Setting, the rule, and Scene, a combine that reads all three.");
+      await t.waitVoice();
       await t.callout("order", ["Time of day", "Setting", "Lighting from time", "Scene"].map((n) => t.moduleRow(ctx, n)), "Top to bottom", 4);
       await t.say("Order matters: rows run top to bottom, so the rule goes after Time of day, which it reads, and the combine goes last, after everything it uses. A rule placed above what it reads sees nothing yet.");
       await t.waitVoice();
@@ -110,8 +115,9 @@ tutorial(
 
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
-        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, nodes.ctx);
+        await t.say("WP Debug under the Context shows what every run rolled.");
+        await t.waitVoice();
         await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, between: () => t.click(plus) });
         // Said once the pictures are on screen, not before them.
         await t.say("Here are a few of those scenes, run through a model.");

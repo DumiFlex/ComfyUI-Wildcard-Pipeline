@@ -1,10 +1,10 @@
-// Nodes 5: WP Bookmark. A Role Context and an Assembler; a bookmark "Prompt" at their top left (where
+// Nodes 15: WP Bookmark. A Role Context and an Assembler; a bookmark "Prompt" at their top left (where
 // it lands, zoom, shortcut Alt+1); the view wanders off and comes back from the Bookmarks dock, then
 // with Alt+1; a second bookmark, and the dock's previous / next.
 import { tutorial } from "../tutorial.js";
 
 tutorial(
-  "N05",
+  "N15",
   {
     title: "WP Bookmark",
     description: "Jump around a big workflow: bookmarks, the Bookmarks dock, shortcuts, and stepping through them like slides.",

@@ -43,6 +43,8 @@ tutorial(
       const c3 = await t.addNode("WP Context", { x: 1000, y: 560 });
       await t.wire(c2, "context", c3, "upstream");
       await t.pickModules(c3, ["Setting"]);
+      await t.waitVoice();
+      await t.say("Edit the third one's Setting, and change its variable to later, so the two settings don't overwrite each other.");
       modal = await editItem(c3, "Setting");
       const binding = modal.getByLabel("Variable binding");
       await t.fill(binding, "later", { cps: 12 });
@@ -85,11 +87,13 @@ tutorial(
     });
 
     await t.h.step("First", async () => {
-      await t.say("Edit the constraint on this node and set its reach to first.");
+      await t.say("Edit the constraint on this node.");
       const modal = await editItem(nodes.c1, "Role fits the place");
       const section = modal.locator('[data-test="reach-section"]');
       await t.scrollTo(section, { at: 0.5 });
       await t.callout("reach", section, "Reach: which Settings it changes", 6);
+      await t.say("Reach says which Settings it changes. Set it to first.");
+      await t.waitVoice();
       await t.click(modal.locator('[data-test="reach-mode-first"]'));
       await t.uncallout("reach");
       await t.beat(600);
@@ -108,12 +112,13 @@ tutorial(
       await t.waitVoice();
       await t.click(modal.locator('[data-test="cnm-save"]'));
       await t.beat(700);
-      await t.say("Now only the first place follows the rule. The later one rolls freely, forests included.");
+      await t.say("Now only the first place follows the rule. Change the seed until the later one lands somewhere new.");
       await roll(14, /later in a (misty pine forest|mossy clearing)/);
       if (!/later in a (misty pine forest|mossy clearing)/.test((await prev.textContent()) ?? "")) {
         throw new Error("The preview never put the later place in a forest with reach first");
       }
       await t.callout("prev", prev, "The later place can be a forest", 6);
+      await t.say("The later one rolls freely, forests included.");
       await t.waitVoice();
       await t.uncallout("prev");
     });

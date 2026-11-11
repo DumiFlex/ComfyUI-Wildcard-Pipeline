@@ -132,9 +132,12 @@ tutorial(
       await t.wire(sl, "seed", p2, "anything");
       await t.run();
       await filled(p2, /\d{4,}[\s\S]*\d{4,}/);
+      // Both land low, under the caption: bring them up while they're talked about.
+      const back = await t.zoomOn(sl, { scale: 0.9, top: 160 });
       await t.callout("sl", t.node(p2), "One sampler seed per frame", 5);
       await t.waitVoice();
       await t.uncallout("sl");
+      await t.setView(back);
       await t.say("Without it, a plain KSampler uses one seed for every frame, which is what you want for a clean sweep comparison.");
       await t.waitVoice();
     });

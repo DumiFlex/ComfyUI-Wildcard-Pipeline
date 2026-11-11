@@ -108,6 +108,8 @@ export class Tutor {
   private caption: { text: string; until: number } | null = null;
   readonly cues: Cue[] = [];
   readonly fast: FastRange[] = [];
+  /** When the hand clicked, dragged, typed or pressed a key (ms): render.mjs plays those parts at most 2x. */
+  readonly acts: number[] = [];
   /** Where the video starts showing the tutorial (after the canvas has loaded). */
   startAt = 0;
   /** When the sync mark went up (render.mjs finds it in the video). */
@@ -195,7 +197,7 @@ export class Tutor {
     const missing = this.cues.filter((c) => !c.voiced).length;
     await this.syncMark();
     if (missing) this.h.note(`${missing} line(s) have no voice yet: run python tutorials/voice/speak.py and record again.`);
-    await this.h.file("cues.json", JSON.stringify({ t0: this.t0, mark: this.markAt, start: this.startAt, cues: this.cues, fast: this.fast, marks: this.marks, ended: this.now() }, null, 1), "application/json");
+    await this.h.file("cues.json", JSON.stringify({ t0: this.t0, mark: this.markAt, start: this.startAt, cues: this.cues, fast: this.fast, acts: this.acts, marks: this.marks, ended: this.now() }, null, 1), "application/json");
   }
 
   /** Marks the start of the tutorial: the video before it (loading the page) is cut. */
@@ -304,6 +306,7 @@ export class Tutor {
     await this.moveTo(at);
     await sleep(140);
     const button = right ? "right" : "left";
+    this.acts.push(this.now());
     await this.page.mouse.down({ button });
     await sleep(70);
     await this.page.mouse.up({ button });
@@ -337,6 +340,7 @@ export class Tutor {
   async drag(from: Point, to: Point): Promise<void> {
     await this.moveTo(from);
     await sleep(160);
+    this.acts.push(this.now());
     await this.page.mouse.down();
     await sleep(120);
     await this.moveTo(to, { speed: 0.8 });
@@ -348,7 +352,9 @@ export class Tutor {
   /** Types like a person: one key at a time. */
   async type(text: string, { cps = 22, rest = true }: { cps?: number; rest?: boolean } = {}): Promise<void> {
     await this.lead();
+    this.acts.push(this.now());
     await this.page.keyboard.type(text, { delay: Math.round(1000 / cps) });
+    this.acts.push(this.now());
     await sleep(300);
     if (this.inManager() || !rest) return;
     // A suggestion list still open after the last word (a $name, its `.neg`) would stay over the
@@ -375,8 +381,11 @@ export class Tutor {
    * over what the next line is about: on the canvas the hand moves off to empty canvas, which
    * closes it.
    */
+  /** True while the picture is about a tooltip or hover card: `say` then leaves the hand where it is. */
+  keepTooltip = false;
+
   private async clearTooltip(): Promise<void> {
-    if (this.inManager()) return;
+    if (this.inManager() || this.keepTooltip) return;
     const up = await this.page
       .evaluate(() =>
         [...document.querySelectorAll('.p-tooltip, [role="tooltip"], .wp-tooltip, .comfy-tooltip, .litegraph-tooltip')].some((el) => {
@@ -424,6 +433,7 @@ export class Tutor {
   async press(key: string): Promise<void> {
     await this.lead();
     await sleep(120);
+    this.acts.push(this.now());
     await this.page.keyboard.press(key);
     await sleep(250);
   }
@@ -482,6 +492,19 @@ export class Tutor {
       if (stuck >= 3) break;
       last = now;
     }
+    // The wheel can land on something that doesn't scroll the page (a fixed bar, a field that
+    // keeps it): then scroll the part's own scrolling box, smoothly, so it still ends up in view.
+    const end = await target.boundingBox();
+    if (end && Math.abs(end.y - view.height * at) > 60) {
+      await target.evaluate((el, at) => {
+        let box: HTMLElement | null = el.parentElement;
+        while (box && !(box.scrollHeight > box.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+        const scroller = box ?? document.scrollingElement ?? document.documentElement;
+        const dy = el.getBoundingClientRect().top - window.innerHeight * at;
+        scroller.scrollBy({ top: dy, behavior: "smooth" });
+      }, at);
+      await sleep(700);
+    }
     await sleep(400);
   }
 
@@ -522,13 +545,18 @@ export class Tutor {
       const out = [];
       for (const one of targets) {
         await one.waitFor({ state: "visible", timeout: 15_000 });
-        const b = await shownBox(one);
+        // A part that pokes out of a clipping parent (a node's slot dot on its edge) measures as
+        // hidden: box its own rectangle then, rather than drawing nothing.
+        const b = (await shownBox(one)) ?? (await one.boundingBox().catch(() => null));
         if (b) out.push(b);
       }
       return out;
     };
     let boxes = await measure();
-    if (!boxes.length) return;
+    if (!boxes.length) {
+      this.h.log(`callout "${id}": nothing to box (its part has no size on screen).`);
+      return;
+    }
     // Below this line a two-line caption covers the box.
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     const limit = view.height - CAPTION_BAND;
@@ -1317,21 +1345,25 @@ export async function jumpTo(t: Tutor, row: number, { scale = 0.85, box = true }
   const title = ((await dockRow.getAttribute("aria-label").catch(() => null)) ?? "").replace(/^Jump to /, "");
   await t.click(dockRow);
   await sleep(1200);
+  const view = page.viewportSize() ?? { width: 1920, height: 1080 };
   const found = await page.evaluate(
-    ({ title, scale }) => {
-      type N = { id: number | string; title?: string; type: string; pos: [number, number] };
+    ({ title, scale, limit }) => {
+      type N = { id: number | string; title?: string; type: string; pos: [number, number]; size: [number, number] };
       const c = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] } } }).canvas;
       const nodes = ((window.app?.graph?.nodes ?? []) as unknown as N[]).filter((n) => /^WP_(Note|Bookmark)$/.test(n.type));
       const n = nodes.find((x) => x.title === title);
       if (!n) return null;
       const { scale: s, offset: o } = c.ds;
-      if (s >= scale - 0.05) return { id: String(n.id), view: null };
       // Keep the note's top-left where it landed: screen = (graph + offset) * scale.
       const px = (n.pos[0] + o[0]) * s;
       const py = (n.pos[1] + o[1]) * s;
-      return { id: String(n.id), view: { scale, offset: [px / scale - n.pos[0], py / scale - n.pos[1]] as [number, number] } };
+      // A tall note would run under the caption: zoom out until it ends above it (not below 0.6).
+      const fits = (k: number) => py + n.size[1] * k <= limit;
+      const want = fits(scale) ? scale : Math.max(0.6, (limit - py) / n.size[1]);
+      if (s >= want - 0.05 && fits(s)) return { id: String(n.id), view: null };
+      return { id: String(n.id), view: { scale: want, offset: [px / want - n.pos[0], py / want - n.pos[1]] as [number, number] } };
     },
-    { title, scale },
+    { title, scale, limit: view.height - CAPTION_BAND - 12 },
   ).catch(() => null);
   if (!found) return null;
   if (found.view) await t.setView(found.view);

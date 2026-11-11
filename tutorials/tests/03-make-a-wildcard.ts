@@ -1,6 +1,7 @@
 // Tutorial 3: make your own wildcard. A Weather wildcard in the manager: name and variable, two
 // options by hand, three more with Bulk add, a lower weight on two of them with Bulk edit, then
 // used on the canvas next to Role.
+import { StepError } from "watchwright";
 import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
 tutorial(
@@ -63,9 +64,19 @@ tutorial(
 
     await t.h.step("Bulk edit", async () => {
       await t.say("Snow and the thunderstorm should be rare. Tick both rows.");
-      await t.click(page.locator('[data-test="wc-opt-check-3"]'));
-      await t.click(page.locator('[data-test="wc-opt-check-4"]'));
-      await t.beat(500);
+      // The selection bar slides in after the first tick and moves the rows: tick one at a time and
+      // check each took, or the second click lands where its row used to be.
+      for (const i of [3, 4]) {
+        const box = page.locator(`[data-test="wc-opt-check-${i}"]`);
+        const ticked = () =>
+          box.evaluate((el) => (el.querySelector("input") as HTMLInputElement | null)?.checked ?? el.getAttribute("aria-checked") === "true");
+        for (let tries = 0; tries < 3 && !(await ticked()); tries++) {
+          await t.click(box);
+          await t.beat(700);
+        }
+        if (!(await ticked())) throw new StepError(`Row ${i + 1} didn't tick.`);
+      }
+      await t.beat(300);
       const bar = page.locator(".wpc-seltoolbar").first();
       await t.callout("bar", bar, "Change every ticked row at once", 4);
       await t.say("This bar changes every ticked row at once: tags, weight, negatives, order, or delete.");
@@ -92,12 +103,14 @@ tutorial(
 
     const asm = await t.h.step("Use it in a prompt", async () => {
       await t.go("/");
-      await t.say("Back on the canvas, add a Context node and pick Role and Weather.");
-      await t.beat(800);
+      // Short lines, each said while its node goes in, so the canvas never sits empty under a line.
+      await t.say("Back on the canvas, add a Context node.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 200 });
+      await t.say("Pick Role and Weather.");
       await t.pickModules(ctx, ["Role", "Weather"]);
-      await t.say("Add a Prompt Assembler, wire it up, and write the template.");
+      await t.say("Add a Prompt Assembler.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 200 });
+      await t.say("Wire it up, and write the template.");
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role standing in $weather");
@@ -114,8 +127,9 @@ tutorial(
     if (showcasing(t)) {
       await t.h.step("The pictures", async () => {
         const plus = t.node(asm.ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
-        await t.say("First, add WP Debug under the Context, so every run shows what it rolled.");
         const dbg = await addDebugUnder(t, asm.ctx);
+        await t.say("WP Debug under the Context shows what every run rolled.");
+        await t.waitVoice();
         await showcase(t, { from: asm.asm, preview: { x: 1340, y: 380, width: 420, height: 610 }, chain: { x: 1820, y: 900 }, between: () => t.click(plus) });
         // Said once the pictures are on screen, not before them.
         await t.say("Here's what those prompts make, run through a model.");
