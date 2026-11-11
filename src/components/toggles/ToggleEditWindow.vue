@@ -14,7 +14,7 @@ import Checkbox from "@/kit/Checkbox.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import Combobox from "@/kit/Combobox.vue";
 import ColorField from "@/kit/ColorField.vue";
-import IconPicker from "@/kit/IconPicker.vue";
+import IconSwatch from "./IconSwatch.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { vToggleRow } from "@/kit/toggle-row";
 import NodeEditWindow from "../shared/NodeEditWindow.vue";
@@ -26,6 +26,7 @@ import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
 
 const RichTextInput = defineAsyncComponent(() => import("../../manager/components/RichTextInput.vue"));
+const NegativeField = defineAsyncComponent(() => import("../../manager/components/NegativeField.vue"));
 
 interface Choice { value: string; label: string }
 
@@ -192,15 +193,14 @@ function previewSet(on: boolean): void {
         <div class="wp-tgr__field">
           <span>Looks <em>icon and colours; None keeps the theme's</em></span>
           <span class="wp-tgr__looks">
-            <IconPicker
-              :model-value="d.icon ?? null"
-              all
-              :color="d.icon_color"
-              aria-label="Icon"
-              data-test="tg-icon"
-              @update:model-value="(v: string | null) => patch({ icon: v || undefined })"
-            />
             <span class="wp-tgr__look">
+              <IconSwatch
+                :model-value="d.icon ?? null"
+                :color="d.icon_color"
+                aria-label="Icon"
+                data-test="tg-icon"
+                @update:model-value="(v: string | null) => patch({ icon: v || undefined })"
+              />
               <ColorField :model-value="colorValue(d.icon_color)" allow-none presets compact aria-label="Icon colour" data-test="tg-icon-color" @update:model-value="(v: string) => patch({ icon_color: pickColor(v) })" />
               Icon
             </span>
@@ -236,6 +236,16 @@ function previewSet(on: boolean): void {
           <p v-if="hasInlinePicks(d.value ?? '')" class="wp-tgr__note" data-test="tg-inline-picks">
             <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ INLINE_PICKS_NOTE }}
           </p>
+          <NegativeField
+            :model-value="d.negative"
+            surface="combine"
+            label="toggle"
+            test-id="tg-negative"
+            :var-suggestions="varSuggestions ?? []"
+            :var-producers="varProducers"
+            :graph-aware="!!varProducers"
+            @update:model-value="(v: string | undefined) => patch({ negative: v })"
+          />
         </div>
         <div v-if="!pickOne" class="wp-tgr__field">
           <span>Style</span>

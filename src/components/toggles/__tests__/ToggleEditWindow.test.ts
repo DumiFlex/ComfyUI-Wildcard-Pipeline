@@ -1,5 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import ToggleEditWindow from "../ToggleEditWindow.vue";
 import type { ToggleRow as Row } from "../../../extension/toggles";
 
@@ -74,6 +74,20 @@ describe("ToggleEditWindow", () => {
     const any = open(base);
     expect(q('[aria-label="Style"]')).not.toBeNull();
     expect(q('[data-test="tg-needs"]')).not.toBeNull();
+    any.unmount();
+  });
+
+  it("offers a negative beside the Value in Pick one only", async () => {
+    const one = open({ ...base, negative: "night sky" }, { pickOne: true });
+    for (let i = 0; i < 4; i++) {
+      await vi.dynamicImportSettled();
+      await flushPromises();
+    }
+    expect(q('[data-test="tg-negative"]')).not.toBeNull();
+    one.unmount();
+    const any = open(base);
+    await flushPromises();
+    expect(q('[data-test="tg-negative"]')).toBeNull();
     any.unmount();
   });
 

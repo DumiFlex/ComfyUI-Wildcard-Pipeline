@@ -51,6 +51,8 @@ export interface ToggleRow {
   hide_var?: true;
   /** Pick one: what the picked variable gets instead of the name (may read `$vars`). */
   value?: string;
+  /** Pick one: negative text the picked variable carries (send-to-negative). */
+  negative?: string;
   /** The variable shows in the Assembler and prints in a prompt (the
    *  globe "internal" button turned off). Absent: internal, for rules only. */
   visible?: true;
@@ -253,6 +255,7 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (str(o.off_label)) t.off_label = str(o.off_label);
     if (str(o.needs)) t.needs = str(o.needs);
     if (typeof o.value === "string" && o.value) t.value = o.value;
+    if (typeof o.negative === "string" && o.negative.trim()) t.negative = o.negative;
     if (o.upstream === true) t.upstream = true;
     if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
     if (o.invert === true) t.invert = true;

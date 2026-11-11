@@ -277,6 +277,20 @@ describe("dragRow (edit view drag across groups)", () => {
   });
 });
 
+describe("parseTogglesConfig negative", () => {
+  it("keeps a toggle's negative and drops a blank one", () => {
+    const cfg = parseTogglesConfig(JSON.stringify({
+      mode: "one",
+      rows: [
+        { id: "t1", name: "Day", var: "day", negative: "night sky" },
+        { id: "t2", name: "Night", var: "night", negative: "   " },
+      ],
+    }));
+    expect(cfg.rows.find((r) => r.id === "t1")).toMatchObject({ negative: "night sky" });
+    expect(cfg.rows.find((r) => r.id === "t2")).not.toHaveProperty("negative");
+  });
+});
+
 describe("parseTogglesConfig looks", () => {
   it("keeps icons and #rrggbb colours, drops anything else", () => {
     const cfg = parseTogglesConfig({

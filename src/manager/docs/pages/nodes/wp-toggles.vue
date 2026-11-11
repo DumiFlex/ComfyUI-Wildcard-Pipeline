@@ -107,7 +107,9 @@ import VarToken from "../../../components/docs/VarToken.vue";
         One toggle is on. Which one, first match wins: the toggle the upstream picked variable
         names (with <b>Upstream can pick</b>), then the first toggle upstream set to a yes word,
         then the first one you switched on. The picked variable gets the toggle's
-        <b>Value</b>, or its name; it is internal unless <b>Show in Assembler</b> is on. All rows share one look here:
+        <b>Value</b>, or its name; it is internal unless <b>Show in Assembler</b> is on. A toggle's
+        <b>Negative</b>, under its Value, goes with the picked variable: an Assembler that prints it
+        sends those words to its negative output. All rows share one look here:
         the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, so a
         toggle's own Style and Needs are hidden.
       </p>

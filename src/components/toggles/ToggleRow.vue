@@ -125,7 +125,13 @@ function flip(): void {
             :disabled="blocked"
             :data-test="`tg-ctl-${t.id}`"
             @update:model-value="(v: boolean) => emit('set-on', v)"
-          />
+          >
+            <span class="wp-tgr__chipname">{{ t.name }}</span>
+            <template v-if="t.var && !t.hide_var">
+              <span class="wp-tgr__chipdot" aria-hidden="true">·</span>
+              <span class="wp-tgr__chipvar" :class="varColorClass(t.var)" :data-test="`tg-chip-var-${t.id}`">${{ t.var }}</span>
+            </template>
+          </WpSwitch>
         </span>
         <span v-if="parentName" class="wp-tgr__sub" :class="subClass()"><i class="pi pi-link" aria-hidden="true" />{{ sub() }}</span>
         <i
@@ -299,11 +305,46 @@ function flip(): void {
 .wp-tgr__sub.is-warn { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__sub.is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-tgr__title { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.wp-tgr__icon { flex: none; font-size: 12px; color: var(--wp-tg-icon, var(--wp-text-muted, var(--wp-text2))); }
+/* A fixed box with the glyph centred in it: the icon font's own line box sat
+ * the glyph a pixel or two off the name's middle. */
+.wp-tgr__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 16px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--wp-tg-icon, var(--wp-text-muted, var(--wp-text2)));
+}
+/* The chip says "Name · $var" (the var when Show is on). */
+.wp-tgr__chipname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 16px;
+  color: var(--wp-tg-text, inherit);
+}
+.wp-tgr__chipdot { flex: none; line-height: 16px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgr__chipvar {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 10.5px/16px var(--wp-font-mono, monospace);
+}
+.wp-tgr__chip :deep(.wp-switch--chip .wp-switch__icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  line-height: 1;
+}
 .wp-tgr__name b { color: var(--wp-tg-text, inherit); }
 /* Own colours win over the chip's lit accent, so a yellow sun stays yellow. */
 .wp-tgr__row.has-icon-color .wp-tgr__chip :deep(.wp-switch--chip .wp-switch__icon) { color: var(--wp-tg-icon); }
-.wp-tgr__row.has-text-color .wp-tgr__chip :deep(.wp-switch--chip .wp-switch__label) { color: var(--wp-tg-text); }
 .wp-tgr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 /* Mute / bypass icon: dim while it isn't acting, coloured while it is
  * (bypass in the host's bypass violet, mute in amber). */

@@ -20,11 +20,12 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 
 ## Editing
 
-- **Name**: Shown on the row and on its output.
-- **Variable**: Gets true or false. It follows the name until you change it. Internal until you turn off the row's globe. Show puts it under the name.
+- **Name**: Shown on the row and on its output. A Chip shows Name · $variable (the variable while Show is on).
+- **Variable**: Gets true or false. It follows the name until you change it. Internal until you turn off the row's globe. Show puts it under the name, or after it on a Chip.
 - **Looks**: An icon before the name, and colours for the icon, the name and the control (switch, check, radio, chip or buttons), so Day can be yellow and Night blue. None keeps the theme's colour.
 - **Style**: Switch, Check, Buttons (two words of your own, like Day / Night) or Chip (a small chip with the name). Any on only: in Pick one the Style in the top bar sets every row's look.
 - **Value (Pick one)**: What the picked variable gets when this toggle is picked, instead of its name. A text box like the Assembler's: $ lists every variable upstream (Context Injector ones included) and the toggles' own, and tag, LoRA and embedding autocomplete work when they are on. A $name nothing upstream sets is flagged under the box and in WP Debug. Inline {a|b} picks need a seed, so they print as written; roll them in a wildcard instead. Drag the corner to make it taller.
+- **Negative (Pick one)**: Words to keep out of the image while this toggle is picked. They go with the picked variable, so an Assembler that prints it sends them to its negative output, like a wildcard option's negative. It can read $variables; a pick without one clears what the variable carried.
 - **Needs**: Any on only. Another toggle this one needs. While that one is off, this one is off too; it keeps your choice for when it comes back on.
 - **When off**: Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run. When several toggles drive one node, off wins: it runs only while all of them let it (Mute beats Bypass).
 - **Invert**: Mute or bypass while the toggle is ON instead, for a node used only as a switchboard.

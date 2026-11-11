@@ -27,7 +27,7 @@ import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import ColorField from "@/kit/ColorField.vue";
-import IconPicker from "@/kit/IconPicker.vue";
+import IconSwatch from "./IconSwatch.vue";
 import SortableList from "@/kit/SortableList.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import { vTooltip } from "@/kit/tooltip";
@@ -479,10 +479,8 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             />
             <span class="wp-tg__rule" />
             <span class="wp-tg__count">{{ groupOfLabel(item).toggles.length }}<template v-if="item.collapsed"> · {{ onCount(groupOfLabel(item)) }} on</template></span>
-            <IconPicker
+            <IconSwatch
               :model-value="item.icon ?? null"
-              all
-              compact
               :color="labelColor(item)"
               aria-label="Group icon"
               :data-test="`tg-label-icon-${item.id}`"

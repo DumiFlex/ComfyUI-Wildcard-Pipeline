@@ -47,6 +47,19 @@ describe("ToggleRow internal button", () => {
   });
 });
 
+describe("ToggleRow chip", () => {
+  it("says Name · $var, and the name alone when Show is off", () => {
+    const chip: Row = { ...base, style: "chip" };
+    const w = mountRow(chip, { editable: false });
+    expect(w.find(".wp-tgr__chip").text().replace(/\s+/g, "")).toBe("Dawn·$dawn");
+    w.unmount();
+    const bare = mountRow({ ...chip, hide_var: true }, { editable: false });
+    expect(bare.find('[data-test="tg-chip-var-a"]').exists()).toBe(false);
+    expect(bare.find(".wp-tgr__chip").text()).toBe("Dawn");
+    bare.unmount();
+  });
+});
+
 describe("ToggleRow looks", () => {
   it("draws the icon and hands its colours to the row", () => {
     const w = mountRow({ ...base, icon: "sun", icon_color: "#ffcc00", text_color: "#ff0000", tint: "#00aaff" }, {});

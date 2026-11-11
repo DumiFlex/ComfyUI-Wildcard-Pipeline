@@ -76,6 +76,8 @@ class Toggle:
     upstream: bool = False
     value: str = ""
     visible: bool = False
+    #: Pick one: negative text filed under ``group_var`` when this one is picked.
+    negative: str = ""
 
 
 @dataclass
@@ -118,6 +120,7 @@ def parse_config(raw: Any) -> Config:
             continue
         out = row.get("out")
         value = row.get("value")
+        negative = row.get("negative")
         toggles.append(Toggle(
             id=tid,
             name=_str(row.get("name")) or tid,
@@ -129,6 +132,7 @@ def parse_config(raw: Any) -> Config:
             upstream=row.get("upstream") is True,
             value=value if isinstance(value, str) else "",
             visible=row.get("visible") is True,
+            negative=negative.strip() if isinstance(negative, str) else "",
         ))
     return Config(
         mode=mode,
@@ -257,6 +261,16 @@ def resolve(cfg: Config) -> dict[str, str]:
         picked = next((t for t in cfg.toggles if eff[t.id]), None)
         values[cfg.group_var] = (picked.value or picked.name) if picked else ""
     return values
+
+
+def picked_negative(cfg: Config) -> str:
+    """Pick one: the picked toggle's negative text ('' when none), the
+    negative the Pick one variable carries (send-to-negative)."""
+    if cfg.mode != "one" or not cfg.group_var or not VAR_RE.match(cfg.group_var):
+        return ""
+    eff = effective(cfg)
+    picked = next((t for t in cfg.toggles if eff[t.id]), None)
+    return picked.negative if picked else ""
 
 
 def internal_vars(cfg: Config) -> set[str]:
