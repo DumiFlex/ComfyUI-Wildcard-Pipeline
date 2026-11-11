@@ -1,5 +1,5 @@
 {
- "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first).",
+ "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first). A case's optional internal lists the variables kept out of the prompt (internal_vars / internalToggleVars), sorted.",
  "cases": [
   {
    "name": "plain switches",
@@ -749,6 +749,166 @@
     false,
     false,
     true
+   ]
+  },
+  {
+   "name": "internal by default, visible shows",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch"
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "b",
+      "var": "b",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "visible": true
+     }
+    ]
+   },
+   "values": {
+    "a": "true",
+    "b": "false"
+   },
+   "outputs": [],
+   "internal": [
+    "a"
+   ]
+  },
+  {
+   "name": "pick one variable shows with group_visible",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "time",
+    "group_visible": true,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "dawn",
+      "var": "dawn",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "value": "at dawn"
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "visible": true
+     }
+    ]
+   },
+   "values": {
+    "dawn": "true",
+    "dusk": "false",
+    "time": "at dawn"
+   },
+   "outputs": [],
+   "internal": [
+    "dawn"
+   ]
+  },
+  {
+   "name": "pick one variable internal without group_visible",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "time",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "dawn",
+      "var": "dawn",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch"
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch"
+     }
+    ]
+   },
+   "values": {
+    "dawn": "false",
+    "dusk": "false",
+    "time": ""
+   },
+   "outputs": [],
+   "internal": [
+    "dawn",
+    "dusk",
+    "time"
+   ]
+  },
+  {
+   "name": "last row writing a variable decides internal",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "a",
+      "var": "a",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "visible": true
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "a2",
+      "var": "a",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch"
+     }
+    ]
+   },
+   "values": {
+    "a": "false"
+   },
+   "outputs": [],
+   "internal": [
+    "a"
    ]
   }
  ]

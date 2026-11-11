@@ -21,6 +21,8 @@ def test_corpus(case):
     assert len(vals) == toggles.MAX_OUTPUTS
     assert vals[:n] == case["outputs"]
     assert not any(vals[n:])
+    if "internal" in case:
+        assert sorted(toggles.internal_vars(cfg)) == case["internal"]
 
 
 @pytest.mark.parametrize(

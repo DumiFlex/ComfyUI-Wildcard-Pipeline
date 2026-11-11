@@ -29,6 +29,7 @@ import Input from "@/kit/Input.vue";
 import { computed, ref, watch } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import RichTextInput from "../../manager/components/RichTextInput.vue";
+import { INLINE_PICKS_NOTE, hasInlinePicks } from "../context/editors/_shared/preview-tokens";
 import Button from "@/kit/Button.vue";
 import ListRow from "@/kit/ListRow.vue";
 import ModalShell from "@/kit/ModalShell.vue";
@@ -178,6 +179,9 @@ watch(
 );
 
 const templateValue = computed(() => draftTemplate.value);
+/** The injector writes text as it is, with no seed: say so when an inline
+ *  pick would otherwise look like it rolls. */
+const inlinePicks = computed(() => hasInlinePicks(draftTemplate.value) || hasInlinePicks(draftNegative.value));
 
 const isDirty = computed(() => {
   if (draftBinding.value !== props.row.binding) return true;
@@ -470,6 +474,9 @@ function onKeydown(ev: KeyboardEvent): void {
             {{ refCount }} refs<span v-if="unknownRefCount > 0"> · {{ unknownRefCount }} unknown</span>
           </span>
         </div>
+        <p v-if="inlinePicks" class="wp-inline-picks-note" data-test="ibm-inline-picks">
+          <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ INLINE_PICKS_NOTE }}
+        </p>
 
       </section>
 
@@ -719,6 +726,15 @@ function onKeydown(ev: KeyboardEvent): void {
 }
 .ibm__template::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
 
+.wp-inline-picks-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--wp-amber, var(--wp-warn));
+}
 .ibm__detected {
   display: flex;
   align-items: center;

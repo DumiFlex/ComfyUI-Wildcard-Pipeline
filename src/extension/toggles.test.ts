@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 import corpus from "../../tests/fixtures/toggles-corpus.json";
 import {
+  collectUpstreamKinds,
+  collectUpstreamRenderableVariables,
+  collectUpstreamVariables,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "./graph";
+import {
   MAX_OUTPUTS,
   defaultTogglesConfig,
+  dragRow,
+  visibleRows,
   withUpstream,
   groupsOf,
+  internalToggleVars,
   needsDepth,
   needsLoop,
   newToggle,
@@ -16,6 +26,7 @@ import {
   rowsOf,
   toggleProblems,
   toggleRows,
+  togglesPreviewModules,
   uniqueVar,
   varFromName,
   type ToggleRow,
@@ -38,6 +49,7 @@ describe("toggles corpus (shared with engine/toggles.py)", () => {
       expect(vals).toHaveLength(MAX_OUTPUTS);
       expect(vals.slice(0, c.outputs.length)).toEqual(c.outputs);
       expect(vals.slice(c.outputs.length).some(Boolean)).toBe(false);
+      if ("internal" in c) expect([...internalToggleVars(parsed)].sort()).toEqual(c.internal);
     });
   }
 });
@@ -170,5 +182,97 @@ describe("needs + problems + groups", () => {
     const g = groupsOf(c);
     expect(g.map((x) => [x.label?.id ?? null, x.toggles.map((r) => r.id)])).toEqual([[null, ["a"]], ["L", ["b"]]]);
     expect(rowsOf(g)).toEqual(c.rows);
+  });
+});
+
+describe("toggle variables in the graph walkers", () => {
+  function chain(config: TogglesConfig) {
+    const nodes: LiteNodeLike[] = [];
+    const g = {
+      _nodes: nodes,
+      links: { 10: { id: 10, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => nodes.find((n) => n.id === id) ?? null,
+    } as unknown as LiteGraphLike;
+    nodes.push(
+      {
+        id: 1, type: "WP_Toggles", graph: g,
+        inputs: [{ name: "upstream", link: null }],
+        outputs: [{ name: "context", links: [10], type: "PIPELINE_CONTEXT" }],
+        widgets: [{ name: "wp_toggles", value: JSON.stringify(config) }],
+      },
+      {
+        id: 2, type: "WP_PromptAssembler", graph: g,
+        inputs: [{ name: "context", link: 10 }],
+        outputs: [],
+        widgets: [],
+      },
+    );
+    return { g, asm: nodes[1] };
+  }
+
+  it("keeps internal toggles out of the Assembler and shows the rest", () => {
+    const c = { ...cfg([t("a", "dawn", true), t("b", "dusk", false, { visible: true })], "one"), group_var: "time", group_visible: true as const };
+    const { g, asm } = chain(c);
+    expect(collectUpstreamVariables(g, asm).sort()).toEqual(["dawn", "dusk", "time"]);
+    expect(collectUpstreamRenderableVariables(g, asm).sort()).toEqual(["dusk", "time"]);
+    const kinds = collectUpstreamKinds(g, asm);
+    expect(kinds.time).toBe("toggle");
+    expect(kinds.__wp_internal_flags__).toBe(JSON.stringify({ dawn: true }));
+  });
+
+  it("the Pick one variable is internal without Show in Assembler", () => {
+    const { g, asm } = chain({ ...cfg([t("a", "dawn", true)], "one"), group_var: "time" });
+    expect(collectUpstreamRenderableVariables(g, asm)).toEqual([]);
+  });
+
+  it("the preview splits shown and internal variables", () => {
+    const c = cfg([t("a", "dawn", true), t("b", "dusk", false, { visible: true })]);
+    const steps = togglesPreviewModules({ widgets: [{ name: "wp_toggles", value: JSON.stringify(c) }] });
+    expect(steps.map((s) => [s.instance, (s.entries as { variable_name: string }[]).map((e) => e.variable_name)])).toEqual([
+      [{}, ["dusk"]],
+      [{ internal: true }, ["dawn"]],
+    ]);
+  });
+});
+
+describe("pick_style", () => {
+  it("keeps a known Pick one style and drops radio or junk", () => {
+    expect(parseTogglesConfig({ mode: "one", rows: [], pick_style: "chip" }).pick_style).toBe("chip");
+    expect(parseTogglesConfig({ mode: "one", rows: [], pick_style: "radio" }).pick_style).toBeUndefined();
+    expect(parseTogglesConfig({ mode: "one", rows: [], pick_style: "buttons" }).pick_style).toBeUndefined();
+  });
+  it("keeps visible only as true", () => {
+    const c = parseTogglesConfig({ rows: [{ id: "a", kind: "toggle", name: "a", var: "a", visible: true }, { id: "b", kind: "toggle", name: "b", var: "b", visible: "yes" }] });
+    expect(toggleRows(c).map((r) => r.visible)).toEqual([true, undefined]);
+  });
+});
+
+describe("dragRow (edit view drag across groups)", () => {
+  const L = (id: string, collapsed = false): TogglesConfig["rows"][number] => ({ id, kind: "label", name: id, color: 1, ...(collapsed ? { collapsed: true } : {}) });
+  const ids = (rows: TogglesConfig["rows"]) => rows.map((r) => r.id);
+  const c = cfg([t("a", "a", true), L("L1"), t("b", "b", true), t("c", "c", true), L("L2"), t("d", "d", true)]);
+
+  it("moves a toggle into another group", () => {
+    // a L1 b c L2 d → drag a below L2
+    expect(ids(dragRow(c, 0, 4))).toEqual(["L1", "b", "c", "L2", "a", "d"]);
+  });
+  it("moves a toggle out of a group to the top", () => {
+    expect(ids(dragRow(c, 2, 0))).toEqual(["b", "a", "L1", "c", "L2", "d"]);
+  });
+  it("a label carries its toggles and never splits a group", () => {
+    // drag L2 between b and c: it moves past c, taking d along.
+    expect(ids(dragRow(c, 4, 3))).toEqual(["a", "L1", "b", "c", "L2", "d"]);
+    // drag L2 above L1.
+    expect(ids(dragRow(c, 4, 1))).toEqual(["a", "L2", "d", "L1", "b", "c"]);
+    // drag L1 to the end.
+    expect(ids(dragRow(c, 1, 5))).toEqual(["a", "L2", "d", "L1", "b", "c"]);
+  });
+  it("keeps a folded group's hidden toggles and unfolds on a drop into it", () => {
+    const f = cfg([t("a", "a", true), L("L1", true), t("b", "b", true), L("L2"), t("d", "d", true)]);
+    expect(ids(visibleRows(f))).toEqual(["a", "L1", "L2", "d"]);
+    const out = dragRow(f, 3, 2); // d just below folded L1
+    expect(ids(out)).toEqual(["a", "L1", "b", "d", "L2"]);
+    expect(out[1]).toMatchObject({ id: "L1", collapsed: false });
+    expect(ids(dragRow(f, 1, 3))).toEqual(["a", "L2", "d", "L1", "b"]);
   });
 });
