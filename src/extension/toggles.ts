@@ -19,6 +19,9 @@ export const MAX_OUTPUTS = 16;
 export const TOGGLE_STYLES = ["switch", "checkbox", "buttons", "chip"] as const;
 export type ToggleStyle = (typeof TOGGLE_STYLES)[number];
 export type TogglesMode = "any" | "one";
+/** Pick one's look, one for every row (absent: radio). Frontend only. */
+export const PICK_STYLES = ["radio", "chip", "switch", "checkbox"] as const;
+export type PickStyle = (typeof PICK_STYLES)[number];
 
 export interface ToggleRow {
   id: string;
@@ -48,6 +51,9 @@ export interface ToggleRow {
   hide_var?: true;
   /** Pick one: what the picked variable gets instead of the name (may read `$vars`). */
   value?: string;
+  /** The variable shows in the Assembler and prints in a prompt (the
+   *  globe "internal" button turned off). Absent: internal, for rules only. */
+  visible?: true;
 }
 
 export const TOGGLE_CONTROLS = ["mute", "bypass"] as const;
@@ -74,6 +80,8 @@ export interface TogglesConfig {
   group_visible?: true;
   /** Pick one: an upstream `group_var` naming a toggle picks it. */
   group_upstream?: true;
+  /** Pick one: how every row looks (absent: radio). Row `style` is Any on's. */
+  pick_style?: Exclude<PickStyle, "radio">;
   /** Set by `withUpstream` only, never saved: the toggle the upstream
    *  `group_var` picked, and the toggles upstream set to a yes word. */
   forced?: string;
@@ -227,6 +235,7 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
     if (o.invert === true) t.invert = true;
     if (o.hide_var === true) t.hide_var = true;
+    if (o.visible === true) t.visible = true;
     const groups = Array.isArray(o.groups) ? o.groups.map(str).filter(Boolean) : [];
     if (groups.length) t.groups = [...new Set(groups)];
     rows.push(t);
@@ -239,6 +248,9 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
   };
   if (d.group_visible === true) cfg.group_visible = true;
   if (d.group_upstream === true) cfg.group_upstream = true;
+  if (PICK_STYLES.includes(d.pick_style as PickStyle) && d.pick_style !== "radio") {
+    cfg.pick_style = d.pick_style as Exclude<PickStyle, "radio">;
+  }
   return cfg;
 }
 
@@ -287,6 +299,19 @@ export function resolveToggles(cfg: TogglesConfig): Record<string, string> {
     values[cfg.group_var] = picked ? picked.value || picked.name : "";
   }
   return values;
+}
+
+/** Variables the node writes that stay out of the prompt (mirror of
+ *  `engine/toggles.py::internal_vars`): a toggle not `visible` (the
+ *  last row writing a variable decides) and the Pick one variable unless
+ *  `group_visible`. */
+export function internalToggleVars(cfg: TogglesConfig): Set<string> {
+  const flags = new Map<string, boolean>();
+  for (const t of toggleRows(cfg)) {
+    if (t.var && VAR_RE.test(t.var)) flags.set(t.var, t.visible !== true);
+  }
+  if (cfg.mode === "one" && cfg.group_var && VAR_RE.test(cfg.group_var)) flags.set(cfg.group_var, !cfg.group_visible);
+  return new Set([...flags].filter(([, v]) => v).map(([k]) => k));
 }
 
 /** Pinned toggles in slot order (1, 2, …): by `out` when those are 1..N
@@ -447,16 +472,81 @@ export function nodeTogglesConfig(node: TogglesNodeLike): TogglesConfig {
   return parseTogglesConfig(node.widgets?.find((w) => w.name === "wp_toggles")?.value ?? "");
 }
 
-/** What the node writes (all internal), for the static chain preview. */
+/** What the node writes, for the static chain preview. */
 export function staticToggleValues(node: TogglesNodeLike): Record<string, string> {
   return resolveToggles(nodeTogglesConfig(node));
 }
 
-/** One internal fixed_values step standing in for the node (preview API). */
+/** The node's variables that stay out of the prompt (graph walkers). */
+export function staticToggleInternals(node: TogglesNodeLike): Set<string> {
+  return internalToggleVars(nodeTogglesConfig(node));
+}
+
+/** fixed_values steps standing in for the node (preview API): one for the
+ *  variables that show in the prompt, one internal one for the rest. */
 export function togglesPreviewModules(node: TogglesNodeLike): Record<string, unknown>[] {
-  const entries = Object.entries(staticToggleValues(node)).map(([variable_name, value]) => ({ variable_name, value }));
-  return [{
-    id: "0de1f0fd", type: "fixed_values", enabled: true,
-    meta: { name: "WP Toggles" }, entries, instance: { internal: true },
-  }];
+  const cfg = nodeTogglesConfig(node);
+  const hidden = internalToggleVars(cfg);
+  const all = Object.entries(resolveToggles(cfg)).map(([variable_name, value]) => ({ variable_name, value }));
+  const step = (id: string, entries: typeof all, internal: boolean): Record<string, unknown> => ({
+    id, type: "fixed_values", enabled: true,
+    meta: { name: "WP Toggles" }, entries, instance: internal ? { internal: true } : {},
+  });
+  const shown = all.filter((e) => !hidden.has(e.variable_name));
+  const kept = all.filter((e) => hidden.has(e.variable_name));
+  const out: Record<string, unknown>[] = [];
+  if (shown.length) out.push(step("0de1f0fe", shown, false));
+  if (kept.length || !shown.length) out.push(step("0de1f0fd", kept, true));
+  return out;
+}
+
+/** Rows the edit view lists, in order: toggles under a folded label are left out. */
+export function visibleRows(cfg: TogglesConfig): TogglesItem[] {
+  return groupsOf(cfg).flatMap((g) => (g.label ? [g.label, ...(g.label.collapsed ? [] : g.toggles)] : g.toggles));
+}
+
+/**
+ * Rows after dragging the edit view's row `from` to `to` (indices into
+ * {@link visibleRows}). A toggle joins the group of the label above where it
+ * lands (a folded one unfolds). A label takes all its toggles along and lands
+ * at a group edge: dropped among another group's toggles, it moves down past
+ * them, so it never splits a group.
+ */
+export function dragRow(cfg: TogglesConfig, from: number, to: number): TogglesItem[] {
+  const shown = visibleRows(cfg);
+  const moved = shown[from];
+  if (!moved || from === to || to < 0 || to >= shown.length) return cfg.rows;
+  const next = [...shown];
+  next.splice(from, 1);
+  next.splice(to, 0, moved);
+  const groups = groupsOf(cfg);
+  const ownToggles = (labelId: string): ToggleRow[] => groups.find((g) => g.label?.id === labelId)?.toggles ?? [];
+  let list = next;
+  let block: ToggleRow[] = [];
+  if (moved.kind === "label") {
+    block = ownToggles(moved.id);
+    const inBlock = new Set(block.map((t) => t.id));
+    list = next.filter((r) => !inBlock.has(r.id) && r.id !== moved.id);
+    let at = next.filter((r) => !inBlock.has(r.id)).indexOf(moved);
+    while (at < list.length && list[at]?.kind === "toggle") at++;
+    list.splice(at, 0, moved);
+  }
+  const out: TogglesItem[] = [];
+  let lastLabel: LabelRow | null = null;
+  for (const r of list) {
+    if (r.kind === "label") {
+      lastLabel = r;
+      out.push(r);
+      if (r.id === moved.id) out.push(...block);
+      else if (r.collapsed) out.push(...ownToggles(r.id));
+      continue;
+    }
+    if (r.id === moved.id && lastLabel?.collapsed) {
+      const i = out.indexOf(lastLabel);
+      out[i] = { ...lastLabel, collapsed: false };
+      lastLabel = out[i] as LabelRow;
+    }
+    out.push(r);
+  }
+  return out;
 }

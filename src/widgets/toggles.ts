@@ -1,4 +1,12 @@
-import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { computed, defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { app } from "#comfyui/app";
+import {
+  collectUpstreamProducers,
+  collectUpstreamVariables,
+  findRootGraph,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "../extension/graph";
 import { attachRowOutputs, queueRowOutputs, type RowOutputNode } from "../extension/row-outputs";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
@@ -14,7 +22,7 @@ import {
 } from "../extension/toggle-control";
 import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { nodeEditors } from "../extension/_stashes";
-import { reactiveFromGraph } from "../extension/reactive";
+import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import {
   effectiveToggles,
   defaultTogglesConfig,
@@ -194,6 +202,27 @@ export function create(node: TogglesHostNode, inputName: string) {
         () => groupTitles(ctlNode.graph),
         (a, b) => a.join("\u0000") === b.join("\u0000"),
       );
+      // `$` suggestions for the Pick one Value: every upstream variable
+      // (the node resolves the value against the whole upstream Context,
+      // internal ones too). `app.graph` is the subgraph while inside one,
+      // so climb from the node's own graph.
+      const rootGraph = (): LiteGraphLike | null => {
+        const start = (node as unknown as { graph?: LiteGraphLike }).graph ?? (app.graph as unknown as LiteGraphLike);
+        return start ? findRootGraph(start) : null;
+      };
+      const upstreamVars = reactiveFromGraph<string[]>(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const g = rootGraph();
+          return g ? collectUpstreamVariables(g, node as unknown as LiteNodeLike) : [];
+        },
+        stringArrayEqual,
+      );
+      const varProducers = computed(() => {
+        void upstreamVars.value;
+        const g = rootGraph();
+        return g ? new Map(Object.entries(collectUpstreamProducers(g, node as unknown as LiteNodeLike))) : undefined;
+      });
       return () => {
         const controls: Record<string, ControlState> = {};
         const eff = effectiveToggles(config.value);
@@ -209,6 +238,8 @@ export function create(node: TogglesHostNode, inputName: string) {
           controls,
           canvasGroups: canvasGroups.value,
           editRequest: editRequest.value,
+          upstreamVars: upstreamVars.value,
+          varProducers: varProducers.value,
           "onUpdate:modelValue": onUpdate,
         });
       };

@@ -155,3 +155,41 @@ def test_upstream_group_var_names_the_pick():
     payload, *_ = _run(cfg, upstream=up).values
     assert payload.context["look"] == "Dusk"
     assert payload.context["dusk"] == "true" and payload.context["night"] == "false"
+
+
+def test_visible_toggle_shows_in_the_assembler():
+    rows = [dict(r) for r in CFG["rows"]]
+    rows[3]["visible"] = True  # Anime look: the globe turned off
+    up = ContextPayload(
+        context={}, debug={}, internals={"__wp_internal_flags__": {"anime_look": True}},
+    )
+    payload, *_ = _run({**CFG, "rows": rows}, upstream=up).values
+    flags = payload.internals["__wp_internal_flags__"]
+    assert "anime_look" not in flags
+    assert flags["use_lora_character"] is True
+    trace = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    assert trace["anime_look"]["internal"] is False
+
+
+def _pick_value(value: str) -> dict:
+    rows = [dict(r) for r in PICK["rows"]]
+    rows[0]["value"] = value
+    return {**PICK, "rows": rows}
+
+
+def test_pick_value_keeps_inline_picks_as_written():
+    up = ContextPayload(context={"time": "noon"}, debug={"node_seed": 5}, internals={})
+    payload, *_ = _run(_pick_value("{golden|soft} $time light"), upstream=up).values
+    assert payload.context["look"] == "{golden|soft} noon light"
+
+
+def test_plain_pick_name_is_kept():
+    payload, *_ = _run({**PICK, "rows": [{**PICK["rows"][1], "on": True}]}).values
+    assert payload.context["look"] == "Night"
+
+
+def test_pick_value_missing_variable_warns():
+    payload, *_ = _run(_pick_value("$nowhere light")).values
+    warns = payload.debug["__wp_warnings__"]
+    assert any(w["type"] == "unknown_var" and "$nowhere" in w["message"] for w in warns)
+    assert all(w["node_id"] == "7" for w in warns)

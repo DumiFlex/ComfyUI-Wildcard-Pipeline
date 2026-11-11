@@ -17,16 +17,24 @@ import WpSelect from "@/kit/WpSelect.vue";
 import Combobox from "@/kit/Combobox.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
-import type { ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
+import { computed, defineAsyncComponent } from "vue";
+import type { PickStyle, ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";
 import { vToggleRow } from "@/kit/toggle-row";
+import type { VarProducerLike } from "../../manager/components/RefChip.vue";
+import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
+
+// Loaded with the edit panel only: the clean view never needs the editor.
+const RichTextInput = defineAsyncComponent(() => import("../../manager/components/RichTextInput.vue"));
 
 interface Choice { value: string; label: string }
 
 const props = defineProps<{
   t: ToggleRow;
-  /** Pick one mode: a radio instead of the style's control. */
+  /** Pick one mode: every row wears `pickStyle` instead of its own style. */
   pickOne: boolean;
+  /** Pick one's look for every row (default radio). */
+  pickStyle?: PickStyle | undefined;
   /** What the control shows (Pick one: picked; Any on: own choice). */
   shownOn: boolean;
   /** The output's value after needs / Pick one. */
@@ -51,6 +59,10 @@ const props = defineProps<{
   controlState?: ControlState | null;
   /** Canvas group titles to offer in the edit panel. */
   canvasGroups?: string[];
+  /** `$` suggestions for the Pick one Value: upstream + the toggles' own. */
+  varSuggestions?: string[];
+  /** Who writes each upstream `$var`, for the Value's chip hover card. */
+  varProducers?: Map<string, VarProducerLike> | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -83,6 +95,26 @@ const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
   { value: "chip", label: "Chip", hint: "A small chip with the name, lit when on" },
 ];
 
+/** `$names` the Pick one Value reads that nothing upstream (nor this node)
+ *  sets. Only with a graph to look at (`varSuggestions` given). */
+const missingVars = computed(() => {
+  const known = props.varSuggestions;
+  if (!props.pickOne || !known || !props.t.value?.includes("$")) return [];
+  const names = tokenize(props.t.value, "assembler")
+    .filter((tok) => tok.kind === "var" && tok.varName)
+    .map((tok) => tok.varName ?? "");
+  return [...new Set(names)].filter((n) => !known.includes(n));
+});
+const missingNote = computed(() => {
+  const list = missingVars.value.map((v) => "$" + v).join(", ");
+  return missingVars.value.length > 1
+    ? `${list}: nothing upstream sets these, so they print nothing`
+    : `${list}: nothing upstream sets this, so it prints nothing`;
+});
+
+/** The control this row draws: Pick one's shared look, else its own style. */
+const look = computed<ToggleStyle | "radio">(() => (props.pickOne ? props.pickStyle ?? "radio" : props.t.style));
+
 function blockedHint(): string {
   return props.blocked ? `Turn on "${props.parentName}" first` : "";
 }
@@ -97,6 +129,12 @@ function subClass(): string {
 function value(ev: Event): string {
   return (ev.target as HTMLInputElement).value.trim();
 }
+function internalHint(): string {
+  const v = `$${props.t.var}`;
+  return props.t.visible
+    ? `${v} shows in the Assembler. Mark internal to keep it for rules only`
+    : `Internal: ${v} is for rules only and stays out of the Assembler. Click to show it there`;
+}
 function flip(): void {
   emit("set-on", !props.shownOn);
 }
@@ -106,12 +144,12 @@ function flip(): void {
   <div class="wp-tgr" :style="indent ? { marginLeft: `${indent}px` } : undefined">
     <div
       class="wp-tgr__row"
-      :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': t.style === 'chip' && !pickOne, 'is-editing': editing }"
+      :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing }"
       :data-wp-out="t.pin && t.out ? `toggle_${t.out}` : undefined"
       :data-wp-socket="t.control ? ctlInputName(t.id) : undefined"
       :data-test="`tg-row-${t.id}`"
     >
-      <template v-if="t.style === 'chip' && !pickOne">
+      <template v-if="look === 'chip'">
         <span v-tooltip="blocked ? blockedHint() : t.var ? `$${t.var}` : ''" class="wp-tgr__chip">
           <WpSwitch
             :model-value="shownOn"
@@ -145,7 +183,7 @@ function flip(): void {
             :aria-label="controlState.hint"
           />
         </span>
-        <span v-if="editable || parentName || !t.hide_var" class="wp-tgr__sub" :class="subClass()">
+        <span v-if="parentName || !t.hide_var" class="wp-tgr__sub" :class="subClass()">
           <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
           <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
         </span>
@@ -158,6 +196,16 @@ function flip(): void {
         :aria-label="problem"
       />
       <WpIconButton
+        v-if="editable && t.var"
+        icon="pi-globe"
+        tone="accent"
+        :pressed="!t.visible"
+        :label="t.visible ? 'Mark internal' : 'Unmark internal'"
+        :hint="internalHint()"
+        :data-test="`tg-internal-${t.id}`"
+        @click="emit('patch', { visible: t.visible ? undefined : true })"
+      />
+      <WpIconButton
         v-if="editable"
         icon="pi-pencil"
         :pressed="editing"
@@ -165,7 +213,7 @@ function flip(): void {
         :data-test="`tg-edit-${t.id}`"
         @click="emit('edit')"
       />
-      <template v-if="pickOne">
+      <template v-if="look === 'radio'">
         <span
           v-tooltip="shownOn ? 'Picked' : 'Pick this one'"
           role="radio"
@@ -180,16 +228,16 @@ function flip(): void {
           @keydown.enter.prevent.stop="flip"
         />
       </template>
-      <span v-else-if="t.style === 'checkbox'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+      <span v-else-if="look === 'checkbox'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
         <Checkbox
-          :model-value="t.on"
+          :model-value="shownOn"
           :disabled="blocked"
           :aria-label="t.name"
           :data-test="`tg-ctl-${t.id}`"
           @update:model-value="(v: boolean) => emit('set-on', v)"
         />
       </span>
-      <span v-else-if="t.style === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+      <span v-else-if="look === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
         <WpSegmented
           :model-value="t.on ? 'on' : 'off'"
           :options="[{ value: 'on', label: t.on_label || 'On' }, { value: 'off', label: t.off_label || 'Off' }]"
@@ -200,9 +248,9 @@ function flip(): void {
           @update:model-value="(v: string) => emit('set-on', v === 'on')"
         />
       </span>
-      <span v-else-if="t.style === 'switch'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
+      <span v-else-if="look === 'switch'" v-tooltip="blockedHint()" class="wp-tgr__ctl">
         <WpSwitch
-          :model-value="t.on"
+          :model-value="shownOn"
           size="sm"
           :disabled="blocked"
           :aria-label="t.name"
@@ -222,7 +270,7 @@ function flip(): void {
         <Input size="sm" :model-value="t.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="emit('rename', value($event))" />
       </label>
       <label class="wp-tgr__field">
-        <span>Variable <em>true or false, for rules only</em></span>
+        <span>Variable <em>true or false; the globe keeps it internal</em></span>
         <span class="wp-tgr__var-row">
         <Input
           size="sm"
@@ -238,11 +286,11 @@ function flip(): void {
           @keydown.stop
           @change="emit('set-var', value($event).replace(/^\$/, ''))"
         />
-        <span v-tooltip="'Show the $variable under the name in the clean view'" v-toggle-row class="wp-tgr__check">
+        <span v-tooltip="'Show the $variable under the name'" v-toggle-row class="wp-tgr__check">
           <Checkbox
             :model-value="!t.hide_var"
             size="sm"
-            aria-label="Show in clean view"
+            aria-label="Show the variable under the name"
             data-test="tg-show-var"
             @update:model-value="(v: boolean) => emit('patch', { hide_var: v ? undefined : true })"
           />
@@ -250,31 +298,43 @@ function flip(): void {
         </span>
         </span>
       </label>
-      <label v-if="pickOne" class="wp-tgr__field">
+      <div v-if="pickOne" class="wp-tgr__field">
         <span>Value <em>picked variable gets this, not the name</em></span>
-        <Input
-          size="sm"
+        <RichTextInput
+          class="wp-tgr__value"
           :model-value="t.value ?? ''"
+          surface="combine"
+          multiline
+          :rows="2"
           :placeholder="t.name"
-          spellcheck="false"
+          :var-suggestions="varSuggestions ?? []"
+          :var-producers="varProducers"
+          :graph-aware="!!varProducers"
+          aria-label="Value"
           data-test="tg-value"
-          @keydown.stop
-          @change="emit('patch', { value: ($event.target as HTMLInputElement).value || undefined })"
+          @update:model-value="(v: string) => emit('patch', { value: v.trim() ? v : undefined })"
         />
-      </label>
+        <p v-if="missingVars.length" class="wp-tgr__note" data-test="tg-missing-vars">
+          <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ missingNote }}
+        </p>
+        <p v-if="hasInlinePicks(t.value ?? '')" class="wp-tgr__note" data-test="tg-inline-picks">
+          <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ INLINE_PICKS_NOTE }}
+        </p>
+      </div>
       <div class="wp-tgr__field">
-        <span>Style</span>
+        <span>Style <em v-if="pickOne">Pick one sets every row's look at the top</em></span>
         <WpSegmented
           :model-value="t.style"
           :options="STYLES"
           size="sm"
           block
+          :disabled="pickOne"
           aria-label="Style"
           test-prefix="tg-style"
           @update:model-value="(v: ToggleStyle) => emit('patch', { style: v })"
         />
       </div>
-      <div v-if="t.style === 'buttons'" class="wp-tgr__two">
+      <div v-if="t.style === 'buttons' && !pickOne" class="wp-tgr__two">
         <label class="wp-tgr__field">
           <span>On word</span>
           <Input size="sm" :model-value="t.on_label ?? ''" placeholder="On" data-test="tg-on-label" @keydown.stop @change="emit('patch', { on_label: value($event) || undefined })" />
@@ -410,9 +470,11 @@ function flip(): void {
   white-space: nowrap;
 }
 .wp-tgr__row.is-blocked .wp-tgr__name b { color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-tgr__chip { display: inline-flex; min-width: 0; }
-.wp-tgr__row.is-chip .wp-tgr__sub { flex: 1; }
-.wp-tgr__row.is-chip:not(:has(.wp-tgr__sub)) .wp-tgr__chip { margin-right: auto; }
+/* A chip spans the row (one chip per row, so a narrow one looked lost and
+ * was a small target); the needs line and icons keep their size after it. */
+.wp-tgr__chip { display: flex; flex: 1 1 0; min-width: 0; }
+.wp-tgr__chip :deep(.wp-switch--chip) { width: 100%; min-width: 0; justify-content: center; }
+.wp-tgr__row.is-chip .wp-tgr__sub { flex: 0 1 auto; max-width: 50%; }
 .wp-tgr__sub {
   display: inline-flex;
   align-items: center;
@@ -438,6 +500,7 @@ function flip(): void {
 .wp-tgr__var-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-tgr__var-row .wp-tgr__var { flex: 1 1 0; min-width: 80px; }
 .wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgr__note { margin: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10.5px; line-height: 1.4; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__ctl { display: inline-flex; flex: none; }
 .wp-tgr__radio {

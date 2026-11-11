@@ -1,6 +1,6 @@
 """WP_Toggles — one node for many on/off switches.
 
-Each toggle writes ``"true"`` / ``"false"`` to its own internal variable, and
+Each toggle writes ``"true"`` / ``"false"`` to its own variable, and
 a pinned toggle also has a plain BOOLEAN output. ComfyUI V3 has no dynamic
 outputs, so the schema declares the context plus :data:`MAX_OUTPUTS`
 BOOLEANs; the frontend (``src/widgets/toggles.ts``) shows only the pinned ones
@@ -68,7 +68,15 @@ class WPToggles(io.ComfyNode):
         group = cfg.group_var if cfg.mode == "one" else ""
         if group in values and ("$" in values[group] or "{" in values[group]):
             # A pick's value may read upstream variables and the toggles' own.
-            values[group] = template.resolve_variables(values[group], {**upstream_ctx, **values})
+            # Inline {a|b} picks need a seed the node doesn't have, so they
+            # stay as written (the Assembler's seedless surface), like the
+            # Context Injector's templates; the editor warns about them.
+            value_warnings: list = []
+            values[group] = template.resolve_variables(
+                values[group], {**upstream_ctx, **values, "__wp_warnings__": value_warnings},
+            )
+        else:
+            value_warnings = []
 
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = upstream.internals if upstream is not None else {}
@@ -85,13 +93,15 @@ class WPToggles(io.ComfyNode):
             out_internals[negatives.NEG_KEY] = {
                 k: v for k, v in neg_table.items() if k not in values
             }
-        # Toggle variables are for rules, never for the prompt: always
-        # internal. The Pick one variable may be shown (`group_visible`).
-        hidden_vars = [k for k in values if not (k == group and cfg.group_visible)]
+        # Each toggle chooses whether its variable shows in the Assembler
+        # (`visible`); the Pick one variable shows with `group_visible`.
+        hidden_vars = toggles.internal_vars(cfg)
         flags = dict(out_internals.get("__wp_internal_flags__") or {})
-        flags.update({k: True for k in hidden_vars})
-        if group and cfg.group_visible:
-            flags.pop(group, None)
+        for k in values:
+            if k in hidden_vars:
+                flags[k] = True
+            else:
+                flags.pop(k, None)
         if flags or "__wp_internal_flags__" in out_internals:
             out_internals["__wp_internal_flags__"] = flags
         traces = [
@@ -108,6 +118,11 @@ class WPToggles(io.ComfyNode):
         warnings = [
             {"type": "toggles_problem", "severity": "warn", "message": f"WP Toggles: {msg}"}
             for msg in toggles.problems(cfg)
+        ]
+        # What resolving the Pick one value found (a `$name` nothing sets …).
+        warnings += [
+            {**w, "message": f"WP Toggles value: {w.get('message', '')}"}
+            for w in value_warnings if isinstance(w, dict)
         ]
         if cfg.mode == "one" and not cfg.forced and len(cfg.upstream_on) > 1:
             names = [t.name for t in cfg.toggles if t.id in cfg.upstream_on]

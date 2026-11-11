@@ -53,9 +53,21 @@ import VarToken from "../../../components/docs/VarToken.vue";
     <DocSection title="Editing a toggle">
       <DocFields node="WP_Toggles" group="edit" />
       <Banner tone="info" note>
-        Drag the grip to reorder. A label moves with its toggles. Moving a row never re-points a wire:
+        Drag the grip to reorder. A toggle dropped under a label joins that group (a folded one
+        opens), and one dropped above the first label leaves its group. A label moves with its
+        toggles. Moving a row never re-points a wire:
         each output stays with its toggle.
       </Banner>
+    </DocSection>
+
+    <DocSection title="Use a toggle in the prompt">
+      <p>
+        A toggle's variable is internal by default: rules read it, but the Assembler doesn't offer
+        it, since <code>true</code> or <code>false</code> rarely belongs in a prompt. To print it, open
+        the edit view and turn off the globe on its row. In Pick one, <b>Show in Assembler</b> does the
+        same for the picked variable, so <VarToken>$time</VarToken> can print the picked toggle's
+        <b>Value</b>.
+      </p>
     </DocSection>
 
     <DocSection title="Mute or bypass nodes">
@@ -85,7 +97,9 @@ import VarToken from "../../../components/docs/VarToken.vue";
         One toggle is on. Which one, first match wins: the toggle the upstream picked variable
         names (with <b>Upstream can pick</b>), then the first toggle upstream set to a yes word,
         then the first one you switched on. The picked variable gets the toggle's
-        <b>Value</b>, or its name; it is internal unless <b>Show in prompt</b> is on.
+        <b>Value</b>, or its name; it is internal unless <b>Show in Assembler</b> is on. All rows share one look here:
+        the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, and
+        each row's own Style is greyed out.
       </p>
     </DocSection>
 

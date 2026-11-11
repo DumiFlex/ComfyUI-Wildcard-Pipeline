@@ -19,7 +19,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { TOGGLES_NODE, staticToggleValues, togglesPreviewModules } from "./toggles";
+import { TOGGLES_NODE, staticToggleInternals, staticToggleValues, togglesPreviewModules } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
@@ -984,9 +984,10 @@ export function collectUpstreamKinds(
       continue;
     }
     if (n.type === TOGGLES_NODE) {
+      const hidden = staticToggleInternals(n);
       for (const v of Object.keys(staticToggleValues(n))) {
         kinds[v] = "toggle";
-        flagInternal(v, true);
+        flagInternal(v, hidden.has(v));
       }
       continue;
     }
@@ -1260,7 +1261,8 @@ export function collectUpstreamProducers(
     }
 
     if (n.type === TOGGLES_NODE) {
-      for (const v of Object.keys(staticToggleValues(n))) write(v, { kind: "toggle", nodeId, nodeLabel, internal: true });
+      const hidden = staticToggleInternals(n);
+      for (const v of Object.keys(staticToggleValues(n))) write(v, { kind: "toggle", nodeId, nodeLabel, internal: hidden.has(v) });
       continue;
     }
 
@@ -1607,9 +1609,11 @@ function resolveChainStatic(
       continue;
     }
     if (n.type === TOGGLES_NODE) {
+      const hidden = staticToggleInternals(n);
       for (const [k, v] of Object.entries(staticToggleValues(n))) {
         ctx[k] = v;
-        internalKeys.add(k);
+        if (hidden.has(k)) internalKeys.add(k);
+        else internalKeys.delete(k);
       }
       continue;
     }

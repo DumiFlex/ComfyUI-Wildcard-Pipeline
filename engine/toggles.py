@@ -31,10 +31,13 @@ leaves the switch alone.
 ``control`` / ``groups`` (mute or bypass other nodes) are frontend-only: the
 canvas sets node modes when a toggle flips, and the run never sees them.
 
-Every toggle writes ``"true"`` / ``"false"`` to its variable, always
-internal. A pinned toggle (``pin``) also has a BOOLEAN output; ``out`` is its
-output slot (1-based, slot 0 is the context). The frontend keeps ``out``
-unique; :func:`output_values` falls back to row order when it isn't.
+Every toggle writes ``"true"`` / ``"false"`` to its variable. It is
+internal (for rules only) unless the row carries ``visible: true`` (stored
+only as ``true``; the canvas's globe "internal" button turned off), which
+lets the Assembler print it; :func:`internal_vars` lists the hidden ones.
+A pinned toggle (``pin``) also has a BOOLEAN output; ``out`` is its output
+slot (1-based, slot 0 is the context). The frontend keeps ``out`` unique;
+:func:`output_values` falls back to row order when it isn't.
 
 Mirrored in TS at ``src/extension/toggles.ts`` via the shared
 ``tests/fixtures/toggles-corpus.json``. Keep the two in step.
@@ -72,6 +75,7 @@ class Toggle:
     needs: str = ""
     upstream: bool = False
     value: str = ""
+    visible: bool = False
 
 
 @dataclass
@@ -124,6 +128,7 @@ def parse_config(raw: Any) -> Config:
             needs=_str(row.get("needs")),
             upstream=row.get("upstream") is True,
             value=value if isinstance(value, str) else "",
+            visible=row.get("visible") is True,
         ))
     return Config(
         mode=mode,
@@ -252,6 +257,19 @@ def resolve(cfg: Config) -> dict[str, str]:
         picked = next((t for t in cfg.toggles if eff[t.id]), None)
         values[cfg.group_var] = (picked.value or picked.name) if picked else ""
     return values
+
+
+def internal_vars(cfg: Config) -> set[str]:
+    """Variables the node writes that stay out of the prompt: a toggle
+    without ``visible`` (the last row writing a variable decides, as in
+    :func:`resolve`) and the Pick one variable unless ``group_visible``."""
+    flags: dict[str, bool] = {}
+    for t in cfg.toggles:
+        if t.var and VAR_RE.match(t.var):
+            flags[t.var] = not t.visible
+    if cfg.mode == "one" and cfg.group_var and VAR_RE.match(cfg.group_var):
+        flags[cfg.group_var] = not cfg.group_visible
+    return {k for k, v in flags.items() if v}
 
 
 def output_slots(cfg: Config) -> list[Toggle]:
