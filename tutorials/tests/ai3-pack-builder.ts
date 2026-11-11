@@ -1,6 +1,8 @@
 // AI 3: the pack builder. Describe a pack, the recommended settings, Plan (Decide all on questions),
-// the plan, Build (the check plays it), Install as one bundle with Undo.
-import { aiWait, tutorial } from "../tutorial.js";
+// the plan, Build (the check plays it), Install as one bundle with Undo, then the bundle on a Context
+// with the pack's own template in an Assembler, run into a real picture.
+import { StepError } from "watchwright";
+import { aiWait, showcase, showcasing, tutorial } from "../tutorial.js";
 
 const field = (id: string) => `textarea[data-test="${id}"], [data-test="${id}"] textarea, input[data-test="${id}"], [data-test="${id}"] input`;
 
@@ -85,6 +87,11 @@ tutorial(
       }
     });
 
+    // What the library held before Install, to find the pack's bundle and template after it.
+    const before = await t.h.library();
+    const had = new Set([...before.bundles, ...before.templates].map((x) => x.id));
+    let installed = false;
+
     await t.h.step("Install", async () => {
       const install = page.locator('[data-test="pack-install"]');
       if (await install.isEnabled().catch(() => false)) {
@@ -95,6 +102,7 @@ tutorial(
           : "A warning or two can stay: Install puts it in your library as one bundle, and you fix the rest in its editors.");
         await t.click(install);
         await aiWait(t, { quiet: 2000 });
+        installed = true;
         await t.callout("undo", page.locator('[data-test="pack-undo"]'), "One Undo takes it all back", 4);
         await t.waitVoice();
         await t.uncallout("undo");
@@ -104,8 +112,42 @@ tutorial(
       }
     });
 
+    // The pack at work: its bundle on a Context, its template in an Assembler, and a picture.
+    if (installed && showcasing(t)) await t.h.step("Use it", async () => {
+      const after = await t.h.library();
+      const bundle = after.bundles.find((x) => !had.has(x.id));
+      const tpl = after.templates.find((x) => !had.has(x.id));
+      if (!bundle) throw new StepError("Install made no new bundle.");
+      await t.go("/");
+      await t.say("Now use it. On the canvas, a Context takes the whole pack: Add Bundle, and pick it.");
+      const ctx = await t.addNode("WP Context", { x: 420, y: 170 });
+      await t.click(t.node(ctx).locator('[data-testid="open-bundle-picker"]').first());
+      await t.beat(700);
+      const row = page.locator(`[data-testid="bundle-picker-row-${bundle.id}"]`);
+      await t.callout("row", row, "The pack you just built", 6);
+      await t.waitVoice();
+      await t.click(row);
+      await t.uncallout("row");
+      await t.beat(900);
+      const asm = await t.addNode("WP Prompt Assembler", { x: 1000, y: 170 });
+      await t.wire(ctx, "context", asm, "context");
+      if (tpl) {
+        await t.say("The pack also made a prompt template. Load it into the Assembler with the folder button.");
+        await t.click(t.node(asm).locator('[data-test="asm-load-template"]'));
+        await t.beat(800);
+        await t.click(page.locator('[data-test="load-tpl-row"]').filter({ hasText: tpl.name }).first());
+        await t.beat(1200);
+        await t.waitVoice();
+      } else {
+        throw new StepError("The pack installed no template to load.");
+      }
+      await t.say("Run it, and the pack rolls a new tavern scene every time.");
+      await showcase(t, { from: asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, runs: 2, between: () => t.click(t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first()) });
+      await t.waitVoice();
+    });
+
     await t.h.step("Outro", async () => {
-      await t.say("Describe, plan, build, install. Next: web search and tag lookup.");
+      await t.say("Describe, plan, build, install, and run. Next: web search and tag lookup.");
     });
   },
 );
