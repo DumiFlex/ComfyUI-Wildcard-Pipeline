@@ -314,12 +314,13 @@ function onFile(ev: Event): void {
   input.value = "";
   void addFile(file);
 }
-/** The extension's pictures, narrowed by the search box. */
+/** The extension's pictures matching the search box; none until something is typed. */
 const assetQuery = ref("");
 const assetTiles = computed(() => {
   const q = assetQuery.value.trim().toLowerCase();
+  if (!q) return [];
   const origin = typeof window === "undefined" ? "" : window.location.origin;
-  return NOTE_ASSETS.filter((a) => !q || a.label.toLowerCase().includes(q) || a.id.includes(q))
+  return NOTE_ASSETS.filter((a) => a.label.toLowerCase().includes(q) || a.id.includes(q))
     .map((a) => ({ id: a.id, src: assetUrl(a.id, origin) ?? "", alt: a.label, caption: a.label }));
 });
 function onAssetTile(i: number): void {
@@ -606,7 +607,7 @@ function insertIcon(name: string): void {
         noun="pictures"
         test-prefix="note-asset-search"
       />
-      <div class="wp-note-ed__assets" data-test="note-assets">
+      <div v-if="assetQuery.trim()" class="wp-note-ed__assets" data-test="note-assets">
         <ImageGrid
           :images="assetTiles"
           :lightbox="false"

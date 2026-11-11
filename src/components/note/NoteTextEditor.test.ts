@@ -251,8 +251,9 @@ describe("NoteTextEditor pictures", () => {
     const area = w.get('[data-test="note-text"]').element as HTMLTextAreaElement;
     area.setSelectionRange(5, 5);
     await w.get('[data-test="note-fmt-image"]').trigger("click");
-    // Every shipped picture is there, docs screenshots too; the search narrows them.
-    expect(w.findAll('[data-test="note-assets"] .wp-image-grid__open').length).toBe(NOTE_ASSETS.length);
+    // No grid until something is searched; the box says how many there are.
+    expect(w.find('[data-test="note-assets"]').exists()).toBe(false);
+    expect(w.text()).toContain(`${NOTE_ASSETS.length} pictures`);
     await w.get('input[aria-label="Find a picture from the extension"]').setValue("help button");
     const tiles = w.findAll('[data-test="note-assets"] .wp-image-grid__open');
     expect(tiles).toHaveLength(1);

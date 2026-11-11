@@ -114,7 +114,8 @@ const syntax = [
         A note can show pictures: a screenshot of the step it explains, or one the extension ships, such as
         the node toolbar with its <b>?</b> button or any screenshot from these docs. Open <b>Pictures</b> in
         the bar and press <b>Add a picture…</b>, paste or drop a picture straight into the text, or pick one
-        under <b>From the extension</b> (the search box finds it by name). Each one goes on a line of its own
+        under <b>From the extension</b>: type part of its name in the search box and click it in the grid that
+        shows up. Each one goes on a line of its own
         where the caret is, named by what you type in the box (or the picture's name). The panel stays open
         after you add one, so you can set its width right away.
       </p>
