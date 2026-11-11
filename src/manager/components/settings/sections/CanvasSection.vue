@@ -59,11 +59,11 @@ async function commitDepth(): Promise<void> {
 </script>
 
 <template>
-  <p class="wp-set-callout">
+  <Banner tone="accent" size="sm" icon="pi-info-circle" note class="wp-set-callout">
     The same settings as ComfyUI › Settings › Wildcard Pipeline. A change here applies to any canvas tab
     that is open right now, and is saved for the next one. For a live preview, open the display
     playground from ComfyUI's settings panel.
-  </p>
+  </Banner>
   <Banner v-if="canvas.error.value" tone="danger" size="sm" class="wp-set-error" data-test="canvas-settings-error">
     Couldn't reach ComfyUI's settings: {{ canvas.error.value }}
   </Banner>

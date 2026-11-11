@@ -221,11 +221,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <p class="wp-set-callout">
+  <Banner tone="accent" size="sm" icon="pi-info-circle" note class="wp-set-callout">
     Each setting has two values. <b>Manager</b> is for the editors on these pages; <b>Canvas</b> is for the
     node editors in ComfyUI and is the same setting as ComfyUI › Settings › Wildcard Pipeline, kept in step
     both ways while both are open.
-  </p>
+  </Banner>
   <Banner v-if="canvas.error.value" tone="danger" size="sm" class="wp-set-error" data-test="canvas-ac-error">
     Couldn't reach ComfyUI's settings: {{ canvas.error.value }}
   </Banner>

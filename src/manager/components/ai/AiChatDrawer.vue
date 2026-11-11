@@ -884,7 +884,7 @@ onMounted(() => {
           @click="chat.open.value = false"
         />
       </header>
-      <p v-if="modelNote" class="wp-ai-chat__model-note" role="status" data-test="ai-chat-model-note">{{ modelNote }}</p>
+      <Banner v-if="modelNote" tone="info" size="sm" class="wp-ai-chat__model-note" data-test="ai-chat-model-note">{{ modelNote }}</Banner>
 
       <div v-if="showList" class="wp-ai-chat__body" data-test="ai-chat-list-view">
         <AiChatList :current="chat.chatId.value" @pick="pickChat" @deleted="onDeleted" />
@@ -1453,10 +1453,7 @@ onMounted(() => {
   .wp-ai-chat__model { order: 10; flex: 1 1 0; max-width: none; min-width: 0; }
   .wp-ai-chat__think { order: 11; }
 }
-.wp-ai-chat__model-note {
-  margin: 0; padding: 6px 12px; font-size: 12px; color: var(--wp-text-muted);
-  border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2);
-}
+.wp-ai-chat__model-note { margin: 6px 12px; }
 .wp-ai-chat__spacer { flex: 1; }
 .wp-ai-chat__meta {
   display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px;
