@@ -6,9 +6,9 @@
  * `$name.AXIS` reads they answer.
  */
 import Button from "@/kit/Button.vue";
+import CopyButton from "@/kit/CopyButton.vue";
 import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
-import DebugNodeCard, { type NodeEntry } from "./DebugNodeCard.vue";
 import {
   KIND_ICONS,
   NODE_KINDS,
@@ -16,6 +16,7 @@ import {
   kindColor,
   type Kind,
   type NodeInfo,
+  type RawDetail,
   type TraceStep,
   type VarRow,
   type WarningRow,
@@ -35,12 +36,6 @@ const props = defineProps<{
   /** The host can select a node on the canvas. */
   canFocus?: boolean;
 }>();
-
-/** A node card row's "show on node": blink the field that wrote `name`. */
-function showField(sec: Section, name: string): void {
-  const row = sec.rows.find((v) => v.name === name);
-  if (row) emit("show-var", row);
-}
 
 /** The variables grouped by the node that wrote them last: each Loop,
  *  Model Info, Toggles or Injector node gets a card drawn its own way, each
@@ -92,16 +87,92 @@ const sections = computed((): Section[] => {
 });
 const grouped = computed(() => sections.value.length > 1 || sections.value.some((s) => s.kind !== "context" && s.kind !== "upstream"));
 
-function entries(sec: Section): NodeEntry[] {
-  return sec.rows.map((v) => ({
-    key: `var:${v.name}`,
-    name: v.name,
-    value: v.value,
-    internal: v.internal,
-    step: v.writerKey ? props.stepsByKey?.get(v.writerKey) ?? null : null,
-  }));
+// ── Rows from other nodes ────────────────────────────────────────────────
+// Every row keeps the same metrics and everything a Context row shows
+// (multi-pick items, negatives, axes, tags, write count); a node's rows only
+// add how that node works: a switch, a radio mark, a model value, a type.
+function stepOf(v: VarRow): TraceStep | null {
+  return v.writerKey ? props.stepsByKey?.get(v.writerKey) ?? null : null;
+}
+function nodeKindOf(v: VarRow): Kind | null {
+  return v.writerKind && NODE_KINDS.has(v.writerKind) ? v.writerKind : null;
+}
+function boolOf(v: string): boolean | null {
+  const t = v.trim().toLowerCase();
+  if (t === "true") return true;
+  if (t === "false") return false;
+  return null;
+}
+function isPick(v: VarRow): boolean {
+  return !!stepOf(v)?.source.startsWith("Pick one");
+}
+/** A toggle's on/off state (also each pick of a Pick one node); null for
+ *  anything else. A toggle with a value text holds that text (empty while
+ *  off) and its state stays readable as `$name.bool`. */
+function switchOf(v: VarRow): boolean | null {
+  if (v.writerKind !== "toggle" || isPick(v) || v.items) return null;
+  const step = stepOf(v);
+  if (step) return step.toggleBool;
+  return boolOf(v.value);
+}
+function isSwitch(v: VarRow): boolean {
+  return switchOf(v) !== null;
+}
+function hasToggleValue(v: VarRow): boolean {
+  return !!stepOf(v)?.toggleHasValue;
+}
+/** Pick one mode: this node also wrote a Pick one variable. */
+function inPickMode(sec: Section): boolean {
+  return sec.kind === "toggle" && sec.rows.some(isPick);
+}
+/** The source column for a node-written variable: how that node set it. */
+function nodeNote(sec: Section, v: VarRow): string {
+  const step = stepOf(v);
+  switch (v.writerKind) {
+    case "toggle": {
+      const up = step?.source.endsWith("set upstream") ? ", set upstream" : "";
+      if (isPick(v)) return `pick one${up}`;
+      if (!inPickMode(sec)) return `switch${up}`;
+      return `${switchOf(v) ? "picked" : "not picked"}${up}`;
+    }
+    case "loop":
+      return v.name.endsWith("_value") ? "value line" : v.name.endsWith("_total") ? "frames" : "frame";
+    case "model":
+      return step?.source ?? "";
+    default:
+      return "";
+  }
+}
+function injectorType(v: VarRow): string {
+  if (v.writerKind !== "injector") return "";
+  const step = stepOf(v);
+  if (!step) return "";
+  return step.isTemplate ? "TPL" : step.valueType;
+}
+/** The Loop's frame line: frame, seed, sweep combination, value line. */
+function loopDetail(sec: Section): RawDetail | null {
+  if (sec.kind !== "loop") return null;
+  for (const v of sec.rows) {
+    const d = stepOf(v)?.detail;
+    if (d && typeof d.frame === "number") return d;
+  }
+  return null;
+}
+function frameParts(sec: Section): string[] {
+  const d = loopDetail(sec);
+  if (!d) return [];
+  const out = [d.of ? `frame ${d.frame} of ${d.of}` : `frame ${d.frame}`];
+  if (d.bypass) out.push("loop bypassed");
+  if (typeof d.combo === "number") out.push(`combination ${d.combo} / ${d.combos ?? "?"}`);
+  if (typeof d.value_line === "number") out.push(`line ${d.value_line} / ${d.values ?? "?"}`);
+  return out;
+}
+function loopSeed(sec: Section): string {
+  const s = loopDetail(sec)?.seed;
+  return typeof s === "number" ? String(s) : "";
 }
 function sectionWarnings(sec: Section): WarningRow[] {
+  if (sec.kind === "context" || sec.kind === "upstream") return [];
   if (!props.warningsByStep || !props.stepsByKey) return [];
   const out: WarningRow[] = [];
   for (const [key, list] of props.warningsByStep) {
@@ -170,19 +241,17 @@ const nameWidth = computed(() => {
         @click="emit('goto-step', sec.firstKey)"
       >trace</Button>
     </header>
-    <DebugNodeCard
-      v-if="sec.kind !== 'context' && sec.kind !== 'upstream'"
-      :kind="sec.kind"
-      :entries="entries(sec)"
-      :warnings="sectionWarnings(sec)"
-      :uuid-to-name="uuidToName"
-      :uuid-to-kind="uuidToKind"
-      :active-key="ctxActiveKey"
-      :pinned="pinned"
-      :can-focus="canFocus"
-      @show-field="(name) => showField(sec, name)"
-    />
-    <template v-else>
+    <div v-if="frameParts(sec).length" class="wp-dbg-vsec__frame" data-test="dbg-loop-frame">
+      <span v-for="(p, i) in frameParts(sec)" :key="i" :class="{ 'is-lead': i === 0 }">{{ p }}</span>
+      <CopyButton
+        v-if="loopSeed(sec)"
+        :text="loopSeed(sec)"
+        label="Copy this frame's seed"
+        size="sm"
+        variant="ghost"
+        class="wp-dbg-vsec__seed"
+      ><span class="wp-dbg-vsec__seed-label">seed</span>{{ loopSeed(sec) }}</CopyButton>
+    </div>
     <div
       v-for="v in sec.rows"
       :key="v.name"
@@ -203,13 +272,26 @@ const nameWidth = computed(() => {
         <i v-if="v.internal" class="pi pi-eye-slash wp-dbg-flag" title="Internal: downstream modules can read it, the prompt never shows it" />
         <span v-if="v.writeCount > 1" class="wp-dbg-var-row__count" :title="`Written ${v.writeCount} times; the last write wins`">×{{ v.writeCount }}</span>
       </div>
-      <div class="wp-dbg-var-row__value">
-        <ol v-if="v.items" class="wp-dbg-var-row__items" data-test="dbg-var-items">
+      <div class="wp-dbg-var-row__value" :class="{ 'is-model': v.writerKind === 'model' }">
+        <span
+          v-if="isSwitch(v)"
+          class="wp-dbg-var-row__switch"
+          :class="switchOf(v) ? 'is-on' : 'is-off'"
+          :title="hasToggleValue(v) ? `$${v.name}.bool = ${switchOf(v)}` : `$${v.name} = ${v.value}`"
+          data-test="dbg-node-switch"
+        ><span class="wp-dbg-var-row__knob" aria-hidden="true" />{{ switchOf(v) ? "ON" : "OFF" }}</span>
+        <template v-if="isSwitch(v) && !hasToggleValue(v)" />
+        <ol v-else-if="v.items" class="wp-dbg-var-row__items" data-test="dbg-var-items">
           <li v-for="(it, i) in v.items" :key="i">
             <span class="wp-dbg-var-row__idx" :title="`$${v.name}.${i}`">.{{ i }}</span>
             <RichTextPreview :value="it" :uuid-to-name="uuidToName" :uuid-to-kind="uuidToKind" surface="wildcard" />
           </li>
         </ol>
+        <span v-else-if="v.value && v.writerKind === 'model'" class="wp-dbg-var-row__model">{{ v.value }}</span>
+        <span v-else-if="v.value && isPick(v)" class="wp-dbg-var-row__pick">
+          <i class="pi pi-circle-on wp-dbg-var-row__radio" title="The picked value" aria-hidden="true" />
+          <RichTextPreview :value="v.value" :uuid-to-name="uuidToName" :uuid-to-kind="uuidToKind" surface="wildcard" />
+        </span>
         <RichTextPreview
           v-else-if="v.value"
           :value="v.value"
@@ -217,7 +299,7 @@ const nameWidth = computed(() => {
           :uuid-to-kind="uuidToKind"
           surface="wildcard"
         />
-        <span v-else class="wp-dbg-var-row__empty">empty</span>
+        <span v-else class="wp-dbg-var-row__empty">{{ v.writerKind === "model" ? "not detected" : isPick(v) ? "nothing picked" : isSwitch(v) ? "empty while off" : "empty" }}</span>
         <div
           v-for="(n, i) in v.negatives"
           :key="`neg-${i}`"
@@ -229,7 +311,10 @@ const nameWidth = computed(() => {
           <span class="wp-dbg-var-row__neg-text">{{ n.text }}</span>
           <span v-if="n.source" class="wp-dbg-var-row__neg-src" data-test="dbg-var-neg-src">· {{ n.source }}</span>
         </div>
-        <div v-if="v.axes.length || v.tags.length" class="wp-dbg-var-row__extra">
+        <div v-if="v.axes.length || v.tags.length || hasToggleValue(v)" class="wp-dbg-var-row__extra">
+          <span v-if="hasToggleValue(v)" class="wp-dbg-var-row__axis" data-test="dbg-var-bool" :title="`$${v.name}.bool`">
+            <code>.bool</code> {{ switchOf(v) ? "true" : "false" }}
+          </span>
           <span v-for="a in v.axes" :key="a.axis" class="wp-dbg-var-row__axis" data-test="dbg-var-axis" :title="`$${v.name}.${a.axis}`">
             <code>.{{ a.axis }}</code> {{ a.value || "—" }}
           </span>
@@ -246,11 +331,22 @@ const nameWidth = computed(() => {
         @click="emit('goto-step', v.writerKey)"
       >
         <i :class="['wp-dbg-var-row__src-icon', KIND_ICONS[v.writerKind ?? 'unknown']]" aria-hidden="true" />
-        <span class="wp-dbg-var-row__src-name">{{ writerLabel(v) }}</span>
+        <span v-if="injectorType(v)" class="wp-dbg-var-row__type" data-test="dbg-node-type">{{ injectorType(v) }}</span>
+        <span class="wp-dbg-var-row__src-name" :data-test="nodeKindOf(v) ? 'dbg-node-source' : undefined">{{ nodeKindOf(v) ? nodeNote(sec, v) || writerLabel(v) : writerLabel(v) }}</span>
       </Button>
       <span v-else class="wp-dbg-var-row__src wp-dbg-var-row__src--upstream" title="Came in from upstream, no module in this trace wrote it">upstream</span>
     </div>
-    </template>
+    <div
+      v-for="w in sectionWarnings(sec)"
+      :key="`w-${w.key}`"
+      class="wp-dbg-vsec__warn"
+      :class="`is-${w.severity}`"
+      data-test="dbg-node-warning"
+    >
+      <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+      <span class="wp-dbg-vsec__warn-label">{{ w.label }}</span>
+      <span class="wp-dbg-vsec__warn-msg">{{ w.message }}</span>
+    </div>
    </section>
   </div>
 </template>
@@ -318,6 +414,64 @@ const nameWidth = computed(() => {
 }
 .wp-dbg-var-row__src.wp-btn:hover .wp-dbg-var-row__src-name { color: var(--wp-text); text-decoration: underline; }
 .wp-dbg-var-row__src-name { overflow: hidden; text-overflow: ellipsis; }
+
+/* Rows from other nodes: the same row, with how that node works. */
+.wp-dbg-var-row__value.is-model { font: 600 11.5px/1.5 var(--wp-font-mono); color: var(--wp-dbg-kind); }
+.wp-dbg-var-row__model { overflow-wrap: anywhere; }
+.wp-dbg-var-row__pick { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
+.wp-dbg-var-row__radio { font-size: 9px; color: var(--wp-dbg-kind); }
+.wp-dbg-var-row__value:has(> .wp-dbg-var-row__switch + :not(.wp-dbg-var-row__neg, .wp-dbg-var-row__extra)) .wp-dbg-var-row__switch { margin-right: 8px; }
+.wp-dbg-var-row__switch { display: inline-flex; align-items: center; gap: 5px; font: 700 10px/1.5 var(--wp-font-sans); letter-spacing: 0.04em; color: var(--wp-text-dim); }
+.wp-dbg-var-row__switch.is-on { color: var(--wp-dbg-kind); }
+.wp-dbg-var-row__knob {
+  position: relative; width: 18px; height: 10px; flex: none;
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
+  background: var(--wp-bg-4, var(--wp-border-strong));
+}
+.wp-dbg-var-row__knob::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px;
+  border-radius: min(50%, var(--wp-radius-cap, 999px));
+  background: var(--wp-text-dim);
+}
+.wp-dbg-var-row__switch.is-on .wp-dbg-var-row__knob { background: color-mix(in oklab, var(--wp-dbg-kind) 70%, transparent); }
+.wp-dbg-var-row__switch.is-on .wp-dbg-var-row__knob::after { left: 10px; background: var(--wp-bg); }
+.wp-dbg-var-row__type {
+  font: 600 9px/1 var(--wp-font-mono);
+  padding: 2px 4px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
+  color: var(--wp-dbg-kind);
+  background: color-mix(in oklab, var(--wp-dbg-kind) 14%, transparent);
+}
+.wp-dbg-vsec__frame {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+  padding: 3px 6px;
+  font: 500 10.5px/1.6 var(--wp-font-sans);
+  color: var(--wp-text-dim);
+  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--wp-dbg-kind) 70%, transparent);
+}
+.wp-dbg-vsec__frame .is-lead { color: var(--wp-dbg-kind); font-weight: 600; }
+.wp-copy-btn.wp-dbg-vsec__seed {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  height: auto; min-height: 0;
+  background: transparent; border: 0; padding: 0;
+  color: var(--wp-text-muted);
+  font: 500 10.5px/1.6 var(--wp-font-mono);
+  cursor: pointer;
+}
+.wp-copy-btn.wp-dbg-vsec__seed:hover { color: var(--wp-text); }
+.wp-dbg-vsec__seed-label { color: var(--wp-text-dim); font-family: var(--wp-font-sans); }
+.wp-dbg-vsec__warn {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px;
+  padding: 3px 6px 4px;
+  font-size: 10.5px; color: var(--wp-warn);
+  box-shadow: inset 2px 0 0 var(--wp-warn);
+}
+.wp-dbg-vsec__warn.is-error { color: var(--wp-red); box-shadow: inset 2px 0 0 var(--wp-red); }
+.wp-dbg-vsec__warn.is-info { color: var(--wp-text-muted); box-shadow: inset 2px 0 0 var(--wp-border-strong, var(--wp-border)); }
+.wp-dbg-vsec__warn .pi { font-size: 9px; }
+.wp-dbg-vsec__warn-label { font-weight: 600; }
+.wp-dbg-vsec__warn-msg { color: var(--wp-text-muted); }
 .wp-dbg-var-row__src--upstream { cursor: default; font-style: italic; }
 .wp-dbg-var-row__src-icon { font-size: 9px; flex: none; color: var(--wp-dbg-kind); }
 .wp-dbg-var-row__src.wp-btn :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }

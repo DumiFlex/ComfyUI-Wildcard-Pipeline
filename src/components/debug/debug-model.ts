@@ -116,6 +116,12 @@ export interface RawTraceEntry {
   constraint_target?: string;
   /** WP Toggles: "upstream" when an upstream variable set the switch. */
   source?: string;
+  /** WP Toggles: the toggle's on/off state (what `$name.bool` reads). */
+  bool?: boolean;
+  /** WP Toggles: the row wrote the toggle's value text, not true/false. */
+  has_value?: boolean;
+  /** WP Toggles: the negative it filed for its variable. */
+  negative?: string;
   error?: string | { type?: string; message?: string } | null;
   detail?: RawDetail;
 }
@@ -196,6 +202,11 @@ export interface TraceStep {
   /** Node rows (Model Info, Toggles, Context Loop): where the value came
    *  from, in words ("from the model", "set upstream", "frame 3 of 8"). */
   source: string;
+  /** Toggle rows: on/off (`$name.bool`), null for other rows and Pick one. */
+  toggleBool: boolean | null;
+  /** Toggle rows: the variable holds the toggle's value text (empty while
+   *  off) instead of true/false. */
+  toggleHasValue: boolean;
   isTemplate: boolean;
   detail: RawDetail | null;
   refs: RefRow[];
@@ -510,6 +521,9 @@ function negativeSourceLabel(variable: string, source: string, carriers: Map<str
   const carrier = carriers.get(source);
   if (carrier) return carrier;
   if (source === "injector") return "Injector";
+  // WP Toggles files a toggle's (or Pick one's) negative under the variable
+  // it writes, so it is the variable's own.
+  if (source === "WP_Toggles") return "";
   if (source === "derivation") return "derivation";
   return `$${source}`;
 }
@@ -555,6 +569,17 @@ export function sourceText(kind: Kind, entry: RawTraceEntry): string {
     return typeof d.of === "number" ? `frame ${d.frame} of ${d.of}` : `frame ${d.frame}`;
   }
   return "";
+}
+
+/** A toggle row's on/off state: its `bool` field, else a true/false value
+ *  (toggles without a value text). Pick one rows have none. */
+export function toggleBoolOf(kind: Kind, entry: RawTraceEntry): boolean | null {
+  if (kind !== "toggle" || str(entry.type) === "pick") return null;
+  if (typeof entry.bool === "boolean") return entry.bool;
+  const v = typeof entry.value === "string" ? entry.value.trim().toLowerCase() : entry.value;
+  if (v === "true" || v === true) return true;
+  if (v === "false" || v === false) return false;
+  return null;
 }
 
 // ── Build ───────────────────────────────────────────────────────────────
@@ -688,6 +713,8 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       error: errorText(t.error),
       valueType: kind === "injector" ? (isTemplate ? "str" : injectorType).toUpperCase() : "",
       source: sourceText(kind, t),
+      toggleBool: toggleBoolOf(kind, t),
+      toggleHasValue: kind === "toggle" && t.has_value === true,
       isTemplate,
       detail,
       refs: refsByOwner.get(`${nodeId}|${str(t._uid)}`) ?? [],

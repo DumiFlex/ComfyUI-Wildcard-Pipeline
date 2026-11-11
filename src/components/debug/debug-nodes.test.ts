@@ -120,8 +120,8 @@ describe("node rows in the view", () => {
     const secs = w.findAll('[data-test="dbg-var-section"]');
     expect(secs.map((x) => x.attributes("data-kind"))).toEqual(["toggle", "model", "context"]);
     expect(secs[0].find('[data-test="dbg-var-section-head"]').text()).toContain("Moods");
-    expect(secs[0].find(".wp-dbg-nc__switch").classes()).toContain("is-on");
-    expect(secs[1].find(".wp-dbg-nc__value.is-model").text()).toBe("SDXL");
+    expect(secs[0].find(".wp-dbg-var-row__switch").classes()).toContain("is-on");
+    expect(secs[1].find(".wp-dbg-var-row__value.is-model").text()).toBe("SDXL");
     expect(secs[1].find('[data-test="dbg-node-source"]').text()).toBe("from the model");
     expect(secs[2].find('[data-test="dbg-var-section-head"]').text()).toContain("ALPHA");
     expect(secs[2].find('[data-test="dbg-var"]').exists()).toBe(true);
@@ -142,15 +142,39 @@ describe("node rows in the view", () => {
         ctxActiveKey: null, stepsByKey: new Map(m.steps.map((s) => [s.key, s])), canFocus: true,
       },
     });
-    const rows = w.findAll('[data-test="dbg-node-entry"]');
+    const rows = w.findAll('[data-test="dbg-var"]');
     const byName = (n: string) => rows.find((r) => r.text().includes(`$${n}`));
-    expect(byName("warm")?.find(".wp-dbg-nc__switch").classes()).toContain("is-on");
+    expect(byName("warm")?.find(".wp-dbg-var-row__switch").classes()).toContain("is-on");
     expect(byName("warm")?.text()).toContain("picked");
-    expect(byName("cold")?.find(".wp-dbg-nc__switch").classes()).toContain("is-off");
+    expect(byName("cold")?.find(".wp-dbg-var-row__switch").classes()).toContain("is-off");
     expect(byName("cold")?.text()).toContain("not picked");
     expect(byName("mood")?.text()).toContain("pick one");
-    await byName("cold")?.find('[data-test="dbg-node-show"]').trigger("click");
-    expect(w.emitted("show-var")?.[0]?.[0]).toMatchObject({ name: "cold" });
+  });
+
+  it("shows a toggle with a value as its text plus its .bool state", () => {
+    const m = buildModel({
+      day: "bright daylight", night: "",
+      __wp_negatives__: { day: [{ text: "dark", pick: null, source: "WP_Toggles" }] },
+      __wp_trace__: [
+        { node: "WP_Toggles", node_id: "8", binding: "day", type: "toggle", value: "bright daylight", bool: true, has_value: true, negative: "dark" },
+        { node: "WP_Toggles", node_id: "8", binding: "night", type: "toggle", value: "", bool: false, has_value: true },
+      ],
+    });
+    const w = mount(DebugVariables, {
+      props: {
+        rows: m.variables, pinned: new Set<string>(), flashed: new Set<string>(), uuidToName: new Map(), uuidToKind: new Map(),
+        ctxActiveKey: null, stepsByKey: new Map(m.steps.map((s) => [s.key, s])),
+      },
+    });
+    const rows = w.findAll('[data-test="dbg-var"]');
+    const day = rows.find((r) => r.text().includes("$day"));
+    const night = rows.find((r) => r.text().includes("$night"));
+    expect(day?.find(".wp-dbg-var-row__switch").classes()).toContain("is-on");
+    expect(day?.text()).toContain("bright daylight");
+    expect(day?.find('[data-test="dbg-var-bool"]').text()).toContain("true");
+    expect(day?.find('[data-test="dbg-var-neg"]').text()).toContain("dark");
+    expect(night?.find(".wp-dbg-var-row__switch").classes()).toContain("is-off");
+    expect(night?.text()).toContain("empty while off");
   });
 
   it("draws node rows in the trace as numbered steps, in run order", () => {
