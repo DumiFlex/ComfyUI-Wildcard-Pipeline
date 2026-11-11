@@ -98,10 +98,12 @@ tutorial(
       }
       await t.beat(600);
       // Each save keeps the version before it in the item's own history (the last three).
-      await t.say("Each save also keeps the version before it. Open Role again: History, at the bottom of the editor, holds its last three versions.");
+      await t.say("Each save also keeps the version before it. Open Role again.");
       await t.go("/wp/wildcards/808878ba/edit");
       await t.beat(900);
       await t.callout("histbtn", page.locator('[data-test="history-btn"]'), "Up to three earlier versions", 3);
+      await t.say("History, at the bottom of the editor, holds its last three versions.");
+      await t.waitVoice();
       await t.click(page.locator('[data-test="history-btn"]'));
       await t.uncallout("histbtn");
       await t.beat(900);

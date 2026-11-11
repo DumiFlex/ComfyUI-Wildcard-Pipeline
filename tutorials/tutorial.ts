@@ -1337,21 +1337,25 @@ export async function jumpTo(t: Tutor, row: number, { scale = 0.85, box = true }
   const title = ((await dockRow.getAttribute("aria-label").catch(() => null)) ?? "").replace(/^Jump to /, "");
   await t.click(dockRow);
   await sleep(1200);
+  const view = page.viewportSize() ?? { width: 1920, height: 1080 };
   const found = await page.evaluate(
-    ({ title, scale }) => {
-      type N = { id: number | string; title?: string; type: string; pos: [number, number] };
+    ({ title, scale, limit }) => {
+      type N = { id: number | string; title?: string; type: string; pos: [number, number]; size: [number, number] };
       const c = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] } } }).canvas;
       const nodes = ((window.app?.graph?.nodes ?? []) as unknown as N[]).filter((n) => /^WP_(Note|Bookmark)$/.test(n.type));
       const n = nodes.find((x) => x.title === title);
       if (!n) return null;
       const { scale: s, offset: o } = c.ds;
-      if (s >= scale - 0.05) return { id: String(n.id), view: null };
       // Keep the note's top-left where it landed: screen = (graph + offset) * scale.
       const px = (n.pos[0] + o[0]) * s;
       const py = (n.pos[1] + o[1]) * s;
-      return { id: String(n.id), view: { scale, offset: [px / scale - n.pos[0], py / scale - n.pos[1]] as [number, number] } };
+      // A tall note would run under the caption: zoom out until it ends above it (not below 0.6).
+      const fits = (k: number) => py + n.size[1] * k <= limit;
+      const want = fits(scale) ? scale : Math.max(0.6, (limit - py) / n.size[1]);
+      if (s >= want - 0.05 && fits(s)) return { id: String(n.id), view: null };
+      return { id: String(n.id), view: { scale: want, offset: [px / want - n.pos[0], py / want - n.pos[1]] as [number, number] } };
     },
-    { title, scale },
+    { title, scale, limit: view.height - CAPTION_BAND - 12 },
   ).catch(() => null);
   if (!found) return null;
   if (found.view) await t.setView(found.view);

@@ -1,6 +1,7 @@
 // Nodes 14: WP Note. A Role Context to explain; a Step card with a docs button and an add-to-library
 // button; a Sticky warning with an icon; a Label with a shipped picture, read by hovering it; double
 // click to edit again; "Also a bookmark" pointed at.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -77,15 +78,22 @@ tutorial(
       await t.click(t.node(note).locator('[data-test="note-look-label"]'));
       await t.click(t.node(note).locator('[data-test="note-tone-plain"]'));
       await t.waitVoice();
-      await t.say("This one has a picture in its text, a small one from the node's toolbar.");
+      await t.say("Give it a title, and text with a picture: a small one from the node's toolbar.");
       await t.fill(title(note), "Need help?", { cps: 14 });
       await t.fill(textArea(note), "Every node's ? button opens its help.\n\n![The ? button](wp:asset/toolbar-help){width=90%}", { cps: 22 });
       await t.beat(400);
       await t.click(t.node(note).locator('[data-test="note-done"]'));
       await t.beat(900);
-      await t.hover(t.node(note).locator('[data-test="note-title-text"]'));
-      await t.beat(1200);
       await t.waitVoice();
+      await t.hover(t.node(note).locator('[data-test="note-title-text"]'));
+      await t.beat(800);
+      // The line is about the picture, so it must be showing (rendered, not the markdown).
+      const pic = t.page.locator('[data-test="note-peek"] img').first();
+      if (!(await pic.waitFor({ state: "visible", timeout: 4000 }).then(() => true, () => false))) throw new StepError("Hovering the label didn't show its picture.");
+      await t.callout("pic", pic, "Shown when you hover", 4);
+      await t.say("Hover it, and its text shows, picture and all.");
+      await t.waitVoice();
+      await t.uncallout("pic");
       await t.moveTo({ x: 900, y: 950 });
       await t.beat(600);
     });

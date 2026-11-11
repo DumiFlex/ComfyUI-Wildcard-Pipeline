@@ -67,18 +67,21 @@ tutorial(
 
     await t.h.step("Use it", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick scene in a Context. Its references to creature and weather became wildcard references, so they roll too.");
+      // The node goes in first, so the line plays over it and the picking.
       const ctx = await t.addNode("WP Context", { x: 400, y: 200 });
+      await t.say("On the canvas, pick scene in a Context. Its references to creature and weather became wildcard references, so they roll too.");
       await t.pickModules(ctx, ["scene"]);
       await t.waitVoice();
-      await t.say("Then an Assembler that prints the scene, in oil paint.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1000, y: 200 });
+      await t.say("Then an Assembler that prints the scene, in oil paint.");
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("$scene, oil painting", { cps: 16 });
       await t.beat(800);
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
+      await t.waitVoice();
       await t.callout("prev", t.node(asm).locator('[data-test="asm-preview"]'), "A creature, in some weather", 6);
+      await t.say("Change the seed: a creature, in some weather, every time.");
       for (let i = 0; i < 3; i++) {
         await t.click(plus);
         await t.beat(1000);
