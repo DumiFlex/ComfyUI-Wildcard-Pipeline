@@ -99,11 +99,15 @@ tutorial(
       await t.say("The prompt has the role and the time, and no light, because the rule never ran.");
       await t.waitVoice();
       await t.uncallout("out");
-      await t.say("Now switch the toggle on. Watch the lighting Context: it's back to normal, so the rule runs again.");
+      await t.say("Now switch the toggle on.");
       await t.click(t.node(tg).locator('[data-test^="tg-ctl-"]').first());
-      await t.beat(800);
-      await t.callout("ctx2", t.node(nodes.ctx2), "On: runs again", 5);
       await t.waitVoice();
+      await t.beat(500);
+      // The box comes up with its own line (it used to come at the end of one and flash past).
+      await t.callout("ctx2", t.node(nodes.ctx2), "On: runs again", 5);
+      await t.say("Watch the lighting Context: it's back to normal, so the rule runs again.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("ctx2");
       await t.say("Run again.");
       await t.run();
