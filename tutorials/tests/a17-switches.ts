@@ -1,5 +1,5 @@
 // Advanced 17: switches, node groups and relays, variables first. Role + Time → a second Context with
-// Lighting from time and "Lights on or off" (made off camera: when $use_lighting is false, $lighting
+// Lighting from time and "Lights on or off" (in the tutorial library: when $use_lighting is false, $lighting
 // is emptied) → Assembler → Preview as Text. A WP Toggles row "Lighting" writes $use_lighting into the
 // chain, so the rule follows the switch. A second WP Toggles in Pick one mode writes $time itself
 // (Dawn / Sunset / Night). Then the same Lighting toggle bypasses the lighting Context instead, a
@@ -7,22 +7,6 @@
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
-// Off camera: the rule that reads the toggle. Checked against the engine: with $use_lighting false
-// the prompt loses its lighting and nothing else ("A painting of a forest ranger at dawn").
-const LIGHTS = {
-  id: "b17a0ff1",
-  type: "derivation",
-  name: "Lights on or off",
-  description: "While $use_lighting is false, the lighting words go.",
-  payload: {
-    rules: [
-      {
-        id: "b17a0ff2",
-        branches: [{ condition: { var: "use_lighting", op: "equals", value: "false" }, action: { target_var: "lighting", mode: "replace", value: "" } }],
-      },
-    ],
-  },
-};
 
 tutorial(
   "A17",
@@ -51,9 +35,6 @@ tutorial(
       return page.getByRole("dialog").last();
     };
 
-    await t.tidyLibrary();
-    const made = await t.h.api("/wp/api/modules", { method: "POST", body: LIGHTS });
-    if (made.status >= 300) throw new StepError(`Couldn't add "Lights on or off" (${made.status}).`);
 
     const nodes = await t.h.step("A workflow with a part to switch", async () => {
       await t.go("/");
@@ -127,7 +108,8 @@ tutorial(
     await t.h.step("A rule reads it", async () => {
       await t.say("Lights on or off is the rule that reads it. Open it.");
       const modal = await editItem(nodes.ctx2, "Lights on or off");
-      await t.callout("rule", modal, "When $use_lighting is false: empty $lighting", 6);
+      // Just the rule's branch, not the whole editor (the dialog-wide box was too wide).
+      await t.callout("rule", modal.locator('[data-test="branch-row-b17a0ff2-0"]'), "When $use_lighting is false: empty $lighting", 6);
       await t.say("When use lighting equals false, it replaces lighting with nothing.");
       await t.waitVoice();
       await t.uncallout("rule");
@@ -274,8 +256,6 @@ tutorial(
       });
       await t.setView({ scale: v.scale * 0.85, offset: v.offset });
       await t.say("Toggles write true or false for your rules, or pick the words themselves. Node Groups and Mode Relay switch whole parts of a workflow. The first example workflow uses all three.");
-      // The item stays until the next video's tidyLibrary: deleting it here, still on camera, made
-      // the canvas show it as missing at the end.
     });
   },
 );

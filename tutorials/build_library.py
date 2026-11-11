@@ -428,10 +428,37 @@ SETTINGS = derivation(
     },
 )
 
+# Items a video uses without building them on screen, so a viewer following along has them too.
+DAYDREAM = wildcard(
+    "9e1a7c42",
+    "Daydream",
+    "daydream",
+    [opt("d1a7c420", "dreaming of being @{aa76ada8#Setting}")],
+    "Reads Setting through an @{} reference, so a constraint on Setting reaches inside it (A09).",
+)
+
+LIGHTS_SWITCH = derivation(
+    "b17a0ff1",
+    "Lights on or off",
+    "b17a0ff2",
+    [branch("use_lighting", "false", "lighting", "replace", "")],
+    "While $use_lighting is false (a WP Toggles switch), the lighting words go (A17).",
+)
+
+SHOT = derivation(
+    "5a0b51e1",
+    "Shot per frame",
+    "a51c0e01",
+    [branch("iteration", "1", "shot", "replace", "wide establishing shot")],
+    "Frame 1 is a wide establishing shot, every other frame a close-up (N05).",
+    otherwise={"action": {"target_var": "shot", "mode": "replace", "value": "close-up"}},
+)
+
 MODULES = [
     ROLE, COLORS, HAIR, EYES, OUTFIT, HELD, SETTING, TIME, FRAMING, GEAR, COMPANION, QUALITY,
     SUBJECT, LIGHTING, SCENE, STYLE, OUTFIT_FITS, HELD_FITS, PLACE_FITS,
     LORA_CHARACTER, LORA_CLOTHES, LORA_STYLE, SETTINGS,
+    DAYDREAM, LIGHTS_SWITCH, SHOT,
 ]  # fmt: skip
 
 # --- Bundles ----------------------------------------------------------------------------------

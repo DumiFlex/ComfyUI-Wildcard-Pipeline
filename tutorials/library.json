@@ -1748,6 +1748,33 @@
      ]
     }
    }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "9e1a7c42",
+   "type": "wildcard",
+   "name": "Daydream",
+   "description": "Reads Setting through an @{} reference, so a constraint on Setting reaches inside it (A09).",
+   "payload": {
+    "var_binding": "daydream",
+    "sub_categories": [],
+    "options": [
+     {
+      "id": "d1a7c420",
+      "value": "dreaming of being @{aa76ada8#Setting}",
+      "weight": 1,
+      "sub_categories": []
+     }
+    ]
+   }
   }
  ],
  "fixed_values": [
@@ -2108,6 +2135,85 @@
          "value": "5"
         }
        ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "b17a0ff1",
+   "type": "derivation",
+   "name": "Lights on or off",
+   "description": "While $use_lighting is false (a WP Toggles switch), the lighting words go (A17).",
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "use_lighting",
+         "op": "equals",
+         "value": "false"
+        },
+        "action": {
+         "target_var": "lighting",
+         "mode": "replace",
+         "value": ""
+        }
+       }
+      ],
+      "id": "b17a0ff2"
+     }
+    ]
+   }
+  },
+  {
+   "category_id": null,
+   "tags": [],
+   "is_favorite": false,
+   "version": 1,
+   "created_at": "2026-11-09T12:00:00Z",
+   "updated_at": "2026-11-09T12:00:00Z",
+   "community_post_slug": null,
+   "community_version_number": null,
+   "content_rating": "safe",
+   "id": "5a0b51e1",
+   "type": "derivation",
+   "name": "Shot per frame",
+   "description": "Frame 1 is a wide establishing shot, every other frame a close-up (N05).",
+   "payload": {
+    "rules": [
+     {
+      "branches": [
+       {
+        "condition": {
+         "var": "iteration",
+         "op": "equals",
+         "value": "1"
+        },
+        "action": {
+         "target_var": "shot",
+         "mode": "replace",
+         "value": "wide establishing shot"
+        }
+       }
+      ],
+      "id": "a51c0e01",
+      "else": {
+       "action": {
+        "target_var": "shot",
+        "mode": "replace",
+        "value": "close-up"
+       }
       }
      }
     ]
