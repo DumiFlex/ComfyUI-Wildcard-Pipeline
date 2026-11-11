@@ -141,7 +141,7 @@ function flip(): void {
 </script>
 
 <template>
-  <div class="wp-tgr" :style="indent ? { marginLeft: `${indent}px` } : undefined">
+  <div class="wp-tgr" :style="indent ? { marginLeft: `${indent}px` } : undefined" :data-wp-vars="t.var || undefined">
     <div
       class="wp-tgr__row"
       :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing }"

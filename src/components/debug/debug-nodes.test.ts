@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import DebugStepDetail from "./DebugStepDetail.vue";
 import DebugVariables from "./DebugVariables.vue";
+import DebugTrace from "./DebugTrace.vue";
 import { WARNING_LABELS, buildModel, kindColor } from "./debug-model";
 
 // WP Debug and the nodes that write context without a module: Context Loop,
@@ -120,9 +121,55 @@ describe("node rows in the view", () => {
     expect(secs.map((x) => x.attributes("data-kind"))).toEqual(["toggle", "model", "context"]);
     expect(secs[0].find('[data-test="dbg-var-section-head"]').text()).toContain("Moods");
     expect(secs[0].find(".wp-dbg-nc__switch").classes()).toContain("is-on");
-    expect(secs[1].find(".wp-dbg-nc__field-value").text()).toBe("SDXL");
+    expect(secs[1].find(".wp-dbg-nc__value.is-model").text()).toBe("SDXL");
     expect(secs[1].find('[data-test="dbg-node-source"]').text()).toBe("from the model");
     expect(secs[2].find('[data-test="dbg-var-section-head"]').text()).toContain("ALPHA");
     expect(secs[2].find('[data-test="dbg-var"]').exists()).toBe(true);
+  });
+
+  it("draws every pick of a Pick one node as its own switch", async () => {
+    const m = buildModel({
+      warm: "true", cold: "false", mood: "warm light",
+      __wp_trace__: [
+        { node: "WP_Toggles", node_id: "8", binding: "warm", type: "toggle", value: "true" },
+        { node: "WP_Toggles", node_id: "8", binding: "cold", type: "toggle", value: "false" },
+        { node: "WP_Toggles", node_id: "8", binding: "mood", type: "pick", value: "warm light" },
+      ],
+    });
+    const w = mount(DebugVariables, {
+      props: {
+        rows: m.variables, pinned: new Set<string>(), flashed: new Set<string>(), uuidToName: new Map(), uuidToKind: new Map(),
+        ctxActiveKey: null, stepsByKey: new Map(m.steps.map((s) => [s.key, s])), canFocus: true,
+      },
+    });
+    const rows = w.findAll('[data-test="dbg-node-entry"]');
+    const byName = (n: string) => rows.find((r) => r.text().includes(`$${n}`));
+    expect(byName("warm")?.find(".wp-dbg-nc__switch").classes()).toContain("is-on");
+    expect(byName("warm")?.text()).toContain("picked");
+    expect(byName("cold")?.find(".wp-dbg-nc__switch").classes()).toContain("is-off");
+    expect(byName("cold")?.text()).toContain("not picked");
+    expect(byName("mood")?.text()).toContain("pick one");
+    await byName("cold")?.find('[data-test="dbg-node-show"]').trigger("click");
+    expect(w.emitted("show-var")?.[0]?.[0]).toMatchObject({ name: "cold" });
+  });
+
+  it("draws node rows in the trace as numbered steps, in run order", () => {
+    const m = buildModel({
+      __wp_trace__: [
+        { id: "aaaa1111", _uid: "u", node_id: "9", type: "wildcard", status: "ok", writes: [{ variable: "mood", value: "calm" }] },
+        { node: "WP_Toggles", node_id: "8", binding: "warm", type: "toggle", value: "true" },
+        { node: "WP_Toggles", node_id: "8", binding: "cold", type: "toggle", value: "false" },
+      ],
+    });
+    const w = mount(DebugTrace, {
+      props: {
+        groups: m.groups, showGroupHeads: true, expanded: new Set<string>(), pinned: new Set<string>(), flashKey: null,
+        warningsByStep: new Map(), uuidToName: new Map(), uuidToKind: new Map(),
+        nodeInfo: () => ({ title: "", codename: "" }), canFocus: false, ctxActiveKey: null,
+      },
+    });
+    expect(w.find('[data-test="dbg-node-card"]').exists()).toBe(false);
+    expect(w.findAll(".wp-dbg-step__order").map((x) => x.text())).toEqual(["1", "2", "3"]);
+    expect(w.findAll(".wp-dbg-step").map((x) => x.attributes("data-kind"))).toEqual(["wildcard", "toggle", "toggle"]);
   });
 });

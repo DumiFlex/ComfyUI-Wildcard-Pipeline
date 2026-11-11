@@ -92,6 +92,17 @@ describe("buildModel", () => {
     expect(m.steps[2].constraint).toMatchObject({ hits: 4, reach: "next 2 targets", cells: 1, only: false });
   });
 
+  it("links a constraint warning to its row by the instance uid", () => {
+    const m = buildModel({
+      __wp_trace__: [{
+        id: "lib00001", _uid: "inst-con-0001", type: "constraint", status: "ok",
+        detail: { uid: "inst-con-0001", reach: { mode: "all" }, cells: 1, exceptions: 0, only: false },
+      }],
+      __wp_warnings__: [{ type: "constraint_never_applied", module_id: "inst-con-0001" }],
+    });
+    expect(m.warnings[0].stepKey).toBe(m.steps[0].key);
+  });
+
   it("leaves a constraint whose ref-only target wasn't drawn ok", () => {
     const m = buildModel({
       __wp_trace__: [{

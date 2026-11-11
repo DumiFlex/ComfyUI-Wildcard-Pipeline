@@ -32,7 +32,15 @@ const props = defineProps<{
   nodeInfo?: (nodeId: string) => NodeInfo;
   stepsByKey?: Map<string, TraceStep>;
   warningsByStep?: Map<string, WarningRow[]>;
+  /** The host can select a node on the canvas. */
+  canFocus?: boolean;
 }>();
+
+/** A node card row's "show on node": blink the field that wrote `name`. */
+function showField(sec: Section, name: string): void {
+  const row = sec.rows.find((v) => v.name === name);
+  if (row) emit("show-var", row);
+}
 
 /** The variables grouped by the node that wrote them last: each Loop,
  *  Model Info, Toggles or Injector node gets a card drawn its own way, each
@@ -43,6 +51,8 @@ interface Section {
   kind: Kind | "context" | "upstream";
   nodeId: string;
   title: string;
+  /** A Context's codename, shown as a chip beside the title. */
+  codename: string;
   rows: VarRow[];
   firstKey: string;
 }
@@ -63,7 +73,8 @@ const sections = computed((): Section[] => {
           ? "From upstream"
           : nodeKind
             ? info?.title || NODE_KIND_TITLES[nodeKind] || nodeKind
-            : info?.codename || info?.title || "Context",
+            : info?.title || "WP Context",
+        codename: v.writerKey && !nodeKind ? info?.codename ?? "" : "",
         rows: [],
         firstKey: v.writerKey ?? "",
       };
@@ -124,6 +135,7 @@ function writerLabel(v: VarRow): string {
 const emit = defineEmits<{
   (e: "goto-step", key: string): void;
   (e: "row-menu", ev: MouseEvent, row: VarRow): void;
+  (e: "show-var", row: VarRow): void;
 }>();
 
 /** One name column for every row, sized to the longest name (capped;
@@ -147,6 +159,7 @@ const nameWidth = computed(() => {
     <header v-if="grouped" class="wp-dbg-vsec__head" data-test="dbg-var-section-head">
       <i :class="['wp-dbg-vsec__icon', sectionIcon(sec)]" aria-hidden="true" />
       <span class="wp-dbg-vsec__title">{{ sec.title }}</span>
+      <span v-if="sec.codename" class="wp-dbg-vsec__codename" data-test="dbg-var-section-codename">{{ sec.codename }}</span>
       <span class="wp-dbg-vsec__count">{{ sec.rows.length }}</span>
       <Button
         v-if="sec.kind !== 'upstream' && sec.firstKey"
@@ -166,6 +179,8 @@ const nameWidth = computed(() => {
       :uuid-to-kind="uuidToKind"
       :active-key="ctxActiveKey"
       :pinned="pinned"
+      :can-focus="canFocus"
+      @show-field="(name) => showField(sec, name)"
     />
     <template v-else>
     <div
@@ -247,6 +262,13 @@ const nameWidth = computed(() => {
 .wp-dbg-vsec__head { display: flex; align-items: center; gap: 6px; padding: 0 4px 4px; font-size: 10px; color: var(--wp-text-dim); }
 .wp-dbg-vsec__icon { font-size: 10px; color: var(--wp-dbg-kind); }
 .wp-dbg-vsec__title { font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-text); }
+.wp-dbg-vsec__codename {
+  font: 600 10.5px/1.5 var(--wp-font-mono);
+  color: var(--wp-text);
+  padding: 0 7px;
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
+  border: 1px solid var(--wp-border);
+}
 .wp-dbg-vsec__count { font: 500 9.5px/1 var(--wp-font-mono); }
 .wp-dbg-vsec__goto.wp-btn { margin-left: auto; height: auto; min-height: 0; padding: 0; font-size: 10px; }
 .wp-dbg-var-row {

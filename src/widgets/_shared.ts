@@ -1,6 +1,6 @@
 import { createApp, effectScope, type App, type Component, type EffectScope } from "vue";
 
-import { nodeCollapseAnimating } from "../extension/_stashes";
+import { nodeCollapseAnimating, nodeWidgetHosts } from "../extension/_stashes";
 import { isVueNodes } from "../extension/renderer";
 import { installClipboardShield } from "./clipboard-shield";
 import { registerOverlapClip } from "./dom-clip";
@@ -226,6 +226,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   host.classList.add("wp-widget");
   host.dataset.wpWidget = widgetName;
   liveHosts.add(host);
+  {
+    let hosts = nodeWidgetHosts.get(node);
+    if (!hosts) nodeWidgetHosts.set(node, (hosts = new Set()));
+    hosts.add(host);
+  }
   host.style.width = "100%";
   host.style.boxSizing = "border-box";
 
@@ -622,6 +627,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     if (unmounted) return;
     unmounted = true;
     liveHosts.delete(host);
+    nodeWidgetHosts.get(node)?.delete(host);
     // Each step guarded so one failing teardown can't strand the rest.
     const steps: Array<() => void> = [
       () => scope.stop(),

@@ -8,7 +8,6 @@ import WpIconButton from "@/kit/WpIconButton.vue";
 import { nextTick, ref, watch } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugStepDetail from "./DebugStepDetail.vue";
-import DebugNodeCard, { type NodeEntry } from "./DebugNodeCard.vue";
 import {
   KIND_ICONS,
   NODE_KINDS,
@@ -38,7 +37,7 @@ const emit = defineEmits<{
   (e: "toggle", key: string): void;
   (e: "goto-step", key: string): void;
   (e: "row-menu", ev: MouseEvent, step: TraceStep): void;
-  (e: "focus-node", nodeId: string): void;
+  (e: "focus-node", nodeId: string, step?: TraceStep): void;
 }>();
 
 // Open rows whose one-line value is cut off in the row. Their detail repeats
@@ -82,7 +81,8 @@ function refName(uuid: string): string {
 function groupLabel(g: TraceGroup): string {
   if (!g.nodeId) return "Chain";
   const info = props.nodeInfo(g.nodeId);
-  return info.codename || info.title || NODE_KIND_TITLES[groupKind(g) ?? "unknown"] || `Node ${g.nodeId}`;
+  // The node's own title; a Context's codename sits beside it as a chip.
+  return info.title || NODE_KIND_TITLES[groupKind(g) ?? "unknown"] || (info.codename ? "WP Context" : `Node ${g.nodeId}`);
 }
 /** The node kind a group came from (Loop, Toggles …), or null for a
  *  Context node, whose rows are modules. */
@@ -91,18 +91,6 @@ function groupKind(g: TraceGroup): Kind | null {
   return k && NODE_KINDS.has(k) ? k : null;
 }
 /** A node group's rows as card entries (each row is one variable). */
-function nodeEntries(g: TraceGroup): NodeEntry[] {
-  return g.steps.map((s) => ({
-    key: s.key,
-    name: s.writes[0]?.variable ?? s.bindings[0] ?? "",
-    value: s.writes[0]?.value ?? "",
-    internal: s.internal,
-    step: s,
-  }));
-}
-function nodeWarnings(g: TraceGroup): WarningRow[] {
-  return g.steps.flatMap((s) => props.warningsByStep.get(s.key) ?? []);
-}
 function groupIcon(g: TraceGroup): string {
   const k = groupKind(g);
   return k ? KIND_ICONS[k] : "pi pi-sitemap";
@@ -113,8 +101,7 @@ function groupColor(g: TraceGroup): string {
 }
 function groupTooltip(g: TraceGroup): string {
   if (!g.nodeId) return "";
-  const info = props.nodeInfo(g.nodeId);
-  return [info.codename ? info.title : "", `node id ${g.nodeId}`].filter(Boolean).join(" · ");
+  return `node id ${g.nodeId}`;
 }
 </script>
 
@@ -123,12 +110,13 @@ function groupTooltip(g: TraceGroup): string {
     <section v-for="(g, gi) in groups" :key="`${g.nodeId}:${gi}`" class="wp-dbg-group">
       <header v-if="showGroupHeads" class="wp-dbg-group__head" data-test="dbg-group-head">
         <i :class="['wp-dbg-group__icon', groupIcon(g)]" :style="{ color: groupColor(g) }" aria-hidden="true" />
+        <span class="wp-dbg-group__title" :title="groupTooltip(g)" data-test="dbg-group-title">{{ groupLabel(g) }}</span>
         <span
-          class="wp-dbg-group__title"
-          :class="{ 'wp-dbg-group__title--codename': !!(g.nodeId && nodeInfo(g.nodeId).codename) }"
-          :title="groupTooltip(g)"
-          data-test="dbg-group-title"
-        >{{ groupLabel(g) }}</span>
+          v-if="g.nodeId && nodeInfo(g.nodeId).codename"
+          class="wp-dbg-group__title wp-dbg-group__title--codename"
+          title="The Context's codename"
+          data-test="dbg-group-codename"
+        >{{ nodeInfo(g.nodeId).codename }}</span>
         <span v-if="g.seed" class="wp-dbg-group__seed" title="Chain seed this node ran with">seed {{ g.seed }}</span>
         <WpIconButton
           v-if="canFocus && g.nodeId"
@@ -138,18 +126,8 @@ function groupTooltip(g: TraceGroup): string {
           @click="emit('focus-node', g.nodeId)"
         />
       </header>
-      <DebugNodeCard
-        v-if="groupKind(g)"
-        :kind="groupKind(g) ?? 'unknown'"
-        :entries="nodeEntries(g)"
-        :warnings="nodeWarnings(g)"
-        :uuid-to-name="uuidToName"
-        :uuid-to-kind="uuidToKind"
-        :flash-key="flashKey"
-        :style="{ '--wp-dbg-kind': groupColor(g) }"
-      />
       <div
-        v-for="s in groupKind(g) ? [] : g.steps"
+        v-for="s in g.steps"
         :key="s.key"
         class="wp-dbg-step"
         :class="[
@@ -268,7 +246,7 @@ function groupTooltip(g: TraceGroup): string {
             :uuid-to-kind="uuidToKind"
             :can-focus="canFocus"
             @goto-step="(k) => emit('goto-step', k)"
-            @focus-node="(id) => emit('focus-node', id)"
+            @focus-node="(id) => emit('focus-node', id, s)"
           />
         </div>
       </div>

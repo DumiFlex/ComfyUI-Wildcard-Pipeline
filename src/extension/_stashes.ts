@@ -134,3 +134,8 @@ export const bookmarkCells: WeakMap<object, { get(): unknown; set(next: unknown)
  *  ComfyUI's selection toolbar calls it. Registered by the widget glue of
  *  each node with an edit view (WP Toggles, WP Bookmark, WP Note). */
 export const nodeEditors: WeakMap<object, () => void> = new WeakMap();
+
+/** Every WP DOM widget host a node owns. WP Debug's "Show node" looks up the
+ *  row it should flash inside them (works in both renderers: the legacy
+ *  renderer keeps DOM widgets in an overlay, not inside a node card). */
+export const nodeWidgetHosts: WeakMap<object, Set<HTMLElement>> = new WeakMap();

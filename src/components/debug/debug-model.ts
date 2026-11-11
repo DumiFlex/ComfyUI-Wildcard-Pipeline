@@ -664,7 +664,11 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     const key = String(i);
     const nodeId = str(t.node_id);
     if (t._uid) stepKeyByOwner.set(`${nodeId}|${t._uid}`, key);
-    if (t.id && !stepKeyByModuleId.has(t.id)) stepKeyByModuleId.set(t.id, key);
+    // Engine warnings name a module by its instance `_uid` (constraints key
+    // their hit counters per instance) or its library id.
+    for (const id of [str(t._uid), str(t.id)]) {
+      if (id && !stepKeyByModuleId.has(id)) stepKeyByModuleId.set(id, key);
+    }
     return {
       key,
       order: i + 1,

@@ -21,6 +21,7 @@ import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";
 import {
   buildModel,
+  NODE_KINDS,
   parseSnapshot,
   stepSearchText,
   unresolvedUuids,
@@ -42,7 +43,7 @@ const props = withDefaults(
     /** Title + codename of the graph node with this id ("" when unknown). */
     nodeInfo?: (nodeId: string) => NodeInfo;
     /** Select + centre a graph node. Omitted in tests / off-canvas. */
-    focusNode?: ((nodeId: string) => void) | null;
+    focusNode?: ((nodeId: string, target?: { uid?: string; vars?: string[] }) => void) | null;
   }>(),
   {
     nodeMode: 0,
@@ -210,8 +211,22 @@ async function gotoStep(key: string): Promise<void> {
   el?.scrollIntoView?.({ block: "nearest" });
 }
 const canFocus = computed(() => typeof props.focusNode === "function");
-function focusNode(id: string): void {
-  props.focusNode?.(id);
+/** Select the node; with a step, also blink the row that step came from
+ *  (a Context module by uid, any other node's field by the variable). */
+function focusNode(id: string, s?: TraceStep): void {
+  if (!s) { props.focusNode?.(id); return; }
+  const uid = s.uid || s.detail?.uid;
+  props.focusNode?.(id, {
+    ...(typeof uid === "string" && uid ? { uid } : {}),
+    vars: [...s.bindings],
+  });
+}
+/** Select the node that wrote `$name` and blink the field that wrote it. */
+function showVar(v: VarRow): void {
+  if (!v.writerNodeId) return;
+  const step = v.writerKey ? stepsByKey.value.get(v.writerKey) : undefined;
+  const uid = step && !NODE_KINDS.has(step.kind) ? step.uid : "";
+  props.focusNode?.(v.writerNodeId, { ...(uid ? { uid } : {}), vars: [v.name] });
 }
 
 // Keep expansions only while the steps they name still exist.
@@ -336,6 +351,9 @@ function openVarMenu(ev: MouseEvent, v: VarRow): void {
     const k = v.writerKey;
     items.push({ label: "Show in trace", icon: "pi-bolt", divider: true, onSelect: () => { void gotoStep(k); } });
   }
+  if (canFocus.value && v.writerNodeId) {
+    items.push({ label: "Show on node", icon: "pi-arrow-up-right", divider: !v.writerKey, onSelect: () => showVar(v) });
+  }
   openMenu(ev, key, items, { icon: "pi-dollar", label: `Variable · $${v.name}` });
 }
 function openStepMenu(ev: MouseEvent, s: TraceStep): void {
@@ -353,7 +371,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   if (s.id) items.push({ label: "Copy module id", icon: "pi-id-card", onSelect: () => { void clipboardWrite(s.id); } });
   if (canFocus.value && s.nodeId) {
     const id = s.nodeId;
-    items.push({ label: "Show node", icon: "pi-arrow-up-right", divider: true, onSelect: () => focusNode(id) });
+    items.push({ label: "Show node", icon: "pi-arrow-up-right", divider: true, onSelect: () => focusNode(id, s) });
   }
   openMenu(ev, s.key, items, { icon: "pi-bolt", label: `Step ${s.order} · ${s.name || s.kindLabel}` });
 }
@@ -468,8 +486,10 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             :node-info="nodeInfo"
             :steps-by-key="stepsByKey"
             :warnings-by-step="warningsByStep"
+            :can-focus="canFocus"
             @goto-step="gotoStep"
             @row-menu="openVarMenu"
+            @show-var="showVar"
           />
           <div v-else class="wp-dbg-empty">
             <i class="pi pi-dollar wp-dbg-empty__icon" aria-hidden="true" />

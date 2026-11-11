@@ -165,6 +165,7 @@ function onDragEnd(): void {
     class="wp-inj-row"
     :data-type="(valueType ?? '').toLowerCase()"
     :data-uid="row._uid"
+    :data-wp-vars="row.binding.trim() || undefined"
     :data-kind="isGeneral ? 'general' : 'socket'"
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
