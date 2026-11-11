@@ -6,6 +6,7 @@
  * (`/wp/api/ai/config`), and the API key is write-only: the page can set or
  * remove it, never read it back.
  */
+import Banner from "@/kit/Banner.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { aiDebugEnabled, setAiDebug } from "../../../api/ai-debug";
@@ -696,8 +697,8 @@ const off = computed(() => !config.value?.enabled);
 </script>
 
 <template>
-  <p v-if="error" class="wp-set-error" role="alert">{{ error }}</p>
-  <p v-if="saveError" class="wp-set-error" role="alert" data-test="ai-save-error">{{ saveError }}</p>
+  <Banner v-if="error" tone="danger" size="sm" class="wp-set-error">{{ error }}</Banner>
+  <Banner v-if="saveError" tone="danger" size="sm" class="wp-set-error" data-test="ai-save-error">{{ saveError }}</Banner>
 
   <div v-if="config" class="wp-ai-set-wrap">
     <div class="wp-ai-set">
@@ -845,11 +846,11 @@ const off = computed(() => !config.value?.enabled);
             <span v-else-if="config.key_set" class="wp-set-pill" data-tone="ok" data-test="ai-key-set">{{ config.key_from_env ? "From environment" : "Key saved" }}</span>
             <span v-else-if="config.key_for_host" class="wp-set-pill" data-tone="warn" data-test="ai-key-elsewhere">Saved for {{ config.key_for_host }}</span>
           </SettingRow>
-          <p v-if="config.key_for_host && !config.key_set" class="wp-ai-set__ctx" role="status" data-test="ai-key-elsewhere-note">
+          <Banner v-if="config.key_for_host && !config.key_set" tone="warn" size="sm" class="wp-ai-set__ctx" data-test="ai-key-elsewhere-note">
             The key was saved for {{ config.key_for_host }}, so it isn't sent to this address. A key
             only ever goes to the address it was given for; paste it again to use it here, or set
             the address back.
-          </p>
+          </Banner>
 
           <SettingRow form label="Test connection" hint="Lists the server's models, asks the chosen one for a tiny JSON answer, and says how much of the model's context a new chat's instructions, tools and library summary take before you type anything." setting-key="ai-test">
             <Button size="sm" :loading="testing" :disabled="off" data-test="ai-test" @click="runTest">Test connection</Button>
@@ -860,21 +861,21 @@ const off = computed(() => !config.value?.enabled);
           <p v-if="prefixLine" class="wp-ai-set__prefix" :data-tone="test?.prefix?.fits === false ? 'warn' : undefined" data-test="ai-prefix">
             {{ prefixLine }}
           </p>
-          <p v-if="test?.context_low" class="wp-ai-set__ctx" role="status" data-test="ai-context-low">
+          <Banner v-if="test?.context_low" tone="warn" size="sm" class="wp-ai-set__ctx" data-test="ai-context-low">
             The model was loaded with {{ Math.round((test.context ?? 0) / 1024) }}k of context. The chat
             needs 16k or more: its instructions, a few turns and the answer don't fit in less. The
             server fixes this when it loads the model, so set the context length there (in LM Studio,
             in the model's load settings) and load it again.
-          </p>
-          <p v-if="test?.embed && !test.embed.ok" class="wp-ai-set__ctx" role="status" data-test="ai-embed-error">
+          </Banner>
+          <Banner v-if="test?.embed && !test.embed.ok" tone="danger" size="sm" class="wp-ai-set__ctx" data-test="ai-embed-error">
             The embedding model didn't answer: {{ test.embed.error }}
-          </p>
-          <p v-else-if="test?.embed?.swapped" class="wp-ai-set__ctx" role="status" data-test="ai-embed-swapped">
+          </Banner>
+          <Banner v-else-if="test?.embed?.swapped" tone="warn" size="sm" class="wp-ai-set__ctx" data-test="ai-embed-swapped">
             Loading the embedding model pushed the chat model out of memory, so every search would
             reload it and throw away what it had read. Ollama keeps only one model loaded here (its
             default on Windows with a Radeon GPU). Set <code>OLLAMA_MAX_LOADED_MODELS=2</code> on the
             Ollama machine and restart it, or turn meaning search off.
-          </p>
+          </Banner>
         </SettingGroup>
 
         <SettingGroup title="How the model runs" :note="perModelNote">
@@ -1375,22 +1376,18 @@ const off = computed(() => !config.value?.enabled);
             />
           </SettingRow>
 
-          <div v-if="webNotice" class="wp-ai-set__ctx" role="note" data-test="ai-web-notice">
-            <p>
-              <strong>What leaves your machine.</strong> A web search sends its words to the engine you
+          <Banner v-if="webNotice" tone="neutral" size="sm" note class="wp-ai-set__ctx" title="What leaves your machine." data-test="ai-web-notice">
+            A web search sends its words to the engine you
               picked; a page read fetches that page; a Danbooru lookup asks Danbooru about one tag. Those
               services' own terms and laws apply, and what you search for and use is up to you. Text from
               the web is handed to the model as data, never as instructions.
-            </p>
-            <Button size="sm" variant="ghost" data-test="ai-web-notice-dismiss" @click="dismissNotice('web')">Got it</Button>
-          </div>
-          <div v-if="alwaysNotice" class="wp-ai-set__ctx" role="note" data-test="ai-always-notice">
-            <p>
-              <strong>No Allow card.</strong> A web page or a library item could ask the model to search
+            <template #actions><Button size="sm" variant="ghost" data-test="ai-web-notice-dismiss" @click="dismissNotice('web')">Got it</Button></template>
+          </Banner>
+          <Banner v-if="alwaysNotice" tone="warn" size="sm" note class="wp-ai-set__ctx" title="No Allow card." data-test="ai-always-notice">
+            A web page or a library item could ask the model to search
               for something you didn't mean to send. With this on, nothing stops that before it goes out.
-            </p>
-            <Button size="sm" variant="ghost" data-test="ai-always-notice-dismiss" @click="dismissNotice('always')">Got it</Button>
-          </div>
+            <template #actions><Button size="sm" variant="ghost" data-test="ai-always-notice-dismiss" @click="dismissNotice('always')">Got it</Button></template>
+          </Banner>
           <p v-if="dismissed.length" class="wp-ai-set__muted">
             <Button variant="link" size="sm" class="wp-ai-set__link" data-test="ai-notices-again" @click="showNoticesAgain">Show dismissed notices again</Button>
           </p>
@@ -1613,16 +1610,7 @@ const off = computed(() => !config.value?.enabled);
 }
 .wp-ai-set__prefix[data-tone="warn"] { color: var(--wp-warn); }
 .wp-ai-set__index { flex: 1 1 200px; min-width: 0; font-size: var(--wp-text-sm); color: var(--wp-text-muted); }
-.wp-ai-set__ctx {
-  margin: 0;
-  padding: var(--wp-space-4) var(--wp-space-6);
-  font-size: var(--wp-text-sm);
-  color: var(--wp-warn);
-  border-top: 1px solid var(--wp-border);
-}
-div.wp-ai-set__ctx { display: flex; align-items: flex-start; gap: var(--wp-space-4); }
-div.wp-ai-set__ctx p { margin: 0; flex: 1; color: var(--wp-text-muted); }
-div.wp-ai-set__ctx strong { color: var(--wp-text); }
+.wp-ai-set__ctx { margin: var(--wp-space-4) var(--wp-space-6); }
 p.wp-ai-set__muted:has(.wp-ai-set__link) { padding: var(--wp-space-2) var(--wp-space-6); }
 
 /* Side cards. */

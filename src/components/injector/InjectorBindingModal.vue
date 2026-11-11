@@ -24,6 +24,7 @@
  * there is no draft buffer, mirroring the lightweight per-row UX of
  * the inline row controls. Save = close.
  */
+import Banner from "@/kit/Banner.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Input from "@/kit/Input.vue";
 import { computed, ref, watch } from "vue";
@@ -474,9 +475,9 @@ function onKeydown(ev: KeyboardEvent): void {
             {{ refCount }} refs<span v-if="unknownRefCount > 0"> · {{ unknownRefCount }} unknown</span>
           </span>
         </div>
-        <p v-if="inlinePicks" class="wp-inline-picks-note" data-test="ibm-inline-picks">
-          <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ INLINE_PICKS_NOTE }}
-        </p>
+        <Banner v-if="inlinePicks" tone="warn" size="sm" class="wp-inline-picks-note" data-test="ibm-inline-picks">
+          {{ INLINE_PICKS_NOTE }}
+        </Banner>
 
       </section>
 
@@ -726,15 +727,7 @@ function onKeydown(ev: KeyboardEvent): void {
 }
 .ibm__template::placeholder { color: var(--wp-text-dim, var(--wp-text3)); }
 
-.wp-inline-picks-note {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 6px 0 0;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--wp-amber, var(--wp-warn));
-}
+.wp-inline-picks-note { margin: 6px 0 0; }
 .ibm__detected {
   display: flex;
   align-items: center;
