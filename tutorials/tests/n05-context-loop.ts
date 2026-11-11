@@ -34,11 +34,18 @@ tutorial(
   async (t) => {
     const page = t.page;
     // A highlight on a Show Any waits until the run's text is in it, not just until the run ends.
+    // The node's text, its fields' values included: innerText skips what a textarea holds, so a
+    // wait on it alone ran to its 15 s limit (a still screen after every run).
+    const textOf = (node: string) =>
+      t.node(node)
+        .evaluate((el) => `${(el as HTMLElement).innerText} ${[...el.querySelectorAll("textarea, input")].map((f) => (f as HTMLInputElement).value).join(" ")}`)
+        .catch(() => "");
     const filled = async (node: string, re: RegExp) => {
       for (let i = 0; i < 60; i++) {
-        if (re.test(await t.node(node).innerText().catch(() => ""))) break;
+        if (re.test(await textOf(node))) break;
         await t.beat(250);
       }
+      if (!re.test(await textOf(node))) t.h.log(`${node} never showed ${re}`);
       await t.beat(400);
     };
     const chip = (loop: string, n: number | "base") => t.node(loop).locator(`[data-test="loop-frame-${n}"]`);

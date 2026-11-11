@@ -174,6 +174,8 @@ tutorial(
         ["Night", "at night"],
       ];
       for (const [i, [name, value]] of rows.entries()) {
+        // The first row at normal speed, the other two the same again: sped up.
+        if (i === 1) await t.speedUp(4);
         if (i === 0) await t.click(t.node(tg2).locator(rowEdit).first());
         else await t.click(t.node(tg2).locator('[data-test="tg-add"]'));
         await t.beat(600);
@@ -186,6 +188,7 @@ tutorial(
         await t.click(t.node(tg2).locator('[data-test="tg-done"]'));
         await t.beat(400);
       }
+      await t.normalSpeed();
       await t.click(t.node(tg2).locator('[data-test="tg-edit-done"]'));
       await t.beat(800);
       await t.deselect();
@@ -248,13 +251,19 @@ tutorial(
     });
 
     await t.h.step("WP Mode Relay", async () => {
-      await t.say("WP Mode Relay chains mutes and bypasses. It watches the nodes wired into it, and when they're muted or bypassed, it does the same to the node group its output goes into.");
+      await t.say("WP Mode Relay chains mutes and bypasses. Wire into it the nodes it should watch.");
       const relay = await t.addNode("WP Mode Relay", { x: 620, y: 780 });
       await t.wire(nodes.ctx2, "context", relay, "node_1");
       await t.beat(800);
-      await t.callout("relay", t.node(relay), "Mute a sampler, and its save branch follows", 6);
       await t.waitVoice();
+      // The box comes up with the line that explains it, after the wiring.
+      await t.callout("relay", t.node(relay), "Mute a sampler, and its save branch follows", 6);
+      await t.say("When the nodes it watches are muted or bypassed, it does the same to the node group its output goes into.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("relay");
+      // Out of the way of the outro caption.
+      await t.moveTo({ x: 1200, y: 500 });
     });
 
     await t.h.step("Outro", async () => {
