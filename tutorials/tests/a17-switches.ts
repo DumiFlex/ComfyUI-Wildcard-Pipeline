@@ -71,11 +71,18 @@ tutorial(
     });
 
     // A highlight on the text waits until the run's prompt is in it.
+    // The node's text, its fields' values included (innerText skips what a textarea holds, so a
+    // wait on it alone ran to its 15 s limit: the long pause after "Run again").
+    const textOf = () =>
+      t.node(nodes.text)
+        .evaluate((el) => `${(el as HTMLElement).innerText} ${[...el.querySelectorAll("textarea, input")].map((f) => (f as HTMLInputElement).value).join(" ")}`)
+        .catch(() => "");
     const shown = async (re: RegExp) => {
       for (let i = 0; i < 60; i++) {
-        if (re.test(await t.node(nodes.text).innerText().catch(() => ""))) break;
+        if (re.test(await textOf())) break;
         await t.beat(250);
       }
+      if (!re.test(await textOf())) t.h.log(`the preview never showed ${re}`);
       await t.beat(400);
     };
 
@@ -93,8 +100,10 @@ tutorial(
       await t.say("The toggle is off, and the lighting Context turns purple: it's bypassed, so the run goes straight past it. Run.");
       await t.waitVoice();
       await t.uncallout("ctx2");
-      await t.run();
-      await shown(/A painting of/);
+      await t.fastForward(async () => {
+        await t.run();
+        await shown(/A painting of/);
+      }, 8);
       await t.callout("out", t.node(nodes.text), "No lighting", 5);
       await t.say("The prompt has the role and the time, and no light, because the rule never ran.");
       await t.waitVoice();
@@ -110,8 +119,10 @@ tutorial(
       await t.beat(400);
       await t.uncallout("ctx2");
       await t.say("Run again.");
-      await t.run();
-      await shown(/moonlight|rim light|morning light/);
+      await t.fastForward(async () => {
+        await t.run();
+        await shown(/moonlight|rim light|morning light/);
+      }, 8);
       await t.callout("out", t.node(nodes.text), "Lighting is back", 5);
       await t.say("And the light is back in the prompt.");
       await t.waitVoice();
