@@ -20,7 +20,7 @@ tutorial(
       await t.beat(400);
     };
     const textDone = async () => {
-      await t.click(t.page.locator('[data-test="node-edit-done"]'));
+      await t.click(t.page.locator('[data-test="note-text-done"]'));
       await t.beat(500);
     };
     const title = (id: string) => t.node(id).locator('input[data-test="note-title"], [data-test="note-title"] input').first();
