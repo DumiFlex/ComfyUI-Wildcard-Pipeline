@@ -24,6 +24,7 @@
  * Pure functions: the renderer (note-markdown.ts) and the editor share them.
  */
 import { PI_ICON_SET } from "@/kit/pi-icons";
+import noteAssets from "./note-assets.json";
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -176,11 +177,11 @@ export function insert(value: string, start: number, end: number, text: string):
 
 // ── pictures ───────────────────────────────────────────────────────────
 
-/** The pictures the extension ships, served from `/wp/images/note/`. A fixed
- *  list: a note can't name any other file. */
-export const NOTE_ASSETS: ReadonlyArray<{ id: string; label: string; file: string; w: number; h: number }> = [
-  { id: "toolbar-help", label: "Node toolbar with the ? help button", file: "toolbar-help.png", w: 610, h: 116 },
-];
+/** The pictures the extension ships, served from `/wp/images/`: the note
+ *  pictures and every docs screenshot (`note-assets.json`, kept in step with
+ *  the files by `note-assets.test.ts`). A fixed list: a note can't name any
+ *  other file. */
+export const NOTE_ASSETS: ReadonlyArray<{ id: string; label: string; file: string; w: number; h: number }> = noteAssets;
 
 export type ImageTarget =
   | { kind: "saved"; id: string }
@@ -204,7 +205,7 @@ export function parseImageTarget(src: string): ImageTarget {
 
 export function assetUrl(id: string, origin: string): string | null {
   const a = NOTE_ASSETS.find((x) => x.id === id);
-  return a ? `${origin}/wp/images/note/${a.file}` : null;
+  return a ? `${origin}/wp/images/${a.file}` : null;
 }
 
 export const IMAGE_WIDTH_MIN = 10;

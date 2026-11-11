@@ -3,11 +3,11 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { ref } from "vue";
 import NoteTextModal from "./NoteTextModal.vue";
 import { NOTE_CONTEXTS } from "./note-actions";
-import type { NoteImage } from "../../extension/note";
+import { defaultNoteConfig, type NoteConfig, type NoteImage } from "../../extension/note";
 
-function make(text = "Hello", images: Record<string, NoteImage> = {}) {
+function make(text = "Hello", images: Record<string, NoteImage> = {}, more: Partial<NoteConfig> = {}, width?: number) {
   return mount(NoteTextModal, {
-    props: { text, images, title: "Read me", look: "card", toneCss: "" },
+    props: { config: { ...defaultNoteConfig(), text, images, ...more }, title: "Read me", width },
     attachTo: document.body,
     global: { provide: { [NOTE_CONTEXTS as symbol]: ref([]) } },
   });
@@ -39,6 +39,30 @@ describe("NoteTextModal", () => {
     expect($('[data-test="note-text-preview"]')?.textContent).not.toContain("**");
     await type("# Steps");
     expect($('[data-test="note-text-preview"]')?.textContent).toContain("Steps");
+    w.unmount();
+  });
+
+  it("previews the note with the node's own settings", async () => {
+    const w = make("Body", {}, { tone: "step", step: 3, look: "sticky", color: "#ff0000" }, 320);
+    await flushPromises();
+    const panel = $('[data-test="note-text-preview"] [data-test="note-panel"]');
+    expect(panel?.classList.contains("wp-note__panel--sticky")).toBe(true);
+    expect($('[data-test="note-text-preview"] [data-test="note-step"]')?.textContent).toBe("3");
+    expect($('[data-test="note-text-preview"] [data-test="note-title-text"]')?.textContent).toBe("Read me");
+    const card = panel?.parentElement;
+    expect(card?.style.width).toBe("320px");
+    expect(card?.style.getPropertyValue("--wp-note-tone")).toBe("#ff0000");
+    w.unmount();
+  });
+
+  it("previews a label as its tag plus the hover card with the text", async () => {
+    const w = make("**Hidden** until hover", {}, { look: "label" });
+    await flushPromises();
+    expect($('[data-test="note-text-preview"] .wp-note__panel--label')?.textContent).toContain("Read me");
+    expect($('[data-test="note-text-preview"] .wp-note__body')).toBeNull();
+    const peek = $('[data-test="note-text-preview"] [data-test="note-peek"]');
+    expect(peek?.textContent).toContain("Hidden until hover");
+    expect($('[data-test="note-peek-edit"]')).toBeNull();
     w.unmount();
   });
 

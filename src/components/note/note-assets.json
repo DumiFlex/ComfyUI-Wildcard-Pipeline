@@ -1,0 +1,373 @@
+[
+  {
+    "id": "toolbar-help",
+    "label": "Node toolbar with the ? help button",
+    "file": "note/toolbar-help.png",
+    "w": 610,
+    "h": 116
+  },
+  {
+    "id": "ai-setup",
+    "label": "AI assistant setup in Settings",
+    "file": "docs/ai-setup.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "assembler-negative",
+    "label": "Assembler with its negative output",
+    "file": "docs/assembler-negative.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "bundles",
+    "label": "A bundle inside a Context",
+    "file": "docs/bundles.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "combine",
+    "label": "Combine editor",
+    "file": "docs/combine.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "conflicts-warning",
+    "label": "Missing variable warning on a Context row",
+    "file": "docs/conflicts-warning.png",
+    "w": 1720,
+    "h": 644
+  },
+  {
+    "id": "constraint-matrix",
+    "label": "Constraint rule matrix",
+    "file": "docs/constraint-matrix.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "context-chaining",
+    "label": "Two chained Contexts into an Assembler",
+    "file": "docs/context-chaining.png",
+    "w": 1720,
+    "h": 644
+  },
+  {
+    "id": "derivation",
+    "label": "Derivation editor",
+    "file": "docs/derivation.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "fixed-values",
+    "label": "Fixed value editor",
+    "file": "docs/fixed-values.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "introduction-graph",
+    "label": "A first Wildcard Pipeline graph",
+    "file": "docs/introduction-graph.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "library-health",
+    "label": "Library health page",
+    "file": "docs/library-health.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "loop-frames",
+    "label": "Context Loop frames",
+    "file": "docs/loop-frames.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "loop-sweep",
+    "label": "Context Loop sweep",
+    "file": "docs/loop-sweep.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "quick-start-graph",
+    "label": "Quick start graph",
+    "file": "docs/quick-start-graph.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "quick-start-starter",
+    "label": "Quick start: the starter library",
+    "file": "docs/quick-start-starter.png",
+    "w": 1720,
+    "h": 1625
+  },
+  {
+    "id": "spa-manager",
+    "label": "The library manager",
+    "file": "docs/spa_manager.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "test-runner",
+    "label": "Test runner",
+    "file": "docs/test-runner.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wildcard-constraint-order",
+    "label": "Wildcard, constraint and target order",
+    "file": "docs/wildcard-constraint-order.png",
+    "w": 1720,
+    "h": 644
+  },
+  {
+    "id": "wildcard-editor",
+    "label": "Wildcard editor",
+    "file": "docs/wildcard-editor.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wildcard-import",
+    "label": "Wildcard import review",
+    "file": "docs/wildcard-import.png",
+    "w": 1720,
+    "h": 1075
+  },
+  {
+    "id": "wp-bookmark-dock",
+    "label": "Bookmarks dock",
+    "file": "docs/wp-bookmark-dock.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-bookmark",
+    "label": "WP Bookmark editing",
+    "file": "docs/wp-bookmark.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-context-injector",
+    "label": "WP Context Injector",
+    "file": "docs/wp-context-injector.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-context-loop-graph",
+    "label": "WP Context Loop in a graph",
+    "file": "docs/wp-context-loop-graph.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-context-loop-grid",
+    "label": "Looped workflow and its image grid",
+    "file": "docs/wp-context-loop-grid.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-context",
+    "label": "WP Context nodes",
+    "file": "docs/wp-context.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-debug-two",
+    "label": "Two WP Debug nodes",
+    "file": "docs/wp-debug-two.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-debug-viewer",
+    "label": "WP Debug variables",
+    "file": "docs/wp-debug-viewer.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-image-filter-grid",
+    "label": "Image Filter: table layout",
+    "file": "docs/wp-image-filter-grid.png",
+    "w": 1720,
+    "h": 644
+  },
+  {
+    "id": "wp-image-filter-labels",
+    "label": "Image Filter: labels",
+    "file": "docs/wp-image-filter-labels.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-image-filter-mask",
+    "label": "Image Filter: mask painter",
+    "file": "docs/wp-image-filter-mask.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-image-filter-picker",
+    "label": "Image Filter: picking",
+    "file": "docs/wp-image-filter-picker.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-image-filter-refine",
+    "label": "Image Filter: detail view",
+    "file": "docs/wp-image-filter-refine.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-image-filter-zoom",
+    "label": "Image Filter: zoom",
+    "file": "docs/wp-image-filter-zoom.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-image-filter",
+    "label": "WP Image Filter",
+    "file": "docs/wp-image-filter.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-label-grid",
+    "label": "WP Label & Grid",
+    "file": "docs/wp-label-grid.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-mode-relay",
+    "label": "WP Mode Relay",
+    "file": "docs/wp-mode-relay.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-model-info",
+    "label": "WP Model Info",
+    "file": "docs/wp-model-info.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-node-group",
+    "label": "WP Node Group",
+    "file": "docs/wp-node-group.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-note-bookmark",
+    "label": "A note with a bookmark",
+    "file": "docs/wp-note-bookmark.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-note-editor",
+    "label": "Note text window",
+    "file": "docs/wp-note-editor.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-note-library",
+    "label": "Note library",
+    "file": "docs/wp-note-library.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-note-pictures",
+    "label": "Pictures in a note",
+    "file": "docs/wp-note-pictures.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-note",
+    "label": "WP Note",
+    "file": "docs/wp-note.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-prompt-assembler",
+    "label": "WP Prompt Assembler",
+    "file": "docs/wp-prompt-assembler.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-prompt-cleaner",
+    "label": "WP Prompt Cleaner",
+    "file": "docs/wp-prompt-cleaner.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-seed-list",
+    "label": "WP Seed List",
+    "file": "docs/wp-seed-list.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-toggles",
+    "label": "WP Toggles",
+    "file": "docs/wp-toggles.png",
+    "w": 1720,
+    "h": 860
+  },
+  {
+    "id": "wp-var-to-bool",
+    "label": "WP Var to Bool",
+    "file": "docs/wp-var-to-bool.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-var-to-choice",
+    "label": "WP Var to Choice",
+    "file": "docs/wp-var-to-choice.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-var-to-float",
+    "label": "WP Var to Float",
+    "file": "docs/wp-var-to-float.png",
+    "w": 1720,
+    "h": 752
+  },
+  {
+    "id": "wp-var-to-int",
+    "label": "WP Var to Int",
+    "file": "docs/wp-var-to-int.png",
+    "w": 1720,
+    "h": 644
+  }
+]
