@@ -59,10 +59,12 @@ tutorial(
 
     await t.h.step("For this node only", async () => {
       await t.go("/");
-      // The node goes in first, so the line plays over it and the picking.
+      // Built fast and silent first, so the line plays over a filled Context, not an empty one.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
-      await t.say("On the canvas, pick Role, Setting and the Role fits the place constraint.");
       await t.pickModules(ctx, ["Role", "Setting", "Role fits the place"]);
+      await t.normalSpeed();
+      await t.say("On the canvas, a Context with Role, Setting and the Role fits the place constraint.");
       await t.waitVoice();
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.say("Then a Prompt Assembler for the role and the setting.");

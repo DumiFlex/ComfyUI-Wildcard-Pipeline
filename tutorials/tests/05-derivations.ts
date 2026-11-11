@@ -75,10 +75,13 @@ tutorial(
 
     const nodes = await t.h.step("On the canvas", async () => {
       await t.go("/");
-      await t.say("On the canvas, pick Time of day and Setting, the rule, and Scene, a combine that reads all three.");
-      await t.beat(600);
+      // Built fast and silent first, so the line plays over a filled Context, not an empty canvas.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
       await t.pickModules(ctx, ["Time of day", "Setting", "Lighting from time", "Scene"]);
+      await t.normalSpeed();
+      await t.say("On the canvas, a Context with Time of day and Setting, the rule, and Scene, a combine that reads all three.");
+      await t.waitVoice();
       await t.callout("order", ["Time of day", "Setting", "Lighting from time", "Scene"].map((n) => t.moduleRow(ctx, n)), "Top to bottom", 4);
       await t.say("Order matters: rows run top to bottom, so the rule goes after Time of day, which it reads, and the combine goes last, after everything it uses. A rule placed above what it reads sees nothing yet.");
       await t.waitVoice();
