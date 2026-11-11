@@ -45,7 +45,8 @@ tutorial(
     if (showcasing(t)) {
       await t.h.step("Run it", async () => {
         await t.say("Run.");
-        await t.fastForward(() => t.run(), 8);
+        // Nine images take a while: 20x keeps the wait to a few seconds (8x left 20 s of still screen).
+        await t.fastForward(() => t.run(), 20);
         await stop(5);
         await t.beat(1500);
         await t.say("Nine images, shots down and lights across, each cell headed. Grid saves the sheet; images gives each one with its label.");

@@ -52,6 +52,7 @@ tutorial("T07", { title: "Your next tutorial" }, async (t) => {
 });
 ```
 
+- `t.uncallout(id)` holds every box at least 2 s, and until the end of its line: a line still playing that started with the box (or up to 1.5 s before it) is the box's line. Give a box its own line, said right after `callout`, rather than showing it at the end of a long one.
 - `t.say(line)` shows the caption and returns right away, so the hands work while the voice speaks. The next `say` waits until the line has been spoken. Use `t.waitVoice()` to wait on purpose, for example to keep a callout up until its line ends. Each line must be a plain string literal so `speak.py` can find it. Write the caption the way it looks on screen (`library.json`, `$gear.SHOES`, `<lora:`): the voice reads it through `speak.py`'s `spoken_text` rules (`$role` as "role", "WP" as "W P", "LoRAs" as "loras", `library.json` as "library dot json", "2.22" as "two twenty-two"). When those don't fit, give the spoken words as a second string: `t.say("$gear.SHOES prints the shoe.", "Dollar gear dot shoes prints the shoe.")`. A line whose spoken text changes is spoken again.
 - Every `t.h.step` becomes a chapter.
 - `t.addNode(search, {x, y})` drops the node centred on that point. Leave the bottom 140 px free for the caption.

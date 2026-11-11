@@ -3,26 +3,10 @@
 // a loop differs from ComfyUI's batch size and Run count; the Edit frame chips (a frame's own pick, a
 // lock on one frame, a module off on one frame and on for one frame only); Override Context seed and
 // the strategies; the seeds panel; Ctrl-click to skip a frame and Alt-click to lock its seed; the
-// values input; a derivation on $iteration ("Shot per frame", made off camera) against a frame edit;
+// values input; a derivation on $iteration ("Shot per frame", in the tutorial library) against a frame edit;
 // then WP Seed List, Hold across run and Bypass loop. Prompt-only: no model.
-import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
-// A rule on $iteration, made off camera: frame 1 is the establishing shot, the rest close-ups.
-const SHOT = {
-  type: "derivation",
-  name: "Shot per frame",
-  description: "Frame 1 is a wide establishing shot, every other frame a close-up.",
-  payload: {
-    rules: [
-      {
-        id: "a51c0e01",
-        branches: [{ condition: { var: "iteration", op: "equals", value: "1" }, action: { target_var: "shot", mode: "replace", value: "wide establishing shot" } }],
-        else: { action: { target_var: "shot", mode: "replace", value: "close-up" } },
-      },
-    ],
-  },
-};
 
 tutorial(
   "N05",
@@ -34,11 +18,18 @@ tutorial(
   async (t) => {
     const page = t.page;
     // A highlight on a Show Any waits until the run's text is in it, not just until the run ends.
+    // The node's text, its fields' values included: innerText skips what a textarea holds, so a
+    // wait on it alone ran to its 15 s limit (a still screen after every run).
+    const textOf = (node: string) =>
+      t.node(node)
+        .evaluate((el) => `${(el as HTMLElement).innerText} ${[...el.querySelectorAll("textarea, input")].map((f) => (f as HTMLInputElement).value).join(" ")}`)
+        .catch(() => "");
     const filled = async (node: string, re: RegExp) => {
       for (let i = 0; i < 60; i++) {
-        if (re.test(await t.node(node).innerText().catch(() => ""))) break;
+        if (re.test(await textOf(node))) break;
         await t.beat(250);
       }
+      if (!re.test(await textOf(node))) t.h.log(`${node} never showed ${re}`);
       await t.beat(400);
     };
     const chip = (loop: string, n: number | "base") => t.node(loop).locator(`[data-test="loop-frame-${n}"]`);
@@ -58,10 +49,6 @@ tutorial(
       return page.getByRole("dialog").last();
     };
 
-    // Off camera: the library as the viewer has it, plus the $iteration rule for step 7.
-    await t.tidyLibrary();
-    const made = await t.h.api("/wp/api/modules", { method: "POST", body: SHOT });
-    if (made.status >= 300) throw new StepError(`Couldn't add "Shot per frame" (${made.status}).`);
 
     const n = await t.h.step("What runs again", async () => {
       await t.go("/");
