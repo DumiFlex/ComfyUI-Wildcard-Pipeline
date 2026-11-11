@@ -143,9 +143,12 @@ function flip(): void {
             :aria-label="controlState.hint"
           />
       </template>
-      <span v-else class="wp-tgr__name">
+      <template v-else>
+      <!-- The icon is a column of its own, centred against the name and
+           its $var, so both lines start at the same edge. -->
+      <i v-if="t.icon" class="pi wp-tgr__icon" :class="`pi-${t.icon}`" aria-hidden="true" :data-test="`tg-icon-${t.id}`" />
+      <span class="wp-tgr__name">
         <span class="wp-tgr__title">
-          <i v-if="t.icon" class="pi wp-tgr__icon" :class="`pi-${t.icon}`" aria-hidden="true" />
           <b>{{ t.name }}</b>
           <i
             v-if="controlState"
@@ -161,6 +164,7 @@ function flip(): void {
           <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
         </span>
       </span>
+      </template>
       <i
         v-if="problem"
         v-tooltip="problem"
@@ -312,9 +316,9 @@ function flip(): void {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
+  width: 16px;
   height: 16px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
   color: var(--wp-tg-icon, var(--wp-text-muted, var(--wp-text2)));
 }
