@@ -121,6 +121,15 @@ function pickColor(v: string): string | undefined {
 
 /** The preview's switch: Any on shows (and flips) the draft's own choice. */
 const previewOn = computed(() => (props.pickOne ? props.shownOn : d.value.on));
+/** The header wears the toggle's own looks: icon colour (else its control
+ *  colour), control colour on the chip, name colour on the name line. */
+const headStyle = computed(() => {
+  const s: Record<string, string> = {};
+  if (d.value.icon_color) s["--wp-tgw-icon"] = d.value.icon_color;
+  if (d.value.tint) s["--wp-tgw-tint"] = d.value.tint;
+  if (d.value.text_color) s["--wp-tgw-text"] = d.value.text_color;
+  return s;
+});
 function previewSet(on: boolean): void {
   if (!props.pickOne) patch({ on });
 }
@@ -143,13 +152,19 @@ function onKey(ev: KeyboardEvent): void {
 <template>
   <Modal :open="true" size="md" @update:open="(v: boolean) => { if (!v) cancel(); }" @keydown="onKey">
     <template #header="{ titleId }">
-      <i class="pi pi-sliders-h wp-tgw__icon" aria-hidden="true" />
+      <i class="pi wp-tgw__icon" :class="d.icon ? `pi-${d.icon}` : 'pi-sliders-h'" :style="headStyle" aria-hidden="true" data-test="tg-window-icon" />
       <div class="wp-tgw__titles">
         <div class="wp-tgw__title-row">
           <h3 :id="titleId" class="wp-tgw__title">{{ nodeTitle || 'WP Toggles' }}</h3>
-          <span class="wp-tgw__chip">Toggle</span>
+          <span class="wp-tgw__chip" :style="headStyle">Toggle</span>
         </div>
-        <div class="wp-tgw__sub">{{ d.var ? `${d.name} · $${d.var}` : d.name }}</div>
+        <div class="wp-tgw__sub" :style="headStyle" data-test="tg-window-sub">
+          <span class="wp-tgw__subname">{{ d.name }}</span>
+          <template v-if="d.var">
+            <span aria-hidden="true"> · </span>
+            <span class="wp-tgw__subvar" :class="d.text_color ? 'has-text' : varColorClass(d.var)">${{ d.var }}</span>
+          </template>
+        </div>
       </div>
     </template>
     <div class="wp-tgw__preview" data-test="tg-window-preview">
@@ -397,7 +412,7 @@ function onKey(ev: KeyboardEvent): void {
   border-bottom: 1px solid var(--wp-border);
   background: var(--wp-bg-deep, var(--wp-bg));
 }
-.wp-tgw__icon { color: var(--wp-accent); font-size: 14px; }
+.wp-tgw__icon { color: var(--wp-tgw-icon, var(--wp-tgw-tint, var(--wp-accent))); font-size: 14px; }
 .wp-tgw__titles { flex: 1; min-width: 0; }
 .wp-tgw__title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-tgw__title { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -409,9 +424,12 @@ function onKey(ev: KeyboardEvent): void {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: color-mix(in srgb, var(--wp-accent) 22%, transparent);
-  color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-tgw-tint, var(--wp-accent)) 22%, transparent);
+  color: var(--wp-tgw-tint, var(--wp-accent));
 }
+.wp-tgw__subname { color: var(--wp-tgw-text, var(--wp-text)); font-weight: 600; }
+.wp-tgw__subvar { font-family: var(--wp-font-mono, monospace); }
+.wp-tgw__subvar.has-text { color: var(--wp-tgw-text); }
 .wp-tgw__sub { margin-top: 3px; font-size: 11px; color: var(--wp-text-dim); }
 .wp-tgw__hint { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 11px; color: var(--wp-text-dim); }
 .wp-tgw__cap { font: 600 9px var(--wp-font-sans, sans-serif); letter-spacing: 0.08em; color: var(--wp-text-dim, var(--wp-text3)); }

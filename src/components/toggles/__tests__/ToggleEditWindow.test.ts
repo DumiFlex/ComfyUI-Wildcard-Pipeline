@@ -107,4 +107,12 @@ describe("ToggleEditWindow", () => {
     expect(note).not.toContain("$time");
     w.unmount();
   });
+  it("colours the header with the toggle's looks", () => {
+    const w = open({ ...base, icon: "moon", icon_color: "#7aa7ff", text_color: "#a9c4ff", tint: "#4c7dff" });
+    const icon = q('[data-test="tg-window-icon"]');
+    expect(icon?.className).toContain("pi-moon");
+    expect(icon?.getAttribute("style")).toContain("--wp-tgw-icon: #7aa7ff");
+    expect(q('[data-test="tg-window-sub"]')?.getAttribute("style")).toContain("--wp-tgw-text: #a9c4ff");
+    w.unmount();
+  });
 });
