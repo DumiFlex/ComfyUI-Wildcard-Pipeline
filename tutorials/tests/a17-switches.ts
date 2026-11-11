@@ -268,8 +268,8 @@ tutorial(
 
     await t.h.step("Outro", async () => {
       await t.say("Toggles write true or false for your rules, or pick the words themselves. Node Groups and Mode Relay switch whole parts of a workflow. The first example workflow uses all three.");
-      // Off camera: the library back as the viewer has it.
-      await t.h.api(`/wp/api/modules/${LIGHTS.id}`, { method: "DELETE" });
+      // The item stays until the next video's tidyLibrary: deleting it here, still on camera, made
+      // the canvas show it as missing at the end.
     });
   },
 );

@@ -203,8 +203,8 @@ tutorial(
 
     await t.h.step("Outro", async () => {
       await t.say("First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain and inside nested ones. Next: negatives.");
-      // Off camera: the library back as the viewer has it.
-      await t.h.api(`/wp/api/modules/${DAYDREAM.id}`, { method: "DELETE" });
+      // The item stays until the next video's tidyLibrary: deleting it here, still on camera, made
+      // the canvas show it as missing at the end.
     });
   },
 );
