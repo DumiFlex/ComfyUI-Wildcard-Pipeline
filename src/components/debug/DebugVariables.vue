@@ -8,7 +8,7 @@
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
 import CopyButton from "@/kit/CopyButton.vue";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import { TEMPLATE_TYPE, valueTypeLook, type ValueTypeLook } from "../injector/value-types";
 import {
@@ -93,6 +93,34 @@ const grouped = computed(() => sections.value.length > 1 || sections.value.some(
 // Every row keeps the same metrics and everything a Context row shows
 // (multi-pick items, negatives, axes, tags, write count); a node's rows only
 // add how that node works: a switch, a radio mark, a model value, a type.
+/** Long values fold to a few lines (and long lists to their first items)
+ *  until the row is opened, so one long story doesn't fill the panel. */
+const LONG_VALUE = 160;
+const LONG_NEGATIVE = 120;
+const FOLDED_ITEMS = 3;
+const openRows = ref(new Set<string>());
+function isLong(v: VarRow): boolean {
+  if ((v.value ?? "").length > LONG_VALUE) return true;
+  if (v.items && (v.items.length > FOLDED_ITEMS || v.items.some((it) => it.length > LONG_VALUE))) return true;
+  return v.negatives.reduce((n, neg) => n + neg.text.length, 0) > LONG_NEGATIVE;
+}
+function isFolded(v: VarRow): boolean {
+  return isLong(v) && !openRows.value.has(v.name);
+}
+function shownItems(v: VarRow): string[] {
+  const items = v.items ?? [];
+  return isFolded(v) ? items.slice(0, FOLDED_ITEMS) : items;
+}
+function moreLabel(v: VarRow): string {
+  const hidden = (v.items?.length ?? 0) - FOLDED_ITEMS;
+  return isFolded(v) && hidden > 0 ? `Show all (${hidden} more)` : isFolded(v) ? "Show all" : "Show less";
+}
+function toggleOpen(name: string): void {
+  const next = new Set(openRows.value);
+  if (next.has(name)) next.delete(name);
+  else next.add(name);
+  openRows.value = next;
+}
 function stepOf(v: VarRow): TraceStep | null {
   return v.writerKey ? props.stepsByKey?.get(v.writerKey) ?? null : null;
 }
@@ -305,7 +333,7 @@ const nameWidth = computed(() => {
         <i v-if="v.internal" class="pi pi-eye-slash wp-dbg-flag" title="Internal: downstream modules can read it, the prompt never shows it" />
         <span v-if="v.writeCount > 1" class="wp-dbg-var-row__count" :title="`Written ${v.writeCount} times; the last write wins`">×{{ v.writeCount }}</span>
       </div>
-      <div class="wp-dbg-var-row__value" :class="{ 'is-model': v.writerKind === 'model' }">
+      <div class="wp-dbg-var-row__value" :class="{ 'is-model': v.writerKind === 'model', 'is-folded': isFolded(v) }">
         <Chip
           v-if="isSwitch(v) && !hasToggleValue(v)"
           class="wp-dbg-var-row__switch"
@@ -317,7 +345,7 @@ const nameWidth = computed(() => {
         >{{ switchOf(v) ? "true" : "false" }}</Chip>
         <template v-if="isSwitch(v) && !hasToggleValue(v)" />
         <ol v-else-if="v.items" class="wp-dbg-var-row__items" data-test="dbg-var-items">
-          <li v-for="(it, i) in v.items" :key="i">
+          <li v-for="(it, i) in shownItems(v)" :key="i">
             <span class="wp-dbg-var-row__idx" :title="`$${v.name}.${i}`">.{{ i }}</span>
             <RichTextPreview :value="it" :uuid-to-name="uuidToName" :uuid-to-kind="uuidToKind" surface="wildcard" />
           </li>
@@ -347,14 +375,35 @@ const nameWidth = computed(() => {
           <span v-if="n.source" class="wp-dbg-var-row__neg-src" data-test="dbg-var-neg-src">· {{ n.source }}</span>
         </div>
         <div v-if="v.axes.length || v.tags.length || hasToggleValue(v)" class="wp-dbg-var-row__extra">
-          <span v-if="hasToggleValue(v)" class="wp-dbg-var-row__axis" :class="{ 'is-on': switchOf(v) }" data-test="dbg-var-bool" :title="`$${v.name}.bool: the toggle is ${switchOf(v) ? 'on' : 'off'}`">
-            <code>.bool</code> {{ switchOf(v) ? "true" : "false" }}
-          </span>
-          <span v-for="a in v.axes" :key="a.axis" class="wp-dbg-var-row__axis" data-test="dbg-var-axis" :title="`$${v.name}.${a.axis}`">
-            <code>.{{ a.axis }}</code> {{ a.value || "—" }}
-          </span>
-          <span v-for="t in v.tags" :key="t" class="wp-dbg-var-row__tag">{{ t }}</span>
+          <Chip
+            v-if="hasToggleValue(v)"
+            class="wp-dbg-var-row__axis"
+            :class="{ 'is-on': switchOf(v) }"
+            :color="switchOf(v) ? kindColor('toggle') : null"
+            dot
+            data-test="dbg-var-bool"
+            :title="`$${v.name}.bool: the toggle is ${switchOf(v) ? 'on' : 'off'}`"
+          ><code>.bool</code> {{ switchOf(v) ? "true" : "false" }}</Chip>
+          <Chip
+            v-for="a in v.axes"
+            :key="a.axis"
+            class="wp-dbg-var-row__axis"
+            :color="kindColor(v.writerKind ?? 'wildcard')"
+            data-test="dbg-var-axis"
+            :title="`$${v.name}.${a.axis}`"
+          ><code>.{{ a.axis }}</code> {{ a.value || "—" }}</Chip>
+          <Chip v-for="t in v.tags" :key="t" class="wp-dbg-var-row__tag" icon="pi-tag">{{ t }}</Chip>
         </div>
+        <Button
+          v-if="isLong(v)"
+          variant="link"
+          size="sm"
+          class="wp-dbg-var-row__more"
+          :icon="isFolded(v) ? 'pi-chevron-down' : 'pi-chevron-up'"
+          :aria-expanded="!isFolded(v)"
+          data-test="dbg-var-more"
+          @click="toggleOpen(v.name)"
+        >{{ moreLabel(v) }}</Button>
       </div>
       <Button
         v-if="v.writerKey"
@@ -471,16 +520,24 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__neg-mark, .wp-dbg-var-row__neg-text { color: var(--wp-red); }
 .wp-dbg-var-row__neg-text { min-width: 0; overflow-wrap: anywhere; }
 .wp-dbg-var-row__neg-src { flex: none; color: var(--wp-text-dim); font-family: var(--wp-font-sans); }
-.wp-dbg-var-row__extra { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-.wp-dbg-var-row__axis, .wp-dbg-var-row__tag {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--wp-radius-cap, 999px);
-  background: var(--wp-bg-2, var(--wp-bg2));
-  color: var(--wp-text-muted);
+/* Folded: the value shows three lines, each negative one, until opened. */
+.wp-dbg-var-row__value.is-folded > .wp-rtp,
+.wp-dbg-var-row__value.is-folded .wp-dbg-var-row__pick > .wp-rtp,
+.wp-dbg-var-row__value.is-folded .wp-dbg-var-row__items li > .wp-rtp {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
 }
-.wp-dbg-var-row__axis code { font-family: var(--wp-font-mono); color: var(--wp-kind-wildcard); }
-.wp-dbg-var-row__axis.is-on { color: var(--wp-text); }
+.wp-dbg-var-row__value.is-folded .wp-dbg-var-row__neg-text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
+}
+.wp-btn.wp-dbg-var-row__more { align-self: flex-start; height: auto; min-height: 0; padding: 0; font-size: 10.5px; }
+.wp-dbg-var-row__extra { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+/* Kit chips, sized like the switch chip; the accessor reads in mono. */
+.wp-chip.wp-dbg-var-row__axis, .wp-chip.wp-dbg-var-row__tag {
+  height: 17px; min-height: 0; box-sizing: border-box;
+  padding: 0 6px; gap: 4px;
+  font: 500 10px/1 var(--wp-font-sans);
+}
+.wp-dbg-var-row__axis code { font: 600 10px/1 var(--wp-font-mono); }
 .wp-dbg-var-row__fact {
   flex: none;
   font: 600 9.5px/1 var(--wp-font-mono);

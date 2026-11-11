@@ -178,6 +178,33 @@ describe("node rows in the view", () => {
     expect(night?.text()).toContain("empty while off");
   });
 
+  it("folds a long value and long negatives until the row is opened", async () => {
+    const long = "word ".repeat(60).trim();
+    const m = buildModel({
+      story: long, short: "calm",
+      __wp_negatives__: { story: [{ text: "bad ".repeat(40).trim(), pick: null, source: "" }] },
+      __wp_trace__: [
+        { id: "aaaa1111", _uid: "u1", node_id: "9", type: "wildcard", status: "ok", writes: [{ variable: "story", value: long }] },
+        { id: "bbbb2222", _uid: "u2", node_id: "9", type: "wildcard", status: "ok", writes: [{ variable: "short", value: "calm" }] },
+      ],
+    });
+    const w = mount(DebugVariables, {
+      props: {
+        rows: m.variables, pinned: new Set<string>(), flashed: new Set<string>(), uuidToName: new Map(), uuidToKind: new Map(),
+        ctxActiveKey: null, stepsByKey: new Map(m.steps.map((s) => [s.key, s])),
+      },
+    });
+    const rowOf = (name: string) => w.findAll('[data-test="dbg-var"]').find((r) => r.text().includes(`$${name}`));
+    expect(rowOf("short")?.find('[data-test="dbg-var-more"]').exists()).toBe(false);
+    const story = rowOf("story");
+    expect(story?.find(".wp-dbg-var-row__value").classes()).toContain("is-folded");
+    const more = story?.find('[data-test="dbg-var-more"]');
+    expect(more?.text()).toBe("Show all");
+    await more?.trigger("click");
+    expect(rowOf("story")?.find(".wp-dbg-var-row__value").classes()).not.toContain("is-folded");
+    expect(rowOf("story")?.find('[data-test="dbg-var-more"]').text()).toBe("Show less");
+  });
+
   it("draws node rows in the trace as numbered steps, in run order", () => {
     const m = buildModel({
       __wp_trace__: [
