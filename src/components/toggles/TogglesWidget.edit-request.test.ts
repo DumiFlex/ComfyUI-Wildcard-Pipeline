@@ -1,68 +1,93 @@
 import { describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import TogglesWidget from "./TogglesWidget.vue";
-import { defaultTogglesConfig, type TogglesConfig } from "../../extension/toggles";
+import { defaultTogglesConfig, type ToggleRow, type TogglesConfig } from "../../extension/toggles";
 
 const cfg: TogglesConfig = {
   ...defaultTogglesConfig(),
   rows: [
-    { id: "aaaa0001", kind: "label", name: "Time", color: 2, hex: "#ffaa00", icon: "clock" },
     { id: "00000001", kind: "toggle", name: "Day", var: "day", on: true, pin: false, out: 0, style: "switch", icon: "sun" },
+    { id: "aaaa0001", kind: "label", name: "Time", color: 2, hex: "#ffaa00", icon: "clock" },
+    { id: "00000002", kind: "toggle", name: "Night", var: "night", on: false, pin: false, out: 0, style: "switch" },
   ],
 };
 
-/** The window is teleported to body; wait for its lazy chunk. */
+/** The toggle window is teleported to body and loads lazily. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 4; i++) {
     await vi.dynamicImportSettled();
     await flushPromises();
   }
 }
-function inBody(sel: string): HTMLElement | null {
+function q(sel: string): HTMLElement | null {
   return document.body.querySelector<HTMLElement>(sel);
 }
+function lastConfig(w: { emitted: (e: string) => unknown[][] | undefined }): TogglesConfig | undefined {
+  const all = w.emitted("update:modelValue");
+  return all?.[all.length - 1]?.[0] as TogglesConfig | undefined;
+}
 
-describe("TogglesWidget edit window", () => {
-  it("keeps the node in its clean view and opens the window on the toolbar pencil", async () => {
-    const w = mount(TogglesWidget, { attachTo: document.body, props: { modelValue: cfg, editRequest: 0, nodeTitle: "Light" } });
+describe("TogglesWidget edit view (toolbar pencil)", () => {
+  it("flips the edit view in the node each time the request is bumped", async () => {
+    const w = mount(TogglesWidget, { props: { modelValue: cfg, editRequest: 0 } });
     expect(w.find(".wp-tg--edit").exists()).toBe(false);
-    expect(inBody('[data-test="tg-editor-window"]')).toBeNull();
     await w.setProps({ editRequest: 1 });
-    await settle();
-    expect(inBody('[data-test="tg-editor-window"]')?.textContent).toContain("Light");
-    // The editor column and the preview both draw the draft.
-    expect(inBody('[data-test="tg-editor-window"] .wp-tg--edit')).not.toBeNull();
-    expect(inBody('[data-test="tg-preview"] [data-test="tg-row-00000001"]')).not.toBeNull();
+    expect(w.find(".wp-tg--edit").exists()).toBe(true);
+    await w.setProps({ editRequest: 2 });
+    expect(w.find(".wp-tg--edit").exists()).toBe(false);
     w.unmount();
   });
 
-  it("writes the draft on Done and drops it on Cancel", async () => {
-    const w = mount(TogglesWidget, { attachTo: document.body, props: { modelValue: cfg, editRequest: 0 } });
+  it("keeps the group buttons in the node", async () => {
+    const w = mount(TogglesWidget, { props: { modelValue: cfg, editRequest: 0 } });
     await w.setProps({ editRequest: 1 });
+    expect(w.find('[data-test="tg-color-aaaa0001"]').exists()).toBe(true);
+    expect(w.find('[data-test="tg-label-icon-aaaa0001"]').exists()).toBe(true);
+    w.unmount();
+  });
+});
+
+describe("TogglesWidget toggle window", () => {
+  it("a row's pencil opens its window; Done stores the draft and the variable follows the name", async () => {
+    const w = mount(TogglesWidget, { attachTo: document.body, props: { modelValue: cfg, editRequest: 0, nodeTitle: "Light" } });
+    await w.setProps({ editRequest: 1 });
+    await w.find('[data-test="tg-edit-00000001"]').trigger("click");
     await settle();
-    inBody('[data-test="tg-preview"] [data-test="tg-ctl-00000001"]')?.click();
-    await settle();
-    inBody('[data-test="tg-window-cancel"]')?.click();
+    expect(q('[data-test="node-edit-window"]')?.textContent).toContain("Light");
+    const name = q('[data-test="tg-name"]') as HTMLInputElement | null;
+    if (name) {
+      name.value = "Sunrise";
+      name.dispatchEvent(new Event("change"));
+    }
     await settle();
     expect(w.emitted("update:modelValue")).toBeUndefined();
-    expect(inBody('[data-test="tg-editor-window"]')).toBeNull();
-
-    await w.setProps({ editRequest: 2 });
+    q('[data-test="node-edit-done"]')?.click();
     await settle();
-    inBody('[data-test="tg-preview"] [data-test="tg-ctl-00000001"]')?.click();
-    await settle();
-    inBody('[data-test="tg-window-done"]')?.click();
-    await settle();
-    const next = w.emitted("update:modelValue")?.[0]?.[0] as TogglesConfig | undefined;
-    expect(next?.rows.find((r) => r.id === "00000001" && r.kind === "toggle" && !r.on)).toBeDefined();
+    const row = lastConfig(w)?.rows.find((r): r is ToggleRow => r.id === "00000001" && r.kind === "toggle");
+    expect(row).toMatchObject({ name: "Sunrise", var: "sunrise", icon: "sun" });
+    expect(q('[data-test="node-edit-window"]')).toBeNull();
     w.unmount();
   });
 
-  it("an empty node offers a button that opens the window", async () => {
-    const w = mount(TogglesWidget, { attachTo: document.body, props: { modelValue: { ...defaultTogglesConfig(), rows: [] } } });
-    await w.find('[data-test="tg-open-window"]').trigger("click");
+  it("Done moves the toggle to the group picked in its window", async () => {
+    const w = mount(TogglesWidget, { attachTo: document.body, props: { modelValue: cfg, editRequest: 0 } });
+    await w.setProps({ editRequest: 1 });
+    await w.find('[data-test="tg-edit-00000002"]').trigger("click");
     await settle();
-    expect(inBody('[data-test="tg-editor-window"]')).not.toBeNull();
+    // Night sits under "Time"; Top moves it above the label.
+    const win = w.findComponent({ name: "ToggleEditWindow" });
+    expect(win.exists()).toBe(true);
+    win.vm.$emit("done", cfg.rows[2], "");
+    await settle();
+    expect(lastConfig(w)?.rows.map((r) => r.id)).toEqual(["00000001", "00000002", "aaaa0001"]);
+    w.unmount();
+  });
+
+  it("the row's trash removes the toggle", async () => {
+    const w = mount(TogglesWidget, { props: { modelValue: cfg, editRequest: 0 } });
+    await w.setProps({ editRequest: 1 });
+    await w.find('[data-test="tg-remove-00000002"]').trigger("click");
+    expect(lastConfig(w)?.rows.map((r) => r.id)).toEqual(["00000001", "aaaa0001"]);
     w.unmount();
   });
 

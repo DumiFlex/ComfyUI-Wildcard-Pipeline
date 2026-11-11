@@ -47,19 +47,6 @@ describe("ToggleRow internal button", () => {
   });
 });
 
-describe("ToggleRow fields in Pick one", () => {
-  it("hides Style and Needs while Pick one is on", () => {
-    const one = mountRow(base, { pickOne: true, editing: true });
-    expect(one.find('[aria-label="Style"]').exists()).toBe(false);
-    expect(one.find('[data-test="tg-needs"]').exists()).toBe(false);
-    one.unmount();
-    const any = mountRow(base, { editing: true });
-    expect(any.find('[aria-label="Style"]').exists()).toBe(true);
-    expect(any.find('[data-test="tg-needs"]').exists()).toBe(true);
-    any.unmount();
-  });
-});
-
 describe("ToggleRow looks", () => {
   it("draws the icon and hands its colours to the row", () => {
     const w = mountRow({ ...base, icon: "sun", icon_color: "#ffcc00", text_color: "#ff0000", tint: "#00aaff" }, {});
@@ -126,29 +113,11 @@ describe("ToggleRow Pick one style", () => {
   });
 });
 
-describe("ToggleRow Pick one Value", () => {
-  it("warns that inline picks print as written", () => {
-    const w = mountRow({ ...base, value: "{golden|soft} light" }, { pickOne: true, editing: true });
-    expect(w.find('[data-test="tg-inline-picks"]').exists()).toBe(true);
-    w.unmount();
-    const plain = mountRow({ ...base, value: "$time light" }, { pickOne: true, editing: true });
-    expect(plain.find('[data-test="tg-inline-picks"]').exists()).toBe(false);
-    plain.unmount();
-  });
-});
-
-describe("ToggleRow Pick one Value variables", () => {
-  it("flags a $name nothing upstream sets", () => {
-    const w = mount(ToggleRow, {
-      attachTo: document.body,
-      props: {
-        t: { ...base, value: "$time and $nowhere" }, pickOne: true, shownOn: true, effOn: true, parentName: "", blocked: false,
-        indent: 0, editing: true, needsOptions: [], groupOptions: [], groupId: "", outputsFull: false, editable: true,
-        varSuggestions: ["time"],
-      },
-    });
-    expect(w.find('[data-test="tg-missing-vars"]').text()).toContain("$nowhere");
-    expect(w.find('[data-test="tg-missing-vars"]').text()).not.toContain("$time");
+describe("ToggleRow controls", () => {
+  it("draws a checkbox for the Check style", () => {
+    const w = mountRow({ ...base, style: "checkbox" }, { editable: false });
+    expect(w.find(`[data-test="tg-ctl-${base.id}"]`).exists()).toBe(true);
+    expect(w.find(".wp-tgr__ctl").html()).toContain("checkbox");
     w.unmount();
   });
 });

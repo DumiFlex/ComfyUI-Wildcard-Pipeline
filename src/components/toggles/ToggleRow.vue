@@ -1,33 +1,22 @@
 <script setup lang="ts">
 /**
- * One toggle row of WP Toggles, plus its edit panel when open. Stateless:
+ * One toggle row of WP Toggles (its settings open in `ToggleEditWindow.vue`). Stateless:
  * the parent (`TogglesWidget.vue`) works out every fact shown here and
  * applies every change this emits.
  *
  * The row carries `data-wp-out="toggle_<out>"` while it has an output, so
  * `extension/row-outputs.ts` puts that BOOLEAN dot at the row's right edge.
  */
-import Button from "@/kit/Button.vue";
-import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Checkbox from "@/kit/Checkbox.vue";
-import WpSelect from "@/kit/WpSelect.vue";
-import Combobox from "@/kit/Combobox.vue";
-import ColorField from "@/kit/ColorField.vue";
-import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
-import { computed, defineAsyncComponent } from "vue";
-import type { PickStyle, ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
+import { computed } from "vue";
+import type { PickStyle, ToggleRow, ToggleStyle } from "../../extension/toggles";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";
-import { vToggleRow } from "@/kit/toggle-row";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
-import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
-
-// Loaded with the edit panel only: the clean view never needs the editor.
-const RichTextInput = defineAsyncComponent(() => import("../../manager/components/RichTextInput.vue"));
 
 interface Choice { value: string; label: string }
 
@@ -70,49 +59,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   "set-on": [on: boolean];
   patch: [patch: Partial<ToggleRow>];
-  rename: [name: string];
-  "set-var": [v: string];
   edit: [];
-  "move-group": [labelId: string];
   remove: [];
 }>();
-
-const CONTROLS = [
-  { value: "", label: "Nothing", hint: "Off only writes false and sends False" },
-  { value: "mute", label: "Mute", hint: "Off also mutes the nodes wired into the dot in front of the row" },
-  { value: "bypass", label: "Bypass", hint: "Off also bypasses the nodes wired into the dot in front of the row" },
-];
-function setControl(v: string): void {
-  emit("patch", v ? { control: v as ToggleControl } : { control: undefined, groups: undefined });
-}
-function setGroups(v: string[] | string | null): void {
-  const list = Array.isArray(v) ? v : [];
-  emit("patch", { groups: list.length ? list : undefined });
-}
-
-const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
-  { value: "switch", label: "Switch", hint: "A sliding switch" },
-  { value: "checkbox", label: "Check", hint: "A checkbox" },
-  { value: "buttons", label: "Buttons", hint: "Two buttons with your own words, e.g. Day / Night" },
-  { value: "chip", label: "Chip", hint: "A small chip with the name, lit when on" },
-];
-
-/** `$names` the Pick one Value reads that nothing upstream (nor this node)
- *  sets. Only with a graph to look at (`varSuggestions` given). */
-const missingVars = computed(() => {
-  const known = props.varSuggestions;
-  if (!props.pickOne || !known || !props.t.value?.includes("$")) return [];
-  const names = tokenize(props.t.value, "assembler")
-    .filter((tok) => tok.kind === "var" && tok.varName)
-    .map((tok) => tok.varName ?? "");
-  return [...new Set(names)].filter((n) => !known.includes(n));
-});
-const missingNote = computed(() => {
-  const list = missingVars.value.map((v) => "$" + v).join(", ");
-  return missingVars.value.length > 1
-    ? `${list}: nothing upstream sets these, so they print nothing`
-    : `${list}: nothing upstream sets this, so it prints nothing`;
-});
 
 /** The row's icon and name colours as CSS variables (absent: the theme's). */
 const looks = computed(() => {
@@ -130,16 +79,6 @@ const tintStyle = computed(() => {
   for (const k of ["--wp-accent", "--wp-accent-text", "--wp-accent-500", "--wp-accent-600", "--check-on"]) s[k] = c;
   return s;
 });
-/** A colour field's value: the colour, or `none`. */
-function colorValue(v: string | undefined): string {
-  return v ?? "none";
-}
-/** A colour field's pick as a stored colour (`none` clears it). */
-function pickColor(v: string): string | undefined {
-  const c = v.slice(0, 7).toLowerCase();
-  return /^#[0-9a-f]{6}$/.test(c) ? c : undefined;
-}
-
 /** The control this row draws: Pick one's shared look, else its own style. */
 const look = computed<ToggleStyle | "radio">(() => (props.pickOne ? props.pickStyle ?? "radio" : props.t.style));
 
@@ -153,9 +92,6 @@ function sub(): string {
 function subClass(): string {
   if (props.parentName) return props.blocked ? "is-warn" : "is-linked";
   return props.t.var ? varColorClass(props.t.var) : "is-dim";
-}
-function value(ev: Event): string {
-  return (ev.target as HTMLInputElement).value.trim();
 }
 function internalHint(): string {
   const v = `$${props.t.var}`;
@@ -300,196 +236,6 @@ function flip(): void {
       </span>
     </div>
 
-    <div v-if="editable && editing" class="wp-tgr__edit" :data-test="`tg-editor-${t.id}`">
-      <div class="wp-tgr__edit-head">
-        <span class="wp-tgr__cap">EDIT TOGGLE</span>
-        <Button variant="ghost" icon="times" size="sm" aria-label="Done" @click="emit('edit')" />
-      </div>
-      <label class="wp-tgr__field">
-        <span>Name <em>on the row and its output</em></span>
-        <Input size="sm" :model-value="t.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="emit('rename', value($event))" />
-      </label>
-      <label class="wp-tgr__field">
-        <span>Variable <em>true or false; the globe keeps it internal</em></span>
-        <span class="wp-tgr__var-row">
-        <Input
-          size="sm"
-          mono
-          prefix="$"
-          class="wp-tgr__var"
-          :class="t.var ? varColorClass(t.var) : undefined"
-          :tone="problem ? 'warn' : undefined"
-          :model-value="t.var"
-          placeholder="variable_name"
-          spellcheck="false"
-          data-test="tg-var"
-          @keydown.stop
-          @change="emit('set-var', value($event).replace(/^\$/, ''))"
-        />
-        <span v-tooltip="'Show the $variable under the name'" v-toggle-row class="wp-tgr__check">
-          <Checkbox
-            :model-value="!t.hide_var"
-            size="sm"
-            aria-label="Show the variable under the name"
-            data-test="tg-show-var"
-            @update:model-value="(v: boolean) => emit('patch', { hide_var: v ? undefined : true })"
-          />
-          <span aria-hidden="true">Show</span>
-        </span>
-        </span>
-      </label>
-      <div class="wp-tgr__field">
-        <span>Looks <em>icon and colours; None keeps the theme's</em></span>
-        <span class="wp-tgr__looks">
-          <IconPicker
-            :model-value="t.icon ?? null"
-            all
-            :color="t.icon_color"
-            aria-label="Icon"
-            data-test="tg-icon"
-            @update:model-value="(v: string | null) => emit('patch', { icon: v || undefined })"
-          />
-          <span class="wp-tgr__look">
-            <ColorField :model-value="colorValue(t.icon_color)" allow-none presets compact aria-label="Icon colour" data-test="tg-icon-color" @update:model-value="(v: string) => emit('patch', { icon_color: pickColor(v) })" />
-            Icon
-          </span>
-          <span class="wp-tgr__look">
-            <ColorField :model-value="colorValue(t.text_color)" allow-none presets compact aria-label="Name colour" data-test="tg-text-color" @update:model-value="(v: string) => emit('patch', { text_color: pickColor(v) })" />
-            Name
-          </span>
-          <span class="wp-tgr__look">
-            <ColorField :model-value="colorValue(t.tint)" allow-none presets compact aria-label="Control colour" data-test="tg-tint" @update:model-value="(v: string) => emit('patch', { tint: pickColor(v) })" />
-            Control
-          </span>
-        </span>
-      </div>
-      <div v-if="pickOne" class="wp-tgr__field">
-        <span>Value <em>picked variable gets this, not the name</em></span>
-        <RichTextInput
-          class="wp-tgr__value"
-          :model-value="t.value ?? ''"
-          surface="combine"
-          multiline
-          :rows="2"
-          :placeholder="t.name"
-          :var-suggestions="varSuggestions ?? []"
-          :var-producers="varProducers"
-          :graph-aware="!!varProducers"
-          aria-label="Value"
-          data-test="tg-value"
-          @update:model-value="(v: string) => emit('patch', { value: v.trim() ? v : undefined })"
-        />
-        <p v-if="missingVars.length" class="wp-tgr__note" data-test="tg-missing-vars">
-          <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ missingNote }}
-        </p>
-        <p v-if="hasInlinePicks(t.value ?? '')" class="wp-tgr__note" data-test="tg-inline-picks">
-          <i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ INLINE_PICKS_NOTE }}
-        </p>
-      </div>
-      <div v-if="!pickOne" class="wp-tgr__field">
-        <span>Style</span>
-        <WpSegmented
-          :model-value="t.style"
-          :options="STYLES"
-          size="sm"
-          block
-          aria-label="Style"
-          test-prefix="tg-style"
-          @update:model-value="(v: ToggleStyle) => emit('patch', { style: v })"
-        />
-      </div>
-      <div v-if="t.style === 'buttons' && !pickOne" class="wp-tgr__two">
-        <label class="wp-tgr__field">
-          <span>On word</span>
-          <Input size="sm" :model-value="t.on_label ?? ''" placeholder="On" data-test="tg-on-label" @keydown.stop @change="emit('patch', { on_label: value($event) || undefined })" />
-        </label>
-        <label class="wp-tgr__field">
-          <span>Off word</span>
-          <Input size="sm" :model-value="t.off_label ?? ''" placeholder="Off" data-test="tg-off-label" @keydown.stop @change="emit('patch', { off_label: value($event) || undefined })" />
-        </label>
-      </div>
-      <div v-if="!pickOne" class="wp-tgr__field">
-        <span>Needs <em>only on while that toggle is on</em></span>
-        <WpSelect
-          :model-value="t.needs ?? ''"
-          :options="needsOptions"
-          aria-label="Needs"
-          data-test="tg-needs"
-          @update:model-value="(v: string) => emit('patch', { needs: v || undefined })"
-        />
-      </div>
-      <div class="wp-tgr__field">
-        <span>When off <em>also mute or bypass other nodes</em></span>
-        <WpSegmented
-          :model-value="t.control ?? ''"
-          :options="CONTROLS"
-          size="sm"
-          block
-          aria-label="When off"
-          test-prefix="tg-control"
-          @update:model-value="setControl"
-        />
-      </div>
-      <span v-if="t.control" v-tooltip="'Mute or bypass while the toggle is ON instead, for a node used only as a switchboard'" v-toggle-row class="wp-tgr__check">
-        <Checkbox
-          :model-value="!!t.invert"
-          size="sm"
-          aria-label="Invert"
-          data-test="tg-invert"
-          @update:model-value="(v: boolean) => emit('patch', { invert: v ? true : undefined })"
-        />
-        <span aria-hidden="true">Invert: {{ t.control === "mute" ? "mute" : "bypass" }} while on</span>
-      </span>
-      <div v-if="t.control" class="wp-tgr__field">
-        <span>Canvas groups <em>wire nodes into the dot in front of the row, or pick groups</em></span>
-        <Combobox
-          :model-value="t.groups ?? []"
-          multiple
-          :options="(canvasGroups ?? []).map((g) => ({ value: g, label: g }))"
-          placeholder="No groups"
-          size="sm"
-          aria-label="Canvas groups"
-          data-test="tg-groups"
-          @update:model-value="setGroups"
-        />
-      </div>
-      <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" v-toggle-row class="wp-tgr__check">
-        <Checkbox
-          :model-value="!!t.upstream"
-          size="sm"
-          aria-label="Upstream can set it"
-          data-test="tg-upstream"
-          @update:model-value="(v: boolean) => emit('patch', { upstream: v ? true : undefined })"
-        />
-        <span aria-hidden="true">Upstream can set it</span>
-      </span>
-      <div v-if="groupOptions.length" class="wp-tgr__field">
-        <span>Group</span>
-        <WpSelect
-          :model-value="groupId"
-          :options="groupOptions"
-          aria-label="Group"
-          data-test="tg-group"
-          @update:model-value="(v: string) => emit('move-group', v)"
-        />
-      </div>
-      <div class="wp-tgr__edit-foot">
-        <span v-tooltip="!t.pin && outputsFull ? 'All 16 outputs are in use' : 'Show a BOOLEAN output for switch nodes'" v-toggle-row class="wp-tgr__check">
-          <Checkbox
-            :model-value="t.pin"
-            size="sm"
-            :disabled="!t.pin && outputsFull"
-            aria-label="BOOLEAN output"
-            data-test="tg-pin"
-            @update:model-value="(v: boolean) => emit('patch', { pin: v })"
-          />
-          <span aria-hidden="true">BOOLEAN output</span>
-        </span>
-        <span class="wp-tgr__foot-btns">
-          <Button variant="primary" size="sm" icon="pi-check" data-test="tg-done" @click="emit('edit')">Done</Button>
-        </span>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -559,18 +305,13 @@ function flip(): void {
 .wp-tgr__row.has-icon-color .wp-tgr__chip :deep(.wp-switch--chip .wp-switch__icon) { color: var(--wp-tg-icon); }
 .wp-tgr__row.has-text-color .wp-tgr__chip :deep(.wp-switch--chip .wp-switch__label) { color: var(--wp-tg-text); }
 .wp-tgr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
-.wp-tgr__looks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-.wp-tgr__look { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--wp-text-muted, var(--wp-text2)); }
 /* Mute / bypass icon: dim while it isn't acting, coloured while it is
  * (bypass in the host's bypass violet, mute in amber). */
 .wp-tgr__ctlicon { flex: none; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); opacity: 0.7; }
 .wp-tgr__ctlicon.is-active { opacity: 1; }
 .wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
 .wp-tgr__ctlicon.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }
-.wp-tgr__var-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.wp-tgr__var-row .wp-tgr__var { flex: 1 1 0; min-width: 80px; }
 .wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-tgr__note { margin: 0; display: flex; align-items: baseline; gap: 5px; font-size: 10.5px; line-height: 1.4; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__ctl { display: inline-flex; flex: none; }
 .wp-tgr__radio {
@@ -596,27 +337,4 @@ function flip(): void {
 }
 .wp-tgr__radio:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--wp-border-focus, var(--wp-accent)); }
 
-/* Edit panel */
-.wp-tgr__edit {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-}
-.wp-tgr__edit-head { display: flex; align-items: center; justify-content: space-between; }
-.wp-tgr__cap {
-  font: 600 9px var(--wp-font-sans, sans-serif);
-  letter-spacing: 0.08em;
-  color: var(--wp-text-dim, var(--wp-text-muted, var(--wp-text2)));
-}
-.wp-tgr__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.wp-tgr__field > span { font-size: 10.5px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-tgr__field em { font-style: normal; font-weight: 400; color: var(--wp-text-dim, var(--wp-text3)); margin-left: 4px; }
-.wp-tgr__two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-.wp-tgr__edit-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.wp-tgr__foot-btns { display: inline-flex; align-items: center; gap: 6px; }
-.wp-tgr__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 </style>

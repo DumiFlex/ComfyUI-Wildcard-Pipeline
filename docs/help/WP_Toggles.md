@@ -6,13 +6,13 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 ## On the node
 
 - **upstream (in)** `context`: Optional Context to extend. Only nodes after this one see the toggle variables. It can also set toggles (see below).
-- **Pencil (toolbar)**: Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit window: the editor on the left, a live preview of the node on the right. Done saves your changes, Cancel or Escape drops them. The node itself only shows the switches. An empty node has an Add toggles button that opens it too.
+- **Pencil (toolbar)**: Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit view: the mode, the Pick one options, the grips to reorder, the row buttons, Add toggle and Add label. Done goes back to the clean view, which shows only the switches.
 - **Any on / Pick one**: Any on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons.
 - **writes (Pick one)**: Optional variable that also gets the picked toggle's value (or its name), so one rule can branch on it.
-- **Globe (row)**: Edit window only. On (the default) keeps the toggle's variable internal: rules read it, the Assembler doesn't offer it and it never prints. Turn it off to use the variable in a prompt. Same in Any on and Pick one.
+- **Globe (row)**: Edit view only. On (the default) keeps the toggle's variable internal: rules read it, the Assembler doesn't offer it and it never prints. Turn it off to use the variable in a prompt. Same in Any on and Pick one.
 - **Show in Assembler (Pick one)**: The picked variable shows in the Assembler and can print in the prompt. Off, it is internal.
 - **Style (Pick one)**: How every row looks in Pick one: Radio (a round dot, the default), Chip (the name across the row, lit when picked), Switch or Check. Turning one on turns the others off.
-- **Pencil, globe, trash (row)**: Each row in the edit window has three buttons: the pencil opens the toggle's edit panel (name, variable, looks, style, needs, what off mutes or bypasses, group and its output), the globe keeps its variable internal, the trash removes it.
+- **Pencil, globe, trash (row)**: Each row in the edit view has three buttons, like a module on a Context node: the pencil opens the toggle's own settings in a window (name, variable, looks, style, needs, what off mutes or bypasses, group and its output) with the row drawn on top as the node will show it; the globe keeps its variable internal; the trash removes it.
 - **Add toggle / Add label**: A new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it; its icon and colour buttons pick any icon and any colour. Drag a toggle's grip under a label to move it into that group; a dragged label takes its toggles along.
 - **control dots (in)**: A toggle that mutes or bypasses has a dot at the left of its row: wire the nodes it drives into it.
 - **context (out)** `context`: The Context with every toggle variable added. Internal ones (the globe) are for rules only; the rest show in the Assembler.

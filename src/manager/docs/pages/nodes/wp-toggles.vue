@@ -62,11 +62,11 @@ import VarToken from "../../../components/docs/VarToken.vue";
 
     <DocSection title="Icons and colours">
       <p>
-        Give a toggle an icon and its own colours under <b>Looks</b> in its edit panel: one for the
+        Give a toggle an icon and its own colours under <b>Looks</b> in its window: one for the
         icon, one for the name and one for the control itself, so Day can glow yellow and Night blue.
         A label's icon and colour buttons do the same for the group, and its toggles wear that
-        colour on their left edge. The preview beside the editor shows each change before you
-        press Done.
+        colour on their left edge. The row at the top of the toggle's window shows each change
+        before you press Done.
       </p>
     </DocSection>
 
@@ -74,7 +74,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <p>
         A toggle's variable is internal by default: rules read it, but the Assembler doesn't offer
         it, since <code>true</code> or <code>false</code> rarely belongs in a prompt. To print it, open
-        the edit window and turn off the globe on its row. In Pick one, <b>Show in Assembler</b> does the
+        the edit view and turn off the globe on its row. In Pick one, <b>Show in Assembler</b> does the
         same for the picked variable, so <VarToken>$time</VarToken> can print the picked toggle's
         <b>Value</b>.
       </p>
