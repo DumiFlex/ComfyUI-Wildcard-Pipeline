@@ -87,8 +87,12 @@ tutorial(
       await t.press("Control+/");
       await t.beat(1200);
       // The dialog role sits on a full-width wrapper; box the panel inside it.
-      await t.callout("keys", page.getByRole("dialog").last().locator(".wp-modal").first(), "Keyboard shortcuts", 4);
       await t.waitVoice();
+      // The box gets its own line (it came at the end of the last one and flashed past).
+      await t.callout("keys", page.getByRole("dialog").last().locator(".wp-modal").first(), "Keyboard shortcuts", 4);
+      await t.say("Here they all are, in one list.");
+      await t.waitVoice();
+      await t.beat(500);
       await t.uncallout("keys");
       await t.press("Escape");
       await t.beat(500);

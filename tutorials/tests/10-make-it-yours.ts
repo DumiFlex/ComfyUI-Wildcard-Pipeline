@@ -132,7 +132,8 @@ tutorial(
       await openPlayground(t);
       const canvasColors = page.locator('[data-test="playground-controls"] label.wp-pg__row').filter({ hasText: "Canvas colors" }).first();
       await t.callout("cc", canvasColors, "Follow the palette, or not", 6);
-      await t.say("Rather keep Wildcard Pipeline's own colours? Canvas colors switches that.");
+      // Ends on a soft word: the question + "switches that." landed hard in the voice.
+      await t.say("Canvas colors lets you keep Wildcard Pipeline's own colors instead.");
       await t.waitVoice();
       await t.uncallout("cc");
     });

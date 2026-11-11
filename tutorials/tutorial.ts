@@ -39,6 +39,10 @@ function voiceLines(packDir: string): Record<string, VoiceLine> {
 }
 
 /** About how long a line takes to say, for lines without a voice file yet. */
+/** The shortest time a callout stays up, in ms. */
+const MIN_CALLOUT = 2000;
+/** A line that started at most this long before its box (ms) counts as the box's line. */
+const MINE_LEAD = 1500;
 const estimate = (text: string) => Math.max(1600, Math.round(text.length * 62));
 
 export interface Cue {
@@ -101,6 +105,10 @@ export class Tutor {
   private readonly t0 = Date.now();
   private pos: Point = { x: 960, y: 560 };
   private busyUntil = 0;
+  /** When the line being spoken started (Date.now()). */
+  private sayAt = 0;
+  /** When each callout on screen came up (Date.now()), for the minimum hold in `uncallout`. */
+  private calloutAt = new Map<string, number>();
   /** The first move after a line waits until then, so the hand acts as the voice says it, not ahead of it. */
   private leadUntil = 0;
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -156,6 +164,7 @@ export class Tutor {
     // Each line also flashes the sync mark (render.mjs paints it out), so the voice can't drift from the picture.
     const mark = at - (this.marks[this.marks.length - 1] ?? -Infinity) > 900;
     if (mark) this.marks.push(at);
+    this.sayAt = Date.now();
     this.busyUntil = Date.now() + ms + 350;
     this.leadUntil = Date.now() + Math.min(ms * 0.45, 2200);
     if (this.hideTimer) clearTimeout(this.hideTimer);
@@ -597,6 +606,7 @@ export class Tutor {
       height: Math.max(...boxes.map((b) => b.y + b.height)) + pad - y,
     };
     await this.page.evaluate(([i, b, l]) => window.__tut?.callout(i, b, l), [id, box, label ?? ""] as const);
+    this.calloutAt.set(id, Date.now());
     this.follow(id, Array.isArray(target) ? target : [target], pad);
   }
 
@@ -652,6 +662,16 @@ export class Tutor {
   }
 
   async uncallout(id: string): Promise<void> {
+    // Every box is held long enough to see, and for the whole of its line: a line still playing
+    // that started with the box (or just before it) is the box's line. Short, unsynced boxes kept
+    // coming up in review (T12, A14, A17), so the rule lives here rather than in each video.
+    const at = this.calloutAt.get(id);
+    this.calloutAt.delete(id);
+    if (at !== undefined && this.followers.has(id)) {
+      if (this.busyUntil > Date.now() && this.sayAt >= at - MINE_LEAD) await this.waitVoice();
+      const left = at + MIN_CALLOUT - Date.now();
+      if (left > 0) await sleep(left);
+    }
     this.stopFollowing(id);
     await this.page.evaluate((i) => window.__tut?.uncallout(i), id);
   }

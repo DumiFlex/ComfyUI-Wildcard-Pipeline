@@ -138,8 +138,8 @@ function suggest(): void {
 </script>
 
 <template>
-  <div class="wp-bmf">
-    <div class="wp-bmf__row wp-bmf__row--top">
+  <div class="wp-bmf wp-frameless__pass">
+    <div class="wp-bmf__row wp-bmf__row--top wp-frameless__pass">
       <span class="wp-bmf__label">Lands at</span>
       <div class="wp-bmf__grid" role="radiogroup" aria-label="Where the bookmark lands on screen">
         <WpIconButton
@@ -167,7 +167,7 @@ function suggest(): void {
       </div>
     </div>
 
-    <div class="wp-bmf__row">
+    <div class="wp-bmf__row wp-frameless__pass">
       <span class="wp-bmf__label">Zoom</span>
       <WpSegmented
         :model-value="value.zoomMode"
@@ -199,7 +199,7 @@ function suggest(): void {
       </template>
     </div>
 
-    <div class="wp-bmf__row">
+    <div class="wp-bmf__row wp-frameless__pass">
       <span class="wp-bmf__label">Shortcut</span>
       <Button
         size="sm"

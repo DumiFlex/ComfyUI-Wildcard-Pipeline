@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, provide, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, provide, ref, watch } from "vue";
 import ColorField from "@/kit/ColorField.vue";
 import Input from "@/kit/Input.vue";
 import Button from "@/kit/Button.vue";
@@ -8,10 +8,12 @@ import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import RadioGroup from "@/kit/RadioGroup.vue";
 import NoteMarkdown from "./note-markdown";
-import NoteTextEditor from "./NoteTextEditor.vue";
+// The text and its preview edit in their own window (loaded on first open).
+const NoteTextModal = defineAsyncComponent(() => import("./NoteTextModal.vue"));
 import { NOTE_ACTIONS, NOTE_CONTEXTS } from "./note-actions";
 import { useNoteLibrary } from "./note-library-state";
 import { prunePictures } from "./note-images";
+import type { NoteImage } from "../../extension/note";
 import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import BookmarkFields from "../bookmark/BookmarkFields.vue";
@@ -98,6 +100,28 @@ const bookmarkHint = computed(() => {
   return b ? `Also a bookmark${b.shortcut ? ` · ${b.shortcut}` : ""}` : "";
 });
 
+// ── text window ────────────────────────────────────────────────────
+const textOpen = ref(false);
+function onText(next: { text: string; images: Record<string, NoteImage> }): void {
+  textOpen.value = false;
+  patch({ text: next.text, images: prunePictures(next.text, next.images) });
+}
+/** What the node says about the text: its first line and how much more. */
+const textSummary = computed(() => {
+  const t = props.config.text.trim();
+  if (!t) return "";
+  const lines = t.split("\n");
+  const first = (lines.find((l) => l.trim()) ?? "").replace(/^[#>\-*\s]+|[*_`~]/g, "").trim();
+  return first.length > 60 ? `${first.slice(0, 59)}…` : first;
+});
+const textCount = computed(() => {
+  const t = props.config.text.trim();
+  if (!t) return "";
+  const lines = t.split("\n").length;
+  const pics = Object.keys(props.config.images).length;
+  return [`${lines} line${lines === 1 ? "" : "s"}`, pics ? `${pics} picture${pics === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+});
+
 /** Any link in the text: a label shows a mark for it. */
 const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.config.text));
 </script>
@@ -149,14 +173,14 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
          the kit Popover listens on window in the capture phase. -->
     <form
       v-else
-      class="wp-note__form"
+      class="wp-note__form wp-frameless__pass"
       data-test="note-form"
       @submit.prevent="emit('update:editing', false)"
       @keydown.stop
       @keyup.stop
       @keypress.stop
     >
-      <div class="wp-note__row">
+      <div class="wp-note__row wp-frameless__pass">
         <span class="wp-note__label">Tone</span>
         <WpSegmented
           :model-value="config.tone"
@@ -200,7 +224,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
         data-test="note-icon-grid"
         @update:model-value="(v: string | null) => { patch({ icon: v ?? '' }); pickIcon = false; }"
       />
-      <div class="wp-note__row">
+      <div class="wp-note__row wp-frameless__pass">
         <span class="wp-note__label">Look</span>
         <WpSegmented
           :model-value="config.look"
@@ -219,7 +243,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
           @update:model-value="(v: boolean) => emit('update:pinned', v)"
         />
       </div>
-      <div class="wp-note__row">
+      <div class="wp-note__row wp-frameless__pass">
         <span class="wp-note__label">Colour</span>
         <RadioGroup
           class="wp-note__swatches"
@@ -239,21 +263,27 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
           @update:model-value="(v: string) => patch({ color: noteColor(v.slice(0, 7)) })"
         />
       </div>
-      <label class="wp-note__field">
+      <label class="wp-note__field wp-frameless__pass">
         <span class="wp-note__label">Title</span>
         <Input size="sm" :model-value="title" data-test="note-title" @input="onTitle" />
       </label>
-      <div class="wp-note__field">
-        <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows when you hover the label" : "Markdown, links and icons" }}</span></span>
-        <NoteTextEditor
-          :model-value="config.text"
-          :images="config.images"
-          :hint="config.look === 'label' ? 'What the label explains…' : 'Write the note. The bar above adds links to the docs, icons and formatting.'"
-          @update:model-value="(v: string) => patch({ text: v })"
-          @picture="(v) => patch(v)"
-        />
+      <div class="wp-note__field wp-frameless__pass">
+        <span class="wp-note__label">Text <span class="wp-note__hint">{{ config.look === "label" ? "shows when you hover the label" : "Markdown, links, icons and pictures" }}</span></span>
+        <div class="wp-note__textrow wp-frameless__pass">
+          <span class="wp-note__textsum" data-test="note-text-summary">
+            <template v-if="textSummary">{{ textSummary }} <span class="wp-note__hint">{{ textCount }}</span></template>
+            <span v-else class="wp-note__hint">Nothing written yet.</span>
+          </span>
+          <Button
+            size="sm"
+            icon="pi-pencil"
+            hint="Write the text in its own window, with the preview beside it"
+            data-test="note-text-edit"
+            @click="textOpen = true"
+          >{{ config.text.trim() ? "Edit text" : "Write text" }}</Button>
+        </div>
       </div>
-      <div class="wp-note__row">
+      <div class="wp-note__row wp-frameless__pass">
         <WpSwitch
           :model-value="!!config.bookmark"
           size="sm"
@@ -272,10 +302,21 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
         @update="onJump"
         @recording="(on: boolean) => emit('recording', on)"
       />
-      <div class="wp-note__actions">
+      <div class="wp-note__actions wp-frameless__pass">
+        <span class="wp-note__hint">Drag the card's background to move the note.</span>
         <Button variant="primary" size="sm" type="submit" data-test="note-done">Done</Button>
       </div>
     </form>
+    <NoteTextModal
+      v-if="textOpen"
+      :text="config.text"
+      :images="config.images"
+      :title="title"
+      :look="config.look"
+      :tone-css="config.color ? noteColorCss(config.color) : ''"
+      @done="onText"
+      @close="textOpen = false"
+    />
   </div>
 </template>
 
@@ -296,9 +337,6 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
      No padding: the node is exactly the panel, so its selection outline hugs it. */
   pointer-events: none;
 }
-/* Editing, the note is a form: nothing above it may be pointer-events: none,
-   or Firefox's overlay scrollbars inside it ignore the pointer until a click. */
-.wp-note--editing { pointer-events: auto; }
 
 /* ── panel looks ─────────────────────────────────────────────────── */
 .wp-note__panel {
@@ -393,8 +431,9 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
 .wp-note__body { margin-top: 8px; color: var(--wp-text-muted, inherit); }
 .wp-note__empty { margin: 0; color: var(--wp-text-dim); }
 /* ── edit form ───────────────────────────────────────────────────── */
+/* The form lets presses on its background through, so the note drags while
+ * it is open (frameless-node.css: wp-frameless__pass). */
 .wp-note__form {
-  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -418,7 +457,18 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
 .wp-note__custom--on { border-color: var(--wp-text); }
 .wp-note__chev { font-size: 9px; color: var(--wp-text-dim); }
 .wp-note__field { display: flex; flex-direction: column; gap: 4px; }
-.wp-note__actions { display: flex; justify-content: flex-end; }
+.wp-note__actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wp-note__actions .wp-note__hint { margin-left: 0; font-size: 11px; }
+.wp-note__textrow { display: flex; align-items: center; gap: 8px; }
+.wp-note__textsum {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--wp-text-muted);
+}
 </style>
 
 <style>
@@ -466,10 +516,8 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
      drags the node; the canvas handles it instead. The note's own buttons
      and its edit form take events back: those selectors must stay more
      specific than the `none` one (the :not() inside :has() counts). */
-  .lg-node:has(.wp-note:not(.wp-note--editing)) .lg-node-widgets,
-  .lg-node:has(.wp-note:not(.wp-note--editing)) .lg-node-widgets * { pointer-events: none !important; }
-  .lg-node:has(.wp-note) .lg-node-widgets .wp-note__form,
-  .lg-node:has(.wp-note) .lg-node-widgets .wp-note__form *,
+  .lg-node:has(.wp-note) .lg-node-widgets,
+  .lg-node:has(.wp-note) .lg-node-widgets * { pointer-events: none !important; }
   .lg-node:has(.wp-note) .lg-node-widgets .wp-note-md a,
   .lg-node:has(.wp-note) .lg-node-widgets .wp-note-md a *,
   .lg-node:has(.wp-note) .lg-node-widgets .wp-note-md button,

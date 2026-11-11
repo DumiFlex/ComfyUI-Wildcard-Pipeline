@@ -80,7 +80,7 @@ tutorial(
       await aiWait(t);
       await t.callout("ans", page.locator('[data-test="ai-chat-reply"]').last(), "An answer from the docs", 5);
       await t.waitVoice();
-      await t.say("Like any language model, it can get things wrong, or make up a feature that doesn't exist. A bigger model does better overall than a small one like this, so check what it says against the docs.");
+      await t.say("Like any language model, it can get things wrong, or make up a feature that doesn't exist, so check what it says against the docs.");
       await t.waitVoice();
       await t.uncallout("ans");
     });
