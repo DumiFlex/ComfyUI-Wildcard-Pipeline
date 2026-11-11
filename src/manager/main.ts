@@ -1,3 +1,5 @@
+// Layer order first: it must come before any sheet that names a layer.
+import "./styles/layers.css";
 import { createApp } from "vue";
 import { markOverlayScrollbars } from "@/kit/overlay-scrollbars";
 import { createPinia } from "pinia";
