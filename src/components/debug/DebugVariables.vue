@@ -10,6 +10,7 @@ import Chip from "@/kit/Chip.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
+import { TEMPLATE_TYPE, valueTypeLook, type ValueTypeLook } from "../injector/value-types";
 import {
   KIND_ICONS,
   NODE_KINDS,
@@ -166,6 +167,12 @@ function moduleFact(v: VarRow): string {
     if (typeof fired === "number") return `branch ${fired + 1}`;
   }
   return "";
+}
+/** The Injector's own icon + colour for this value's wire type. */
+function injectorLook(v: VarRow): ValueTypeLook {
+  const step = stepOf(v);
+  if (step?.isTemplate) return TEMPLATE_TYPE;
+  return valueTypeLook(step?.valueType);
 }
 function injectorType(v: VarRow): string {
   if (v.writerKind !== "injector") return "";
@@ -358,7 +365,13 @@ const nameWidth = computed(() => {
         @click="emit('goto-step', v.writerKey)"
       >
         <i :class="['wp-dbg-var-row__src-icon', KIND_ICONS[v.writerKind ?? 'unknown']]" aria-hidden="true" />
-        <Chip v-if="injectorType(v)" :color="kindColor('injector')" class="wp-dbg-var-row__type" data-test="dbg-node-type">{{ injectorType(v) }}</Chip>
+        <Chip
+          v-if="injectorType(v)"
+          :color="injectorLook(v).color"
+          :icon="injectorLook(v).icon"
+          class="wp-dbg-var-row__type"
+          data-test="dbg-node-type"
+        >{{ injectorType(v) }}</Chip>
         <span class="wp-dbg-var-row__src-name" :data-test="nodeKindOf(v) ? 'dbg-node-source' : undefined">{{ nodeKindOf(v) ? nodeNote(sec, v) || writerLabel(v) : writerLabel(v) }}</span>
         <span v-if="!nodeKindOf(v) && moduleFact(v)" class="wp-dbg-var-row__fact" data-test="dbg-var-fact">{{ moduleFact(v) }}</span>
       </Button>

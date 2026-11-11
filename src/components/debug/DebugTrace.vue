@@ -8,6 +8,7 @@ import WpIconButton from "@/kit/WpIconButton.vue";
 import { nextTick, ref, watch } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugStepDetail from "./DebugStepDetail.vue";
+import { TEMPLATE_TYPE, valueTypeLook, type ValueTypeLook } from "../injector/value-types";
 import {
   KIND_ICONS,
   NODE_KINDS,
@@ -91,6 +92,10 @@ function groupKind(g: TraceGroup): Kind | null {
   return k && NODE_KINDS.has(k) ? k : null;
 }
 /** A node group's rows as card entries (each row is one variable). */
+/** An Injector step's wire type, in the Injector's own icon and colour. */
+function typeLook(s: TraceStep): ValueTypeLook {
+  return s.isTemplate ? TEMPLATE_TYPE : valueTypeLook(s.valueType);
+}
 function groupIcon(g: TraceGroup): string {
   const k = groupKind(g);
   return k ? KIND_ICONS[k] : "pi pi-sitemap";
@@ -189,7 +194,12 @@ function groupTooltip(g: TraceGroup): string {
           </span>
           <span class="wp-dbg-step__badges">
             <span v-if="s.source" class="wp-dbg-badge wp-dbg-badge--kind" data-test="dbg-step-source" title="Where this value came from">{{ s.source }}</span>
-            <span v-if="s.valueType" class="wp-dbg-badge" :title="s.isTemplate ? 'Template rendered from $slot values' : 'Value type on the wire'">{{ s.isTemplate ? "TPL" : s.valueType }}</span>
+            <span
+              v-if="s.valueType"
+              class="wp-dbg-badge wp-dbg-badge--type"
+              :style="{ '--wp-dbg-type': typeLook(s).color }"
+              :title="s.isTemplate ? 'Template rendered from $slot values' : 'Value type on the wire'"
+            ><i :class="['pi', typeLook(s).icon]" aria-hidden="true" />{{ s.isTemplate ? "TPL" : s.valueType }}</span>
             <span
               v-if="typeof s.detail?.chance === 'number' && s.detail.chance < 0.995"
               class="wp-dbg-badge"
@@ -255,6 +265,12 @@ function groupTooltip(g: TraceGroup): string {
 </template>
 
 <style scoped>
+.wp-dbg-badge.wp-dbg-badge--type {
+  display: inline-flex; align-items: center; gap: 3px;
+  color: var(--wp-dbg-type);
+  background: color-mix(in oklab, var(--wp-dbg-type) 16%, transparent);
+}
+.wp-dbg-badge--type .pi { font-size: 8px; }
 .wp-dbg-trace { display: flex; flex-direction: column; gap: 8px; }
 .wp-dbg-group { display: flex; flex-direction: column; }
 .wp-dbg-group__head {

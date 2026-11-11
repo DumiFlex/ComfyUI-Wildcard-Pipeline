@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { valueTypeLook } from "./value-types";
 import { computed, ref } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import Checkbox from "@/kit/Checkbox.vue";
@@ -74,30 +75,8 @@ const isEmpty = computed(() => !props.row.binding.trim());
  *  the user correlate the wire visually. Falls back to pi-circle for
  *  unknown types so the icon slot never goes empty (consistent row
  *  height). */
-const TYPE_ICONS: Record<string, string> = {
-  // Engine-native primitives
-  string: "pi-pencil",
-  int: "pi-hashtag",
-  float: "pi-percentage",
-  boolean: "pi-check-square",
-  // Common ComfyUI tensor / model types — stringified by engine but
-  // worth surfacing visually so the user reads the wire kind.
-  image: "pi-image",
-  mask: "pi-clone",
-  latent: "pi-cloud",
-  conditioning: "pi-comment",
-  model: "pi-cube",
-  clip: "pi-tag",
-  vae: "pi-box",
-  audio: "pi-volume-up",
-  video: "pi-video",
-  noise: "pi-sparkles",
-  sigmas: "pi-chart-line",
-  guider: "pi-compass",
-  sampler: "pi-sliders-h",
-};
 const typeIcon = computed(
-  () => TYPE_ICONS[(props.valueType ?? "").toLowerCase()] ?? "pi-circle",
+  () => valueTypeLook(props.valueType).icon,
 );
 
 const hasTemplate = computed(() => {
