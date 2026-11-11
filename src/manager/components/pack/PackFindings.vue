@@ -5,6 +5,7 @@
  * with "Fix with AI".
  */
 import { computed } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import type { AiPackFinding } from "../../api/types";
@@ -50,7 +51,7 @@ function patchLabel(f: AiPackFinding): string {
         </span>
       </li>
     </ul>
-    <p v-if="pb.notice.value" class="wp-pack-findings__notice" role="status" data-test="pack-notice"><i class="pi pi-info-circle" aria-hidden="true" /> {{ pb.notice.value }}</p>
+    <Banner v-if="pb.notice.value" tone="warn" size="sm" icon="pi-info-circle" class="wp-pack-findings__notice" data-test="pack-notice">{{ pb.notice.value }}</Banner>
     <div class="wp-pack-findings__row">
       <span class="wp-pack-findings__dim">{{ stuck ? `The AI couldn't fix ${stuck} last time: apply its fix, edit the item, or dismiss it.` : fixes ? `${fixes} to fix before building.` : 'Checked against the authoring guide.' }}</span>
       <Button size="sm" variant="ghost" icon="pi-microchip-ai" :loading="pb.reviewing.value" :disabled="busy" data-test="pack-review-ai" @click="pb.reviewPlan()">Review with AI</Button>
@@ -76,7 +77,7 @@ function patchLabel(f: AiPackFinding): string {
 .wp-pack-findings__text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .wp-pack-findings__by { color: var(--wp-text-dim); }
 .wp-pack-findings__acts { flex: none; display: inline-flex; gap: 4px; }
-.wp-pack-findings__notice { margin: 8px 0 0; font-size: 12.5px; color: var(--wp-warn); display: flex; gap: 6px; align-items: center; }
+.wp-pack-findings__notice { margin: 8px 0 0; }
 .wp-pack-findings__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .wp-pack-findings__dim { flex: 1; font-size: 12px; color: var(--wp-text-dim); }
 </style>

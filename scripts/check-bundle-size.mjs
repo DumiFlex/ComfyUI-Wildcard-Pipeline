@@ -378,7 +378,9 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // fixes, PostCard samples, overlay-scrollbar room) put the total at ~640.9 KB.
 // RAISED 650 -> 655 KB on 2026-11-11: WP Debug's newer-node support (node
 // cards in Variables, Show node blink, toggle values/.bool) put it at ~650.04 KB.
-const TOTAL_LIMIT = 655 * 1024;     // 655 KB
+// RAISED 655 -> 660 KB on 2026-11-11: WP Debug folding long values plus
+// dev's kit Banners (#363) put it at ~655.7 KB.
+const TOTAL_LIMIT = 660 * 1024;     // 660 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

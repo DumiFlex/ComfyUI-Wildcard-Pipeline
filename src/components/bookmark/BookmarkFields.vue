@@ -138,8 +138,8 @@ function suggest(): void {
 </script>
 
 <template>
-  <div class="wp-bmf">
-    <div class="wp-bmf__row wp-bmf__row--top">
+  <div class="wp-bmf wp-frameless__pass">
+    <div class="wp-bmf__row wp-bmf__row--top wp-frameless__pass">
       <span class="wp-bmf__label">Lands at</span>
       <div class="wp-bmf__grid" role="radiogroup" aria-label="Where the bookmark lands on screen">
         <WpIconButton
@@ -167,7 +167,7 @@ function suggest(): void {
       </div>
     </div>
 
-    <div class="wp-bmf__row">
+    <div class="wp-bmf__row wp-frameless__pass">
       <span class="wp-bmf__label">Zoom</span>
       <WpSegmented
         :model-value="value.zoomMode"
@@ -199,7 +199,7 @@ function suggest(): void {
       </template>
     </div>
 
-    <div class="wp-bmf__row">
+    <div class="wp-bmf__row wp-frameless__pass">
       <span class="wp-bmf__label">Shortcut</span>
       <Button
         size="sm"
@@ -223,7 +223,7 @@ function suggest(): void {
         @click="emit('update', { shortcut: '' })"
       />
     </div>
-    <p v-if="refused" class="wp-bmf__refused" role="alert" data-test="bm-refused">{{ refused }}</p>
+    <Banner v-if="refused" tone="danger" size="sm" data-test="bm-refused">{{ refused }}</Banner>
     <Banner
       v-else-if="conflicts.length && worst !== 'info'"
       :tone="worst"
@@ -276,6 +276,5 @@ function suggest(): void {
 .wp-bmf__record { min-width: 86px; }
 .wp-bmf__hint { font-size: 10.5px; color: var(--wp-text-dim); }
 .wp-bmf__hint--block { margin: 0; padding: 0 6px; }
-.wp-bmf__refused { margin: 0; padding: 0 6px; font-size: 11px; color: var(--wp-danger); }
 .wp-bmf__conflict { display: block; }
 </style>

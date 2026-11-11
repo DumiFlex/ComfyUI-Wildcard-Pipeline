@@ -14,6 +14,7 @@
  * aimed at that bundle (`pb.target`).
  */
 import { textareaEl } from "../utils/kit-field-el";
+import Banner from "@/kit/Banner.vue";
 import Textarea from "@/kit/Textarea.vue";
 import Input from "@/kit/Input.vue";
 import WpNumber from "@/kit/WpNumber.vue";
@@ -469,7 +470,7 @@ function stopExtending(): void {
           >Plan it</Button>
         </div>
         <AiWorking v-if="convo.loading.value" class="wp-pack__status" label="Planning" data-test="pack-working" />
-        <p v-if="convo.error.value" class="wp-pack__error" role="alert">{{ convo.error.value }}</p>
+        <Banner v-if="convo.error.value" tone="danger" size="sm" class="wp-pack__error">{{ convo.error.value }}</Banner>
       </Card>
     </div>
 
@@ -684,8 +685,8 @@ function stopExtending(): void {
               @click="pb.refinePlan"
             >Update plan</Button>
           </div>
-          <p v-if="convo.error.value" class="wp-pack__error" role="alert">{{ convo.error.value }}</p>
-          <p v-if="pb.error.value" class="wp-pack__error" role="alert">{{ pb.error.value }}</p>
+          <Banner v-if="convo.error.value" tone="danger" size="sm" class="wp-pack__error">{{ convo.error.value }}</Banner>
+          <Banner v-if="pb.error.value" tone="danger" size="sm" class="wp-pack__error">{{ pb.error.value }}</Banner>
         </Card>
       </div>
 
@@ -902,7 +903,7 @@ function stopExtending(): void {
           {{ pb.summary.value.built }} built<template v-if="pb.summary.value.failed">, {{ pb.summary.value.failed }} failed</template><template v-if="pb.summary.value.skipped">, {{ pb.summary.value.skipped }} skipped</template><template v-if="pb.summary.value.waiting">, {{ pb.summary.value.waiting }} not built</template>.
           <template v-if="pb.summary.value.failed">Retry a failed item, rebuild it with a note, or leave it out.</template>
         </p>
-        <p v-if="pb.error.value" class="wp-pack__error" role="alert">{{ pb.error.value }}</p>
+        <Banner v-if="pb.error.value" tone="danger" size="sm" class="wp-pack__error">{{ pb.error.value }}</Banner>
       </Card>
 
       <div class="wp-pack__col">
@@ -1024,7 +1025,7 @@ function stopExtending(): void {
 .wp-pack__dim { font-size: 12px; color: var(--wp-text-dim); margin: 0; }
 .wp-pack__row > .wp-pack__dim { flex: 1; }
 .wp-pack__status { margin: 10px 0 0; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 8px; align-items: center; }
-.wp-pack__error { margin: 6px 0 0; font-size: 12px; color: var(--wp-danger); }
+.wp-pack__error { margin: 6px 0 0; }
 .wp-pack__asks { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .wp-pack__asks li { white-space: pre-wrap; overflow-wrap: anywhere; }
 .wp-pack__asks li:not(:last-child) { color: var(--wp-text-muted); }

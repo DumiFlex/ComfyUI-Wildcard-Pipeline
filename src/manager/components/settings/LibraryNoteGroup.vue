@@ -7,6 +7,7 @@
  * the library summary; nothing is saved until the user presses Save.
  */
 import { computed, ref, watch } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Textarea from "@/kit/Textarea.vue";
 import SettingGroup from "@/kit/SettingGroup.vue";
@@ -130,10 +131,10 @@ watch(draft, () => { savedNow.value = false; });
             >Save</Button>
           </span>
         </div>
-        <p v-if="over" class="wp-libnote__problem" role="alert" data-test="ai-library-note-over">
+        <Banner v-if="over" tone="warn" size="sm" data-test="ai-library-note-over">
           {{ length - NOTE_MAX }} characters over. Small models follow a short note better.
-        </p>
-        <p v-if="problem" class="wp-libnote__problem" role="alert" data-test="ai-library-note-error">{{ problem }}</p>
+        </Banner>
+        <Banner v-if="problem" tone="danger" size="sm" data-test="ai-library-note-error">{{ problem }}</Banner>
       </div>
     </SettingRow>
   </SettingGroup>
@@ -149,5 +150,4 @@ watch(draft, () => { savedNow.value = false; });
 .wp-libnote__status[data-tone="ok"] { color: var(--wp-success); }
 .wp-libnote__status i { font-size: 12px; }
 .wp-libnote__actions { display: inline-flex; gap: var(--wp-space-2); margin-left: auto; }
-.wp-libnote__problem { margin: 0; font-size: var(--wp-text-sm); color: var(--wp-danger, var(--wp-warn)); }
 </style>

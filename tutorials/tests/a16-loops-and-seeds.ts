@@ -14,11 +14,18 @@ tutorial(
   async (t) => {
     const page = t.page;
     // A highlight on a Show Any waits until the run's text is in it, not just until the run ends.
+    // The node's text, its fields' values included: innerText skips what a textarea holds, so a
+    // wait on it alone ran to its 15 s limit (the dead pauses after each run).
+    const textOf = (node: string) =>
+      t.node(node)
+        .evaluate((el) => `${(el as HTMLElement).innerText} ${[...el.querySelectorAll("textarea, input")].map((f) => (f as HTMLInputElement).value).join(" ")}`)
+        .catch(() => "");
     const filled = async (node: string, re: RegExp) => {
       for (let i = 0; i < 60; i++) {
-        if (re.test(await t.node(node).innerText().catch(() => ""))) break;
+        if (re.test(await textOf(node))) break;
         await t.beat(250);
       }
+      if (!re.test(await textOf(node))) t.h.log(`${node} never showed ${re}`);
       await t.beat(400);
     };
 
@@ -54,8 +61,11 @@ tutorial(
         await t.click(more);
         await t.beat(350);
       }
-      await t.run();
-      await filled(text, /frame 4/);
+      // The wait for the run plays sped up, so it never sits silent on screen.
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(text, /frame 4/);
+      }, 8);
       await t.callout("out", t.node(text), "Four numbered prompts", 6);
       await t.say("Four prompts from one click, each with its own picks.");
       await t.waitVoice();
@@ -73,7 +83,9 @@ tutorial(
       await t.beat(900);
       const modal = page.locator('[data-test="seed-modal"]').last();
       await t.callout("seeds", modal, "One seed per frame", 5);
+      await t.say("Here they are, one seed for each frame.");
       await t.waitVoice();
+      await t.beat(300);
       await t.uncallout("seeds");
       await t.say("Lock a frame you like, and it keeps its seed while the others change. That's how you keep a good one and reroll the rest.");
       const lock = modal.locator('[data-test="seedrow-lock"]').nth(1);
@@ -117,10 +129,14 @@ tutorial(
       await t.click(modal.locator('[data-test="sweep-modal-done"]'));
       await t.beat(700);
       await t.say("Run.");
-      await t.run();
-      await filled(nodes.text, /frame 12/);
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(nodes.text, /frame 12/);
+      }, 8);
       await t.callout("out", t.node(nodes.text), "Every pair, one role", 6);
+      await t.say("Twelve prompts: every time of day with every hair style, and the same role on all of them.");
       await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("out");
     });
 
@@ -130,14 +146,20 @@ tutorial(
       await t.wire(nodes.loop, "loop_config", sl, "loop_config");
       const p2 = await t.addNode("Show Any", { x: 790, y: 720 });
       await t.wire(sl, "seed", p2, "anything");
-      await t.run();
-      await filled(p2, /\d{4,}[\s\S]*\d{4,}/);
-      // Both land low, under the caption: bring them up while they're talked about.
-      const back = await t.zoomOn(sl, { scale: 0.9, top: 160 });
-      await t.callout("sl", t.node(p2), "One sampler seed per frame", 5);
       await t.waitVoice();
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(p2, /\d{4,}[\s\S]*\d{4,}/);
+      }, 8);
+      // Both land low, under the caption: bring them up once, let the view settle, then box the
+      // seeds for their own line. The view stays there (panning back right after flashed the box).
+      await t.zoomOn(sl, { scale: 0.9, top: 160 });
+      await t.beat(600);
+      await t.callout("sl", t.node(p2), "One sampler seed per frame", 5);
+      await t.say("Each frame gets its own sampler seed.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("sl");
-      await t.setView(back);
       await t.say("Without it, a plain KSampler uses one seed for every frame, which is what you want for a clean sweep comparison.");
       await t.waitVoice();
     });

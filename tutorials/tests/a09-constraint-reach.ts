@@ -3,22 +3,10 @@
 // the forest; "first" covers only the next one, so the later one can roll a forest; "pick" ticks exactly
 // which ones. The constraint's reach is changed for this node in its Edit view. One Int node feeds
 // all three seeds, so a step rolls the whole chain. Last, a wildcard that reads Setting through an
-// @{} reference ("Daydream", made off camera) shows the constraint reaching inside nested picks too.
+// @{} reference ("Daydream", in the tutorial library) shows the constraint reaching inside nested picks too.
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
-// Off camera: a wildcard whose option reads Setting through an @{} reference.
-const DAYDREAM = {
-  id: "9e1a7c42",
-  type: "wildcard",
-  name: "Daydream",
-  description: "Reads Setting through an @{} reference, so a constraint on Setting reaches inside it.",
-  payload: {
-    var_binding: "daydream",
-    sub_categories: [],
-    options: [{ id: "d1a7c420", value: "dreaming of being @{aa76ada8#Setting}", weight: 1, sub_categories: [] }],
-  },
-};
 
 tutorial(
   "A09",
@@ -37,9 +25,6 @@ tutorial(
       return page.getByRole("dialog").last();
     };
 
-    await t.tidyLibrary();
-    const made = await t.h.api("/wp/api/modules", { method: "POST", body: DAYDREAM });
-    if (made.status >= 300) throw new StepError(`Couldn't add "Daydream" (${made.status}).`);
 
     const nodes = await t.h.step("Two settings", async () => {
       await t.go("/");
@@ -203,8 +188,6 @@ tutorial(
 
     await t.h.step("Outro", async () => {
       await t.say("First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain and inside nested ones. Next: negatives.");
-      // Off camera: the library back as the viewer has it.
-      await t.h.api(`/wp/api/modules/${DAYDREAM.id}`, { method: "DELETE" });
     });
   },
 );

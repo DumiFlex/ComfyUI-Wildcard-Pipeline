@@ -8,6 +8,7 @@
  * offers Undo. Follow-ups refine the answer like every AI panel.
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Chip from "@/kit/Chip.vue";
@@ -252,9 +253,9 @@ function close(): void {
     @close="close"
   >
     <template #top>
-      <p v-if="tooMany" class="wp-ai-org__error" role="alert" data-test="ai-organize-too-many">
+      <Banner v-if="tooMany" tone="danger" size="sm" class="wp-ai-org__error" data-test="ai-organize-too-many">
         That's more than {{ MAX_ITEMS }} items. Select up to {{ MAX_ITEMS }} and try again.
-      </p>
+      </Banner>
     </template>
     <template v-if="result && result.changes.length">
       <ul class="wp-ai-org" data-test="ai-organize-results">
@@ -386,6 +387,6 @@ function close(): void {
 .wp-ai-org__was { color: var(--wp-text-dim); }
 .wp-ai-org__arrow { color: var(--wp-text-dim); }
 .wp-ai-org__note { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
-.wp-ai-org__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-org__error { margin: 0; }
 .wp-ai-org__actions { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

@@ -12,7 +12,17 @@ tutorial(
     learn: "Tones and looks, colours, Markdown, docs links and buttons, pictures, labels, editing again.",
   },
   async (t) => {
-    const textArea = (id: string) => t.node(id).locator('textarea[data-test="note-text"], [data-test="note-text"] textarea').first();
+    // The text is written in its own window (opened from the node), which is on the page, not the node.
+    const textArea = () => t.page.locator('[data-test="note-text-window"] textarea[data-test="note-text"], [data-test="note-text-window"] [data-test="note-text"] textarea').first();
+    const openText = async (id: string) => {
+      await t.click(t.node(id).locator('[data-test="note-text-edit"]'));
+      await textArea().waitFor({ state: "visible", timeout: 5000 });
+      await t.beat(400);
+    };
+    const textDone = async () => {
+      await t.click(t.page.locator('[data-test="note-text-done"]'));
+      await t.beat(500);
+    };
     const title = (id: string) => t.node(id).locator('input[data-test="note-title"], [data-test="note-title"] input').first();
 
     await t.h.step("Something to explain", async () => {
@@ -33,13 +43,16 @@ tutorial(
       await t.beat(300);
       await t.fill(title(note), "Pick your character", { cps: 14 });
       await t.waitVoice();
-      await t.say("The text takes Markdown: bold, lists, links. A docs link can be drawn as a button.");
-      await t.fill(textArea(note), "Choose a **role** in the Context on the right.\n\n[Seeds](docs:seeds-and-loops){button pi-play}", { cps: 20 });
+      await t.say("Edit text opens the text window: Markdown on the left, the note as it will read on the right. A docs link can be drawn as a button.");
+      await openText(note);
+      await t.fill(textArea(), "Choose a **role** in the Context on the right.\n\n[Seeds](docs:seeds-and-loops){button pi-play}", { cps: 20 });
       await t.beat(500);
       await t.waitVoice();
       await t.say("And wp library makes a button that adds this workflow's items to whoever opens it, after a review.");
       await t.type("  [Add the pack](wp:library){button pi-download}", { cps: 20 });
       await t.beat(500);
+      await t.waitVoice();
+      await textDone();
       await t.callout("bm", t.node(note).locator('[data-test="note-bookmark"]'), "Also a jump target", 4);
       await t.say("Also a bookmark puts the note in the Bookmarks dock, which the next video shows.");
       await t.waitVoice();
@@ -64,8 +77,10 @@ tutorial(
       await t.waitVoice();
       await t.say("Give it a title and a line of text, then Done.");
       await t.fill(title(note), "Same seed, same picture", { cps: 14 });
-      await t.fill(textArea(note), "Change the seed on the Context to roll something new.", { cps: 20 });
+      await openText(note);
+      await t.fill(textArea(), "Change the seed on the Context to roll something new.", { cps: 20 });
       await t.beat(400);
+      await textDone();
       await t.click(t.node(note).locator('[data-test="note-done"]'));
       await t.beat(900);
       await t.waitVoice();
@@ -80,8 +95,10 @@ tutorial(
       await t.waitVoice();
       await t.say("Give it a title, and text with a picture: a small one from the node's toolbar.");
       await t.fill(title(note), "Need help?", { cps: 14 });
-      await t.fill(textArea(note), "Every node's ? button opens its help.\n\n![The ? button](wp:asset/toolbar-help){width=90%}", { cps: 22 });
+      await openText(note);
+      await t.fill(textArea(), "Every node's ? button opens its help.\n\n![The ? button](wp:asset/toolbar-help){width=90%}", { cps: 22 });
       await t.beat(400);
+      await textDone();
       await t.click(t.node(note).locator('[data-test="note-done"]'));
       await t.beat(900);
       await t.waitVoice();
