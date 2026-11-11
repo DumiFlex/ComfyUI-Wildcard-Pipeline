@@ -2,15 +2,30 @@
 // constraint, then Setting, then Setting again bound to $later. Reach "all" keeps both settings out of
 // the forest; "first" covers only the next one, so the later one can roll a forest; "pick" ticks exactly
 // which ones. The constraint's reach is changed for this node in its Edit view. One Int node feeds
-// all three seeds, so a step rolls the whole chain.
+// all three seeds, so a step rolls the whole chain. Last, a wildcard that reads Setting through an
+// @{} reference ("Daydream", made off camera) shows the constraint reaching inside nested picks too.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
+
+// Off camera: a wildcard whose option reads Setting through an @{} reference.
+const DAYDREAM = {
+  id: "9e1a7c42",
+  type: "wildcard",
+  name: "Daydream",
+  description: "Reads Setting through an @{} reference, so a constraint on Setting reaches inside it.",
+  payload: {
+    var_binding: "daydream",
+    sub_categories: [],
+    options: [{ id: "d1a7c420", value: "dreaming of being @{aa76ada8#Setting}", weight: 1, sub_categories: [] }],
+  },
+};
 
 tutorial(
   "A09",
   {
     title: "How far a constraint reaches",
-    description: "Choose which of the wildcards after a constraint it covers: the first, the next few, all of them, or ones you pick, even across chained Contexts.",
-    learn: "Target reach (first / next N / all / pick), chained Contexts, and how several constraints combine.",
+    description: "Choose which of the wildcards after a constraint it covers: the first, the next few, all of them, or ones you pick, even across chained Contexts and inside nested wildcards.",
+    learn: "Target reach (first / next N / all / pick), chained Contexts, nested wildcards, and how several constraints combine.",
   },
   async (t) => {
     const page = t.page;
@@ -21,6 +36,10 @@ tutorial(
       await t.beat(1000);
       return page.getByRole("dialog").last();
     };
+
+    await t.tidyLibrary();
+    const made = await t.h.api("/wp/api/modules", { method: "POST", body: DAYDREAM });
+    if (made.status >= 300) throw new StepError(`Couldn't add "Daydream" (${made.status}).`);
 
     const nodes = await t.h.step("Two settings", async () => {
       await t.go("/");
@@ -143,13 +162,49 @@ tutorial(
       await t.waitVoice();
     });
 
+    await t.h.step("Inside nested wildcards", async () => {
+      // Checked against the engine: with reach all, a Setting read through @{} in another wildcard's
+      // option is re-weighted like a direct one (the inventor never dreams of a forest).
+      await t.say("Reach also goes inside nested wildcards. Daydream reads Setting through an at reference. Add it to the third Context.");
+      await t.pickModules(nodes.c3, ["Daydream"]);
+      await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
+      await t.press("End");
+      await t.type(", $daydream", { cps: 14 });
+      await t.beat(600);
+      await t.waitVoice();
+      const modal = await editItem(nodes.c1, "Role fits the place");
+      await t.scrollTo(modal.locator('[data-test="reach-section"]'), { at: 0.5 });
+      const nested = modal.locator('[data-test="reach-picklist"] .rh-pick__row').filter({ has: page.locator(".rh-pick__tag--nested") }).first();
+      await t.callout("nested", nested, "Setting, inside Daydream", 6);
+      await t.say("The list now shows the Setting inside Daydream too, marked nested: a pick can tick it like any other.");
+      await t.waitVoice();
+      await t.uncallout("nested");
+      await t.say("Set reach back to all.");
+      await t.click(modal.locator('[data-test="reach-mode-all"]'));
+      await t.beat(600);
+      await t.click(modal.locator('[data-test="cnm-save"]'));
+      await t.beat(700);
+      await t.waitVoice();
+      await t.say("Now every Setting follows the rule, the ones on the nodes and the one inside Daydream. The inventor never even dreams of a forest.");
+      await t.callout("prev", prev, "No forest, not even in the dream", 6);
+      for (let i = 0; i < 5; i++) {
+        await t.click(plus);
+        await t.beat(800);
+        if (/forest/.test((await prev.textContent()) ?? "")) throw new StepError("A forest got through with reach all.");
+      }
+      await t.waitVoice();
+      await t.uncallout("prev");
+    });
+
     await t.h.step("Several constraints", async () => {
       await t.say("When several constraints cover the same wildcard, they all apply: their factors multiply, and an exclude always wins.");
       await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {
-      await t.say("First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain. Next: negatives.");
+      await t.say("First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain and inside nested ones. Next: negatives.");
+      // Off camera: the library back as the viewer has it.
+      await t.h.api(`/wp/api/modules/${DAYDREAM.id}`, { method: "DELETE" });
     });
   },
 );
