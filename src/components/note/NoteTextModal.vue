@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /**
  * WP Note's text in its own window: the Markdown editor on the left, the
- * note as it will read on the right, updated as you type. It edits a draft
+ * note as it will read on the right, updated as you type. The preview is
+ * the node's own card (its look, tone, colour, title and width); a label
+ * shows its tag and the hover card that holds its text. It edits a draft
  * (text + pictures); Done writes it to the node, Cancel drops it. The
  * frame is the kit's Modal.
  */
@@ -10,30 +12,36 @@ import Button from "@/kit/Button.vue";
 import ConfirmModal from "@/kit/ConfirmModal.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Modal from "@/kit/Modal.vue";
-import NoteMarkdown from "./note-markdown";
+import NoteCard from "./NoteCard.vue";
+import NotePeek from "./NotePeek.vue";
 import NoteTextEditor from "./NoteTextEditor.vue";
-import type { NoteImage, NoteLook } from "../../extension/note";
+import { noteColorCss, type NoteConfig, type NoteImage } from "../../extension/note";
 
 const props = defineProps<{
-  text: string;
-  images: Record<string, NoteImage>;
-  /** The note's title, for the window's header. */
+  /** The note's settings; its text and pictures are the draft's start. */
+  config: NoteConfig;
+  /** The note's title, for the window's header and the preview. */
   title: string;
-  look: NoteLook;
-  /** The note's colour as CSS (`""` = the accent). */
-  toneCss: string;
+  pinned?: boolean | undefined;
+  /** The node's width in px, so the preview wraps (and sizes pictures) as the node does. */
+  width?: number | undefined;
 }>();
 const emit = defineEmits<{
   (e: "done", v: { text: string; images: Record<string, NoteImage> }): void;
   (e: "close"): void;
 }>();
 
-const text = ref(props.text);
-const images = ref<Record<string, NoteImage>>({ ...props.images });
-const dirty = computed(() => text.value !== props.text || Object.keys(images.value).join() !== Object.keys(props.images).join());
+const text = ref(props.config.text);
+const images = ref<Record<string, NoteImage>>({ ...props.config.images });
+const dirty = computed(() => text.value !== props.config.text || Object.keys(images.value).join() !== Object.keys(props.config.images).join());
+/** The note's colour as CSS (`""` = the accent). */
+const toneCss = computed(() => (props.config.color ? noteColorCss(props.config.color) : ""));
+/** The node as it will look with the draft's text. */
+const draft = computed<NoteConfig>(() => ({ ...props.config, text: text.value, images: images.value }));
+const toneStyle = computed(() => (toneCss.value ? { "--wp-note-tone": toneCss.value } : {}));
 
 const shownTitle = computed(() => (props.title.trim() ? props.title : "WP Note"));
-const isLabel = computed(() => props.look === "label");
+const isLabel = computed(() => props.config.look === "label");
 
 function done(): void {
   emit("done", { text: text.value, images: images.value });
@@ -85,9 +93,17 @@ function onKey(ev: KeyboardEvent): void {
       </section>
       <section class="wp-note-tx__pane" aria-label="Preview">
         <span class="wp-note-tx__label">Preview</span>
-        <div class="wp-note-tx__card" :style="toneCss ? { '--wp-note-tone': toneCss } : undefined" data-test="note-text-preview">
-          <NoteMarkdown v-if="text.trim()" :text="text" :images="images" />
-          <p v-else class="wp-note-tx__empty">Nothing written yet.</p>
+        <div class="wp-note-tx__stage" data-test="note-text-preview">
+          <template v-if="isLabel">
+            <div :style="toneStyle">
+              <NoteCard :config="draft" :title="title" :pinned="pinned" />
+            </div>
+            <span class="wp-note-tx__label">When you point at the label</span>
+            <NotePeek :config="draft" :title="title" />
+          </template>
+          <div v-else class="wp-note-tx__card" :style="[toneStyle, width ? { width: `${Math.round(width)}px` } : {}]">
+            <NoteCard :config="draft" :title="title" :pinned="pinned" empty-text="Nothing written yet." />
+          </div>
         </div>
       </section>
     </div>
@@ -137,28 +153,22 @@ function onKey(ev: KeyboardEvent): void {
 }
 .wp-note-tx__pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .wp-note-tx__label { font-size: 11px; font-weight: 600; color: var(--wp-text-muted); }
-/* The note as a card, the way the node shows it: its colour on the left edge. */
-.wp-note-tx__card {
+/* The note on a canvas-like backdrop, at the node's width (never wider than the pane). */
+.wp-note-tx__stage {
   --wp-note-tone: var(--wp-accent);
-  position: relative;
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   min-height: 120px;
   max-height: 62vh;
   overflow: auto;
-  padding: 12px 14px 12px 18px;
+  padding: 14px;
   border: 1px solid var(--wp-border);
   border-radius: min(12px, var(--wp-radius-cap, 999px));
-  background: var(--wp-bg-1, var(--wp-bg-2));
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--wp-text-muted, var(--wp-text));
+  background: var(--wp-bg-0, var(--wp-bg-1));
 }
-.wp-note-tx__card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--wp-note-tone);
-}
-.wp-note-tx__empty { margin: 0; color: var(--wp-text-dim); }
+.wp-note-tx__card { max-width: 100%; min-width: min(240px, 100%); }
+.wp-note-tx__stage > .wp-note-tx__label { margin-top: 6px; }
 </style>

@@ -690,7 +690,12 @@ function insertIcon(name: string): void {
 <style scoped>
 /* The kit picker's list, sized for a node: as wide as the panel, a short
  * scroll area, cells packed by width instead of a fixed 8 columns. */
-.wp-note-ed__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 340px; }
+.wp-note-ed__icons :deep(.wp-iconpick__panel) { max-height: 340px; }
+/* As wide as the space it has. The kit fixes the full set's panel at 264 px
+   (more with a scrollbar) with selectors as strong as ours, so name them. */
+.wp-note-ed__icons.wp-iconpick :deep(.wp-iconpick__panel),
+.wp-note-ed__icons.wp-iconpick :deep(.wp-iconpick__panel[data-all]),
+.wp-note-ed__icons.wp-iconpick :deep(.wp-iconpick__panel[data-all][data-wp-bar~="y"]) { width: auto; }
 .wp-note-ed__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
 .wp-note-ed__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note-ed { display: flex; flex-direction: column; gap: 6px; }

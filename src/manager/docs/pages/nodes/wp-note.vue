@@ -80,7 +80,9 @@ const syntax = [
       </p>
       <p>
         The text has its own window: press <b>Edit text</b> (<b>Write text</b> on an empty note). The
-        Markdown editor is on the left and the note as it will read on the right, following what you type.
+        Markdown editor is on the left and the note as it will read on the right, following what you type:
+        the node's own card, with its look, tone, colour, title and width. A label shows its tag and, under
+        it, the card that opens when you point at it.
         <b>Done</b> (or Ctrl+Enter) puts the text on the note; <b>Cancel</b>, Escape or × leaves the note
         as it was, and asks first when you changed something. The node shows the text's first line and how
         long it is.
