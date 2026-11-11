@@ -146,6 +146,27 @@ function nodeNote(sec: Section, v: VarRow): string {
       return "";
   }
 }
+/** A Context module's one-line fact for the source column: how a wildcard
+ *  picked (its odds, pinned, swept, matched) or which branch a derivation
+ *  ran. Empty when there is nothing short to say. */
+function moduleFact(v: VarRow): string {
+  const step = stepOf(v);
+  const d = step?.detail;
+  if (!step || !d) return "";
+  if (step.kind === "wildcard") {
+    if (d.swept) return "swept";
+    if (d.match_variable) return `matched $${d.match_variable}`;
+    if (d.mode === "pinned") return "pinned";
+    if (typeof d.chance === "number" && d.chance > 0 && d.chance < 1) return `${Math.round(d.chance * 100)}%`;
+    return "";
+  }
+  if (step.kind === "derivation") {
+    const fired = (d.rules ?? []).map((r) => r.fired).find((f) => f != null);
+    if (fired === "else") return "else";
+    if (typeof fired === "number") return `branch ${fired + 1}`;
+  }
+  return "";
+}
 function injectorType(v: VarRow): string {
   if (v.writerKind !== "injector") return "";
   const step = stepOf(v);
@@ -271,20 +292,21 @@ const nameWidth = computed(() => {
     >
       <div class="wp-dbg-var-row__name">
         <i v-if="pinned.has(`var:${v.name}`)" class="pi pi-star-fill wp-dbg-pin" aria-label="pinned" />
+        <span class="wp-dbg-var-row__mark" aria-hidden="true" />
         <code>${{ v.name }}</code>
         <i v-if="v.internal" class="pi pi-eye-slash wp-dbg-flag" title="Internal: downstream modules can read it, the prompt never shows it" />
         <span v-if="v.writeCount > 1" class="wp-dbg-var-row__count" :title="`Written ${v.writeCount} times; the last write wins`">×{{ v.writeCount }}</span>
       </div>
       <div class="wp-dbg-var-row__value" :class="{ 'is-model': v.writerKind === 'model' }">
         <Chip
-          v-if="isSwitch(v)"
+          v-if="isSwitch(v) && !hasToggleValue(v)"
           class="wp-dbg-var-row__switch"
           :class="switchOf(v) ? 'is-on' : 'is-off'"
           :color="switchOf(v) ? kindColor('toggle') : null"
           dot
-          :title="hasToggleValue(v) ? `$${v.name}.bool = ${switchOf(v)}` : `$${v.name} = ${v.value}`"
+          :title="hasToggleValue(v) ? `$${v.name}.bool: the toggle is ${switchOf(v) ? 'on' : 'off'}` : `$${v.name}: the toggle is ${switchOf(v) ? 'on' : 'off'}`"
           data-test="dbg-node-switch"
-        >{{ switchOf(v) ? "ON" : "OFF" }}</Chip>
+        >{{ switchOf(v) ? "true" : "false" }}</Chip>
         <template v-if="isSwitch(v) && !hasToggleValue(v)" />
         <ol v-else-if="v.items" class="wp-dbg-var-row__items" data-test="dbg-var-items">
           <li v-for="(it, i) in v.items" :key="i">
@@ -317,7 +339,7 @@ const nameWidth = computed(() => {
           <span v-if="n.source" class="wp-dbg-var-row__neg-src" data-test="dbg-var-neg-src">· {{ n.source }}</span>
         </div>
         <div v-if="v.axes.length || v.tags.length || hasToggleValue(v)" class="wp-dbg-var-row__extra">
-          <span v-if="hasToggleValue(v)" class="wp-dbg-var-row__axis" data-test="dbg-var-bool" :title="`$${v.name}.bool`">
+          <span v-if="hasToggleValue(v)" class="wp-dbg-var-row__axis" :class="{ 'is-on': switchOf(v) }" data-test="dbg-var-bool" :title="`$${v.name}.bool: the toggle is ${switchOf(v) ? 'on' : 'off'}`">
             <code>.bool</code> {{ switchOf(v) ? "true" : "false" }}
           </span>
           <span v-for="a in v.axes" :key="a.axis" class="wp-dbg-var-row__axis" data-test="dbg-var-axis" :title="`$${v.name}.${a.axis}`">
@@ -338,6 +360,7 @@ const nameWidth = computed(() => {
         <i :class="['wp-dbg-var-row__src-icon', KIND_ICONS[v.writerKind ?? 'unknown']]" aria-hidden="true" />
         <Chip v-if="injectorType(v)" :color="kindColor('injector')" class="wp-dbg-var-row__type" data-test="dbg-node-type">{{ injectorType(v) }}</Chip>
         <span class="wp-dbg-var-row__src-name" :data-test="nodeKindOf(v) ? 'dbg-node-source' : undefined">{{ nodeKindOf(v) ? nodeNote(sec, v) || writerLabel(v) : writerLabel(v) }}</span>
+        <span v-if="!nodeKindOf(v) && moduleFact(v)" class="wp-dbg-var-row__fact" data-test="dbg-var-fact">{{ moduleFact(v) }}</span>
       </Button>
       <span v-else class="wp-dbg-var-row__src wp-dbg-var-row__src--upstream" title="Came in from upstream, no module in this trace wrote it">upstream</span>
     </div>
@@ -358,17 +381,40 @@ const nameWidth = computed(() => {
 
 <style scoped>
 .wp-dbg-vars { display: flex; flex-direction: column; }
-.wp-dbg-vars.is-grouped { gap: 8px; }
+.wp-dbg-vars.is-grouped { gap: 10px; }
 .wp-dbg-vsec { display: flex; flex-direction: column; }
-.wp-dbg-vsec__head { display: flex; align-items: center; gap: 6px; padding: 0 4px 4px; font-size: 10px; color: var(--wp-text-dim); }
-.wp-dbg-vsec__icon { font-size: 10px; color: var(--wp-dbg-kind); }
-.wp-dbg-vsec__title { font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-text); }
+/* Grouped: each node is its own card, tinted by its kind. */
+.wp-dbg-vars.is-grouped .wp-dbg-vsec {
+  border: 1px solid color-mix(in oklab, var(--wp-dbg-kind) 26%, var(--wp-border));
+  border-radius: min(7px, var(--wp-radius-cap, 999px));
+  background: color-mix(in oklab, var(--wp-dbg-kind) 3%, transparent);
+  overflow: hidden;
+}
+.wp-dbg-vsec__head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 8px;
+  font-size: 10px; color: var(--wp-text-dim);
+  background: color-mix(in oklab, var(--wp-dbg-kind) 10%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--wp-dbg-kind) 20%, var(--wp-border));
+}
+.wp-dbg-vsec__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; flex: none;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  font-size: 10px; color: var(--wp-dbg-kind);
+  background: color-mix(in oklab, var(--wp-dbg-kind) 18%, transparent);
+}
+.wp-dbg-vsec__title { font: 600 11.5px/1.4 var(--wp-font-sans); color: var(--wp-text); }
 .wp-dbg-vsec__codename {
-  font: 600 10.5px/1.5 var(--wp-font-mono);
+  display: inline-flex; align-items: center;
+  height: 17px; box-sizing: border-box;
+  font: 600 10px/1 var(--wp-font-mono);
+  letter-spacing: 0.03em;
   color: var(--wp-text);
   padding: 0 7px;
-  border-radius: min(7px, var(--wp-radius-cap, 999px));
-  border: 1px solid var(--wp-border);
+  border-radius: min(5px, var(--wp-radius-cap, 999px));
+  border: 1px solid var(--wp-border-strong, var(--wp-border));
+  background: var(--wp-bg, transparent);
 }
 .wp-dbg-vsec__count { font: 500 9.5px/1 var(--wp-font-mono); }
 .wp-dbg-vsec__goto.wp-btn { margin-left: auto; height: auto; min-height: 0; padding: 0; font-size: 10px; }
@@ -377,13 +423,18 @@ const nameWidth = computed(() => {
   grid-template-columns: max(90px, var(--wp-dbg-name-w, 90px)) minmax(0, 1fr) auto;
   column-gap: 12px;
   align-items: start;
-  padding: 5px 6px;
+  padding: 6px 8px;
   border-top: 1px solid var(--wp-border-soft, var(--wp-border));
   font-size: 11.5px;
 }
-.wp-dbg-var-row:first-child { border-top: 0; }
-/* The writer's kind colour on the left edge (none for upstream values). */
-.wp-dbg-var-row { box-shadow: inset 2px 0 0 color-mix(in oklab, var(--wp-dbg-kind, transparent) 70%, transparent); }
+.wp-dbg-vsec__head + .wp-dbg-var-row, .wp-dbg-vsec__frame + .wp-dbg-var-row, .wp-dbg-var-row:first-child { border-top: 0; }
+/* The writer's kind as a small square before the name (none upstream). */
+.wp-dbg-var-row__mark {
+  width: 6px; height: 6px; flex: none; align-self: center;
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
+  background: var(--wp-dbg-kind, var(--wp-border-strong));
+}
+.wp-dbg-var-row[data-kind="upstream"] .wp-dbg-var-row__mark { background: transparent; box-shadow: inset 0 0 0 1px var(--wp-text-dim); }
 .wp-dbg-var-row:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
 .wp-dbg-var-row.is-ctx { outline: 1px solid var(--wp-accent); outline-offset: -1px; }
 .wp-dbg-var-row__name { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
@@ -411,6 +462,15 @@ const nameWidth = computed(() => {
   color: var(--wp-text-muted);
 }
 .wp-dbg-var-row__axis code { font-family: var(--wp-font-mono); color: var(--wp-kind-wildcard); }
+.wp-dbg-var-row__axis.is-on { color: var(--wp-text); }
+.wp-dbg-var-row__fact {
+  flex: none;
+  font: 600 9.5px/1 var(--wp-font-mono);
+  padding: 2px 5px;
+  border-radius: min(3px, var(--wp-radius-cap, 999px));
+  color: var(--wp-dbg-kind);
+  background: color-mix(in oklab, var(--wp-dbg-kind) 14%, transparent);
+}
 /* The plain span (upstream) and the kit link Button share this look. */
 .wp-dbg-var-row__src, .wp-dbg-var-row__src.wp-btn {
   display: inline-flex; align-items: center; gap: 5px; height: auto; min-height: 0; padding: 1px 0;
@@ -425,13 +485,19 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__model { overflow-wrap: anywhere; }
 .wp-dbg-var-row__pick { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
 .wp-dbg-var-row__radio { font-size: 9px; color: var(--wp-dbg-kind); }
-.wp-dbg-var-row__switch { margin-right: 8px; vertical-align: 1px; }
+/* Kit chips sized to the row's text so they don't push it around. */
+.wp-chip.wp-dbg-var-row__switch, .wp-chip.wp-dbg-var-row__type {
+  height: 17px; min-height: 0; box-sizing: border-box;
+  padding: 0 6px; gap: 4px;
+  font: 600 10px/1 var(--wp-font-mono);
+  vertical-align: middle;
+}
 .wp-dbg-vsec__frame {
   display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px;
-  padding: 3px 6px;
+  padding: 4px 8px;
   font: 500 10.5px/1.6 var(--wp-font-sans);
   color: var(--wp-text-dim);
-  box-shadow: inset 2px 0 0 color-mix(in oklab, var(--wp-dbg-kind) 70%, transparent);
+  border-bottom: 1px solid var(--wp-border-soft, var(--wp-border));
 }
 .wp-dbg-vsec__frame .is-lead { color: var(--wp-dbg-kind); font-weight: 600; }
 .wp-copy-btn.wp-dbg-vsec__seed {
@@ -447,12 +513,13 @@ const nameWidth = computed(() => {
 .wp-dbg-vsec__seed-label { color: var(--wp-text-dim); font-family: var(--wp-font-sans); }
 .wp-dbg-vsec__warn {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px;
-  padding: 3px 6px 4px;
+  padding: 4px 8px;
   font-size: 10.5px; color: var(--wp-warn);
-  box-shadow: inset 2px 0 0 var(--wp-warn);
+  border-top: 1px solid var(--wp-border-soft, var(--wp-border));
+  background: color-mix(in oklab, var(--wp-warn) 8%, transparent);
 }
-.wp-dbg-vsec__warn.is-error { color: var(--wp-red); box-shadow: inset 2px 0 0 var(--wp-red); }
-.wp-dbg-vsec__warn.is-info { color: var(--wp-text-muted); box-shadow: inset 2px 0 0 var(--wp-border-strong, var(--wp-border)); }
+.wp-dbg-vsec__warn.is-error { color: var(--wp-red); background: color-mix(in oklab, var(--wp-red) 8%, transparent); }
+.wp-dbg-vsec__warn.is-info { color: var(--wp-text-muted); background: transparent; }
 .wp-dbg-vsec__warn .pi { font-size: 9px; }
 .wp-dbg-vsec__warn-label { font-weight: 600; }
 .wp-dbg-vsec__warn-msg { color: var(--wp-text-muted); }

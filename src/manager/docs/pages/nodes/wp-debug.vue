@@ -64,7 +64,7 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <ul>
         <li><b>WP Context Loop</b> (orange): <code>$iteration</code>, <code>$iteration_total</code> and <code>$iteration_value</code>, under a line saying which frame this is, the frame's seed when the Loop sets seeds (click to copy), the sweep combination and the value line.</li>
         <li><b>WP Model Info</b> (lime): Family, Variant and Name, each saying where it came from: the model, a file-name rule, a pin, a wire or the loader's file.</li>
-        <li><b>WP Toggles</b> (indigo): each toggle's variable as ON / OFF. In Pick one, each pick still has its own on/off variable (ON is the picked one) and the Pick one variable holds the picked value. An arrow marks a toggle an upstream variable set.</li>
+        <li><b>WP Toggles</b> (indigo): each toggle's variable as <code>true</code> / <code>false</code>, or its value text when the toggle has one (empty while off), with its <code>.bool</code> state and negative under it. In Pick one, each pick still has its own on/off variable (<code>true</code> is the picked one) and the Pick one variable holds the picked value. The source says when an upstream variable set a toggle.</li>
         <li><b>WP Context Injector</b> (blue): each wired value with its type (STR, INT, FLOAT, BOOL, or TPL for a template).</li>
       </ul>
       <p>

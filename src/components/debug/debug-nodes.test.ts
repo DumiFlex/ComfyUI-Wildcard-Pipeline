@@ -169,11 +169,12 @@ describe("node rows in the view", () => {
     const rows = w.findAll('[data-test="dbg-var"]');
     const day = rows.find((r) => r.text().includes("$day"));
     const night = rows.find((r) => r.text().includes("$night"));
-    expect(day?.find(".wp-dbg-var-row__switch").classes()).toContain("is-on");
+    // With a value, the row shows the text; on/off is the .bool line.
+    expect(day?.find(".wp-dbg-var-row__switch").exists()).toBe(false);
     expect(day?.text()).toContain("bright daylight");
     expect(day?.find('[data-test="dbg-var-bool"]').text()).toContain("true");
     expect(day?.find('[data-test="dbg-var-neg"]').text()).toContain("dark");
-    expect(night?.find(".wp-dbg-var-row__switch").classes()).toContain("is-off");
+    expect(night?.find('[data-test="dbg-var-bool"]').text()).toContain("false");
     expect(night?.text()).toContain("empty while off");
   });
 
