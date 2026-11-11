@@ -34,7 +34,6 @@ import { buildTopLevelItems } from "./bundles/top-level-items";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import type { BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
-import ModalShell from "@/kit/ModalShell.vue";
 // Lazy: bundle edit modal pulls in its own IdentitySection +
 // RuntimeSection + color-preset markup. Keeping it out of the
 // ContextWidget entry chunk preserves the size budget — the modal
@@ -901,7 +900,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
          bundle drives `lockState` / `internalState` (not the draft)
          since those toggles cascade onto children, mirroring the
          BundleHeader buttons. -->
-    <ModalShell :visible="bundleDraft !== null" @close="cancelBundleEdit">
       <BundleInstanceModal
         v-if="bundleDraft !== null && editingBundleEntry"
         :bundle="bundleDraft"
@@ -920,7 +918,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         @reset-to-library="onBundleEditResetToLibrary"
         @open-spa="cancelBundleEdit"
       />
-    </ModalShell>
 
     <!-- Standalone push-to-library entry point — fires from the
          right-click menu without going through the edit modal first.

@@ -5,9 +5,12 @@
 // (same icon picker.ts uses for derivation kind).
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, config } from "@vue/test-utils";
 import DerivationInstanceModal from "./DerivationInstanceModal.vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+
+// The window is a kit Modal, which teleports to <body>: render it in place.
+config.global.stubs = { ...config.global.stubs, teleport: true };
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -34,7 +37,7 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("DerivationInstanceModal", () => {
   it("renders pi-arrow-right-arrow-left icon in header", () => {
     const w = mount(DerivationInstanceModal, { props: { module: makeModule() } });
-    expect(w.find(".wp-dvm__head-icon.pi.pi-arrow-right-arrow-left").exists()).toBe(true);
+    expect(w.find(".wp-modal__icon.pi-arrow-right-arrow-left").exists()).toBe(true);
   });
 
   it("renders 'derivation' chip + module name", () => {

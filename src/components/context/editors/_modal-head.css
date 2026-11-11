@@ -1,7 +1,7 @@
 /* Shared modal-head styling — adopted from InjectorBindingModal so
  * every per-instance edit modal in the extension reads as one
- * design family. Each modal sets `--modal-accent` to its kind color;
- * the gradient + chip + icon all read from that single var.
+ * design family. The frame and the coloured header are the kit Modal's
+ * (`accent` = the kind colour); the chip reads it as `--wp-modal-accent`.
  *
  * Imported once from ContextWidget's unscoped `<style>` block — the
  * class names are namespaced (`wp-cbm__`, `wp-cnm__`, `wp-dvm__`,
@@ -11,39 +11,6 @@
  * other shared CSS files in the codebase (Vue's scoped CSS scoper
  * can't parse @layer; namespace prefix carries isolation duty).
  */
-
-/* Per-modal accent — kind color drives the head gradient + chip + icon. */
-.wp-cbm__head { --modal-accent: var(--wp-kind-combine); }
-.wp-cnm__head { --modal-accent: var(--wp-kind-constraint, var(--wp-accent)); }
-.wp-dvm__head { --modal-accent: var(--wp-kind-derivation, var(--wp-accent)); }
-.wp-fvm__head { --modal-accent: var(--wp-kind-fixed); }
-.wp-wcm__head { --modal-accent: var(--wp-kind-wildcard); }
-
-.wp-cbm__head, .wp-cnm__head, .wp-dvm__head, .wp-fvm__head, .wp-wcm__head {
-  /* Pinned to the top of the scrolling modal body so the title + close
-   * stay visible while the content scrolls. Opaque (gradient bottoms out
-   * at --wp-bg2) so scrolled content doesn't bleed through. */
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 18%, var(--wp-bg2)) 0%,
-    var(--wp-bg2) 100%
-  );
-  border-bottom: 1px solid var(--wp-border);
-}
-
-.wp-cbm__head-icon, .wp-cnm__head-icon, .wp-dvm__head-icon, .wp-fvm__head-icon, .wp-wcm__head-icon {
-  color: var(--modal-accent, var(--wp-accent));
-  font-size: 18px;
-  width: 24px;
-  text-align: center;
-}
 
 .wp-cbm__title-block, .wp-cnm__title-block, .wp-dvm__title-block, .wp-fvm__title-block, .wp-wcm__title-block {
   flex: 1;
@@ -67,8 +34,8 @@
   letter-spacing: 0.06em;
   padding: 2px 6px;
   border-radius: 2px;
-  background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 22%, transparent);
-  color: var(--modal-accent, var(--wp-accent));
+  background: color-mix(in srgb, var(--wp-modal-accent, var(--wp-accent)) 22%, transparent);
+  color: var(--wp-modal-accent, var(--wp-accent));
 }
 
 .wp-cbm__sub, .wp-cnm__sub, .wp-dvm__sub, .wp-fvm__sub, .wp-wcm__sub {
