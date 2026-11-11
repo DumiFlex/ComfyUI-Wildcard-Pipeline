@@ -193,6 +193,11 @@ class WPContextInjector(io.ComfyNode):
             if stripped.startswith("_"):
                 warnings.append({
                     "type": "injector_reserved_binding",
+                    "severity": "warning",
+                    "message": (
+                        f"WP Context Injector skipped ${stripped}: names that "
+                        "start with _ are kept for the engine."
+                    ),
                     "binding": stripped,
                     "row_uid": row.get("_uid"),
                 })
@@ -200,6 +205,11 @@ class WPContextInjector(io.ComfyNode):
             if not _BINDING_RE.match(stripped):
                 warnings.append({
                     "type": "injector_invalid_binding",
+                    "severity": "warning",
+                    "message": (
+                        f"WP Context Injector skipped \"{stripped}\": a variable "
+                        "name starts with a letter and uses only letters, digits and _."
+                    ),
                     "binding": stripped,
                     "row_uid": row.get("_uid"),
                 })
@@ -337,7 +347,7 @@ class WPContextInjector(io.ComfyNode):
         hidden = getattr(cls, "hidden", None)
         node_id = getattr(hidden, "unique_id", None) if hidden is not None else None
         if node_id is not None:
-            for row in traces:
+            for row in traces + warnings:
                 row["node_id"] = str(node_id)
         if traces:
             existing_trace = debug.get("__wp_trace__", [])

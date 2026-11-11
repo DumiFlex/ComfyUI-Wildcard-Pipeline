@@ -1007,6 +1007,14 @@ class WildcardHandler(ModuleHandler):
             detail = module_detail(ctx)
             if detail is not None:
                 detail.update({"mode": pin_mode, "option_id": pinned.get("id")})
+                # A Context Loop sweep pins through this same mode; say so.
+                sweep_pins = ctx.get("__wp_pin_overrides__")
+                if (
+                    pin_mode == "pinned"
+                    and isinstance(sweep_pins, dict)
+                    and ctx.get("__wp_current_module_uid__") in sweep_pins
+                ):
+                    detail["swept"] = True
                 if pin_mode != "pinned":
                     detail["match_variable"] = match_var.strip()
             value = str(pinned.get("value", ""))

@@ -53,6 +53,27 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </Banner>
     </DocSection>
 
+    <DocSection title="Rows from other nodes">
+      <p>
+        Besides the modules in your Context nodes, WP Debug shows what the other context nodes
+        wrote. The Variables tab groups the variables by the node that set them, and in both tabs each
+        of these nodes gets a card drawn the way it works, with its own icon and colour:
+      </p>
+      <ul>
+        <li><b>WP Context Loop</b> (orange): <code>$iteration</code>, <code>$iteration_total</code> and <code>$iteration_value</code>, as a frame card: "Frame 5 of 18" with a bar, the frame's seed when the Loop sets seeds (click to copy), the sweep combination and the value line.</li>
+        <li><b>WP Model Info</b> (lime): Family, Variant and Name as fields, each saying where it came from: the model, a file-name rule, a pin, a wire or the loader's file.</li>
+        <li><b>WP Toggles</b> (indigo): each switch as ON / OFF and the Pick one value as the picked row, with an arrow when an upstream variable set it.</li>
+        <li><b>WP Context Injector</b> (blue): each wired value with its type (STR, INT, FLOAT, BOOL, or TPL for a template).</li>
+      </ul>
+      <p>
+        Their warnings (an unknown <code>$variable</code> in a Toggles value, a Model Info rule that couldn't be
+        read, a skipped Injector name) show in the Warnings tab and on that node's row. A wildcard pinned by a
+        Loop sweep says <i>swept</i>, one set to Match variable says which variable it matched, and a pool
+        filter that reads a <code>$variable</code> shows the value it read. With a Loop that skips frames, the
+        frame picker shows the Loop's own frame number.
+      </p>
+    </DocSection>
+
     <DocSection title="Where to put it">
       <p>
         After one Context to check that step, or after the last to see everything. Use as many as

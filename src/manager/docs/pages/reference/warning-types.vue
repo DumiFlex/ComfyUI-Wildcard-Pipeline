@@ -35,7 +35,11 @@ const runtimeWarnings: WarningRow[] = [
   { label: "Constraint failed to register", severity: "warn", desc: "A constraint couldn't be set up, usually because its data is damaged. It was skipped." },
   { label: "Module failed", severity: "warn", desc: "A module hit an error and was skipped. The message says which." },
   { label: "Invalid injector name", severity: "warn", desc: "A WP Context Injector row used a variable name that isn't valid." },
-  { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row name starts with two underscores, which are kept for the engine." },
+  { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row name starts with _, which is kept for the engine." },
+  { label: "Model Info found nothing", severity: "warn", desc: "WP Model Info has no model wired and nothing pinned, so $model_family, $model_variant and $model_name are empty." },
+  { label: "Model Info rule skipped", severity: "warn", desc: "One of WP Model Info's variant rules couldn't be read (often a broken pattern), so it was skipped." },
+  { label: "Toggles setup problem", severity: "warn", desc: "Something in a WP Toggles node's setup doesn't add up, such as two rows writing the same variable. The message says what." },
+  { label: "Upstream turned on several", severity: "warn", desc: "In Pick one with Upstream can pick, upstream variables turned on more than one row, so the first of them was picked." },
 ];
 
 const scannerRules: WarningRow[] = [

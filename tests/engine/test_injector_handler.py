@@ -442,3 +442,16 @@ def test_boolean_pass_through_drives_an_equals_true_rule():
     cond = {"var": "lora_on", "op": "equals", "value": "true"}
     assert _eval_condition(cond, on) is True
     assert _eval_condition(cond, off) is False
+
+
+def test_binding_warnings_say_what_was_skipped():
+    """WP Debug shows the message, so a skipped row must say why."""
+    rows = json.dumps({"version": 1, "rows": [
+        _row("input_0", "_meta"), _row("input_1", "has spaces"),
+    ]})
+    out = WPContextInjector.execute(wp_rows=rows, upstream=None, input_0="a", input_1="b")
+    warnings = out.values[0].debug["__wp_warnings__"]
+    by_type = {w["type"]: w for w in warnings}
+    assert "$_meta" in by_type["injector_reserved_binding"]["message"]
+    assert "has spaces" in by_type["injector_invalid_binding"]["message"]
+    assert all(w["severity"] == "warning" for w in warnings)

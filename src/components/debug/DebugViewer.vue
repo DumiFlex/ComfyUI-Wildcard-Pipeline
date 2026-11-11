@@ -66,6 +66,22 @@ const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const raw = computed(() => parseSnapshot(props.snapshot));
 const model = computed(() => (raw.value ? buildModel(raw.value) : null));
 
+/** The picker counts the items Debug received; a Loop that skipped frames
+ *  (or an Image Filter that kept some) numbers them differently, so show
+ *  the Loop's own frame number when it isn't the same. */
+const frameLabel = computed(() => {
+  const pos = `${props.iterationIndex + 1} / ${props.iterationCount}`;
+  const li = model.value?.loopIndex;
+  if (typeof li === "number" && li !== props.iterationIndex) return `frame ${li + 1} · ${pos}`;
+  return `frame ${pos}`;
+});
+const frameTitle = computed(() => {
+  const li = model.value?.loopIndex;
+  return typeof li === "number" && li !== props.iterationIndex
+    ? `Loop frame ${li + 1}; item ${props.iterationIndex + 1} of the ${props.iterationCount} this Debug received`
+    : "";
+});
+
 function gotoIteration(next: number): void {
   if (next < 0 || next >= props.iterationCount || next === props.iterationIndex) return;
   emit("update:iterationIndex", next);
@@ -364,7 +380,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             hint="Previous iteration"
             @click="gotoIteration(iterationIndex - 1)"
           />
-          <span class="wp-dbg-iter__label" data-test="dbg-iter-label">frame {{ iterationIndex + 1 }} / {{ iterationCount }}</span>
+          <span class="wp-dbg-iter__label" data-test="dbg-iter-label" :title="frameTitle">{{ frameLabel }}</span>
           <Button size="sm" variant="ghost" :disabled="iterationIndex>= iterationCount - 1"
             data-test="dbg-iter-next"
             title="Next iteration"
@@ -449,6 +465,9 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             :uuid-to-name="uuidToName"
             :uuid-to-kind="uuidToKind"
             :ctx-active-key="ctxActiveKey"
+            :node-info="nodeInfo"
+            :steps-by-key="stepsByKey"
+            :warnings-by-step="warningsByStep"
             @goto-step="gotoStep"
             @row-menu="openVarMenu"
           />

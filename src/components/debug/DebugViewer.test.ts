@@ -305,6 +305,11 @@ describe("DebugViewer", () => {
     expect(w.emitted("update:iterationIndex")?.[0]).toEqual([2]);
   });
 
+  it("shows the Loop's own frame number when it differs from the item count", () => {
+    const w = mountRun({ iterationCount: 2, iterationIndex: 1 }, { __wp_loop_index__: 4, __wp_trace__: [] });
+    expect(w.find('[data-test="dbg-iter-label"]').text()).toBe("frame 5 · 2 / 2");
+  });
+
   it("shows the raw snapshot JSON", async () => {
     const w = mountRun();
     await openTab(w, "raw");

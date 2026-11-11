@@ -8,7 +8,18 @@
 import Button from "@/kit/Button.vue";
 import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
-import type { VarRow } from "./debug-model";
+import DebugNodeCard, { type NodeEntry } from "./DebugNodeCard.vue";
+import {
+  KIND_ICONS,
+  NODE_KINDS,
+  NODE_KIND_TITLES,
+  kindColor,
+  type Kind,
+  type NodeInfo,
+  type TraceStep,
+  type VarRow,
+  type WarningRow,
+} from "./debug-model";
 
 const props = defineProps<{
   rows: VarRow[];
@@ -17,7 +28,99 @@ const props = defineProps<{
   uuidToName: Map<string, string>;
   uuidToKind: Map<string, string>;
   ctxActiveKey: string | null;
+  /** Title + codename of a graph node (both "" when unknown). */
+  nodeInfo?: (nodeId: string) => NodeInfo;
+  stepsByKey?: Map<string, TraceStep>;
+  warningsByStep?: Map<string, WarningRow[]>;
 }>();
+
+/** The variables grouped by the node that wrote them last: each Loop,
+ *  Model Info, Toggles or Injector node gets a card drawn its own way, each
+ *  Context a block of module rows, and values from outside the trace go
+ *  last. One plain list when there is only one source. */
+interface Section {
+  id: string;
+  kind: Kind | "context" | "upstream";
+  nodeId: string;
+  title: string;
+  rows: VarRow[];
+  firstKey: string;
+}
+const sections = computed((): Section[] => {
+  const byId = new Map<string, Section>();
+  const order: Section[] = [];
+  for (const v of props.rows) {
+    const nodeKind = v.writerKind && NODE_KINDS.has(v.writerKind) ? v.writerKind : null;
+    const id = !v.writerKey ? "upstream" : `${nodeKind ? "n" : "c"}:${v.writerNodeId}`;
+    let sec = byId.get(id);
+    if (!sec) {
+      const info = v.writerNodeId ? props.nodeInfo?.(v.writerNodeId) : undefined;
+      sec = {
+        id,
+        kind: !v.writerKey ? "upstream" : nodeKind ?? "context",
+        nodeId: v.writerNodeId,
+        title: !v.writerKey
+          ? "From upstream"
+          : nodeKind
+            ? info?.title || NODE_KIND_TITLES[nodeKind] || nodeKind
+            : info?.codename || info?.title || "Context",
+        rows: [],
+        firstKey: v.writerKey ?? "",
+      };
+      byId.set(id, sec);
+      order.push(sec);
+    }
+    sec.rows.push(v);
+    if (v.writerKey && Number(v.writerKey) < Number(sec.firstKey)) sec.firstKey = v.writerKey;
+  }
+  return order.sort((a, b) => {
+    if (a.kind === "upstream") return 1;
+    if (b.kind === "upstream") return -1;
+    return Number(a.firstKey) - Number(b.firstKey);
+  });
+});
+const grouped = computed(() => sections.value.length > 1 || sections.value.some((s) => s.kind !== "context" && s.kind !== "upstream"));
+
+function entries(sec: Section): NodeEntry[] {
+  return sec.rows.map((v) => ({
+    key: `var:${v.name}`,
+    name: v.name,
+    value: v.value,
+    internal: v.internal,
+    step: v.writerKey ? props.stepsByKey?.get(v.writerKey) ?? null : null,
+  }));
+}
+function sectionWarnings(sec: Section): WarningRow[] {
+  if (!props.warningsByStep || !props.stepsByKey) return [];
+  const out: WarningRow[] = [];
+  for (const [key, list] of props.warningsByStep) {
+    if (props.stepsByKey.get(key)?.nodeId === sec.nodeId) out.push(...list);
+  }
+  return out;
+}
+function sectionIcon(sec: Section): string {
+  if (sec.kind === "upstream") return "pi pi-arrow-down";
+  if (sec.kind === "context") return "pi pi-sitemap";
+  return KIND_ICONS[sec.kind];
+}
+function sectionColor(sec: Section): string {
+  if (sec.kind === "upstream") return "var(--wp-text-dim)";
+  if (sec.kind === "context") return "var(--wp-accent-text, var(--wp-accent))";
+  return kindColor(sec.kind);
+}
+
+/** What the source column calls a variable's writer: the module's name, or
+ *  for a node-written variable (Toggles, Model Info, Loop, Injector) that
+ *  node's title on the canvas. */
+function writerLabel(v: VarRow): string {
+  if (v.writerName) return v.writerName;
+  const kind = v.writerKind;
+  if (kind && NODE_KINDS.has(kind)) {
+    const title = v.writerNodeId ? props.nodeInfo?.(v.writerNodeId).title ?? "" : "";
+    return title || NODE_KIND_TITLES[kind] || kind;
+  }
+  return kind ?? "";
+}
 const emit = defineEmits<{
   (e: "goto-step", key: string): void;
   (e: "row-menu", ev: MouseEvent, row: VarRow): void;
@@ -32,11 +135,45 @@ const nameWidth = computed(() => {
 </script>
 
 <template>
-  <div class="wp-dbg-vars" data-test="dbg-vars" :style="{ '--wp-dbg-name-w': nameWidth }">
+  <div class="wp-dbg-vars" :class="{ 'is-grouped': grouped }" data-test="dbg-vars" :style="{ '--wp-dbg-name-w': nameWidth }">
+   <section
+      v-for="sec in sections"
+      :key="sec.id"
+      class="wp-dbg-vsec"
+      :data-kind="sec.kind"
+      :style="{ '--wp-dbg-kind': sectionColor(sec) }"
+      data-test="dbg-var-section"
+    >
+    <header v-if="grouped" class="wp-dbg-vsec__head" data-test="dbg-var-section-head">
+      <i :class="['wp-dbg-vsec__icon', sectionIcon(sec)]" aria-hidden="true" />
+      <span class="wp-dbg-vsec__title">{{ sec.title }}</span>
+      <span class="wp-dbg-vsec__count">{{ sec.rows.length }}</span>
+      <Button
+        v-if="sec.kind !== 'upstream' && sec.firstKey"
+        variant="link"
+        size="sm"
+        class="wp-dbg-vsec__goto"
+        hint="Show in trace"
+        @click="emit('goto-step', sec.firstKey)"
+      >trace</Button>
+    </header>
+    <DebugNodeCard
+      v-if="sec.kind !== 'context' && sec.kind !== 'upstream'"
+      :kind="sec.kind"
+      :entries="entries(sec)"
+      :warnings="sectionWarnings(sec)"
+      :uuid-to-name="uuidToName"
+      :uuid-to-kind="uuidToKind"
+      :active-key="ctxActiveKey"
+      :pinned="pinned"
+    />
+    <template v-else>
     <div
-      v-for="v in rows"
+      v-for="v in sec.rows"
       :key="v.name"
       class="wp-dbg-var-row"
+      :style="{ '--wp-dbg-kind': v.writerKind ? kindColor(v.writerKind) : 'transparent' }"
+      :data-kind="v.writerKind ?? 'upstream'"
       :class="{
         'is-internal': v.internal,
         'wp-row-flash': flashed.has(v.name),
@@ -93,16 +230,25 @@ const nameWidth = computed(() => {
         data-test="dbg-var-src"
         @click="emit('goto-step', v.writerKey)"
       >
-        <span class="wp-dbg-kind-dot" :style="{ background: `var(--wp-kind-${v.writerKind === 'fixed' ? 'fixed' : v.writerKind})` }" />
-        <span class="wp-dbg-var-row__src-name">{{ v.writerName || v.writerKind }}</span>
+        <i :class="['wp-dbg-var-row__src-icon', KIND_ICONS[v.writerKind ?? 'unknown']]" aria-hidden="true" />
+        <span class="wp-dbg-var-row__src-name">{{ writerLabel(v) }}</span>
       </Button>
       <span v-else class="wp-dbg-var-row__src wp-dbg-var-row__src--upstream" title="Came in from upstream, no module in this trace wrote it">upstream</span>
     </div>
+    </template>
+   </section>
   </div>
 </template>
 
 <style scoped>
 .wp-dbg-vars { display: flex; flex-direction: column; }
+.wp-dbg-vars.is-grouped { gap: 8px; }
+.wp-dbg-vsec { display: flex; flex-direction: column; }
+.wp-dbg-vsec__head { display: flex; align-items: center; gap: 6px; padding: 0 4px 4px; font-size: 10px; color: var(--wp-text-dim); }
+.wp-dbg-vsec__icon { font-size: 10px; color: var(--wp-dbg-kind); }
+.wp-dbg-vsec__title { font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-text); }
+.wp-dbg-vsec__count { font: 500 9.5px/1 var(--wp-font-mono); }
+.wp-dbg-vsec__goto.wp-btn { margin-left: auto; height: auto; min-height: 0; padding: 0; font-size: 10px; }
 .wp-dbg-var-row {
   display: grid;
   grid-template-columns: max(90px, var(--wp-dbg-name-w, 90px)) minmax(0, 1fr) auto;
@@ -113,6 +259,8 @@ const nameWidth = computed(() => {
   font-size: 11.5px;
 }
 .wp-dbg-var-row:first-child { border-top: 0; }
+/* The writer's kind colour on the left edge (none for upstream values). */
+.wp-dbg-var-row { box-shadow: inset 2px 0 0 color-mix(in oklab, var(--wp-dbg-kind, transparent) 70%, transparent); }
 .wp-dbg-var-row:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
 .wp-dbg-var-row.is-ctx { outline: 1px solid var(--wp-accent); outline-offset: -1px; }
 .wp-dbg-var-row__name { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
@@ -149,7 +297,7 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__src.wp-btn:hover .wp-dbg-var-row__src-name { color: var(--wp-text); text-decoration: underline; }
 .wp-dbg-var-row__src-name { overflow: hidden; text-overflow: ellipsis; }
 .wp-dbg-var-row__src--upstream { cursor: default; font-style: italic; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; }
+.wp-dbg-var-row__src-icon { font-size: 9px; flex: none; color: var(--wp-dbg-kind); }
 .wp-dbg-var-row__src.wp-btn :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .wp-dbg-var-row__src.wp-btn :deep(.wp-btn__label) { line-height: inherit; }
 </style>

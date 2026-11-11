@@ -114,8 +114,8 @@ export const NODE_FIELDS = {
       { term: "context (in)", sockets: ["in:context"], desc: "Any WP node's context output. The node has no output and changes nothing; drag its corner to resize." },
     ],
     tabs: [
-      { term: "Variables", pin: "css:[role=tab]:nth-of-type(1)@top", desc: "Every $variable and its value at this point, with the module that set it. The quickest way to check what your wildcards picked. Negative words show under the value in red, with the module they came from when it isn't the variable's own." },
-      { term: "Trace", pin: "css:[role=tab]:nth-of-type(2)@top", desc: "Every module in the order it ran, grouped by Context. Open one to see why it did what it did: a wildcard's odds and the constraints that changed them, which derivation branch ran, and the negative each one left." },
+      { term: "Variables", pin: "css:[role=tab]:nth-of-type(1)@top", desc: "Every $variable and its value at this point, with the module or node that set it (its icon and colour on the left edge say which kind: wildcard, derivation, Toggles, Model Info, Context Loop, Injector …). The quickest way to check what your wildcards picked. Negative words show under the value in red, with the module they came from when it isn't the variable's own." },
+      { term: "Trace", pin: "css:[role=tab]:nth-of-type(2)@top", desc: "Every module and node row in the order it ran, grouped by the node it ran in. Open one to see why it did what it did: a wildcard's odds and the constraints that changed them, which derivation branch ran, the negative each one left, and for rows from other nodes where the value came from (a Loop frame and its seed, a Model Info detection, a Toggles switch set upstream)." },
       { term: "Warnings", pin: "css:[role=tab]:nth-of-type(3)@top", desc: "What came up during the run, such as missing variables or a constraint that changed nothing. Look here first when something seems off." },
       { term: "Raw", pin: "css:[role=tab]:nth-of-type(4)@top", desc: "Everything as JSON, with a download button. Handy for bug reports." },
     ],

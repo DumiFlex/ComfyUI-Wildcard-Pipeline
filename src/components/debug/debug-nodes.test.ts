@@ -1,0 +1,128 @@
+import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
+import DebugStepDetail from "./DebugStepDetail.vue";
+import DebugVariables from "./DebugVariables.vue";
+import { WARNING_LABELS, buildModel, kindColor } from "./debug-model";
+
+// WP Debug and the nodes that write context without a module: Context Loop,
+// Model Info, Toggles and the Injector.
+
+const loopRow = (binding: string, value: string, detail: Record<string, unknown> = {}) => ({
+  node: "WP_ContextLoop", node_id: "3", binding, value, internal: false,
+  type: "iteration", detail: { frame: 5, of: 18, ...detail },
+});
+
+describe("node rows in the model", () => {
+  it("reads Context Loop rows as their own kind and names the frame", () => {
+    const m = buildModel({ iteration: "5", __wp_trace__: [loopRow("iteration", "5", { seed: 42, combo: 2, combos: 4 })] });
+    const s = m.steps[0];
+    expect(s.kind).toBe("loop");
+    expect(s.kindLabel).toBe("loop");
+    expect(s.source).toBe("frame 5 of 18");
+    expect(s.writes).toEqual([{ variable: "iteration", value: "5", overwrite: false, negative: "" }]);
+    expect(m.variables[0]).toMatchObject({ name: "iteration", writerKind: "loop", writerNodeId: "3", fromUpstream: false });
+  });
+
+  it("says where Model Info and Toggles values came from", () => {
+    const m = buildModel({
+      __wp_trace__: [
+        { node: "WP_ModelInfo", node_id: "7", binding: "model_family", type: "model", value: "SDXL" },
+        { node: "WP_ModelInfo", node_id: "7", binding: "model_variant", type: "rules", value: "pony" },
+        { node: "WP_Toggles", node_id: "8", binding: "toggle_1", type: "toggle", value: "true", source: "upstream" },
+        { node: "WP_Toggles", node_id: "8", binding: "look", type: "pick", value: "noir" },
+      ],
+    });
+    expect(m.steps.map((s) => s.source)).toEqual([
+      "from the model", "file-name rule", "switch, set upstream", "Pick one",
+    ]);
+  });
+
+  it("labels every node warning and ties it to the node's row", () => {
+    for (const t of [
+      "injector_reserved_binding", "injector_invalid_binding", "model_info_nothing_detected",
+      "model_info_bad_rule", "toggles_problem", "toggles_upstream_many",
+    ]) expect(WARNING_LABELS[t]).toBeTruthy();
+    const m = buildModel({
+      __wp_trace__: [
+        { node: "WP_Toggles", node_id: "8", binding: "toggle_1", type: "toggle", value: "true" },
+        { node: "WP_Toggles", node_id: "8", binding: "look", type: "pick", value: "$missing" },
+        { node: "WP_ContextInjector", node_id: "9", binding: "subject", type: "str", value: "cat" },
+      ],
+      __wp_warnings__: [
+        { type: "unknown_var", node_id: "8", message: "WP Toggles value: $missing", detail: { name: "missing", surface: "assembler" } },
+        { type: "toggles_problem", node_id: "8", message: "WP Toggles: two rows share $x" },
+        { type: "injector_invalid_binding", node_id: "9", binding: "subject", message: "skipped" },
+        { type: "unknown_var", node_id: "404", message: "elsewhere" },
+      ],
+    });
+    expect(m.warnings.map((w) => w.stepKey)).toEqual(["1", "1", "2", null]);
+    expect(m.warnings[0].detailText).toBe("in an assembler");
+    expect(m.steps[1].warningCount).toBe(2);
+  });
+
+  it("gives every node kind a colour token", () => {
+    expect(kindColor("loop")).toBe("var(--wp-kind-loop)");
+    expect(kindColor("toggle")).toBe("var(--wp-kind-toggle)");
+    expect(kindColor("unknown")).toBe("var(--wp-text-dim)");
+  });
+});
+
+describe("node rows in the view", () => {
+  it("shows the Loop's frame facts when a row opens", () => {
+    const m = buildModel({ __wp_trace__: [loopRow("iteration", "5", { seed: 42, combo: 2, combos: 4, value_line: 1, values: 3 })] });
+    const w = mount(DebugStepDetail, {
+      props: { step: m.steps[0], warnings: [], uuidToName: new Map(), uuidToKind: new Map(), canFocus: false },
+    });
+    const facts = w.find('[data-test="dbg-node-facts"]').text();
+    expect(facts).toContain("frame 5 of 18");
+    expect(facts).toContain("frame seed 42");
+    expect(facts).toContain("sweep combination 2 of 4");
+    expect(facts).toContain("value line 1 of 3");
+  });
+
+  it("says a wildcard was swept, matched a variable or read a filter variable", () => {
+    const wcRow = (detail: Record<string, unknown>) => ({
+      id: "aaaa1111", _uid: "u1", type: "wildcard", status: "ok", writes: [{ variable: "style", value: "noir" }], detail,
+    });
+    const m = buildModel({ __wp_trace__: [
+      wcRow({ mode: "pinned", swept: true }),
+      wcRow({ mode: "match_variable", match_variable: "model_variant" }),
+      wcRow({ filter: "$model_variant", filter_vars: { model_variant: "pony" } }),
+    ] });
+    const at = (i: number) => mount(DebugStepDetail, {
+      props: { step: m.steps[i], warnings: [], uuidToName: new Map(), uuidToKind: new Map(), canFocus: false },
+    });
+    expect(at(0).find('[data-test="dbg-swept"]').exists()).toBe(true);
+    expect(at(0).text()).not.toContain("pinned option");
+    expect(at(1).find('[data-test="dbg-match-var"]').text()).toContain("$model_variant");
+    expect(at(2).find('[data-test="dbg-filter-var"]').text()).toContain("pony");
+  });
+
+  it("groups variables by the node that wrote them, each node drawn its own way", () => {
+    const m = buildModel({
+      toggle_1: "true",
+      model_family: "SDXL",
+      mood: "calm",
+      __wp_trace__: [
+        { node: "WP_Toggles", node_id: "8", binding: "toggle_1", type: "toggle", value: "true" },
+        { node: "WP_ModelInfo", node_id: "7", binding: "model_family", type: "model", value: "SDXL" },
+        { id: "aaaa1111", _uid: "u", node_id: "9", type: "wildcard", status: "ok", writes: [{ variable: "mood", value: "calm" }] },
+      ],
+    });
+    const w = mount(DebugVariables, {
+      props: {
+        rows: m.variables, pinned: new Set<string>(), flashed: new Set<string>(), uuidToName: new Map(), uuidToKind: new Map(),
+        ctxActiveKey: null, nodeInfo: (id: string) => ({ title: id === "8" ? "Moods" : "", codename: id === "9" ? "ALPHA" : "" }),
+        stepsByKey: new Map(m.steps.map((s) => [s.key, s])),
+      },
+    });
+    const secs = w.findAll('[data-test="dbg-var-section"]');
+    expect(secs.map((x) => x.attributes("data-kind"))).toEqual(["toggle", "model", "context"]);
+    expect(secs[0].find('[data-test="dbg-var-section-head"]').text()).toContain("Moods");
+    expect(secs[0].find(".wp-dbg-nc__switch").classes()).toContain("is-on");
+    expect(secs[1].find(".wp-dbg-nc__field-value").text()).toBe("SDXL");
+    expect(secs[1].find('[data-test="dbg-node-source"]').text()).toBe("from the model");
+    expect(secs[2].find('[data-test="dbg-var-section-head"]').text()).toContain("ALPHA");
+    expect(secs[2].find('[data-test="dbg-var"]').exists()).toBe(true);
+  });
+});
