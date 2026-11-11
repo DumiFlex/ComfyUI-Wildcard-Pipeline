@@ -86,11 +86,12 @@ tutorial(
       await t.beat(900);
       await t.waitVoice();
       // No callout here: its label landed on the pill, which ended the hover and closed the peek.
-      await t.say("Hover it, and its text shows, picture and all.");
+      // Hover first, so the peek is up for the whole line.
       await t.hover(t.node(note).locator('[data-test="note-title-text"]'));
       // The line is about the picture, so it must be showing (rendered, not the markdown).
       const pic = t.page.locator('[data-test="note-peek"] img').first();
       if (!(await pic.waitFor({ state: "visible", timeout: 4000 }).then(() => true, () => false))) throw new StepError("Hovering the label didn't show its picture.");
+      await t.say("Hover it, and its text shows, picture and all.");
       await t.waitVoice();
       await t.beat(500);
       await t.moveTo({ x: 900, y: 950 });
