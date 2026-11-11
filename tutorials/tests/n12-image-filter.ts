@@ -274,7 +274,8 @@ tutorial(
         const shown = await find("WP_LabelGrid");
         if (shown) await fit([shown]);
         await t.say("Only the painted face changed in the refine pass, with the green scarf, and the grid prints hero shot.");
-        if (shown) await t.callout("grid", t.node(shown), "hero shot, with the scarf", 4);
+        // No label: with the caption at the top it sat half behind it, and the grid's own text says it.
+        if (shown) await t.callout("grid", t.node(shown), undefined, 4);
         await t.waitVoice();
         if (shown) await t.uncallout("grid");
       });

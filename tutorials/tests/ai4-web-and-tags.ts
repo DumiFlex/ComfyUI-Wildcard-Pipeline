@@ -1,8 +1,16 @@
 // AI 4: web search and tag lookup. Settings › AI assistant: a search engine (SearXNG or a key), the
-// Danbooru tag lookup (turned on here, off again at the end), "Don't ask before web calls" left off,
-// the delete and auto-apply permissions. Then a chat ask that looks a tag up, after Allow.
+// live Danbooru lookup (shown, left off), "Don't ask before web calls" left off, the delete and
+// auto-apply permissions. Then the tag lookup that needs no web: Settings › Autocomplete's tag list
+// with Booru tags on (on here, back as it was at the end), and a chat ask that finds a tag in it.
+// (The live Danbooru lookup is refused by Cloudflare from the recording PC's network.)
+import type { Locator } from "playwright";
 import { StepError } from "watchwright";
-import { aiWait, tutorial } from "../tutorial.js";
+import { aiWait, tutorial, type Tutor } from "../tutorial.js";
+
+async function setSwitch(t: Tutor, sw: Locator, on: boolean): Promise<void> {
+  if ((await sw.count()) === 0) return;
+  if (((await sw.getAttribute("aria-checked")) === "true") !== on) await t.click(sw);
+}
 
 const field = (id: string) => `textarea[data-test="${id}"], [data-test="${id}"] textarea, input[data-test="${id}"], [data-test="${id}"] input`;
 
@@ -10,14 +18,15 @@ tutorial(
   "AI4",
   {
     title: "AI assistant: web search and tag lookup",
-    description: "Let the assistant search the web and look up Danbooru tags, always after you allow it, and choose what else it may do.",
-    learn: "Search engine settings, the Danbooru lookup, Allow before each web call, delete and auto-apply permissions.",
+    description: "Let the assistant search the web, always after you allow it, look tags up in your own tag list, and choose what else it may do.",
+    learn: "Search engine settings, the Danbooru lookup, Allow before each web call, delete and auto-apply permissions, tag lookup from the Autocomplete tag list.",
   },
   async (t) => {
     const page = t.page;
     const danbooru = page.locator('[data-test="ai-danbooru"]');
     const isOn = async () => (await danbooru.getAttribute("aria-checked").catch(() => null)) === "true" || (await danbooru.locator("input").isChecked().catch(() => false));
-    let turnedOn = false;
+    const tagSwitch = page.locator('[data-test="settings-tag-autocomplete"]');
+    let tagsWereOn = false;
 
     await t.h.step("Web settings", async () => {
       await t.go("/wp/settings/ai");
@@ -38,13 +47,10 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("eng");
       await t.scrollTo(danbooru, { at: 0.4 });
-      await t.say("Danbooru tag lookup reads tags, their wiki and related tags. Read only, and never more than one call a second. Turn it on.");
-      if (!(await isOn())) {
-        await t.click(danbooru);
-        turnedOn = true;
-        await t.beat(800);
-      }
+      await t.callout("dan", danbooru, "Live Danbooru, also after Allow", 5);
+      await t.say("Danbooru lookup reads tags, their wiki and related tags online. Read only, and never more than one call a second. For plain tag names you don't need it, as you'll see.");
       await t.waitVoice();
+      await t.uncallout("dan");
       await t.callout("ask", page.locator('[data-test="ai-web-always"]'), "Leave this off: it asks first", 5);
       await t.say("Every web call waits for your Allow. This switch would skip that; leave it off.");
       await t.waitVoice();
@@ -56,6 +62,29 @@ tutorial(
       await t.uncallout("perm");
     });
 
+    await t.h.step("Your own tag list", async () => {
+      // Off camera: the tag list must be there (the Autocomplete video downloads it on camera).
+      const status = await t.h.api("/wp/api/tags/status");
+      const have = !!((status.json?.data ?? status.json) as { available?: unknown } | undefined)?.available;
+      if (!have) {
+        await t.fastForward(async () => {
+          const r = await t.h.api("/wp/api/tags/download", { method: "POST" });
+          if (!r.ok) throw new StepError("The tag list couldn't be downloaded on this machine.");
+        }, 0);
+      }
+      await t.go("/wp/settings/autocomplete");
+      tagsWereOn = (await tagSwitch.getAttribute("aria-checked")) === "true";
+      await t.callout("list", page.locator('[data-test="tagac-status"]'), "On your computer", 5);
+      await t.say("Tag names need no web at all. The tag list from Settings, Autocomplete, sits on your own computer.");
+      await t.waitVoice();
+      await t.uncallout("list");
+      await t.callout("sw", tagSwitch, "The assistant reads it too", 5);
+      await t.say("While Booru tags is on for the manager, the assistant looks tags up in it, with nothing to allow.");
+      await setSwitch(t, tagSwitch, true);
+      await t.waitVoice();
+      await t.uncallout("sw");
+    });
+
     await t.h.step("Look a tag up", async () => {
       await t.say("Now ask for a tag.");
       await t.click(page.locator('[data-test="topbar-ai"]'));
@@ -65,47 +94,38 @@ tutorial(
         await t.click(fresh);
         await t.beat(500);
       }
-      await t.fill(page.locator(field("ai-chat-input")).first(), "Look up the Danbooru tag for a pointed witch hat.", { cps: 24 });
+      await t.fill(page.locator(field("ai-chat-input")).first(), "What's the tag for a pointed witch hat? Check my tag list.", { cps: 24 });
       await t.click(page.locator('[data-test="ai-chat-send"]'));
       await aiWait(t);
-      const allow = page.locator('[data-test="ai-chat-search-once"]:visible').last();
-      if (await allow.isVisible().catch(() => false)) {
-        await t.callout("allow", page.locator('[data-test="ai-chat-search"]').last(), "It asks first", 5);
-        await t.say("It asks before it goes online, and shows what it will look up. Allow once.");
-        await t.waitVoice();
-        await t.uncallout("allow");
-        await t.click(allow);
-        await aiWait(t);
+      // The lookup is local, so nothing asks to go online; a web card here means the wrong tool.
+      if (await page.locator('[data-test="ai-chat-search-once"]:visible').count()) {
+        throw new StepError("The assistant asked to go online instead of reading the tag list.");
       }
       const reply = page.locator('[data-test="ai-chat-reply"]').last();
-      // The line says it found the tag: a lookup Danbooru refused (or a network that blocks it)
-      // fails the take instead of narrating an error.
+      // The line says it found the tag: the take fails rather than narrate a miss.
       const said = (await reply.innerText().catch(() => "")).toLowerCase();
-      if (/danbooru (refused|is rate-limiting|answered \d)|network|couldn.t reach/.test(said)) {
-        throw new StepError(`The Danbooru lookup failed on this machine: ${said.slice(0, 200)}`);
-      }
-      await t.callout("ans", reply, "The tag, from Danbooru", 5);
-      await t.say("And here's what it found: the tag as Danbooru writes it, ready to paste into an option.");
+      if (!/witch_hat|witch hat/.test(said)) throw new StepError(`The reply doesn't give the witch hat tag: ${said.slice(0, 200)}`);
+      await t.callout("ans", reply, "The tag, from your tag list", 5);
+      await t.say("And here's what it found: the tag as the list writes it, ready to paste into an option.");
       await t.waitVoice();
       await t.beat(1500);
       await t.uncallout("ans");
     });
 
     await t.h.step("Back as it was", async () => {
-      // Off camera: the switch goes back off for the next video.
-      if (turnedOn || (await isOn())) {
+      // Off camera: Booru tags goes back to how it was for the next video.
+      if (!tagsWereOn) {
         await t.fastForward(async () => {
           await t.click(page.locator('[data-test="ai-chat-close"]'));
           await t.beat(500);
-          await t.scrollTo(danbooru, { at: 0.4 });
-          await t.click(danbooru);
+          await setSwitch(t, tagSwitch, false);
           await t.beat(600);
         }, 0);
       }
     });
 
     await t.h.step("Outro", async () => {
-      await t.say("Web tools when you want them, always after your Allow. That's the AI track.");
+      await t.say("Your tag list for tag names, web tools when you want them, always after your Allow. That's the AI track.");
     });
   },
 );
