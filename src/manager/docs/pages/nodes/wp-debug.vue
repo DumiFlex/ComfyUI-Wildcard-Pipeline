@@ -73,6 +73,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         Info field, a toggle, an Injector row, or the Loop's iteration field.
       </p>
       <p>
+        A long value shows its first three lines (a long list its first three items, a long negative one
+        line) until you press <b>Show all</b> under it; <b>Show less</b> folds it again.
+      </p>
+      <p>
         Their warnings (an unknown <code>$variable</code> in a Toggles value, a Model Info rule that couldn't be
         read, a skipped Injector name) show in the Warnings tab and on that node's row. A wildcard pinned by a
         Loop sweep says <i>swept</i>, one set to Match variable says which variable it matched, and a pool
