@@ -23,10 +23,12 @@ tutorial(
       await t.beat(500);
       const help = page.locator(".wp-tb-icon--help").first().locator("xpath=ancestor::button[1]");
       await t.callout("help", help, "This node's help", 6);
+      // The box stays up for the whole line and the click comes after it, so the two line up.
       await t.say("Select it and press the question mark above it.");
+      await t.waitVoice();
+      await t.beat(300);
       await t.click(help);
       await t.uncallout("help");
-      await t.waitVoice();
       await t.say("Its page opens over the canvas: what each part does, with a picture.");
       await t.beat(1500);
       await t.waitVoice();
@@ -99,10 +101,11 @@ tutorial(
       const news = page.locator('[data-test="topbar-whats-new"]');
       await t.callout("news", news, "What's new", 6);
       await t.say("After an update, the megaphone gets a dot. It shows what changed in each version.");
+      await t.waitVoice();
+      await t.beat(300);
       await t.click(news);
       await t.uncallout("news");
       await t.beat(1500);
-      await t.waitVoice();
       const discord = page.locator('[data-test="topbar-discord"]');
       if ((await discord.count()) > 0) {
         await t.callout("discord", discord, "Ask on Discord", 4);
