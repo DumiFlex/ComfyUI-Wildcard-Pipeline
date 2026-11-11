@@ -542,13 +542,18 @@ export class Tutor {
       const out = [];
       for (const one of targets) {
         await one.waitFor({ state: "visible", timeout: 15_000 });
-        const b = await shownBox(one);
+        // A part that pokes out of a clipping parent (a node's slot dot on its edge) measures as
+        // hidden: box its own rectangle then, rather than drawing nothing.
+        const b = (await shownBox(one)) ?? (await one.boundingBox().catch(() => null));
         if (b) out.push(b);
       }
       return out;
     };
     let boxes = await measure();
-    if (!boxes.length) return;
+    if (!boxes.length) {
+      this.h.log(`callout "${id}": nothing to box (its part has no size on screen).`);
+      return;
+    }
     // Below this line a two-line caption covers the box.
     const view = this.page.viewportSize() ?? { width: 1920, height: 1080 };
     const limit = view.height - CAPTION_BAND;

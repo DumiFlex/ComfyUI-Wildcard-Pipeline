@@ -297,7 +297,9 @@ tutorial(
       await t.uncallout("to");
       // The node is taller than the screen at this zoom: bring its inputs (top) into view.
       await t.zoomOn(filter, { scale: 1, top: 140 });
-      await t.callout("ex", [t.node(filter).locator('[data-slot-key$="-in-8"]').first(), t.node(filter).locator('[data-slot-key$="-in-9"]').first()], "Any type, follows its frame", 6);
+      // The two slot rows (dot and name), as a pair.
+      const exRow = (i: number) => t.node(filter).locator(`[data-slot-key$="-in-${i}"]`).first().locator("xpath=..");
+      await t.callout("ex", [exRow(8), exRow(9)], "Any type, follows its frame", 6);
       await t.say("extra one and two take anything, like a ControlNet image, and it follows its frame through the filter.");
       await t.waitVoice();
       await t.uncallout("ex");
