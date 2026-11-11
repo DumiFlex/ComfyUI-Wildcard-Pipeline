@@ -174,8 +174,8 @@ tutorial(
         ["Night", "at night"],
       ];
       for (const [i, [name, value]] of rows.entries()) {
-        // The first row at normal speed, the other two the same again: sped up.
-        if (i === 1) await t.speedUp(4);
+        // Typing the three rows plays sped up (4x keeps the hand easy to follow).
+        if (i === 0) await t.speedUp(4);
         if (i === 0) await t.click(t.node(tg2).locator(rowEdit).first());
         else await t.click(t.node(tg2).locator('[data-test="tg-add"]'));
         await t.beat(600);
@@ -267,6 +267,12 @@ tutorial(
     });
 
     await t.h.step("Outro", async () => {
+      // Zoom out a little from the top-left, so the group and relay rows rise above the caption.
+      const v = await page.evaluate(() => {
+        const ds = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] } } }).canvas.ds;
+        return { scale: ds.scale, offset: [ds.offset[0], ds.offset[1]] as [number, number] };
+      });
+      await t.setView({ scale: v.scale * 0.85, offset: v.offset });
       await t.say("Toggles write true or false for your rules, or pick the words themselves. Node Groups and Mode Relay switch whole parts of a workflow. The first example workflow uses all three.");
       // The item stays until the next video's tidyLibrary: deleting it here, still on camera, made
       // the canvas show it as missing at the end.
