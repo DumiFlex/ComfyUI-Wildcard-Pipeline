@@ -133,3 +133,45 @@ describe("TogglesWidget folded group", () => {
     w.unmount();
   });
 });
+
+describe("TogglesWidget edit-view drag", () => {
+  const grouped = (): TogglesConfig => ({
+    ...defaultTogglesConfig(),
+    rows: [
+      row("00000001", "Top", false),
+      { id: "0000000a", kind: "label", name: "Light", color: 2 },
+      row("00000002", "Rim", false),
+      row("00000003", "Fog", false),
+      { id: "0000000b", kind: "label", name: "Sky", color: 3 },
+      row("00000004", "Rain", false),
+    ],
+  });
+
+  it("drops a toggle below a group, into no group, with a full-width line", async () => {
+    const w = mount(TogglesWidget, { props: { modelValue: grouped(), editRequest: 0 } });
+    await w.setProps({ editRequest: 1 });
+    const list = w.findComponent({ name: "SortableList" });
+    const dropLine = list.props("dropLine") as (d: { from: number; over: number; edge: string }, noOp: boolean) => unknown;
+    // Shown: Top, Light, Rim, Fog, Sky, Rain. Top before Sky: below Light.
+    expect(dropLine({ from: 0, over: 4, edge: "before" }, false)).toBe(true);
+    // Top after Rim: inside Light, an inset line in its colour.
+    expect(dropLine({ from: 0, over: 2, edge: "after" }, false)).toMatchObject({ inset: 22, color: "var(--wp-var-2)" });
+    // A label can't land inside another group.
+    expect(dropLine({ from: 4, over: 2, edge: "after" }, false)).toBe(false);
+    list.vm.$emit("drop", { from: 0, over: 4, edge: "before", to: 3 });
+    const out = lastConfig(w);
+    expect(out?.rows.map((r) => r.id)).toEqual(["0000000a", "00000002", "00000003", "00000001", "0000000b", "00000004"]);
+    expect(out?.rows.find((r) => r.id === "00000001")).toMatchObject({ ungrouped: true });
+    w.unmount();
+  });
+
+  it("draws a toggle below a group outside it in the clean view", () => {
+    const c = grouped();
+    c.rows = [c.rows[1], c.rows[2], { ...(c.rows[0] as ToggleRow), ungrouped: true }, c.rows[4], c.rows[5]];
+    const w = mount(TogglesWidget, { props: { modelValue: c } });
+    const top = w.find('[data-test="tg-row-00000001"]');
+    expect(top.exists()).toBe(true);
+    expect(top.element.closest(".wp-tg__member.is-grouped")).toBeNull();
+    w.unmount();
+  });
+});

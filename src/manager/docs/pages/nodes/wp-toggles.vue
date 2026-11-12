@@ -53,10 +53,11 @@ import VarToken from "../../../components/docs/VarToken.vue";
     <DocSection title="Editing a toggle">
       <DocFields node="WP_Toggles" group="edit" />
       <Banner tone="info" note>
-        Drag the grip to reorder. A toggle dropped under a label joins that group (a folded one
-        opens), and one dropped above the first label leaves its group. A label moves with its
-        toggles. Moving a row never re-points a wire:
-        each output stays with its toggle.
+        Drag the grip to reorder: the row you drop beside opens a gap with a line. An indented
+        line in a group's colour puts the toggle in that group (a folded one opens); a
+        full-width line, just above a label or below the last row, puts it below the group, in no
+        group. A label moves with its toggles and lands only between groups. Moving a row never
+        re-points a wire: each output stays with its toggle.
       </Banner>
     </DocSection>
 

@@ -10,7 +10,7 @@ import {
 import {
   MAX_OUTPUTS,
   defaultTogglesConfig,
-  dragRow,
+  dropToggleRow,
   visibleRows,
   withUpstream,
   groupsOf,
@@ -251,33 +251,61 @@ describe("pick_style", () => {
   });
 });
 
-describe("dragRow (edit view drag across groups)", () => {
+describe("dropToggleRow (edit view drag across groups)", () => {
   const L = (id: string, collapsed = false): TogglesConfig["rows"][number] => ({ id, kind: "label", name: id, color: 1, ...(collapsed ? { collapsed: true } : {}) });
-  const ids = (rows: TogglesConfig["rows"]) => rows.map((r) => r.id);
+  const ids = (rows: TogglesConfig["rows"] | undefined) => rows?.map((r) => r.id);
+  const groupIds = (c: TogglesConfig) => groupsOf(c).map((g) => `${g.label?.id ?? "-"}:${g.toggles.map((x) => x.id).join("")}`);
   const c = cfg([t("a", "a", true), L("L1"), t("b", "b", true), t("c", "c", true), L("L2"), t("d", "d", true)]);
 
-  it("moves a toggle into another group", () => {
-    // a L1 b c L2 d → drag a below L2
-    expect(ids(dragRow(c, 0, 4))).toEqual(["L1", "b", "c", "L2", "a", "d"]);
+  it("moves a toggle into another group, beside a toggle or first after its label", () => {
+    expect(ids(dropToggleRow(c, "a", "d", "before")?.rows)).toEqual(["L1", "b", "c", "L2", "a", "d"]);
+    const first = dropToggleRow(c, "d", "L1", "after");
+    expect(ids(first?.rows)).toEqual(["a", "L1", "d", "b", "c", "L2"]);
+    expect(first?.group?.id).toBe("L1");
   });
-  it("moves a toggle out of a group to the top", () => {
-    expect(ids(dragRow(c, 2, 0))).toEqual(["b", "a", "L1", "c", "L2", "d"]);
+  it("moves a toggle out of a group, above the first label", () => {
+    expect(ids(dropToggleRow(c, "b", "a", "after")?.rows)).toEqual(["a", "b", "L1", "c", "L2", "d"]);
+    expect(dropToggleRow(c, "b", "L1", "before")?.group).toBeNull();
   });
-  it("a label carries its toggles and never splits a group", () => {
-    // drag L2 between b and c: it moves past c, taking d along.
-    expect(ids(dragRow(c, 4, 3))).toEqual(["a", "L1", "b", "c", "L2", "d"]);
-    // drag L2 above L1.
-    expect(ids(dragRow(c, 4, 1))).toEqual(["a", "L2", "d", "L1", "b", "c"]);
-    // drag L1 to the end.
-    expect(ids(dragRow(c, 1, 5))).toEqual(["a", "L2", "d", "L1", "b", "c"]);
+  it("drops a toggle below a group, in no group, and reads it back the same", () => {
+    const below = dropToggleRow(c, "a", "L2", "before");
+    expect(below?.group).toBeNull();
+    const back = parseTogglesConfig({ rows: below?.rows });
+    expect(groupIds(back)).toEqual(["-:", "L1:bc", "-:a", "L2:d"]);
+    expect(back.rows.find((r) => r.id === "a")).toMatchObject({ ungrouped: true });
+    const end = dropToggleRow(c, "b", "d", "end");
+    expect(groupIds({ ...c, rows: end?.rows ?? [] })).toEqual(["-:a", "L1:c", "L2:d", "-:b"]);
+    // Back into a group, the mark goes.
+    const again = dropToggleRow({ ...c, rows: end?.rows ?? [] }, "b", "d", "after");
+    expect(again?.rows.find((r) => r.id === "b")).not.toHaveProperty("ungrouped");
+  });
+  it("lands nowhere new when nothing would change", () => {
+    expect(dropToggleRow(c, "b", "b", "after")).toBeNull();
+    expect(dropToggleRow(c, "c", "b", "after")).toBeNull();
+    expect(dropToggleRow(c, "a", "L1", "before")).toBeNull();
+  });
+  it("moves a label with its toggles, only between groups", () => {
+    expect(ids(dropToggleRow(c, "L2", "L1", "before")?.rows)).toEqual(["a", "L2", "d", "L1", "b", "c"]);
+    expect(ids(dropToggleRow(c, "L1", "d", "end")?.rows)).toEqual(["a", "L2", "d", "L1", "b", "c"]);
+    expect(ids(dropToggleRow(c, "L2", "c", "after")?.rows)).toBeUndefined(); // already there
+    expect(dropToggleRow(c, "L2", "b", "after")).toBeNull(); // would split L1
+    expect(dropToggleRow(c, "L1", "L2", "after")).toBeNull(); // inside L2
+    expect(dropToggleRow(c, "L1", "b", "before")).toBeNull(); // its own toggles
+  });
+  it("puts a label among toggles in no group, splitting their run", () => {
+    const loose = cfg([t("a", "a", true), t("b", "b", true), L("L1"), t("c", "c", true)]);
+    const out = dropToggleRow(loose, "L1", "a", "after");
+    expect(groupIds({ ...loose, rows: out?.rows ?? [] })).toEqual(["-:a", "L1:c", "-:b"]);
   });
   it("keeps a folded group's hidden toggles and unfolds on a drop into it", () => {
     const f = cfg([t("a", "a", true), L("L1", true), t("b", "b", true), L("L2"), t("d", "d", true)]);
     expect(ids(visibleRows(f))).toEqual(["a", "L1", "L2", "d"]);
-    const out = dragRow(f, 3, 2); // d just below folded L1
-    expect(ids(out)).toEqual(["a", "L1", "b", "d", "L2"]);
-    expect(out[1]).toMatchObject({ id: "L1", collapsed: false });
-    expect(ids(dragRow(f, 1, 3))).toEqual(["a", "L2", "d", "L1", "b"]);
+    const out = dropToggleRow(f, "d", "L1", "after");
+    expect(ids(out?.rows)).toEqual(["a", "L1", "d", "b", "L2"]);
+    expect(out?.rows[1]).toMatchObject({ id: "L1", collapsed: false });
+    expect(ids(dropToggleRow(f, "L1", "d", "end")?.rows)).toEqual(["a", "L2", "d", "L1", "b"]);
+    // After a folded label is between groups for a label.
+    expect(ids(dropToggleRow(f, "L2", "L1", "after")?.rows)).toBeUndefined();
   });
 });
 
