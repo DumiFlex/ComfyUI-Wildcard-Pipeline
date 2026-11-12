@@ -209,10 +209,9 @@ tutorial(
       await t.click(t.node(tg).locator('[data-test^="tg-row-"]').filter({ hasText: "Rain" }).locator('[data-test^="tg-ctl-"]').first());
       await t.beat(500);
       await runFor(/under a clear sky/);
-      await page.waitForFunction(
-        (el) => !(el?.textContent ?? "").includes("sunny sky"),
-        await neg.elementHandle(), { timeout: 15_000 },
-      ).catch(() => { throw new StepError("sunny sky is still in the negative preview with Rain off."); });
+      // "hidden" also passes when the whole negative preview goes (nothing left to send).
+      await neg.filter({ hasText: "sunny sky" }).waitFor({ state: "hidden", timeout: 15_000 })
+        .catch(() => { throw new StepError("sunny sky is still in the negative preview with Rain off."); });
       await t.callout("out", t.node(nodes.text), "The Off value", 5);
       await t.say("Now it's the Off value, and sunny sky has left the negative.");
       await t.waitVoice();
