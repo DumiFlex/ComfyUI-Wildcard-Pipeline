@@ -2606,7 +2606,7 @@
     },
     {
      "title": "Make a bundle",
-     "text": "- On the canvas, select rows in a WP Context, right-click and choose Save as bundle.\n- In the manager, create one on the Bundles page and add modules to it.\n- Drop a saved bundle into a Context with Add Bundle."
+     "text": "- On the canvas, select rows in a WP Context, right-click and choose Save as bundle.\n- In the manager, create one on the Bundles page and add modules to it.\n- Drop a saved bundle into a Context with Add Bundle.\n- Drag a row into a bundle on the canvas: a line in the bundle's colour shows where it lands. On a closed bundle, drop on the middle of its header to put the row inside (the bundle opens); its top and bottom edges drop the row beside it."
     },
     {
      "title": "When you edit a module later",

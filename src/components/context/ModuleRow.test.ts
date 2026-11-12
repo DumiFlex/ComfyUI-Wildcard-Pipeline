@@ -32,6 +32,7 @@ function makeCtx(over: Partial<ModuleRowCtx> = {}): ModuleRowCtx {
     summaryTokens: () => [],
     siblingInfo: () => null,
     rowGap: () => null,
+    rowLineStyle: () => undefined,
     draggingModuleUid: ref<string | null>(null),
     recentDropUids: ref(new Set<string>()),
     pulseDelayFor: () => "0ms",

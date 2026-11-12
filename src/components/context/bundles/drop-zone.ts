@@ -61,6 +61,10 @@ function collectMovingBundleUids(
   return out;
 }
 
+/** Share of a closed bundle's height, at its top and at its bottom, that
+ *  drops beside it instead of into it. */
+export const CLOSED_EDGE = 0.3;
+
 /** Resolves a pointer position to a drop zone.
  *
  *  jsdom + headless environments don't implement elementFromPoint —
@@ -203,6 +207,15 @@ function resolveWithin(
         const b = (value.bundles ?? []).find((bb) => bb._uid === uid);
         const targetIsNested = b && typeof b.parent_uid === "string" && !!b.parent_uid;
         const tierCap = drag?.kind === "bundle" && (dragHasNested || targetIsNested);
+        // A closed bundle is just its header: the top and bottom edges
+        // drop beside it, the middle drops INTO it (at its end; the
+        // bundle opens on drop).
+        if (b && b.collapsed && !tierCap) {
+          const edge = r.height * CLOSED_EDGE;
+          if (y < r.top + edge) return { kind: "slot", containerUid, insertIdx: startIdxOf(k, value) };
+          if (y > r.bottom - edge) return { kind: "slot", containerUid, insertIdx: endIdxOf(k, value) + 1 };
+          return { kind: "slot", containerUid: uid, insertIdx: b.end_idx + 1 };
+        }
         if (!tierCap) {
           const body = k.querySelector<HTMLElement>(":scope > .wp-bundle-children");
           if (body) return resolveWithin(body, y, uid, value, drag, moving);

@@ -26,7 +26,6 @@ import {
 import { LockSeedKey } from "./lock-seed-ctx";
 import { reconcileBundleRanges } from "./bundles/drag";
 import { bundleSnapshotModified, ensureBundleFingerprints } from "./bundles/bundle-fingerprint";
-import BundleDropBar from "./bundles/BundleDropBar.vue";
 import { createBundleOps } from "./bundles/bundle-ops";
 import { createBundleMasterToggles } from "./bundles/master-toggles";
 import { useBundleEdit } from "./bundles/bundle-edit";
@@ -797,10 +796,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
           class="wp-modules"
           :data-suppress-move="suppressMove ? 'true' : null"
         >
-        <!-- Floating drop indicator for top-level scope. Hidden when
-             the resolved zone targets a nested bundle container — that
-             container renders its own BundleDropBar. -->
-        <BundleDropBar :container-uid="null" />
       <template v-for="item in topLevelItems" :key="item.key">
         <BundleFrame
           v-if="item.kind === 'bundle'"
@@ -981,5 +976,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 <style>
 /* Unscoped widget styles live in context-widget.css — same cascade as the
  * inline block they came from (NOT layered; see the note at its top). */
+@import "@/kit/row-drag.css";
 @import "./context-widget.css";
 </style>

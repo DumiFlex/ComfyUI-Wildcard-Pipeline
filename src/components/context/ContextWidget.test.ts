@@ -1966,7 +1966,7 @@ describe("ContextWidget drag-drop overhaul", () => {
     }
   }
 
-  it("dragover top half adds wp-gap-before (gap metaphor)", async () => {
+  it("dragover top half adds wp-rowdrag--before (gap metaphor)", async () => {
     const wrapper = mountFour();
     const cards = wrapper.findAll(".wp-module");
     stubRects([
@@ -1981,14 +1981,14 @@ describe("ContextWidget drag-drop overhaul", () => {
     await cards[1].trigger("dragover", { clientY: 40, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    expect(cards[1].classes()).toContain("wp-gap-before");
-    expect(cards[1].classes()).not.toContain("wp-gap-after");
+    expect(cards[1].classes()).toContain("wp-rowdrag--before");
+    expect(cards[1].classes()).not.toContain("wp-rowdrag--after");
 
     await cards[0].trigger("dragend");
     wrapper.unmount();
   });
 
-  it("dragover bottom half canonicalises to wp-gap-before on next row", async () => {
+  it("dragover bottom half canonicalises to wp-rowdrag--before on next row", async () => {
     // Single canonical zone per gap — bottom-half of row N projects to
     // "before row N+1", so cards[2] receives the class, not cards[1].
     const wrapper = mountFour();
@@ -2004,9 +2004,9 @@ describe("ContextWidget drag-drop overhaul", () => {
     await cards[1].trigger("dragover", { clientY: 55, dataTransfer: makeDataTransfer() });
     await flushPromises();
 
-    expect(cards[2].classes()).toContain("wp-gap-before");
-    expect(cards[1].classes()).not.toContain("wp-gap-after");
-    expect(cards[1].classes()).not.toContain("wp-gap-before");
+    expect(cards[2].classes()).toContain("wp-rowdrag--before");
+    expect(cards[1].classes()).not.toContain("wp-rowdrag--after");
+    expect(cards[1].classes()).not.toContain("wp-rowdrag--before");
 
     await cards[0].trigger("dragend");
     wrapper.unmount();
@@ -2335,9 +2335,13 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
       (body.element as HTMLElement).getBoundingClientRect = rectOf(30, 0);
     }
 
-    // Drag std → bundle header bottom half (clientY in bottom 15px window).
+    // Drag std → the middle of the closed bundle's header (its top and
+    // bottom 30% drop beside it).
     await stdCard.trigger("dragstart", { dataTransfer: makeDataTransfer() });
-    await header.trigger("dragover", { clientY: 22, dataTransfer: makeDataTransfer() });
+    await header.trigger("dragover", { clientY: 15, dataTransfer: makeDataTransfer() });
+    // The closed frame lights up and draws the into line.
+    expect(wrapper.find(".wp-bundle").classes()).toContain("wp-bundle--drop-into");
+    expect(wrapper.find(".wp-bundle").classes()).toContain("wp-bundle--drop-target");
     await header.trigger("drop", { dataTransfer: makeDataTransfer() });
     await flushPromises();
 
@@ -2348,6 +2352,78 @@ describe("ContextWidget bundle drag/drop regressions (Batch 2)", () => {
     // std joined the bundle.
     const std = parsed.modules.find((m: { id: string }) => m.id === "stdaaaaa");
     expect(std.bundle_origin).toBe("bundleUidXX");
+    wrapper.unmount();
+  });
+
+  it("a closed bundle's top edge drops beside it: the row stays out and the bundle stays closed", async () => {
+    const modules = [
+      {
+        id: "ch0aaaaa", _uid: "u0", type: "wildcard", enabled: true,
+        meta: { name: "ch0" }, entries: [],
+        payload: { var_binding: "v0", options: [] }, payload_hash: "ph0",
+        bundle_origin: "bundleUidXX",
+      },
+      {
+        id: "ch1aaaaa", _uid: "u1", type: "wildcard", enabled: true,
+        meta: { name: "ch1" }, entries: [],
+        payload: { var_binding: "v1", options: [] }, payload_hash: "ph1",
+        bundle_origin: "bundleUidXX",
+      },
+      {
+        id: "stdaaaaa", _uid: "u2", type: "wildcard", enabled: true,
+        meta: { name: "std" }, entries: [],
+        payload: { var_binding: "vs", options: [] }, payload_hash: "phs",
+      },
+    ];
+    const bundles = [{
+      _uid: "bundleUidXX", library_id: "lib_b", start_idx: 0, end_idx: 1,
+      enabled: true, collapsed: true, inserted_at_hash: "phB", name: "Group", color: null,
+    }];
+    const onChange = vi.fn();
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: {
+        nodeId: 9302,
+        initialJson: JSON.stringify({ version: 1, modules, bundles }),
+        upstreamVars: [],
+        onChange,
+      },
+    });
+    await flushPromises();
+    onChange.mockClear();
+
+    const header = wrapper.find(".wp-bundle-header");
+    (header.element as HTMLElement).getBoundingClientRect = rectOf(0, 30);
+    const stdCard = wrapper.find('[data-module-id="stdaaaaa"]');
+    (stdCard.element as HTMLElement).getBoundingClientRect = rectOf(80, 30);
+    // Collapsed bundle frame rect = just the header strip (children
+    // container has 0 height via grid-template-rows: auto 0fr). The
+    // slot-zone resolver drills via the frame rect so it needs to be
+    // > 0 height for drill-in to fire.
+    const bundle = wrapper.find(".wp-bundle");
+    (bundle.element as HTMLElement).getBoundingClientRect = rectOf(0, 30);
+    const body = wrapper.find(".wp-bundle-children");
+    if (body.exists()) {
+      (body.element as HTMLElement).getBoundingClientRect = rectOf(30, 0);
+    }
+
+    // Drag std → the top edge of the closed bundle's header.
+    await stdCard.trigger("dragstart", { dataTransfer: makeDataTransfer() });
+    await header.trigger("dragover", { clientY: 3, dataTransfer: makeDataTransfer() });
+    // A gap opens above the frame (kit line, accent colour at top level).
+    const frame = wrapper.find(".wp-bundle");
+    expect(frame.classes()).toContain("wp-rowdrag--before");
+    expect(frame.classes()).not.toContain("wp-bundle--drop-into");
+    await header.trigger("drop", { dataTransfer: makeDataTransfer() });
+    await flushPromises();
+
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0] as string;
+    const parsed = JSON.parse(last);
+    expect(parsed.bundles).toHaveLength(1);
+    expect(parsed.bundles[0].collapsed).toBe(true);
+    // std moved above the bundle, outside it.
+    expect(parsed.modules[0].id).toBe("stdaaaaa");
+    expect(parsed.modules[0].bundle_origin).toBeUndefined();
     wrapper.unmount();
   });
 
