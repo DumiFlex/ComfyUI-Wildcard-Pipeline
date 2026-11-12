@@ -127,7 +127,7 @@ tutorial(
       await t.say("Three times of day by four hair styles: twelve frames. The role isn't swept, so Hold other picks keeps one role on all of them.");
       await t.waitVoice();
       await t.uncallout("total");
-      await t.click(modal.locator('[data-test="sweep-modal-done"]'));
+      await t.click(page.locator('[data-test="sweep-modal-done"]').last());
       await t.beat(700);
       await t.say("Run.");
       await t.fastForward(async () => {

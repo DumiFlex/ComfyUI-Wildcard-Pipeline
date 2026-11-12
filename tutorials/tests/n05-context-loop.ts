@@ -212,7 +212,7 @@ tutorial(
       await t.click(modal.locator('[data-test="mx-seed-unlockall"]'));
       await t.beat(700);
       await t.waitVoice();
-      await t.callout("cp", [modal.locator('[data-test="mx-seed-copy"]'), modal.locator('[data-test="mx-seed-paste"]')], "Move seeds between loops", 4);
+      await t.callout("cp", [modal.locator('[data-test="mx-seed-copy"]'), page.locator('[data-test="mx-seed-paste"]').last()], "Move seeds between loops", 4);
       await t.say("Copy and Paste carry the seeds over as text, to another loop or a Seed List.");
       await t.waitVoice();
       await t.uncallout("cp");
