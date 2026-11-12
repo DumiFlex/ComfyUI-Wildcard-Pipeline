@@ -277,6 +277,23 @@ describe("collectUpstreamProducers", () => {
     });
   });
 
+  it("collectUpstreamInjectorNegatives: a toggle's own negative, or null when it has none", () => {
+    const rows = [
+      { id: "a", kind: "toggle", name: "Rain", var: "rain", on: true, pin: false, out: 0, style: "switch", value: "in the rain", negative: "sunny sky" },
+      { id: "b", kind: "toggle", name: "Fog", var: "fog", on: false, pin: false, out: 0, style: "switch", off_negative: "clear air" },
+      { id: "c", kind: "toggle", name: "Wind", var: "wind", on: true, pin: false, out: 0, style: "switch" },
+    ];
+    const tg: LiteNodeLike = {
+      id: 1,
+      type: "WP_Toggles",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_toggles", value: JSON.stringify({ version: 1, mode: "any", group_var: "", rows }) }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([tg, pov], { 100: { origin_id: 1, target_id: 2 } });
+    expect(collectUpstreamInjectorNegatives(g, pov)).toEqual({ rain: "sunny sky", fog: "clear air", wind: null });
+  });
+
   it("attributes the loop's iteration vars, including the _total pair", () => {
     const loop: LiteNodeLike = {
       id: 1,

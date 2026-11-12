@@ -19,7 +19,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { TOGGLES_NODE, staticToggleInternals, staticToggleValues, togglesPreviewModules } from "./toggles";
+import { TOGGLES_NODE, staticToggleInternals, staticToggleNegatives, staticToggleValues, togglesPreviewModules } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
@@ -760,7 +760,8 @@ export function collectUpstreamInjectorNegatives(
       continue;
     }
     if (n.type === TOGGLES_NODE && !isSkippedMode(n)) {
-      for (const v of Object.keys(staticToggleValues(n))) out[v] = null;
+      // A write replaces the variable's negatives with the toggle's own.
+      for (const [v, neg] of Object.entries(staticToggleNegatives(n))) out[v] = neg || null;
       continue;
     }
     if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
