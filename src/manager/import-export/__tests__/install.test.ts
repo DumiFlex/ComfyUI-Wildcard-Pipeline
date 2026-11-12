@@ -356,13 +356,13 @@ describe("installEnvelope — natively-supported future versions install as-is",
     expect(opts[0].value).toBe("at @{0de11002#Setting:$model_variant}");
   });
 
-  it("rejects a v12 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
-    const v12Envelope = {
-      schema_version: 12,
+  it("rejects a v13 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v13Envelope = {
+      schema_version: 13,
       bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
     };
     const { importExport, seen } = fakeCommit();
-    const result = await installEnvelope({ envelope: v12Envelope }, { importExport });
+    const result = await installEnvelope({ envelope: v13Envelope }, { importExport });
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("parse_failed");

@@ -31,7 +31,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 /**
  * Highest schema version this runtime can correctly READ + WRITE — distinct
  * from CURRENT_SCHEMA_VERSION (the migration-chain head, which stays 2 because
- * v2→v3 through v10→v11 are no-ops). This is the value advertised to the community
+ * v2→v3 through v11→v12 are no-ops). This is the value advertised to the community
  * publish-gate / boot catalog-probe ("am I new enough to publish?").
  *
  * MAINTENANCE CONTRACT: bump this whenever `schemaVersionForPayload()` learns
@@ -39,7 +39,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * very shapes this runtime just learned to produce, one version up. The
  * regression test below pins MAX_KNOWN >= the highest content-stamp.
  */
-export const MAX_KNOWN_SCHEMA_VERSION = 11;
+export const MAX_KNOWN_SCHEMA_VERSION = 12;
 
 /**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
@@ -164,6 +164,16 @@ export const NEGATED_TESTS_SCHEMA_VERSION = 10;
  * uses one (`usesFilterVariables`).
  */
 export const FILTER_VARIABLES_SCHEMA_VERSION = 11;
+
+/**
+ * Community catalog version for WP Toggles booleans: text reading
+ * `$name.bool` (or `$name.K.bool`), or a derivation test whose `var` is
+ * `name.bool`. A toggle with a value writes the value, and `.bool` reads its
+ * on/off. Additive, no migrator; a pre-v12 runtime reads `.bool` as a tag
+ * axis and renders nothing, so the stamp makes it refuse the pack up front.
+ * Publish stamps it only when a payload reads one (`usesBoolAccessor`).
+ */
+export const BOOL_ACCESSOR_SCHEMA_VERSION = 12;
 
 export interface MigrationOk<T> {
   ok: true;

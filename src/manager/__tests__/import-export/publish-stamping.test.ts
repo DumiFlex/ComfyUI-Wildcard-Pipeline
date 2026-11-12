@@ -11,6 +11,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
   FALLBACK_SCHEMA_VERSION,
+  BOOL_ACCESSOR_SCHEMA_VERSION,
   FILTER_VARIABLES_SCHEMA_VERSION,
   NEGATED_TESTS_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
@@ -599,5 +600,20 @@ describe("schemaVersionForPayload — variables in a filter (v11)", () => {
     expect(schemaVersionForPayload(wildcard("at @{0de11002#Setting:$model_variant}"))).toBe(FILTER_VARIABLES_SCHEMA_VERSION);
     expect(schemaVersionForPayload(wildcard("at @{0de11002:not $season!null}"))).toBe(FILTER_VARIABLES_SCHEMA_VERSION);
     expect(schemaVersionForPayload(wildcard("costs $5 at @{0de11002:indoor}"))).toBe(CURRENT_SCHEMA_VERSION);
+  });
+});
+
+describe("schemaVersionForPayload: $name.bool (v12)", () => {
+  it("stamps BOOL_ACCESSOR (12) for a .bool read in text or a condition", () => {
+    expect(schemaVersionForPayload({ template: "a $rain.bool b" })).toBe(BOOL_ACCESSOR_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ template: "a $rain.0.bool b" })).toBe(BOOL_ACCESSOR_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({
+      rules: [{ branches: [{ condition: { var: "rain.bool", op: "equals", value: "true" } }] }],
+    })).toBe(BOOL_ACCESSOR_SCHEMA_VERSION);
+  });
+
+  it("leaves look-alikes at the chain head", () => {
+    expect(schemaVersionForPayload({ template: "a $rain.boolean b" })).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ template: "file.bool" })).toBe(CURRENT_SCHEMA_VERSION);
   });
 });

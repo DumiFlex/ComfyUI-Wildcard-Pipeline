@@ -1978,6 +1978,12 @@ function expandValue(
       // `$name.neg` reads the variable's negatives, which the static preview
       // doesn't track: render nothing rather than a stray accessor.
       if (axis === "neg") return "";
+      // `$name.bool` reads a toggle's on/off: a toggle with a value holds the
+      // value while on and nothing while off.
+      if (axis === "bool") {
+        const v = base.trim().toLowerCase();
+        return v === "true" || v === "false" ? v : v ? "true" : "false";
+      }
       const tag = previewAxisTag(catalog, name, axis);
       return tag ?? full;
     },

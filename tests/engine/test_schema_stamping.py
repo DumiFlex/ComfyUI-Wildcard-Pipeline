@@ -3,6 +3,7 @@
 import pytest
 
 from engine.migrations import (
+    BOOL_ACCESSOR_SCHEMA_VERSION,
     CONSTRAINT_ONLY_SCHEMA_VERSION,
     CURRENT_SCHEMA_VERSION,
     DERIVATION_CONDITIONS_SCHEMA_VERSION,
@@ -295,3 +296,20 @@ def test_ref_filter_variables_need_v11(text, expected):
     row = {"id": "eeeeeeee", "type": "wildcard", "name": "w",
            "payload": {"var_binding": "w", "options": [{"id": "o1", "value": text}]}}
     assert schema_version_for_payload(row) == expected
+
+
+@pytest.mark.parametrize("node,expected", [
+    ({"template": "a $rain.bool b"}, BOOL_ACCESSOR_SCHEMA_VERSION),
+    ({"template": "a $rain.0.bool b"}, BOOL_ACCESSOR_SCHEMA_VERSION),
+    ({"template": "a $rain.boolean b"}, CURRENT_SCHEMA_VERSION),
+    ({"template": "file.bool"}, CURRENT_SCHEMA_VERSION),
+    (
+        {"rules": [{"branches": [
+            {"condition": {"var": "rain.bool", "op": "equals", "value": "true"}},
+        ]}]},
+        BOOL_ACCESSOR_SCHEMA_VERSION,
+    ),
+])
+def test_bool_accessor_needs_v12(node, expected):
+    assert schema_version_for_payload(node) == expected
+    assert MAX_KNOWN_SCHEMA_VERSION >= BOOL_ACCESSOR_SCHEMA_VERSION

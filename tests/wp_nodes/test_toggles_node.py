@@ -223,3 +223,45 @@ def test_pick_one_without_negative_clears_old_one():
     ]}
     payload = _run(config=cfg, upstream=up).values[0]
     assert "time" not in payload.internals[negatives.NEG_KEY]
+
+
+def test_any_on_value_bool_and_negative():
+    up = ContextPayload(
+        context={"weather": "storm"}, debug={},
+        internals={negatives.NEG_KEY: {"fog": [{"text": "old", "pick": None, "source": "x"}]}},
+    )
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "value": "heavy $weather rain", "negative": "sunny"},
+        {"id": "2", "kind": "toggle", "name": "Fog", "var": "fog", "on": False,
+         "value": "thick fog", "negative": "clear air"},
+        {"id": "3", "kind": "toggle", "name": "Wind", "var": "wind", "on": True},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert payload.context["rain"] == "heavy storm rain"
+    assert payload.context["fog"] == ""
+    assert payload.context["wind"] == "true"
+    assert payload.internals["__wp_toggle_bools__"] == {"rain": True, "fog": False, "wind": True}
+    neg = payload.internals[negatives.NEG_KEY]
+    assert neg["rain"] == [{"text": "sunny", "pick": None, "source": "WP_Toggles"}]
+    assert "fog" not in neg  # off: the old negative is cleared, its own not filed
+    rows = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    assert rows["rain"]["bool"] is True and rows["rain"]["has_value"] is True
+    assert rows["rain"]["negative"] == "sunny"
+    assert rows["wind"]["bool"] is True and "has_value" not in rows["wind"]
+
+
+def test_bool_accessor_reads_across_nodes_in_the_assembler():
+    from engine import template
+    from engine.context import strip_internals, with_resolver_tables
+
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "value": "heavy rain", "visible": True},
+        {"id": "2", "kind": "toggle", "name": "Wind", "var": "wind", "on": False},
+    ]}
+    payload = _run(config=cfg).values[0]
+    render = {**payload.context, **payload.internals}
+    ctx = with_resolver_tables(strip_internals(render), render)
+    out = template.resolve_variables("$rain | $rain.bool | $wind.bool", ctx)
+    assert out == "heavy rain | true | false"

@@ -76,7 +76,8 @@ class Toggle:
     upstream: bool = False
     value: str = ""
     visible: bool = False
-    #: Pick one: negative text filed under ``group_var`` when this one is picked.
+    #: Negative text, filed under ``var`` while the toggle is on (and under
+    #: ``group_var`` when it is the Pick one pick).
     negative: str = ""
 
 
@@ -249,18 +250,47 @@ def problems(cfg: Config) -> list[str]:
     return out
 
 
+#: Cross-node internal: every toggle variable's on/off, what `$name.bool`
+#: reads (a toggle with a value writes the value, not the boolean).
+BOOLS_KEY = "__wp_toggle_bools__"
+
+
 def resolve(cfg: Config) -> dict[str, str]:
-    """Variable → ``"true"`` / ``"false"`` (plus the Pick one variable), in
-    row order. A later row with the same variable wins."""
+    """Variable → its value (plus the Pick one variable), in row order. A
+    toggle with a Value writes it while on and ``""`` while off; one without
+    writes ``"true"`` / ``"false"``. A later row with the same variable wins."""
     eff = effective(cfg)
     values: dict[str, str] = {}
     for t in cfg.toggles:
         if t.var and VAR_RE.match(t.var):
-            values[t.var] = TRUE if eff[t.id] else FALSE
+            if t.value:
+                values[t.var] = t.value if eff[t.id] else ""
+            else:
+                values[t.var] = TRUE if eff[t.id] else FALSE
     if cfg.mode == "one" and cfg.group_var and VAR_RE.match(cfg.group_var):
         picked = next((t for t in cfg.toggles if eff[t.id]), None)
         values[cfg.group_var] = (picked.value or picked.name) if picked else ""
     return values
+
+
+def bools(cfg: Config) -> dict[str, bool]:
+    """Each toggle variable's on/off (`$name.bool`); a later row wins."""
+    eff = effective(cfg)
+    return {t.var: eff[t.id] for t in cfg.toggles if t.var and VAR_RE.match(t.var)}
+
+
+def own_negatives(cfg: Config) -> dict[str, str]:
+    """Toggle variable → its negative, for the toggles that are on and have
+    one. A later row writing the same variable decides, as in :func:`resolve`."""
+    eff = effective(cfg)
+    out: dict[str, str] = {}
+    for t in cfg.toggles:
+        if t.var and VAR_RE.match(t.var):
+            if eff[t.id] and t.negative.strip():
+                out[t.var] = t.negative.strip()
+            else:
+                out.pop(t.var, None)
+    return out
 
 
 def picked_negative(cfg: Config) -> str:

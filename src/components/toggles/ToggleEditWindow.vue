@@ -96,7 +96,7 @@ const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
  *  sets. Only with a graph to look at (`varSuggestions` given). */
 const missingVars = computed(() => {
   const known = props.varSuggestions;
-  if (!props.pickOne || !known || !d.value.value?.includes("$")) return [];
+  if (!known || !d.value.value?.includes("$")) return [];
   const names = tokenize(d.value.value, "assembler")
     .filter((tok) => tok.kind === "var" && tok.varName)
     .map((tok) => tok.varName ?? "");
@@ -195,7 +195,7 @@ function onKey(ev: KeyboardEvent): void {
           <Input size="sm" :model-value="d.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="patch({ name: value($event) })" />
         </label>
         <label class="wp-tgr__field">
-          <span>Variable <em>true or false; the globe keeps it internal</em></span>
+          <span>Variable <em>{{ d.value ? `its Value while on, nothing while off; $${d.var || 'name'}.bool is true or false` : 'true or false; the globe keeps it internal' }}</em></span>
           <span class="wp-tgr__var-row">
           <Input
             size="sm"
@@ -249,15 +249,15 @@ function onKey(ev: KeyboardEvent): void {
             </span>
           </span>
         </div>
-        <div v-if="pickOne" class="wp-tgr__field">
-          <span>Value <em>picked variable gets this, not the name</em></span>
+        <div class="wp-tgr__field">
+          <span>Value <em>{{ pickOne ? "the variable and the pick get this, not true or the name" : "the variable gets this while on, instead of true" }}</em></span>
           <RichTextInput
             class="wp-tgr__value"
             :model-value="d.value ?? ''"
             surface="combine"
             multiline
             :rows="2"
-            :placeholder="d.name"
+            :placeholder="pickOne ? d.name : 'true'"
             :var-suggestions="varSuggestions ?? []"
             :var-producers="varProducers"
             :graph-aware="!!varProducers"

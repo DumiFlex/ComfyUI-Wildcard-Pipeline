@@ -1,5 +1,5 @@
 {
- "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first). A case's optional internal lists the variables kept out of the prompt (internal_vars / internalToggleVars), sorted.",
+ "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first). A case's optional internal lists the variables kept out of the prompt (internal_vars / internalToggleVars), sorted. values is what each variable holds (a toggle with a value writes it while on, \"\" while off); bools is each toggle variable's on/off ($name.bool, bools / toggleBools); negatives, when present, the toggle negatives filed under their own variables (own_negatives / ownToggleNegatives).",
  "cases": [
   {
    "name": "plain switches",
@@ -45,7 +45,11 @@
    "outputs": [
     true,
     false
-   ]
+   ],
+   "bools": {
+    "a": true,
+    "b": false
+   }
   },
   {
    "name": "child of an off parent is off",
@@ -85,7 +89,11 @@
    "outputs": [
     false,
     false
-   ]
+   ],
+   "bools": {
+    "lora": false,
+    "clothes": false
+   }
   },
   {
    "name": "child of an on parent keeps its own choice",
@@ -134,7 +142,12 @@
     "clothes": "true",
     "shoes": "false"
    },
-   "outputs": []
+   "outputs": [],
+   "bools": {
+    "lora": true,
+    "clothes": true,
+    "shoes": false
+   }
   },
   {
    "name": "chain",
@@ -183,7 +196,12 @@
     "b": "false",
     "c": "false"
    },
-   "outputs": []
+   "outputs": [],
+   "bools": {
+    "a": false,
+    "b": false,
+    "c": false
+   }
   },
   {
    "name": "loop is off",
@@ -220,7 +238,11 @@
     "a": "false",
     "b": "false"
    },
-   "outputs": []
+   "outputs": [],
+   "bools": {
+    "a": false,
+    "b": false
+   }
   },
   {
    "name": "missing parent is off",
@@ -245,7 +267,10 @@
    "values": {
     "a": "false"
    },
-   "outputs": []
+   "outputs": [],
+   "bools": {
+    "a": false
+   }
   },
   {
    "name": "pick one takes the first on and ignores needs",
@@ -298,7 +323,12 @@
    "outputs": [
     true,
     false
-   ]
+   ],
+   "bools": {
+    "portrait": false,
+    "full_body": true,
+    "landscape": false
+   }
   },
   {
    "name": "pick one with nothing on",
@@ -324,7 +354,10 @@
     "portrait": "false",
     "framing": ""
    },
-   "outputs": []
+   "outputs": [],
+   "bools": {
+    "portrait": false
+   }
   },
   {
    "name": "outputs follow out, not row order",
@@ -364,7 +397,11 @@
    "outputs": [
     false,
     true
-   ]
+   ],
+   "bools": {
+    "a": true,
+    "b": false
+   }
   },
   {
    "name": "repeated out falls back to row order",
@@ -404,7 +441,11 @@
    "outputs": [
     true,
     false
-   ]
+   ],
+   "bools": {
+    "a": true,
+    "b": false
+   }
   },
   {
    "name": "unpinned and bad vars",
@@ -453,7 +494,10 @@
    },
    "outputs": [
     true
-   ]
+   ],
+   "bools": {
+    "ok": true
+   }
   },
   {
    "name": "same var twice, lower wins",
@@ -489,7 +533,10 @@
    "values": {
     "x": "false"
    },
-   "outputs": []
+   "outputs": [],
+   "bools": {
+    "x": false
+   }
   },
   {
    "name": "upstream sets a switch only from a lone yes/no word",
@@ -579,7 +626,14 @@
     true,
     false,
     false
-   ]
+   ],
+   "bools": {
+    "a": true,
+    "b": false,
+    "c": true,
+    "d": false,
+    "e": false
+   }
   },
   {
    "name": "upstream feeds Pick one before the first-on rule",
@@ -626,7 +680,11 @@
    "outputs": [
     false,
     true
-   ]
+   ],
+   "bools": {
+    "a": false,
+    "b": true
+   }
   },
   {
    "name": "pick one: upstream yes beats the canvas pick; a value replaces the name",
@@ -680,8 +738,8 @@
     "dusk": "1"
    },
    "values": {
-    "day": "false",
-    "night": "true",
+    "day": "",
+    "night": "moonlit night",
     "dusk": "false",
     "look": "moonlit night"
    },
@@ -689,7 +747,12 @@
     false,
     true,
     false
-   ]
+   ],
+   "bools": {
+    "day": false,
+    "night": true,
+    "dusk": false
+   }
   },
   {
    "name": "pick one: the upstream picked variable names the pick",
@@ -749,7 +812,12 @@
     false,
     false,
     true
-   ]
+   ],
+   "bools": {
+    "day": false,
+    "night": false,
+    "dusk": true
+   }
   },
   {
    "name": "internal by default, visible shows",
@@ -788,7 +856,11 @@
    "outputs": [],
    "internal": [
     "a"
-   ]
+   ],
+   "bools": {
+    "a": true,
+    "b": false
+   }
   },
   {
    "name": "pick one variable shows with group_visible",
@@ -823,14 +895,18 @@
     ]
    },
    "values": {
-    "dawn": "true",
+    "dawn": "at dawn",
     "dusk": "false",
     "time": "at dawn"
    },
    "outputs": [],
    "internal": [
     "dawn"
-   ]
+   ],
+   "bools": {
+    "dawn": true,
+    "dusk": false
+   }
   },
   {
    "name": "pick one variable internal without group_visible",
@@ -871,7 +947,11 @@
     "dawn",
     "dusk",
     "time"
-   ]
+   ],
+   "bools": {
+    "dawn": false,
+    "dusk": false
+   }
   },
   {
    "name": "last row writing a variable decides internal",
@@ -909,7 +989,56 @@
    "outputs": [],
    "internal": [
     "a"
-   ]
+   ],
+   "bools": {
+    "a": false
+   }
+  },
+  {
+   "name": "any on: a value prints while on and nothing while off; .bool keeps the switch",
+   "config": {
+    "mode": "any",
+    "rows": [
+     {
+      "id": "a1",
+      "kind": "toggle",
+      "name": "Rain",
+      "var": "rain",
+      "on": true,
+      "value": "heavy rain",
+      "negative": "sunny"
+     },
+     {
+      "id": "a2",
+      "kind": "toggle",
+      "name": "Fog",
+      "var": "fog",
+      "on": false,
+      "value": "thick fog"
+     },
+     {
+      "id": "a3",
+      "kind": "toggle",
+      "name": "Wind",
+      "var": "wind",
+      "on": true
+     }
+    ]
+   },
+   "outputs": [],
+   "values": {
+    "rain": "heavy rain",
+    "fog": "",
+    "wind": "true"
+   },
+   "bools": {
+    "rain": true,
+    "fog": false,
+    "wind": true
+   },
+   "negatives": {
+    "rain": "sunny"
+   }
   }
  ]
 }

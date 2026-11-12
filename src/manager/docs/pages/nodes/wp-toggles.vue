@@ -78,6 +78,14 @@ import VarToken from "../../../components/docs/VarToken.vue";
         same for the picked variable, so <VarToken>$time</VarToken> can print the picked toggle's
         <b>Value</b>.
       </p>
+      <p>
+        Give a toggle a <b>Value</b> and its variable holds that text while it is on and nothing
+        while it is off: a Rain toggle with the Value "heavy rain" makes
+        <VarToken>$rain</VarToken> print "heavy rain" or nothing. The switch itself is still there as
+        <VarToken>$rain.bool</VarToken>, <code>true</code> or <code>false</code>, for rules and
+        conditions. Its <b>Negative</b> goes with the variable while it is on, so an Assembler that
+        prints <VarToken>$rain</VarToken> also sends "sunny, dry" to its negative output.
+      </p>
     </DocSection>
 
     <DocSection title="Mute or bypass nodes">

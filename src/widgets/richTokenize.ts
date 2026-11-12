@@ -92,6 +92,10 @@ export function varBaseName(raw: string): string {
  *  `$pose.0.neg`) — send-to-negative. Reserved: no `accepts` tag group may use
  *  this name. Mirrors `NEG_ACCESSOR` in `engine/syntax/resolve.py`. */
 export const NEG_ACCESSOR = "neg";
+/** `$name.bool` reads a WP Toggles variable's on/off, whatever value the
+ *  toggle writes. Reserved like `neg`. Mirrors `BOOL_ACCESSOR` in
+ *  `engine/syntax/resolve.py`. */
+export const BOOL_ACCESSOR = "bool";
 
 export function varAccessorParts(
   raw: string,

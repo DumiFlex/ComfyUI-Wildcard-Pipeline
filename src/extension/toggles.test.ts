@@ -15,6 +15,8 @@ import {
   withUpstream,
   groupsOf,
   internalToggleVars,
+  ownToggleNegatives,
+  toggleBools,
   needsDepth,
   needsLoop,
   newToggle,
@@ -45,6 +47,8 @@ describe("toggles corpus (shared with engine/toggles.py)", () => {
     it(c.name, () => {
       const parsed = withUpstream(parseTogglesConfig(JSON.stringify(c.config)), "upstream" in c ? c.upstream : null).config;
       expect(resolveToggles(parsed)).toEqual(c.values);
+      expect(toggleBools(parsed)).toEqual(c.bools);
+      expect(ownToggleNegatives(parsed)).toEqual("negatives" in c ? c.negatives : {});
       const vals = outputValues(parsed);
       expect(vals).toHaveLength(MAX_OUTPUTS);
       expect(vals.slice(0, c.outputs.length)).toEqual(c.outputs);
