@@ -90,6 +90,19 @@ describe("ToggleEditWindow", () => {
     }
   });
 
+  it("offers an Off value and an Off negative in Any on only", async () => {
+    for (const pickOne of [true, false]) {
+      const w = open({ ...base, off_value: "photorealistic", off_negative: "anime" }, { pickOne });
+      for (let i = 0; i < 4; i++) {
+        await vi.dynamicImportSettled();
+        await flushPromises();
+      }
+      expect(q('[data-test="tg-off-value"]') === null, String(pickOne)).toBe(pickOne);
+      expect(q('[data-test="tg-off-negative"]') === null, String(pickOne)).toBe(pickOne);
+      w.unmount();
+    }
+  });
+
   it("warns that inline picks print as written", () => {
     const w = open({ ...base, value: "{golden|soft} light" }, { pickOne: true });
     expect(q('[data-test="tg-inline-picks"]')).not.toBeNull();

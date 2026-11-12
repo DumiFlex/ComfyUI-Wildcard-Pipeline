@@ -92,12 +92,13 @@ const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
   { value: "chip", label: "Chip", hint: "A small chip with the name, lit when on" },
 ];
 
-/** `$names` the Pick one Value reads that nothing upstream (nor this node)
- *  sets. Only with a graph to look at (`varSuggestions` given). */
+/** `$names` the Value or Off value reads that nothing upstream (nor this
+ *  node) sets. Only with a graph to look at (`varSuggestions` given). */
 const missingVars = computed(() => {
   const known = props.varSuggestions;
-  if (!known || !d.value.value?.includes("$")) return [];
-  const names = tokenize(d.value.value, "assembler")
+  const text = `${d.value.value ?? ""} ${d.value.off_value ?? ""}`;
+  if (!known || !text.includes("$")) return [];
+  const names = tokenize(text, "assembler")
     .filter((tok) => tok.kind === "var" && tok.varName)
     .map((tok) => tok.varName ?? "");
   return [...new Set(names)].filter((n) => !known.includes(n));
@@ -195,7 +196,7 @@ function onKey(ev: KeyboardEvent): void {
           <Input size="sm" :model-value="d.name" spellcheck="false" data-test="tg-name" @keydown.stop @change="patch({ name: value($event) })" />
         </label>
         <label class="wp-tgr__field">
-          <span>Variable <em>{{ d.value ? `its Value while on, nothing while off; $${d.var || 'name'}.bool is true or false` : 'true or false; the globe keeps it internal' }}</em></span>
+          <span>Variable <em>{{ d.value || d.off_value ? `its Value while on, its Off value while off; $${d.var || 'name'}.bool is true or false` : 'true or false; the globe keeps it internal' }}</em></span>
           <span class="wp-tgr__var-row">
           <Input
             size="sm"
@@ -265,8 +266,6 @@ function onKey(ev: KeyboardEvent): void {
             data-test="tg-value"
             @update:model-value="(v: string) => patch({ value: v.trim() ? v : undefined })"
           />
-          <Banner v-if="missingVars.length" tone="warn" size="sm" data-test="tg-missing-vars">{{ missingNote }}</Banner>
-          <Banner v-if="hasInlinePicks(d.value ?? '')" tone="warn" size="sm" data-test="tg-inline-picks">{{ INLINE_PICKS_NOTE }}</Banner>
           <NegativeField
             :model-value="d.negative"
             surface="combine"
@@ -278,6 +277,35 @@ function onKey(ev: KeyboardEvent): void {
             @update:model-value="(v: string | undefined) => patch({ negative: v })"
           />
         </div>
+        <div v-if="!pickOne" class="wp-tgr__field">
+          <span>Off value <em>the variable gets this while off; empty prints nothing</em></span>
+          <RichTextInput
+            class="wp-tgr__value"
+            :model-value="d.off_value ?? ''"
+            surface="combine"
+            multiline
+            :rows="2"
+            :placeholder="d.value ? 'nothing' : 'false'"
+            :var-suggestions="varSuggestions ?? []"
+            :var-producers="varProducers"
+            :graph-aware="!!varProducers"
+            aria-label="Off value"
+            data-test="tg-off-value"
+            @update:model-value="(v: string) => patch({ off_value: v.trim() ? v : undefined })"
+          />
+          <NegativeField
+            :model-value="d.off_negative"
+            surface="combine"
+            label="toggle while off"
+            test-id="tg-off-negative"
+            :var-suggestions="varSuggestions ?? []"
+            :var-producers="varProducers"
+            :graph-aware="!!varProducers"
+            @update:model-value="(v: string | undefined) => patch({ off_negative: v })"
+          />
+        </div>
+        <Banner v-if="missingVars.length" tone="warn" size="sm" data-test="tg-missing-vars">{{ missingNote }}</Banner>
+        <Banner v-if="hasInlinePicks(`${d.value ?? ''} ${d.off_value ?? ''}`)" tone="warn" size="sm" data-test="tg-inline-picks">{{ INLINE_PICKS_NOTE }}</Banner>
         <div v-if="!pickOne" class="wp-tgr__field">
           <span>Style</span>
           <WpSegmented

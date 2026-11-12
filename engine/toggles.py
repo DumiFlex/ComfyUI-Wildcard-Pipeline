@@ -79,6 +79,16 @@ class Toggle:
     #: Negative text, filed under ``var`` while the toggle is on (and under
     #: ``group_var`` when it is the Pick one pick).
     negative: str = ""
+    #: What the variable gets, and the negative it carries, while the toggle
+    #: is OFF (empty: nothing). Either value makes the toggle write text
+    #: instead of true/false.
+    off_value: str = ""
+    off_negative: str = ""
+
+    @property
+    def writes_text(self) -> bool:
+        """A Value or an Off value: the variable holds text, not true/false."""
+        return bool(self.value or self.off_value)
 
 
 @dataclass
@@ -122,6 +132,8 @@ def parse_config(raw: Any) -> Config:
         out = row.get("out")
         value = row.get("value")
         negative = row.get("negative")
+        off_value = row.get("off_value")
+        off_negative = row.get("off_negative")
         toggles.append(Toggle(
             id=tid,
             name=_str(row.get("name")) or tid,
@@ -134,6 +146,8 @@ def parse_config(raw: Any) -> Config:
             value=value if isinstance(value, str) else "",
             visible=row.get("visible") is True,
             negative=negative.strip() if isinstance(negative, str) else "",
+            off_value=off_value if isinstance(off_value, str) else "",
+            off_negative=off_negative.strip() if isinstance(off_negative, str) else "",
         ))
     return Config(
         mode=mode,
@@ -257,14 +271,15 @@ BOOLS_KEY = "__wp_toggle_bools__"
 
 def resolve(cfg: Config) -> dict[str, str]:
     """Variable → its value (plus the Pick one variable), in row order. A
-    toggle with a Value writes it while on and ``""`` while off; one without
-    writes ``"true"`` / ``"false"``. A later row with the same variable wins."""
+    toggle with a Value or an Off value writes the Value while on and the Off
+    value (often ``""``) while off; one with neither writes ``"true"`` /
+    ``"false"``. A later row with the same variable wins."""
     eff = effective(cfg)
     values: dict[str, str] = {}
     for t in cfg.toggles:
         if t.var and VAR_RE.match(t.var):
-            if t.value:
-                values[t.var] = t.value if eff[t.id] else ""
+            if t.writes_text:
+                values[t.var] = t.value if eff[t.id] else t.off_value
             else:
                 values[t.var] = TRUE if eff[t.id] else FALSE
     if cfg.mode == "one" and cfg.group_var and VAR_RE.match(cfg.group_var):
@@ -280,14 +295,16 @@ def bools(cfg: Config) -> dict[str, bool]:
 
 
 def own_negatives(cfg: Config) -> dict[str, str]:
-    """Toggle variable → its negative, for the toggles that are on and have
-    one. A later row writing the same variable decides, as in :func:`resolve`."""
+    """Toggle variable → its negative: the Negative while on, the Off
+    negative while off, left out when that one is empty. A later row writing
+    the same variable decides, as in :func:`resolve`."""
     eff = effective(cfg)
     out: dict[str, str] = {}
     for t in cfg.toggles:
         if t.var and VAR_RE.match(t.var):
-            if eff[t.id] and t.negative.strip():
-                out[t.var] = t.negative.strip()
+            text = (t.negative if eff[t.id] else t.off_negative).strip()
+            if text:
+                out[t.var] = text
             else:
                 out.pop(t.var, None)
     return out

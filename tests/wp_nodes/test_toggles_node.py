@@ -251,6 +251,26 @@ def test_any_on_value_bool_and_negative():
     assert rows["wind"]["bool"] is True and "has_value" not in rows["wind"]
 
 
+def test_any_on_off_value_and_off_negative():
+    up = ContextPayload(context={"look": "film"}, debug={}, internals={})
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Style", "var": "style", "on": False,
+         "value": "anime style", "negative": "photo",
+         "off_value": "$look photo", "off_negative": "anime, cartoon"},
+        {"id": "2", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "off_value": "clear sky", "off_negative": "rain"},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert payload.context["style"] == "film photo"
+    assert payload.context["rain"] == ""  # on, no Value: nothing, not "true"
+    assert payload.internals["__wp_toggle_bools__"] == {"style": False, "rain": True}
+    neg = payload.internals[negatives.NEG_KEY]
+    assert neg["style"] == [{"text": "anime, cartoon", "pick": None, "source": "WP_Toggles"}]
+    assert "rain" not in neg
+    rows = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    assert rows["style"]["has_value"] is True and rows["style"]["negative"] == "anime, cartoon"
+
+
 def test_bool_accessor_reads_across_nodes_in_the_assembler():
     from engine import template
     from engine.context import strip_internals, with_resolver_tables
