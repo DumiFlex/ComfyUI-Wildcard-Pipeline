@@ -183,7 +183,8 @@ def test_wildcard_lists_every_option_and_why_it_is_out():
     rows = {r["id"]: r for r in d["options"]}
     assert rows["angry"]["cut"] == "filter" and rows["angry"]["weight"] is None
     assert "cut" not in rows["calm"] and rows["calm"]["weight"] == 1
-    assert rows["tense"]["base"] == 3 and rows["tense"]["override"] == 5 and rows["tense"]["weight"] == 5
+    tense = rows["tense"]
+    assert tense["base"] == 3 and tense["override"] == 5 and tense["weight"] == 5
     assert rows["sad"]["cut"] == "weight"
     assert d["steps"] == {"library": 4, "filter": 3, "toggles": 3, "live": 2}
     assert d["locked_seed"] is True
@@ -204,7 +205,10 @@ def test_options_table_is_capped():
 
 
 def test_multi_pick_reports_its_separator():
-    w = _wildcard("w1", "outfit", [("a", 1), ("b", 1), ("c", 1)], pick_min=2, pick_max=2, pick_separator=" + ")
+    w = _wildcard(
+        "w1", "outfit", [("a", 1), ("b", 1), ("c", 1)],
+        pick_min=2, pick_max=2, pick_separator=" + ",
+    )
     d = _row(_explain_run([w]), "w1")["detail"]
     assert d["separator"] == " + " and d["range"] == [2, 2]
 

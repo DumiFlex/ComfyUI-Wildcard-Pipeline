@@ -68,7 +68,11 @@ const nodeFacts = computed((): string[] => {
   }
   if (s.kind === "toggle") {
     const pick = s.source.startsWith("Pick one");
-    const out = [pick ? "Pick one: the picked row's value" : "switch: true or false"];
+    const out = [
+      pick ? "Pick one: the picked row's value"
+      : s.toggleHasValue ? `switch with a value: its text while on, empty while off (now ${s.toggleBool ? "on" : "off"})`
+      : "switch: true or false",
+    ];
     if (s.source.endsWith("set upstream")) out.push("set by an upstream variable");
     if (!pick && typeof det?.switch === "boolean") out.push(`switch on the node: ${det.switch ? "on" : "off"}`);
     if (det && "upstream_read" in det) {
