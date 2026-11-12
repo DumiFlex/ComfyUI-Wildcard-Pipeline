@@ -13,9 +13,14 @@ function parentMap(bundles: readonly BundleInstance[] | undefined): Map<string, 
 /** Every bundle uid a module sits in, innermost first. Depth-limited so a
  *  corrupt parent cycle can't loop. */
 function bundleChain(module: ModuleEntry, parent: Map<string, string | null>): string[] {
-  const out: string[] = [];
   const origin = (module as ModuleEntry & { bundle_origin?: string | null }).bundle_origin;
-  let cur: string | null | undefined = typeof origin === "string" ? origin : null;
+  return chainFrom(typeof origin === "string" ? origin : null, parent);
+}
+
+/** `start` and every bundle above it, innermost first. */
+function chainFrom(start: string | null | undefined, parent: Map<string, string | null>): string[] {
+  const out: string[] = [];
+  let cur = start;
   while (cur && parent.has(cur) && !out.includes(cur) && out.length < 8) {
     out.push(cur);
     cur = parent.get(cur);
@@ -34,6 +39,21 @@ export function isHiddenInCollapsedBundle(
   const collapsed = new Set((bundles ?? []).filter((b) => b?.collapsed).map((b) => b._uid));
   if (!collapsed.size) return false;
   return bundleChain(module, parent).some((uid) => collapsed.has(uid));
+}
+
+/** The collapsed bundles that hide the module or bundle `uid` (a bundle's
+ *  own fold is left alone: its header shows). Empty when nothing hides it. */
+export function collapsedAround(
+  uid: string,
+  modules: readonly ModuleEntry[],
+  bundles: readonly BundleInstance[] | undefined,
+): string[] {
+  const parent = parentMap(bundles);
+  const collapsed = new Set((bundles ?? []).filter((b) => b?.collapsed).map((b) => b._uid));
+  if (!collapsed.size) return [];
+  const mod = modules.find((m) => m?._uid === uid);
+  const chain = mod ? bundleChain(mod, parent) : parent.has(uid) ? chainFrom(parent.get(uid), parent) : [];
+  return chain.filter((b) => collapsed.has(b));
 }
 
 /** The modules a bundle holds, its sub-bundles' modules included. */

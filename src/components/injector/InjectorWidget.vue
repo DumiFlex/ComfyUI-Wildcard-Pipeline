@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { revealTarget } from "../../widgets/flash-target";
 import { computed, nextTick, ref, watch } from "vue";
 import {
   emptyInjectorRowsValue,
@@ -260,6 +261,16 @@ watch(
  *  its summary. Persists in widget JSON via the same persist() so
  *  reload restores collapsed state. */
 const collapsed = ref<boolean>(false);
+
+/** WP Debug "Show node": open the list when it hides the row it names. */
+function onReveal(ev: Event): void {
+  const t = revealTarget(ev);
+  if (!t || !collapsed.value) return;
+  const vars = new Set(t.vars ?? []);
+  if (value.value.rows.some((r) => r._uid === t.uid || vars.has(r.binding.trim().replace(/^\$/, "")))) {
+    collapsed.value = false;
+  }
+}
 
 function persist(): void {
   const serialized = serializeWidgetJson(value.value);
@@ -682,7 +693,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
 </script>
 
 <template>
-  <div class="wp-inj-widget" :class="{ 'wp-inj-widget--skipped': isSkipped }">
+  <div class="wp-inj-widget" data-wp-reveal :class="{ 'wp-inj-widget--skipped': isSkipped }" @wp-reveal="onReveal">
     <div class="wp-inj-header">
       <WpIconButton
         variant="bare"

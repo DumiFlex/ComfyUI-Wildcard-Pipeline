@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bundleAlerts, bundleDescendants, isHiddenInCollapsedBundle } from "./bundle-alerts";
+import { bundleAlerts, bundleDescendants, collapsedAround, isHiddenInCollapsedBundle } from "./bundle-alerts";
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 
 function bundle(uid: string, over: Partial<BundleInstance> = {}): BundleInstance {
@@ -60,5 +60,27 @@ describe("bundleAlerts", () => {
     expect(bundleAlerts([mod("a", "x")], checks({}, ["a"])).state).toBe("missing");
     expect(bundleAlerts([mod("a", "x"), mod("b", "x")], checks({}, ["a"], ["b"])).state).toBe("clash");
     expect(bundleAlerts([mod("b", "x"), mod("a", "x")], checks({}, ["a"], ["b"])).state).toBe("clash");
+  });
+});
+
+describe("collapsedAround (Show node unfolds)", () => {
+  const outer = bundle("b-out", { collapsed: true });
+  const inner = bundle("b-in", { collapsed: true, parent_uid: "b-out" });
+  const open = bundle("b-open", { parent_uid: "b-out" });
+  const modules = [mod("m1", "b-in"), mod("m2", "b-open"), mod("m3", null)];
+
+  it("names every folded bundle around a module, innermost first", () => {
+    expect(collapsedAround("m1", modules, [outer, inner, open])).toEqual(["b-in", "b-out"]);
+    expect(collapsedAround("m2", modules, [outer, inner, open])).toEqual(["b-out"]);
+  });
+
+  it("leaves a bundle's own fold alone but opens the ones above it", () => {
+    expect(collapsedAround("b-in", modules, [outer, inner, open])).toEqual(["b-out"]);
+  });
+
+  it("is empty for a top-level module, an unknown uid or no folds", () => {
+    expect(collapsedAround("m3", modules, [outer, inner])).toEqual([]);
+    expect(collapsedAround("nope", modules, [outer, inner])).toEqual([]);
+    expect(collapsedAround("m1", modules, [bundle("b-in", { parent_uid: null })])).toEqual([]);
   });
 });

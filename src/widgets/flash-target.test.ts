@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nodeWidgetHosts } from "../extension/_stashes";
-import { blink, findFlashElement, flashInNode } from "./flash-target";
+import { REVEAL_EVENT, askReveal, blink, findFlashElement, flashInNode, revealTarget } from "./flash-target";
 
 function host(html: string): HTMLElement {
   const h = document.createElement("div");
@@ -50,8 +50,44 @@ describe("Show node blink", () => {
     el.animate = animate as unknown as HTMLElement["animate"];
     flashInNode(node, { vars: ["model_family"] });
     expect(animate).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(200);
+    vi.advanceTimersByTime(300);
     expect(animate).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the widgets to unfold what hides the row before it looks", () => {
+    vi.useFakeTimers();
+    const node = {};
+    const h = host('<div data-wp-reveal><div data-uid="m-9" hidden>child</div></div>');
+    nodeWidgetHosts.set(node, new Set([h]));
+    const wrap = h.firstElementChild as HTMLElement;
+    const child = wrap.firstElementChild as HTMLElement;
+    const seen: unknown[] = [];
+    wrap.addEventListener(REVEAL_EVENT, (ev) => {
+      seen.push(revealTarget(ev));
+      child.hidden = false;
+    });
+    const animate = vi.fn();
+    child.animate = animate as unknown as HTMLElement["animate"];
+    flashInNode(node, { uid: "m-9" });
+    vi.advanceTimersByTime(170);
+    expect(seen).toEqual([{ uid: "m-9" }]);
+    expect(animate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("sends the reveal only to marked elements of live hosts", () => {
+    const gone = document.createElement("div");
+    gone.innerHTML = "<div data-wp-reveal></div>";
+    const h = host("<div data-wp-reveal></div><div></div>");
+    const hits: string[] = [];
+    for (const [name, root] of [["gone", gone], ["live", h]] as const) {
+      for (const el of root.querySelectorAll("div")) el.addEventListener(REVEAL_EVENT, () => hits.push(name));
+    }
+    askReveal([gone, h], { vars: ["x"] });
+    expect(hits).toEqual(["live"]);
+    expect(revealTarget(new Event("click"))).toBeNull();
   });
 
   it("does nothing without animate support", () => {

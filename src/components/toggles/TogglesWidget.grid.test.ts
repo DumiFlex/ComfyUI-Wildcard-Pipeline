@@ -175,3 +175,33 @@ describe("TogglesWidget edit-view drag", () => {
     w.unmount();
   });
 });
+
+describe("TogglesWidget Show node", () => {
+  it("unfolds the label group that holds the toggle WP Debug points at", async () => {
+    const config: TogglesConfig = {
+      ...defaultTogglesConfig(),
+      mode: "any",
+      rows: [
+        { id: "0000000a", kind: "label", name: "Weather", color: 1, collapsed: true },
+        row("00000001", "Rain", false),
+        { id: "0000000b", kind: "label", name: "Light", color: 2, collapsed: true },
+        row("00000002", "Sun", true),
+      ],
+    };
+    const w = mount(TogglesWidget, { props: { modelValue: config } });
+    const root = w.find("[data-wp-reveal]");
+    expect(root.exists()).toBe(true);
+    root.element.dispatchEvent(new CustomEvent("wp-reveal", { detail: { vars: ["rain"] } }));
+    const next = lastConfig(w);
+    const labels = next?.rows.filter((r) => r.kind === "label").map((r) => [r.name, r.kind === "label" && r.collapsed === true]);
+    expect(labels).toEqual([["Weather", false], ["Light", true]]);
+    w.unmount();
+  });
+
+  it("changes nothing when the toggle is already in sight", () => {
+    const w = mount(TogglesWidget, { props: { modelValue: cfg("any") } });
+    w.find("[data-wp-reveal]").element.dispatchEvent(new CustomEvent("wp-reveal", { detail: { vars: ["dawn"] } }));
+    expect(w.emitted("update:modelValue")).toBeUndefined();
+    w.unmount();
+  });
+});

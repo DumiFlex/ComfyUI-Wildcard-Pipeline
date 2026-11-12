@@ -56,7 +56,9 @@ import {
   dropToggleRow,
   type ToggleDropEdge,
   visibleRows,
+  unfoldForVars,
 } from "../../extension/toggles";
+import { revealTarget } from "../../widgets/flash-target";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { vToggleRow } from "@/kit/toggle-row";
@@ -417,6 +419,11 @@ function labelPickerValue(l: LabelRow): string {
 function setLabelColor(l: LabelRow, v: string): void {
   patchLabel(l.id, { hex: /^#[0-9a-f]{6}$/i.test(v.slice(0, 7)) ? v.slice(0, 7).toLowerCase() : undefined });
 }
+/** WP Debug "Show node": unfold the label groups that hide its toggle. */
+function onReveal(ev: Event): void {
+  const rows = unfoldForVars(cfg.value, revealTarget(ev)?.vars ?? []);
+  if (rows) setRows(rows);
+}
 function onCount(g: ToggleGroup): number {
   return g.toggles.filter((t) => eff.value.get(t.id)).length;
 }
@@ -437,7 +444,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 </script>
 
 <template>
-  <div ref="root" class="wp-tg" :class="{ 'wp-tg--skipped': isSkipped, 'wp-tg--edit': editMode }">
+  <div ref="root" class="wp-tg" data-wp-reveal :class="{ 'wp-tg--skipped': isSkipped, 'wp-tg--edit': editMode }" @wp-reveal="onReveal">
     <div v-if="editMode" class="wp-tg__bar">
       <WpSegmented
         :model-value="cfg.mode"

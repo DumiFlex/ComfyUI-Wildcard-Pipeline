@@ -481,6 +481,10 @@ const nameWidth = computed(() => {
 }
 .wp-dbg-vsec__count { font: 500 9.5px/1 var(--wp-font-mono); }
 .wp-dbg-vsec__goto.wp-btn { margin-left: auto; height: auto; min-height: 0; padding: 0; font-size: 10px; }
+/* Only the word is underlined, not the icon (wp-kit fixes this for every
+ * link button from 0.20; drop this once the kit is bumped). */
+.wp-dbg-vsec__goto.wp-btn:is(:hover, :focus-visible) { text-decoration: none; }
+.wp-dbg-vsec__goto.wp-btn:is(:hover, :focus-visible) :deep(.wp-btn__label) { text-decoration: underline; }
 .wp-dbg-var-row {
   display: grid;
   grid-template-columns: max(90px, var(--wp-dbg-name-w, 90px)) minmax(0, 1fr) auto;
