@@ -147,6 +147,10 @@
   border-radius: var(--wp-radius, 4px);
   background: color-mix(in srgb, var(--wp-bundle-color, var(--wp-bundle-default)) 5%, transparent);
   display: grid;
+  /* minmax(0, 1fr): an auto column grows to the header's min-content, so
+   * on a narrow node (or the Settings live preview) the frame and its
+   * children ran past the right edge instead of the header shortening. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   transition: grid-template-rows var(--wp-motion-collapse) var(--wp-motion-curve-collapse),
               border-width var(--wp-motion-quick) ease,
