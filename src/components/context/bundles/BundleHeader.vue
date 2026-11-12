@@ -363,12 +363,53 @@ const summary = computed(() => {
   flex-shrink: 0;
 }
 .wp-bundle-name {
-  flex: 1;
   font: 600 12px/1.3 var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Sized by its text and shrinking slowly next to the badges and the
+   * summary (flex-shrink 8 and 2 there), so the name gives way last; a few
+   * letters always show. */
+  flex: 1 1 auto;
+  min-width: 3em;
+}
+/* On a narrow header the state badges and the summary shorten instead of
+ * pushing the lock / internal / remove buttons past the frame. The badges
+ * keep one line (the row-wide cluster wraps, which would make the header
+ * taller than its rows) and ellipsize; the dot beside each keeps the colour. */
+.wp-bundle-header {
+  container: wp-bundle-head / inline-size;
+}
+.wp-bundle-header .wp-mod-dots {
+  flex: 0 8 auto;
+  flex-wrap: nowrap;
+  max-width: none;
+  /* Room for the dot; the badge word inside shortens to nothing first. */
+  min-width: 11px;
+  /* Start-aligned: the row-wide cluster packs to the end, which clipped a
+   * shortened badge from the LEFT ("ARY UPDATED"). */
+  justify-content: flex-start;
+}
+.wp-bundle-header .wp-mod-dots .wp-mod-badge {
+  flex-shrink: 8;
+  min-width: 3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Below 480 px the badge words go when a dot already says the same thing
+ * (indicator style "Both"): a word cut to "L…" says less than the dot and
+ * its tooltip. "Badges only" keeps its shortened word. */
+@container wp-bundle-head (max-width: 480px) {
+  .wp-indicator-both .wp-bundle-header .wp-mod-dots .wp-mod-badge:not(.wp-mod-badge--example) {
+    display: none;
+  }
+}
+/* Narrowest headers (the preview's 300 px floor, a node squeezed thin):
+ * the summary goes, the name keeps what is left. */
+@container wp-bundle-head (max-width: 280px) {
+  .wp-bundle-header .wp-bundle-summary { display: none; }
 }
 /* Dots for trouble inside a collapsed bundle. Same 7px circle as the row
  * dots; the colour comes from the shared `.wp-conflict-dot--*` /
@@ -396,7 +437,10 @@ const summary = computed(() => {
 .wp-bundle-summary {
   font: 600 11px/1.3 var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
-  flex-shrink: 0;
+  flex: 0 2 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 6px;
   border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in oklab, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);
