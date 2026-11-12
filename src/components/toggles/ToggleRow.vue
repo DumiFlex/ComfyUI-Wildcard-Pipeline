@@ -37,6 +37,9 @@ const props = defineProps<{
   problem?: string;
   /** Left indent in px (needs depth). */
   indent: number;
+  /** Grid tile: its dots live on the socket line under the grid, so the
+   *  tile carries no `data-wp-out` / `data-wp-socket` of its own. */
+  tile?: boolean | undefined;
   editing: boolean;
   needsOptions: Choice[];
   /** Label groups to move to; empty hides the field. */
@@ -109,8 +112,8 @@ function flip(): void {
     <div
       class="wp-tgr__row"
       :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing, 'has-icon-color': !!t.icon_color, 'has-text-color': !!t.text_color }"
-      :data-wp-out="t.pin && t.out ? `toggle_${t.out}` : undefined"
-      :data-wp-socket="t.control ? ctlInputName(t.id) : undefined"
+      :data-wp-out="!tile && t.pin && t.out ? `toggle_${t.out}` : undefined"
+      :data-wp-socket="!tile && t.control ? ctlInputName(t.id) : undefined"
       :data-test="`tg-row-${t.id}`"
       :style="looks"
     >
