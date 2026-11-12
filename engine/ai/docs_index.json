@@ -2212,7 +2212,7 @@
     },
     {
      "title": "How it reads the text",
-     "text": "The node splits the text at spaces, commas, semicolons, pipes and slashes and checks each word (capitals don't matter). Other words are skipped and don't count for the index:\n- True: true, yes, on, 1\n- False: false, no, off, 0\n- Everything else (e.g. maybe, 1.5, hello) is ignored\nSo true maybe false has two: index 0 is true, index 1 is false.\nA wildcard with options on and off through WP Var → Bool switches any true/false input at random. Weights set how often."
+     "text": "The node splits the text at spaces, commas, semicolons, pipes and slashes and checks each word (capitals don't matter). Other words are skipped and don't count for the index:\n- True: true, yes, on, 1\n- False: false, no, off, 0\n- Everything else (e.g. maybe, 1.5, hello) is ignored\nSo true maybe false has two: index 0 is true, index 1 is false.\nA WP Toggles toggle with a Value holds that value in its variable, not true or false. Read its switch with .bool: $rain.bool is true while the toggle is on and false while it's off.\nA wildcard with options on and off through WP Var → Bool switches any true/false input at random. Weights set how often."
     },
     {
      "title": "Works with",

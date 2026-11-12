@@ -96,3 +96,22 @@ def test_lookup_var_joins_and_indexes_listvar():
 )
 def test_lookup_var(ctx, name, expected):
     assert lookup_var(_StubCtx(ctx), name) == expected
+
+
+class _BoolCtx:
+    def __init__(self, ctx, internals):
+        self.context = ctx
+        self.internals = internals
+
+
+def test_lookup_var_bool_reads_the_toggle_switch():
+    """A toggle with a Value writes the value; `.bool` reads its switch."""
+    ctx = _BoolCtx({"quick": "12", "plain": "true"}, {"__wp_toggle_bools__": {"quick": True}})
+    assert lookup_var(ctx, "$quick") == "12"
+    assert lookup_var(ctx, "$quick.bool") == "true"
+    assert parse_bool(lookup_var(ctx, "$quick.bool"), 0, False) is True
+    off = _BoolCtx({"quick": ""}, {"__wp_toggle_bools__": {"quick": False}})
+    assert lookup_var(off, "quick.bool") == "false"
+    # No table entry: a variable that already is true/false reads as itself.
+    assert lookup_var(ctx, "$plain.bool") == "true"
+    assert lookup_var(_StubCtx({"x": "red"}), "$x.bool") == ""

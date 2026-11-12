@@ -11,10 +11,13 @@ import re
 from typing import Any, Protocol
 
 from engine.syntax.types import deref_var_value, split_var_accessor
+from engine.toggles import BOOLS_KEY
 
 
 class _CtxLike(Protocol):
     context: dict[str, object]
+
+
 
 
 _INT_RE = re.compile(r"-?\d+")
@@ -82,6 +85,23 @@ def lookup_var(context: _CtxLike, name: str) -> str:
     bare = (name or "").lstrip("$").strip()
     if not bare:
         return ""
+    if bare.endswith(".bool"):
+        return _lookup_bool(context, bare[: -len(".bool")])
     base, index = split_var_accessor(bare)
     raw: Any = context.context.get(base) if context and getattr(context, "context", None) else None
     return deref_var_value(raw, index)
+
+
+def _lookup_bool(context: _CtxLike, base: str) -> str:
+    """`$name.bool`: a WP Toggles switch as "true" / "false", from the table
+    the payload's `internals` carry (a toggle with a Value writes the value to
+    its variable, not the switch). Falls back to the variable itself when it
+    already is "true" / "false"; else ""."""
+    internals = getattr(context, "internals", None) if context else None
+    table = internals.get(BOOLS_KEY) if isinstance(internals, dict) else None
+    if isinstance(table, dict) and base in table:
+        return "true" if table[base] else "false"
+    raw: Any = context.context.get(base) if context and getattr(context, "context", None) else None
+    if isinstance(raw, str) and raw.strip().lower() in ("true", "false"):
+        return raw.strip().lower()
+    return ""
