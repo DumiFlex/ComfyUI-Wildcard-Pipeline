@@ -47,15 +47,46 @@ describe("ToggleRow internal button", () => {
   });
 });
 
-describe("ToggleRow style in Pick one", () => {
-  it("is disabled while Pick one is on", () => {
-    const one = mountRow(base, { pickOne: true, editing: true });
-    expect(one.find('[aria-label="Style"]').attributes("aria-disabled") ?? one.find('[aria-label="Style"] button').attributes("disabled")).toBeDefined();
-    expect(one.text()).toContain("not used while Pick one is on");
-    one.unmount();
-    const any = mountRow(base, { editing: true });
-    expect(any.find('[aria-label="Style"] button').attributes("disabled")).toBeUndefined();
-    any.unmount();
+describe("ToggleRow chip", () => {
+  it("says Name · $var, and the name alone when Show is off", () => {
+    const chip: Row = { ...base, style: "chip" };
+    const w = mountRow(chip, { editable: false });
+    expect(w.find(".wp-tgr__chip").text().replace(/\s+/g, "")).toBe("Dawn·$dawn");
+    w.unmount();
+    const bare = mountRow({ ...chip, hide_var: true }, { editable: false });
+    expect(bare.find('[data-test="tg-chip-var-a"]').exists()).toBe(false);
+    expect(bare.find(".wp-tgr__chip").text()).toBe("Dawn");
+    bare.unmount();
+  });
+});
+
+describe("ToggleRow looks", () => {
+  it("draws the icon and hands its colours to the row", () => {
+    const w = mountRow({ ...base, icon: "sun", icon_color: "#ffcc00", text_color: "#ff0000", tint: "#00aaff" }, {});
+    const row = w.find(`[data-test="tg-row-${base.id}"]`);
+    expect(row.find(".pi-sun").exists()).toBe(true);
+    const style = row.attributes("style") ?? "";
+    expect(style).toContain("--wp-tg-icon: #ffcc00");
+    expect(style).toContain("--wp-tg-text: #ff0000");
+    expect(style).not.toContain("--wp-accent");
+    expect(w.find(".wp-tgr__ctl").attributes("style")).toContain("--wp-accent: #00aaff");
+    expect(row.classes()).toContain("has-icon-color");
+    w.unmount();
+  });
+
+  it("keeps the theme's look with no colours set", () => {
+    const w = mountRow(base, {});
+    expect(w.find(`[data-test="tg-row-${base.id}"]`).attributes("style") ?? "").not.toContain("--wp-accent");
+    w.unmount();
+  });
+
+  it("offers edit, globe and remove on the row in the editor", async () => {
+    const w = mountRow(base, { editable: true });
+    expect(w.find(`[data-test="tg-edit-${base.id}"]`).exists()).toBe(true);
+    expect(w.find(`[data-test="tg-internal-${base.id}"]`).exists()).toBe(true);
+    await w.find(`[data-test="tg-remove-${base.id}"]`).trigger("click");
+    expect(w.emitted("remove")).toHaveLength(1);
+    w.unmount();
   });
 });
 
@@ -95,29 +126,11 @@ describe("ToggleRow Pick one style", () => {
   });
 });
 
-describe("ToggleRow Pick one Value", () => {
-  it("warns that inline picks print as written", () => {
-    const w = mountRow({ ...base, value: "{golden|soft} light" }, { pickOne: true, editing: true });
-    expect(w.find('[data-test="tg-inline-picks"]').exists()).toBe(true);
-    w.unmount();
-    const plain = mountRow({ ...base, value: "$time light" }, { pickOne: true, editing: true });
-    expect(plain.find('[data-test="tg-inline-picks"]').exists()).toBe(false);
-    plain.unmount();
-  });
-});
-
-describe("ToggleRow Pick one Value variables", () => {
-  it("flags a $name nothing upstream sets", () => {
-    const w = mount(ToggleRow, {
-      attachTo: document.body,
-      props: {
-        t: { ...base, value: "$time and $nowhere" }, pickOne: true, shownOn: true, effOn: true, parentName: "", blocked: false,
-        indent: 0, editing: true, needsOptions: [], groupOptions: [], groupId: "", outputsFull: false, editable: true,
-        varSuggestions: ["time"],
-      },
-    });
-    expect(w.find('[data-test="tg-missing-vars"]').text()).toContain("$nowhere");
-    expect(w.find('[data-test="tg-missing-vars"]').text()).not.toContain("$time");
+describe("ToggleRow controls", () => {
+  it("draws a checkbox for the Check style", () => {
+    const w = mountRow({ ...base, style: "checkbox" }, { editable: false });
+    expect(w.find(`[data-test="tg-ctl-${base.id}"]`).exists()).toBe(true);
+    expect(w.find(".wp-tgr__ctl").html()).toContain("checkbox");
     w.unmount();
   });
 });

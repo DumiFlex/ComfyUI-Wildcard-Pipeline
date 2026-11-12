@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, ref } from "vue";
 import { deriveLoopSeeds, parseSeedLocks, type SeedStrategy } from "./seed-derive";
 import SeedLockRow from "./SeedLockRow.vue";
 import Button from "@/kit/Button.vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 
 const props = defineProps<{
   nodeName: string;
@@ -141,17 +141,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <ModalShell :visible="true" label="Iteration seeds" @close="emit('close')">
+  <Modal :open="true" size="md" flush accent="var(--wp-accent)" icon="list" @update:open="(v: boolean) => { if (!v) emit('close'); }">
+    <template #header="{ titleId }">
+      <div class="sm__title-block">
+        <div class="sm__title-row"><span :id="titleId" class="sm__name">{{ nodeName }}</span><span class="sm__chip">Iteration Seeds</span></div>
+        <div class="sm__sub">base {{ baseSeed }} · {{ strategy }} · {{ Math.max(1, count) }} iterations</div>
+      </div>
+    </template>
       <div class="sm" data-test="seed-modal">
-        <div class="sm__head">
-          <span class="sm__head-icon"><i class="pi pi-list" aria-hidden="true" /></span>
-          <div class="sm__title-block">
-            <div class="sm__title-row"><span class="sm__name">{{ nodeName }}</span><span class="sm__chip">Iteration Seeds</span></div>
-            <div class="sm__sub">base {{ baseSeed }} · {{ strategy }} · {{ Math.max(1, count) }} iterations</div>
-          </div>
-          <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="seed-modal-close" @click="emit('close')" />
-        </div>
-
         <div class="sm__bar">
           <span class="sm__count">{{ Math.max(1, count) }} iterations</span>
           <span class="sm__strat">{{ strategy }}</span>
@@ -200,34 +197,32 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
-        <div class="sm__foot">
-          <span class="sm__foot-hint"><Kbd keys="Esc" size="sm" /> to close · locks save with the node</span>
-          <span class="sm__foot-spacer" />
-          <Button
-            size="sm"
-            variant="outline" :class="{ 'sm__done': pasted }" :icon="pasted ? 'pi-check' : 'pi-clipboard'"
-            data-test="mx-seed-paste" hint="Replace all locks from copied text" @click="pasteAll"
-          >{{ pasted ? "Pasted" : "Paste" }}</Button>
-          <Button size="sm" variant="primary" data-test="seed-modal-done" @click="emit('close')">Done</Button>
-        </div>
       </div>
-  </ModalShell>
+    <template #footer>
+      <span class="sm__foot-hint"><Kbd keys="Esc" size="sm" /> to close · locks save with the node</span>
+      <span class="sm__foot-spacer" />
+      <Button
+        size="sm"
+        variant="outline" :class="{ 'sm__done': pasted }" :icon="pasted ? 'pi-check' : 'pi-clipboard'"
+        data-test="mx-seed-paste" hint="Replace all locks from copied text" @click="pasteAll"
+      >{{ pasted ? "Pasted" : "Paste" }}</Button>
+      <Button size="sm" variant="primary" data-test="seed-modal-done" @click="emit('close')">Done</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
-/* 560px, up from 486px: the toolbar (iterations · strategy · N locked · N
+/* The kit Modal at size md (560px), up from 486px: the toolbar (iterations · strategy · N locked · N
  * bypassed · Lock all · Unlock all · Copy) and each row's three toggles were
  * being squeezed into near-square boxes to fit. Widening is the cheaper fix
  * than re-organising the toolbar. */
-.sm { width: 560px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; color: var(--wp-text); font-size: 12px; font-family: var(--wp-font-sans, sans-serif); box-shadow: var(--wp-shadow-lg); }
-.sm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
-.sm__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
+.sm { display: flex; flex-direction: column; color: var(--wp-text); font-size: 12px; font-family: var(--wp-font-sans, sans-serif); }
 .sm__title-block { flex: 1; min-width: 0; }
 .sm__title-row { display: flex; align-items: center; gap: 8px; }
 .sm__name { font: 600 13px var(--wp-font-sans); color: var(--wp-text); }
-.sm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent); }
+.sm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-modal-accent, var(--wp-accent)) 22%, transparent); color: var(--wp-modal-accent, var(--wp-accent)); }
 .sm__sub { font: 400 10px var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 3px; }
-.sm__bar { display: flex; align-items: center; gap: 8px; padding: 9px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); }
+.sm__bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 9px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: var(--wp-bg-2); }
 .sm__count { font: 600 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .sm__strat { font: 600 9px var(--wp-font-mono); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-text-muted, var(--wp-text2)); background: var(--wp-bg-deep, var(--wp-bg)); border: 1px solid var(--wp-border); }
 .sm__lockcount { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.12); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
@@ -235,9 +230,8 @@ onBeforeUnmount(() => {
 .sm__done, .sm__done:hover { border-color: var(--wp-green); color: var(--wp-green); }
 .sm__hint { display: flex; align-items: center; gap: 7px; padding: 7px 14px; flex-shrink: 0; font: 11px var(--wp-font-sans); color: color-mix(in srgb, var(--wp-amber) 75%, var(--wp-text-muted)); background: color-mix(in srgb, var(--wp-amber) 9%, transparent); border-bottom: 1px solid var(--wp-border); }
 .sm__hint .pi { flex-shrink: 0; color: var(--wp-amber); }
-.sm__list { overflow-y: auto; padding: 6px; flex: 1; min-height: 0; }
+.sm__list { padding: 6px; }
 .sm__inactive-label { padding: 8px 8px 4px; margin-top: 4px; border-top: 1px dashed var(--wp-border); font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .08em; color: var(--wp-text-dim, var(--wp-text3)); }
-.sm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .sm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .sm__foot-spacer { flex: 1; }
 </style>

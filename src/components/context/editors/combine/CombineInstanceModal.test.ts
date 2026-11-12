@@ -6,9 +6,12 @@
 // `--wp-kind-combine` accent.
 
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, config } from "@vue/test-utils";
 import CombineInstanceModal from "./CombineInstanceModal.vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+
+// The window is a kit Modal, which teleports to <body>: render it in place.
+config.global.stubs = { ...config.global.stubs, teleport: true };
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {
@@ -30,7 +33,7 @@ function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
 describe("CombineInstanceModal", () => {
   it("renders pi-link icon in header", () => {
     const w = mount(CombineInstanceModal, { props: { module: makeModule() } });
-    expect(w.find(".wp-cbm__head-icon.pi.pi-link").exists()).toBe(true);
+    expect(w.find(".wp-modal__icon.pi-link").exists()).toBe(true);
   });
 
   it("renders 'combine' chip + module name in header", () => {

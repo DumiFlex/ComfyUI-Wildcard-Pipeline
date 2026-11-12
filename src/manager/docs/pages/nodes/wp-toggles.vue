@@ -60,6 +60,16 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </Banner>
     </DocSection>
 
+    <DocSection title="Icons and colours">
+      <p>
+        Give a toggle an icon and its own colours under <b>Looks</b> in its window: one for the
+        icon, one for the name and one for the control itself, so Day can glow yellow and Night blue.
+        A label's icon and colour buttons do the same for the group, and its toggles wear that
+        colour on their left edge. The row at the top of the toggle's window shows each change
+        before you press Done.
+      </p>
+    </DocSection>
+
     <DocSection title="Use a toggle in the prompt">
       <p>
         A toggle's variable is internal by default: rules read it, but the Assembler doesn't offer
@@ -97,9 +107,11 @@ import VarToken from "../../../components/docs/VarToken.vue";
         One toggle is on. Which one, first match wins: the toggle the upstream picked variable
         names (with <b>Upstream can pick</b>), then the first toggle upstream set to a yes word,
         then the first one you switched on. The picked variable gets the toggle's
-        <b>Value</b>, or its name; it is internal unless <b>Show in Assembler</b> is on. All rows share one look here:
-        the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, and
-        each row's own Style is greyed out.
+        <b>Value</b>, or its name; it is internal unless <b>Show in Assembler</b> is on. A toggle's
+        <b>Negative</b>, under its Value, goes with the picked variable: an Assembler that prints it
+        sends those words to its negative output. All rows share one look here:
+        the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, so a
+        toggle's own Style and Needs are hidden.
       </p>
     </DocSection>
 

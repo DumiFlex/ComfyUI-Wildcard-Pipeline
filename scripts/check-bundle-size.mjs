@@ -380,8 +380,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // cards in Variables, Show node blink, toggle values/.bool) put it at ~650.04 KB.
 // RAISED 655 -> 665 KB on 2026-11-12: every docs screenshot can go in a WP
 // Note (note-assets.json + the kit's ImageGrid/SearchInput in the note's lazy
-// editor chunk), kit 0.17, and WP Debug folding long values put it at ~661.4 KB.
-const TOTAL_LIMIT = 665 * 1024;     // 665 KB
+// editor chunk) put the total at ~652.9 KB.
+// RAISED 660 -> 670 KB on 2026-11-12: with both of those, WP Toggles' toggle
+// window (Value box, icon picker and colour fields in a lazy chunk) and the
+// toggle looks put the total at ~660.0 KB, 9 bytes under the old line.
+const TOTAL_LIMIT = 670 * 1024;     // 670 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
