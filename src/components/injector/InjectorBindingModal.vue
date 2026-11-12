@@ -33,7 +33,7 @@ import RichTextInput from "../../manager/components/RichTextInput.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks } from "../context/editors/_shared/preview-tokens";
 import Button from "@/kit/Button.vue";
 import ListRow from "@/kit/ListRow.vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import Popover from "@/kit/Popover.vue";
 
 const props = withDefaults(
@@ -355,20 +355,25 @@ function onKeydown(ev: KeyboardEvent): void {
 </script>
 
 <template>
-  <ModalShell :visible="true" labelledby="ibm-title" @close="onShellClose" @keydown="onKeydown">
-    <div class="ibm" tabindex="-1">
-      <header class="ibm__head" :style="{ '--ibm-accent': headerColor }">
-        <i :class="['pi', headerIcon, 'ibm__head-icon']" aria-hidden="true" />
-        <div class="ibm__title-block">
-          <div class="ibm__title-row">
-            <span id="ibm-title" class="ibm__name" data-test="ibm-name">{{ headerName }}</span>
-            <span class="ibm__chip" data-test="ibm-chip">{{ headerType }}</span>
-          </div>
-          <div class="ibm__sub">Injector binding · ctx[$<wbr>{{ draftBinding || "…" }}] ← {{ templateValue ? "template" : isGeneral ? "no template yet" : "socket value" }}</div>
+  <Modal
+    :open="true"
+    size="md"
+    flush
+    :accent="headerColor"
+    :icon="headerIcon.replace(/^pi-/, '')"
+    @update:open="(v: boolean) => { if (!v) onShellClose(); }"
+    @keydown="onKeydown"
+  >
+    <template #header="{ titleId }">
+      <div class="ibm__title-block">
+        <div class="ibm__title-row">
+          <span :id="titleId" class="ibm__name" data-test="ibm-name">{{ headerName }}</span>
+          <span class="ibm__chip" data-test="ibm-chip">{{ headerType }}</span>
         </div>
-        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="ibm-close" @click="onCancel" />
-      </header>
-
+        <div class="ibm__sub">Injector binding · ctx[$<wbr>{{ draftBinding || "…" }}] ← {{ templateValue ? "template" : isGeneral ? "no template yet" : "socket value" }}</div>
+      </div>
+    </template>
+    <div class="ibm">
       <section class="ibm__section">
         <div class="ibm__section-head">
           <span class="ibm__section-label">Binding</span>
@@ -564,15 +569,15 @@ function onKeydown(ev: KeyboardEvent): void {
         </template>
       </section>
 
-      <footer class="ibm__foot">
-        <span class="ibm__hint">
-          <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
-        </span>
-        <Button size="sm" data-test="ibm-cancel" @click="onCancel">Cancel</Button>
-        <Button size="sm" variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</Button>
-      </footer>
     </div>
-  </ModalShell>
+    <template #footer>
+      <span class="ibm__hint">
+        <Kbd keys="Esc" size="sm" /> cancel · <Kbd keys="Mod+Enter" size="sm" /> save
+      </span>
+      <Button size="sm" data-test="ibm-cancel" @click="onCancel">Cancel</Button>
+      <Button size="sm" variant="primary" :disabled="!isDirty" data-test="ibm-save" @click="onSave">Save</Button>
+    </template>
+  </Modal>
 </template>
 
 <!-- Shared modal-template-controls partial — imported UNSCOPED so the
@@ -590,37 +595,12 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <style scoped>
 .ibm {
-  width: 100%;
-  max-width: 520px;
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius, 6px);
-  box-shadow: var(--wp-shadow-lg);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 48px);
-  overflow: hidden;
+  min-height: 0;
 }
 
-.ibm__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--ibm-accent, var(--wp-accent)) 18%, var(--wp-bg2)) 0%,
-    var(--wp-bg2) 100%
-  );
-  border-bottom: 1px solid var(--wp-border);
-}
-.ibm__head-icon {
-  font-size: 18px;
-  color: var(--ibm-accent, var(--wp-accent));
-  width: 24px;
-  text-align: center;
-}
-.ibm__title-block { flex: 1; min-width: 0; }
+.ibm__title-block { flex: 1 1 auto; min-width: 0; }
 .ibm__title-row {
   display: flex;
   align-items: center;
@@ -636,8 +616,8 @@ function onKeydown(ev: KeyboardEvent): void {
   letter-spacing: 0.06em;
   padding: 2px 6px;
   border-radius: min(2px, var(--wp-radius-cap, 999px));
-  background: color-mix(in srgb, var(--ibm-accent, var(--wp-accent)) 22%, transparent);
-  color: var(--ibm-accent, var(--wp-accent));
+  background: color-mix(in srgb, var(--wp-modal-accent, var(--wp-accent)) 22%, transparent);
+  color: var(--wp-modal-accent, var(--wp-accent));
 }
 .ibm__sub {
   font: 400 10px var(--wp-font-mono);
@@ -799,15 +779,9 @@ function onKeydown(ev: KeyboardEvent): void {
   font-weight: 600;
 }
 
-.ibm__foot {
-  padding: 10px 16px;
-  border-top: 1px solid var(--wp-border-soft, var(--wp-border));
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 .ibm__hint {
   margin-right: auto;
+  align-self: center;
   font: 10px var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
 }

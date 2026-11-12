@@ -40,8 +40,7 @@ import PlaygroundBehaviorPreview from "./PlaygroundBehaviorPreview.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import Button from "@/kit/Button.vue";
-import ModalShell from "@/kit/ModalShell.vue";
-import { useDialogFocus } from "@/kit/useDialogFocus";
+import Modal from "@/kit/Modal.vue";
 import { useHostDialogGuard } from "@/components/shared/useHostDialogGuard";
 import { vToggleRow } from "@/kit/toggle-row";
 
@@ -263,18 +262,12 @@ function onClose(): void {
 }
 
 // The playground opens from ComfyUI's Settings dialog, which stays open
-// underneath. ModalShell gives the overlay, the backdrop and Escape close and
-// the key shield; useDialogFocus moves focus in, keeps Tab inside (run from
-// the shell's keydown, since the shield stops keys before window) and puts
-// focus back; the host guard, bound to the shell's overlay, stops the
-// Settings dialog from swallowing clicks, pulling focus back or closing
-// along with us.
+// underneath. Modal gives the overlay, the backdrop and Escape close, the key
+// shield and the focus trap + return; the host guard, bound to the modal's
+// overlay, stops the Settings dialog from swallowing clicks, pulling focus
+// back or closing along with us.
 const panelEl = ref<HTMLElement | null>(null);
 const overlayEl = computed(() => panelEl.value?.closest<HTMLElement>(".wp-modal-overlay") ?? null);
-const focus = useDialogFocus(panelEl, () => playgroundOpen.value, {
-  onEscape: () => undefined,
-  window: false,
-});
 useHostDialogGuard(overlayEl, () => playgroundOpen.value);
 
 function onOpenChange(open: boolean): void {
@@ -307,26 +300,27 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <ModalShell :visible="playgroundOpen" labelledby="wp-pg-title" @close="onClose" @keydown="focus.onKeydown">
+  <Modal
+    :open="playgroundOpen"
+    size="lg"
+    flush
+    accent="brand"
+    icon="palette"
+    @update:open="(v: boolean) => { if (!v) onClose(); }"
+  >
+    <template #header="{ titleId }">
+      <div class="wp-pg__head-text">
+        <h3 :id="titleId" class="wp-pg__title">Display Playground</h3>
+        <p class="wp-pg__subtitle">
+          Tweak Wildcard Pipeline visuals — changes apply live.
+        </p>
+      </div>
+    </template>
     <section
       ref="panelEl"
       class="wp-pg"
-      tabindex="-1"
       data-test="playground-panel"
     >
-      <header class="wp-pg__head">
-        <div class="wp-pg__head-inner">
-          <i class="pi pi-palette wp-pg__head-icon" aria-hidden="true" />
-          <div>
-            <h3 id="wp-pg-title" class="wp-pg__title">Display Playground</h3>
-            <p class="wp-pg__subtitle">
-              Tweak Wildcard Pipeline visuals — changes apply live.
-            </p>
-          </div>
-        </div>
-        <Button variant="ghost" icon="times" aria-label="Close playground" size="sm" kbd="Esc" @click="onClose" />
-      </header>
-
       <div class="wp-pg__body">
         <section class="wp-pg__controls" data-test="playground-controls">
           <fieldset class="wp-pg__group">
@@ -538,12 +532,13 @@ onBeforeUnmount(() => {
         </aside>
       </div>
 
-      <footer class="wp-pg__foot">
-        <Button size="md" @click="onResetAll">Reset all to defaults</Button>
-        <Button variant="primary" size="md" @click="onClose">Done</Button>
-      </footer>
     </section>
-  </ModalShell>
+    <template #footer>
+      <Button size="md" @click="onResetAll">Reset all to defaults</Button>
+      <span class="wp-pg__foot-spacer" />
+      <Button variant="primary" size="md" @click="onClose">Done</Button>
+    </template>
+  </Modal>
 </template>
 
 <style>
@@ -553,52 +548,12 @@ onBeforeUnmount(() => {
  * subservient to unlayered ones in the same origin. */
 @layer wp-extension {
 .wp-pg {
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  box-shadow: var(--wp-shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.5));
-  width: min(960px, 100%);
-  max-height: calc(100vh - 64px);
   display: flex;
   flex-direction: column;
+  min-height: 0;
   color: var(--wp-text);
-  outline: none;
 }
-.wp-pg__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--wp-border);
-  background: var(--wp-brand-gradient);
-  position: relative;
-}
-/* Scrim that knocks the brand gradient back so the title stays readable on
- * top of it. It was hardcoded to a near-black rgba, so under the light theme
- * the banner stayed dark while `--wp-text` flipped to a DARK ink — dark text
- * on a dark band. The scrim now follows the theme: near-black under dark,
- * near-white under light, each keeping the same 0.85 knock-back. */
-.wp-pg__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--wp-pg-head-scrim, rgba(35, 35, 35, 0.85));
-  pointer-events: none;
-}
-.wp-theme-light .wp-pg__head {
-  --wp-pg-head-scrim: rgba(248, 248, 250, 0.85);
-}
-.wp-theme-dark .wp-pg__head {
-  --wp-pg-head-scrim: rgba(35, 35, 35, 0.85);
-}
-.wp-pg__head > * { position: relative; z-index: 1; }
-.wp-pg__head-inner { display: flex; gap: 10px; align-items: flex-start; }
-.wp-pg__head-icon {
-  font-size: 14px;
-  color: var(--wp-violet);
-  margin-top: 2px;
-}
+.wp-pg__head-text { flex: 1 1 auto; min-width: 0; }
 .wp-pg__title {
   margin: 0;
   font: 600 13px/1.2 var(--wp-font-sans);
@@ -659,14 +614,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.wp-pg__foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 14px;
-  border-top: 1px solid var(--wp-border);
-  background: var(--wp-bg2);
-}
+.wp-pg__foot-spacer { flex: 1; }
 /* Narrow viewport — stack panes */
 @media (max-width: 720px) {
   .wp-pg__body {

@@ -2,7 +2,7 @@
 import Kbd from "@/kit/Kbd.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import ConfirmModal from "@/kit/ConfirmModal.vue";
 import { api } from "../../manager/api/client";
 import type { BundleRow } from "../../manager/api/types";
@@ -178,19 +178,17 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 </script>
 
 <template>
-  <ModalShell :visible="visible" label="Add bundle from library" @close="emit('close')" @keydown="onKeydown">
-    <div class="wp-bp">
-      <header class="wp-bp__head">
-        <div class="wp-bp__head-text">
-          <div class="wp-bp__eyebrow">Add bundle from library</div>
-          <div class="wp-bp__title">
-            Browse Bundles
-            <span class="wp-bp__title-detail">· {{ filtered.length }} {{ filtered.length === 1 ? "bundle" : "bundles" }}</span>
-          </div>
+  <Modal :open="visible" size="lg" flush accent="brand" icon="box" @update:open="(v: boolean) => { if (!v) emit('close'); }" @keydown="onKeydown">
+    <template #header="{ titleId }">
+      <div class="wp-bp__head-text">
+        <div class="wp-bp__eyebrow">Add bundle from library</div>
+        <div :id="titleId" class="wp-bp__title">
+          Browse Bundles
+          <span class="wp-bp__title-detail">· {{ filtered.length }} {{ filtered.length === 1 ? "bundle" : "bundles" }}</span>
         </div>
-        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" @click="emit('close')" />
-      </header>
-
+      </div>
+    </template>
+    <div class="wp-bp">
       <div class="wp-bp__toolbar">
         <SearchInput
           ref="searchInput"
@@ -263,32 +261,32 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
         </div>
       </div>
 
-      <div class="wp-bp__foot">
-        <div class="wp-bp__hints">
-          <Kbd keys="↑" size="sm" />
-          <Kbd keys="↓" size="sm" />
-          <span class="wp-bp__hint-label">nav</span>
-          <span class="wp-bp__hint-sep">·</span>
-          <Kbd keys="Enter" size="sm" />
-          <span class="wp-bp__hint-label">insert</span>
-          <span class="wp-bp__hint-sep">·</span>
-          <Kbd keys="/" size="sm" />
-          <span class="wp-bp__hint-label">search</span>
-          <span class="wp-bp__hint-sep">·</span>
-          <Kbd keys="Esc" size="sm" />
-          <span class="wp-bp__hint-label">cancel</span>
-        </div>
-        <Button size="sm" @click="emit('close')">Cancel</Button>
-        <Button
-          size="sm"
-          variant="primary"
-          icon="pi-plus"
-          data-testid="bundle-picker-create"
-          @click="emit('create')"
-        >Create Bundle</Button>
-      </div>
     </div>
-  </ModalShell>
+    <template #footer>
+      <div class="wp-bp__hints">
+        <Kbd keys="↑" size="sm" />
+        <Kbd keys="↓" size="sm" />
+        <span class="wp-bp__hint-label">nav</span>
+        <span class="wp-bp__hint-sep">·</span>
+        <Kbd keys="Enter" size="sm" />
+        <span class="wp-bp__hint-label">insert</span>
+        <span class="wp-bp__hint-sep">·</span>
+        <Kbd keys="/" size="sm" />
+        <span class="wp-bp__hint-label">search</span>
+        <span class="wp-bp__hint-sep">·</span>
+        <Kbd keys="Esc" size="sm" />
+        <span class="wp-bp__hint-label">cancel</span>
+      </div>
+      <Button size="sm" @click="emit('close')">Cancel</Button>
+      <Button
+        size="sm"
+        variant="primary"
+        icon="pi-plus"
+        data-testid="bundle-picker-create"
+        @click="emit('create')"
+      >Create Bundle</Button>
+    </template>
+  </Modal>
     <ConfirmModal
       :open="pendingReinsert !== null"
       :title="confirmTitle"
@@ -305,37 +303,12 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 .wp-bp__skel-list { padding: 6px 16px; }
 
 .wp-bp {
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(8px, var(--wp-radius-cap, 999px));
-  width: 720px;
-  max-width: 92vw;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--wp-shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.5));
+  min-height: 0;
 }
 
-/* Header — brand gradient + dark wash overlay, matches edit modals. */
-.wp-bp__head {
-  background: var(--wp-brand-gradient);
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--wp-border);
-  position: relative;
-}
-.wp-bp__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  /* Theme-aware wash so the brand gradient reads correctly in both palettes. */
-  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
-  pointer-events: none;
-}
-.wp-bp__head > * { position: relative; z-index: 1; }
-.wp-bp__head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wp-bp__head-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .wp-bp__eyebrow {
   font: 500 11px/1.2 var(--wp-font-sans);
   color: var(--wp-text-dim, var(--wp-text3));
@@ -461,14 +434,6 @@ const alreadyAddedSet = computed(() => new Set(props.alreadyAddedIds ?? []));
 
 /* Footer — keyboard hints inline with Cancel + Create. Matches the
  * module picker pattern: the keys are the kit's Kbd. */
-.wp-bp__foot {
-  border-top: 1px solid var(--wp-border);
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-}
 .wp-bp__hints {
   display: inline-flex;
   align-items: center;

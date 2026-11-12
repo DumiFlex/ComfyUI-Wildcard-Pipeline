@@ -15,7 +15,7 @@
  * it: the run keeps waiting until one of the three answers is sent.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import Textarea from "@/kit/Textarea.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import WpImageZoom from "@/kit/WpImageZoom.vue";
@@ -263,8 +263,9 @@ const painting = ref(false);
 const pickerEl = ref<HTMLElement | null>(null);
 function keepFocusInside(): void {
   const root = pickerEl.value;
+  const dialog = root?.closest<HTMLElement>(".wp-modal") ?? root;
   const at = document.activeElement;
-  if (root && !(at instanceof Node && root.contains(at))) root.focus({ preventScroll: true });
+  if (root && !(at instanceof Node && dialog?.contains(at))) root.focus({ preventScroll: true });
 }
 watch([mode, () => painting.value], () => { void nextTick(keepFocusInside); }, { flush: "post" });
 const tool = ref<MaskTool>("brush");
@@ -445,6 +446,9 @@ const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
 onMounted(() => {
   timer = setInterval(() => { now.value = Date.now(); }, 1000);
+  // Focus the picker itself, not its first control (Modal leaves focus where it
+  // is when it is already inside): the keys work from there, and no tooltip pops.
+  pickerEl.value?.focus({ preventScroll: true });
 });
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
@@ -546,33 +550,40 @@ const subLine = computed(() => {
 </script>
 
 <template>
-  <ModalShell :visible="true" @close="onClose" @keydown="onKey">
-    <div ref="pickerEl" class="wp-ifp" :class="[`is-${mode}`, { 'is-fit': isFit }]" data-test="image-filter-picker" :data-mode="mode" tabindex="-1">
-      <div class="wp-ifp__head">
-        <i class="pi pi-filter wp-ifp__head-icon" aria-hidden="true" />
-        <div class="wp-ifp__title-block">
-          <div class="wp-ifp__title-row">
-            <span class="wp-ifp__name">WP Image Filter</span>
-            <span class="wp-ifp__chip">Waiting</span>
-            <span v-if="moreWaiting" class="wp-ifp__more" data-test="image-filter-more">+{{ moreWaiting }} more waiting</span>
-          </div>
-          <div class="wp-ifp__sub">
-            <template v-if="multiFrame">{{ frames.length }} frames, {{ total }} images.</template>
-            <template v-else>{{ total }} {{ total === 1 ? "image" : "images" }}.</template>
-            {{ subLine }}
-          </div>
+  <Modal
+    :open="true"
+    size="full"
+    flush
+    accent="var(--wp-accent)"
+    icon="filter"
+    @update:open="(v: boolean) => { if (!v) onClose(); }"
+    @keydown="onKey"
+  >
+    <template #header="{ titleId }">
+      <div class="wp-ifp__title-block">
+        <div class="wp-ifp__title-row">
+          <span :id="titleId" class="wp-ifp__name">WP Image Filter</span>
+          <span class="wp-ifp__chip">Waiting</span>
+          <span v-if="moreWaiting" class="wp-ifp__more" data-test="image-filter-more">+{{ moreWaiting }} more waiting</span>
         </div>
-        <WpSegmented
-          :model-value="mode"
-          :options="MODE_OPTIONS"
-          size="sm"
-          aria-label="Mode"
-          test-prefix="image-filter-mode"
-          :disabled="!total"
-          @update:model-value="(m) => setMode(m)"
-        />
-        <Button size="sm" variant="ghost" icon="pi-minus" aria-label="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')" />
+        <div class="wp-ifp__sub">
+          <template v-if="multiFrame">{{ frames.length }} frames, {{ total }} images.</template>
+          <template v-else>{{ total }} {{ total === 1 ? "image" : "images" }}.</template>
+          {{ subLine }}
+        </div>
       </div>
+      <WpSegmented
+        :model-value="mode"
+        :options="MODE_OPTIONS"
+        size="sm"
+        aria-label="Mode"
+        test-prefix="image-filter-mode"
+        :disabled="!total"
+        @update:model-value="(m) => setMode(m)"
+      />
+      <Button size="sm" variant="ghost" icon="pi-minus" aria-label="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')" />
+    </template>
+    <div ref="pickerEl" class="wp-ifp" :class="[`is-${mode}`, { 'is-fit': isFit }]" data-test="image-filter-picker" :data-mode="mode" tabindex="-1">
 
       <!-- Grid -->
       <template v-if="mode === 'grid'">
@@ -993,28 +1004,27 @@ const subLine = computed(() => {
         </WpImageZoom>
       </div>
 
-      <div class="wp-ifp__foot">
-        <div class="wp-ifp__status" data-test="image-filter-status">
-          <span><strong>{{ pickedList.length }}</strong> of {{ total }} picked<template v-if="multiFrame"> from {{ pickedFrames }} {{ pickedFrames === 1 ? "frame" : "frames" }}</template></span>
-          <span v-if="editCount" class="wp-ifp__edits">{{ editCount }} refined</span>
-          <span v-if="leftLabel" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }">{{ leftLabel }}</span>
-        </div>
-        <span class="wp-ifp__spacer" />
-        <Button v-if="canSendToLoop" size="sm" :disabled="pickedFrames === 0" hint="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks" data-test="image-filter-send-loop" @click="sendToLoop">Send to Loop</Button>
-        <Button size="sm" variant="danger" hint="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</Button>
-        <Button size="sm" data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</Button>
-        <Button size="sm" variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-keep-picked" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</Button>
-      </div>
     </div>
-  </ModalShell>
+    <template #footer>
+      <div class="wp-ifp__status" data-test="image-filter-status">
+        <span><strong>{{ pickedList.length }}</strong> of {{ total }} picked<template v-if="multiFrame"> from {{ pickedFrames }} {{ pickedFrames === 1 ? "frame" : "frames" }}</template></span>
+        <span v-if="editCount" class="wp-ifp__edits">{{ editCount }} refined</span>
+        <span v-if="leftLabel" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }">{{ leftLabel }}</span>
+      </div>
+      <span class="wp-ifp__spacer" />
+      <Button v-if="canSendToLoop" size="sm" :disabled="pickedFrames === 0" hint="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks" data-test="image-filter-send-loop" @click="sendToLoop">Send to Loop</Button>
+      <Button size="sm" variant="danger" hint="Skip everything after this node for this run" data-test="image-filter-stop" @click="stop">Stop branch</Button>
+      <Button size="sm" data-test="image-filter-keep-all" @click="keepAll">Keep all {{ total }}</Button>
+      <Button size="sm" variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-keep-picked" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
 /* One size in every mode, so switching never moves the window under the mouse. */
-.wp-ifp { width: min(1280px, 95vw); height: 90vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); outline: none; }
-.wp-ifp__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
-.wp-ifp__head-icon { color: var(--wp-accent); width: 24px; font-size: 15px; text-align: center; }
-.wp-ifp__title-block { flex: 1; min-width: 0; }
+.wp-ifp { height: 100%; min-height: 0; display: flex; flex-direction: column; color: var(--wp-text); font-size: 12px; outline: none; }
+/* Grows past the kit header spacer so the mode switch sits at the right, by the ×. */
+.wp-ifp__title-block { flex: 999 1 auto; min-width: 0; }
 .wp-ifp__title-row { display: flex; align-items: center; gap: 8px; }
 .wp-ifp__name { font: 600 13px var(--wp-font-sans); }
 .wp-ifp__chip { font: 600 10px var(--wp-font-sans); letter-spacing: .02em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent-text, var(--wp-accent)); }
@@ -1132,8 +1142,7 @@ const subLine = computed(() => {
 .wp-ifp__full-strip .is-current { border-color: var(--wp-accent); }
 .wp-ifp__full-sep { width: 1px; height: 32px; background: var(--wp-border); }
 
-.wp-ifp__foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
-.wp-ifp__status { display: flex; gap: 12px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-ifp__status { align-self: center; display: flex; gap: 12px; font: 11px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-ifp__status strong { color: var(--wp-text); }
 .wp-ifp__edits { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-ifp__left { color: var(--wp-text-dim, var(--wp-text3)); font-family: var(--wp-font-mono, monospace); }

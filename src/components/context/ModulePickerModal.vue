@@ -1,22 +1,19 @@
 <template>
-  <ModalShell :visible="visible" @close="$emit('close')">
-    <div ref="rootEl" class="wp-picker" tabindex="-1">
-
-      <!-- Header -->
-      <header class="wp-picker__head">
-        <div class="wp-picker__head-text">
-          <div class="wp-picker__eyebrow">
-            Add modules from library
-          </div>
-          <div class="wp-picker__title">
-            Browse Library
-            <span class="wp-picker__title-detail">
-              · {{ modules.length }} {{ modules.length === 1 ? "module" : "modules" }}
-            </span>
-          </div>
+  <Modal :open="visible" size="lg" flush accent="brand" icon="th-large" @update:open="(v: boolean) => { if (!v) $emit('close'); }">
+    <template #header="{ titleId }">
+      <div class="wp-picker__head-text">
+        <div class="wp-picker__eyebrow">
+          Add modules from library
         </div>
-        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" @click="$emit('close')" />
-      </header>
+        <div :id="titleId" class="wp-picker__title">
+          Browse Library
+          <span class="wp-picker__title-detail">
+            · {{ modules.length }} {{ modules.length === 1 ? "module" : "modules" }}
+          </span>
+        </div>
+      </div>
+    </template>
+    <div ref="rootEl" class="wp-picker" tabindex="-1">
 
       <!-- Toolbar: search + kind tabs + compact filter buttons.
            Filters are inline on the toolbar (no dedicated row) so
@@ -309,7 +306,7 @@
         >Add {{ selected.size }} {{ selected.size === 1 ? "module" : "modules" }}</Button>
       </footer>
     </div>
-  </ModalShell>
+  </Modal>
 </template>
 
 <script setup lang="ts">
@@ -332,7 +329,7 @@
 import Kbd from "@/kit/Kbd.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { kindIcon } from "../shared/kind-icons";
@@ -970,41 +967,17 @@ onBeforeUnmount(detachCaptureListeners);
 .wp-picker__skel-rows { padding: 0 10px; }
 
 .wp-picker {
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border-strong);
-  border-radius: var(--wp-radius-lg);
-  box-shadow: var(--wp-shadow-lg);
-  width: 780px;
-  max-width: calc(100vw - 32px);
-  height: 600px;
-  max-height: calc(100vh - 32px);
+  height: 560px;
+  max-height: calc(100vh - 120px);
   display: flex;
   flex-direction: column;
   color: var(--wp-text);
-  overflow: hidden;
   font-family: var(--wp-font);
+  outline: none;
 }
 
-/* ── Header — brand gradient + dark wash overlay. Mirrors BundlePicker
- *  so both pickers read as part of the same family. */
-.wp-picker__head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--wp-border);
-  background: var(--wp-brand-gradient);
-  position: relative;
-}
-.wp-picker__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  /* Theme-aware wash so the brand gradient stays subtle in both
-   * palettes — dark bg in dark mode, near-white in light mode. */
-  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
-  pointer-events: none;
-}
-.wp-picker__head > * { position: relative; z-index: 1; }
-.wp-picker__head-text { flex: 1; min-width: 0; }
+/* ── Header text (Modal draws the brand wash). */
+.wp-picker__head-text { flex: 1 1 auto; min-width: 0; }
 .wp-picker__eyebrow {
   font-size: 11px;
   text-transform: uppercase;
