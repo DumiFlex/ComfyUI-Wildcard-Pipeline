@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { valueTypeLook } from "./value-types";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import type { InjectorRow } from "../../widgets/_shared";
 import Checkbox from "@/kit/Checkbox.vue";
 import Input from "@/kit/Input.vue";
