@@ -85,7 +85,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <p>
         <b>Show node</b> (in a step's details, a row's right-click menu, or the arrow on a node row) selects the
         node on the canvas and makes the module or field that row came from blink: a Context's module, a Model
-        Info field, a toggle, an Injector row, or the Loop's iteration field.
+        Info field, a toggle, an Injector row, or the Loop's iteration field. A collapsed node, a folded bundle,
+        a folded Toggles group or the Injector's folded row list opens first so you can see it. A node inside a
+        subgraph opens that subgraph; the subgraph itself is left as it is.
       </p>
       <p>
         A long value shows its first three lines (a long list its first three items, a long negative one

@@ -646,6 +646,19 @@ export function togglesPreviewModules(node: TogglesNodeLike): Record<string, unk
 }
 
 /** Rows the edit view lists, in order: toggles under a folded label are left out. */
+/** The rows with every folded label unfolded whose group holds a toggle
+ *  writing one of `vars`, or null when none needs unfolding. */
+export function unfoldForVars(cfg: TogglesConfig, vars: readonly string[]): TogglesItem[] | null {
+  const want = new Set(vars.filter(Boolean));
+  if (!want.size) return null;
+  const open = new Set<string>();
+  for (const g of groupsOf(cfg)) {
+    if (g.label?.collapsed && g.toggles.some((t) => t.var && want.has(t.var))) open.add(g.label.id);
+  }
+  if (!open.size) return null;
+  return cfg.rows.map((r) => (r.kind === "label" && open.has(r.id) ? { ...r, collapsed: false } : r));
+}
+
 export function visibleRows(cfg: TogglesConfig): TogglesItem[] {
   return groupsOf(cfg).flatMap((g) => (g.label ? [g.label, ...(g.label.collapsed ? [] : g.toggles)] : g.toggles));
 }

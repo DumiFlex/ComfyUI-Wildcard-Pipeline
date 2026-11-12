@@ -15,7 +15,8 @@ import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleFrame from "./bundles/BundleFrame.vue";
 import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
-import { bundleAlerts, bundleDescendants, isHiddenInCollapsedBundle } from "./bundles/bundle-alerts";
+import { bundleAlerts, bundleDescendants, collapsedAround, isHiddenInCollapsedBundle } from "./bundles/bundle-alerts";
+import { revealTarget } from "../../widgets/flash-target";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import {
@@ -729,14 +730,28 @@ const bundleFrameCtx: BundleFrameCtx = {
   ...dragFrameCtx,
 };
 provide(BundleFrameCtxKey, bundleFrameCtx);
+
+/** WP Debug "Show node": unfold the bundles that hide the module it names. */
+function onReveal(ev: Event): void {
+  const uid = revealTarget(ev)?.uid;
+  if (!uid) return;
+  const open = new Set(collapsedAround(uid, value.value.modules, value.value.bundles));
+  if (!open.size) return;
+  value.value = {
+    ...value.value,
+    bundles: (value.value.bundles ?? []).map((b) => (open.has(b._uid) ? { ...b, collapsed: false } : b)),
+  };
+}
 </script>
 
 <template>
   <div
     class="wp-context"
+    data-wp-reveal
     :class="{ 'wp-context--muted': isMuted }"
     :data-mode-label="isMuted ? muteLabel : undefined"
     @dragleave="onContainerLeave($event)"
+    @wp-reveal="onReveal"
   >
     <!-- Node identity strip. A fixed, read-only CODENAME naming THIS
          WP_Context node — a stable `adjective-noun` derived from the

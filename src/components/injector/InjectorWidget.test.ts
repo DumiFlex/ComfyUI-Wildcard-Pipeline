@@ -668,3 +668,26 @@ describe("InjectorWidget — collapse-connections button", () => {
     expect(w.emitted("toggle-connections-collapse")).toHaveLength(1);
   });
 });
+
+describe("InjectorWidget — Show node", () => {
+  const ROWS = JSON.stringify({
+    version: 1,
+    rows: [
+      { _uid: "g1", kind: "general", slot_name: "", binding: "mood", template: "calm", enabled: true, internal: false },
+    ],
+  });
+
+  it("opens the folded row list when WP Debug points at one of its rows", async () => {
+    const w = mount(InjectorWidget, { props: { nodeId: 7, initialJson: ROWS } });
+    await w.find('[data-test="inj-toolbar-collapse"]').trigger("click");
+    expect(w.find(".wp-inj-rows-wrap--collapsed").exists()).toBe(true);
+    const root = w.find("[data-wp-reveal]").element;
+    root.dispatchEvent(new CustomEvent("wp-reveal", { detail: { vars: ["other"] } }));
+    await w.vm.$nextTick();
+    expect(w.find(".wp-inj-rows-wrap--collapsed").exists()).toBe(true);
+    root.dispatchEvent(new CustomEvent("wp-reveal", { detail: { vars: ["mood"] } }));
+    await w.vm.$nextTick();
+    expect(w.find(".wp-inj-rows-wrap--collapsed").exists()).toBe(false);
+    w.unmount();
+  });
+});

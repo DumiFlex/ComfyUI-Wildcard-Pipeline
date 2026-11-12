@@ -5,6 +5,12 @@
  * Context modules (and bundle children) are found by `data-uid`; rows of the
  * other nodes (Injector, Model Info, Toggles, Loop) carry the variables they
  * write in `data-wp-vars` (space separated, no `$`).
+ *
+ * A row can be out of sight inside its node: a folded bundle, a folded
+ * Toggles label group. Before looking, every element marked
+ * `data-wp-reveal` in the node's widgets gets a `wp-reveal` event carrying
+ * the target, and the widget unfolds what hides it. Subgraphs are never
+ * unpacked: `focusNode` opens the graph the node lives in instead.
  */
 import { nodeWidgetHosts } from "../extension/_stashes";
 
@@ -19,6 +25,25 @@ function escapeAttr(v: string): string {
   return typeof CSS !== "undefined" && typeof CSS.escape === "function"
     ? CSS.escape(v)
     : v.replace(/["\\]/g, "\\$&");
+}
+
+/** The DOM event a widget listens for to unfold what hides `target`. */
+export const REVEAL_EVENT = "wp-reveal";
+
+/** Ask every widget in `hosts` to unfold what hides `target`. */
+export function askReveal(hosts: Iterable<HTMLElement>, target: FlashTarget): void {
+  for (const h of hosts) {
+    if (!h.isConnected) continue;
+    for (const el of h.querySelectorAll<HTMLElement>("[data-wp-reveal]")) {
+      el.dispatchEvent(new CustomEvent<FlashTarget>(REVEAL_EVENT, { detail: target }));
+    }
+  }
+}
+
+/** The target a `wp-reveal` event carries, or null for any other event. */
+export function revealTarget(ev: Event): FlashTarget | null {
+  const d = (ev as CustomEvent<unknown>).detail;
+  return d && typeof d === "object" ? (d as FlashTarget) : null;
 }
 
 /** The element in `hosts` that best stands for `target`, or null. */
@@ -71,8 +96,17 @@ export function blink(el: HTMLElement): void {
 export function flashInNode(node: object, target: FlashTarget): void {
   if (!target.uid && !target.vars?.length) return;
   let tries = 0;
+  let asked = false;
   const look = (): void => {
     const hosts = nodeWidgetHosts.get(node);
+    // Once the widgets are mounted, unfold first, then look on the next try
+    // (after the widget has re-rendered).
+    if (hosts && !asked && [...hosts].some((h) => h.isConnected)) {
+      asked = true;
+      askReveal(hosts, target);
+      setTimeout(look, 60);
+      return;
+    }
     const el = hosts ? findFlashElement(hosts, target) : null;
     if (el) {
       const host = [...(hosts ?? [])].find((h) => h.contains(el));
@@ -80,7 +114,8 @@ export function flashInNode(node: object, target: FlashTarget): void {
       blink(el);
       return;
     }
-    if (++tries < 12) setTimeout(look, 90);
+    // A graph switch can take a while to mount its nodes (Nodes 2.0).
+    if (++tries < 20) setTimeout(look, 90);
   };
   // Let the canvas finish centring (and a graph switch mount its nodes).
   setTimeout(look, 160);

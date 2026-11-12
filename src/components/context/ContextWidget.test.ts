@@ -2826,3 +2826,36 @@ describe("ContextWidget collapsed bundles", () => {
     }
   });
 });
+
+describe("ContextWidget — Show node", () => {
+  it("unfolds the bundles around the module WP Debug points at", async () => {
+    const initialJson = JSON.stringify({
+      version: 1,
+      modules: [
+        {
+          id: "eeeeeeee", _uid: "m-child", type: "wildcard", enabled: true,
+          meta: { name: "Deep" }, entries: [],
+          payload: { var_binding: "v", options: [{ id: "o1", value: "x", weight: 1 }] },
+          payload_hash: "h", bundle_origin: "b-inner",
+        },
+      ],
+      bundles: [
+        { _uid: "b-outer", library_id: "bn_o", start_idx: 0, end_idx: 0, enabled: true, collapsed: true, inserted_at_hash: "h", name: "Outer", color: null },
+        { _uid: "b-inner", parent_uid: "b-outer", library_id: "bn_i", start_idx: 0, end_idx: 0, enabled: true, collapsed: true, inserted_at_hash: "h", name: "Inner", color: null },
+        { _uid: "b-other", library_id: "bn_x", start_idx: 0, end_idx: 0, enabled: true, collapsed: true, inserted_at_hash: "h", name: "Other", color: null },
+      ],
+    });
+    const wrapper = mount(ContextWidget, {
+      attachTo: document.body,
+      props: { nodeId: 302, initialJson, upstreamVars: [], onChange: () => {} },
+    });
+    await flushPromises();
+    const folded = () => [...document.querySelectorAll(".wp-bundle--collapsed")].map((el) => el.getAttribute("data-uid"));
+    expect(folded()).toContain("b-outer");
+    wrapper.find("[data-wp-reveal]").element.dispatchEvent(new CustomEvent("wp-reveal", { detail: { uid: "m-child" } }));
+    await flushPromises();
+    expect(folded()).not.toContain("b-outer");
+    expect(folded()).not.toContain("b-inner");
+    wrapper.unmount();
+  });
+});
