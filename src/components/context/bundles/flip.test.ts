@@ -91,7 +91,8 @@ describe("applyFlip", () => {
     await new Promise(r => requestAnimationFrame(r));
     expect(a.style.transition).toContain("transform");
     expect(a.style.transition).toContain(`${MOTION_FLIP_MS}ms`);
-    expect(a.style.transform).toBe("translate(0, 0)");
+    // jsdom 31 serialises `translate(0, 0)` as `translate(0px)`.
+    expect(a.style.transform).toMatch(/^translate\(0(px)?(, 0(px)?)?\)$/);
 
     document.body.removeChild(container);
   });

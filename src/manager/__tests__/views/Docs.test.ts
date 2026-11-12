@@ -26,10 +26,14 @@ beforeAll(async () => {
   ]);
 });
 
-async function mountAt(page?: string) {
+async function mountAt(page?: string, attach = false) {
   await router.push(page ? `/docs/${page}` : "/docs");
   await router.isReady();
-  const w = mount(Docs, { props: { page }, global: { plugins: [router, createPinia()] } });
+  const w = mount(Docs, {
+    props: { page },
+    global: { plugins: [router, createPinia()] },
+    ...(attach ? { attachTo: document.body } : {}),
+  });
   await flushPromises();
   return w;
 }
@@ -59,7 +63,8 @@ describe("Docs.vue", () => {
   });
 
   it("searches the docs text and opens a hit at its section", async () => {
-    const w = await mountAt("wp-context");
+    // Attached: jsdom only computes `display` for connected elements.
+    const w = await mountAt("wp-context", true);
     const input = w.get('[data-test="doc-search"]');
     (input.element as HTMLInputElement).value = "fallback";
     await input.trigger("input");
@@ -74,6 +79,7 @@ describe("Docs.vue", () => {
     await flushPromises();
     expect(router.currentRoute.value.hash).toMatch(/^#s-/);
     expect((input.element as HTMLInputElement).value).toBe("");
+    w.unmount();
   });
 
   it("links the previous and next page in nav order", async () => {

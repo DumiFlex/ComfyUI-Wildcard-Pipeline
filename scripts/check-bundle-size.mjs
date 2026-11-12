@@ -384,7 +384,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 660 -> 670 KB on 2026-11-12: with both of those, WP Toggles' toggle
 // window (Value box, icon picker and colour fields in a lazy chunk) and the
 // toggle looks put the total at ~660.0 KB, 9 bytes under the old line.
-const TOTAL_LIMIT = 670 * 1024;     // 670 KB
+// RAISED 670 -> 685 KB on 2026-11-12 for zod 3 -> 4 (Dependabot): the lazy
+// shape-check chunk (Note add-to-library press, Import tab) grew 17.9 ->
+// 33.5 KB gzip, putting the total at ~684.0 KB. Moving the validators to
+// `zod/mini` could win most of it back.
+const TOTAL_LIMIT = 685 * 1024;     // 685 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
