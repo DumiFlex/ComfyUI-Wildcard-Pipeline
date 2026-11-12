@@ -751,19 +751,16 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 .wp-tg--edit .wp-tg__label { min-height: 38px; }
 .wp-tg__member.is-grouped { padding-left: 8px; border-left: 2px solid var(--wp-tg-group, var(--wp-border)); }
 .wp-tg__group-box { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-/* Grid layout: tiles wrap to the node's width, never resize it. */
+/* Grid layout: each tile is as wide as what it shows (name, var, control),
+ * tiles wrap to the node's width, never resize it, and the tiles in a line
+ * grow to fill it, so nothing is cut short or stretched to two columns. */
 .wp-tg__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   min-width: 0;
 }
-/* A Buttons toggle (two words) takes two tiles once two fit, so its name
- * isn't cut to "Tog…". */
-.wp-tg__grid { container-type: inline-size; }
-@container (min-width: 250px) {
-  .wp-tg__grid > .wp-tgr.is-wide { grid-column: span 2; }
-}
+.wp-tg__grid > .wp-tgr { flex: 1 1 auto; min-width: 96px; max-width: 100%; }
 /* Grid: a thin line under the tiles per wired toggle, so its control dot
  * (left) and BOOLEAN output (right) sit level with its name. */
 .wp-tg__sockline {
