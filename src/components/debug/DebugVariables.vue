@@ -470,7 +470,7 @@ const nameWidth = computed(() => {
 .wp-dbg-vsec__title { font: 600 11.5px/1.4 var(--wp-font-sans); color: var(--wp-text); }
 .wp-dbg-vsec__codename {
   display: inline-flex; align-items: center;
-  height: 17px; box-sizing: border-box;
+  height: 18px; box-sizing: border-box;
   font: 600 10px/1 var(--wp-font-mono);
   letter-spacing: 0.03em;
   color: var(--wp-text);
@@ -531,9 +531,14 @@ const nameWidth = computed(() => {
 }
 .wp-btn.wp-dbg-var-row__more { align-self: flex-start; height: auto; min-height: 0; padding: 0; font-size: 10.5px; }
 .wp-dbg-var-row__extra { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-/* Kit chips, sized like the switch chip; the accessor reads in mono. */
+/* Kit chips, sized like the switch chip; the accessor reads in mono.
+   18px, not 17: inside the 1px border that leaves an even 16px for a 10px
+   line, so the text and icon land on whole pixels. At 17 the half-pixel
+   gap rounded the icon up and the text down (Firefox, canvas zoom), and
+   the chip looked off-centre. Same for the switch/type chips and the
+   codename pill below. */
 .wp-chip.wp-dbg-var-row__axis, .wp-chip.wp-dbg-var-row__tag {
-  height: 17px; min-height: 0; box-sizing: border-box;
+  height: 18px; min-height: 0; box-sizing: border-box;
   padding: 0 6px; gap: 4px;
   font: 500 10px/1 var(--wp-font-sans);
 }
@@ -562,7 +567,7 @@ const nameWidth = computed(() => {
 .wp-dbg-var-row__radio { font-size: 9px; color: var(--wp-dbg-kind); }
 /* Kit chips sized to the row's text so they don't push it around. */
 .wp-chip.wp-dbg-var-row__switch, .wp-chip.wp-dbg-var-row__type {
-  height: 17px; min-height: 0; box-sizing: border-box;
+  height: 18px; min-height: 0; box-sizing: border-box;
   padding: 0 6px; gap: 4px;
   font: 600 10px/1 var(--wp-font-mono);
   vertical-align: middle;
