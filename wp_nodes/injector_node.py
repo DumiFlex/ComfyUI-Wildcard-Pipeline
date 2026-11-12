@@ -45,6 +45,10 @@ def _render_template(template: str, slot_values: dict[str, Any]) -> str:
     return _TEMPLATE_TOKEN_RE.sub(repl, template)
 
 
+
+#: `$name` (not `$$`) in a template, for WP Debug's list of what it read.
+_TEMPLATE_VAR_RE = re.compile(r"(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)")
+
 class WPContextInjector(io.ComfyNode):
     """Graph-side ctx writer. No library, no payload, no resolve-time logic.
 
@@ -160,7 +164,8 @@ class WPContextInjector(io.ComfyNode):
                 neg_table.pop(binding_name, None)
 
         def _emit_trace(
-            binding_name: str, stored_val: Any, trace_kind: str, is_internal: bool
+            binding_name: str, stored_val: Any, trace_kind: str, is_internal: bool,
+            detail: dict[str, Any] | None = None,
         ) -> None:
             # `value` surfaces the written ctx value in Debug's trace
             # tab. Engine module traces use `writes: [{...}]` for the
@@ -180,7 +185,19 @@ class WPContextInjector(io.ComfyNode):
                 "internal": is_internal,
                 "type": trace_kind,
                 "value": value,
+                **({"detail": detail} if detail else {}),
             })
+
+        def _template_detail(tmpl: str, scope: dict[str, Any]) -> dict[str, Any]:
+            """WP Debug: the template and what each `$name` in it filled with
+            (``None`` when nothing in scope set it)."""
+            reads: dict[str, str | None] = {}
+            for name in _TEMPLATE_VAR_RE.findall(tmpl):
+                if name in reads:
+                    continue
+                val = scope.get(name)
+                reads[name] = None if val is None else str(val)[:160]
+            return {"template": tmpl[:400], **({"reads": reads} if reads else {})}
 
         def _validated_binding(row: dict) -> str | None:
             """Shared binding validation for both row kinds. Returns the
@@ -250,6 +267,7 @@ class WPContextInjector(io.ComfyNode):
                 if isinstance(template_raw, str) and template_raw.strip()
                 else ""
             )
+            own_slot: dict[str, Any] = {}
             # Pass-through path: row has no template, just needs the
             # wired socket value. Requires the slot to be wired or the
             # row is skipped (matches legacy behavior).
@@ -271,7 +289,7 @@ class WPContextInjector(io.ComfyNode):
                 # as any unknown ref) — top-to-bottom resolution means an
                 # early socket row must not read a later socket. To
                 # compose multiple sockets, use a GENERAL row instead.
-                own_slot: dict[str, Any] = (
+                own_slot = (
                     {slot_name: slot_values.get(slot_name, "")}
                     if isinstance(slot_name, str)
                     else {}
@@ -287,7 +305,13 @@ class WPContextInjector(io.ComfyNode):
             is_internal = bool(row.get("internal", False))
             if is_internal:
                 internal_keys.add(stripped)
-            _emit_trace(stripped, stored, trace_type, is_internal)
+            _emit_trace(
+                stripped, stored, trace_type, is_internal,
+                {
+                    **({"input": slot_name} if isinstance(slot_name, str) and slot_name else {}),
+                    **(_template_detail(template_str, own_slot) if template_str else {}),
+                },
+            )
 
         # ── Pass 2: general rows (in order, after all socket rows) ────
         # A general row resolves its template against `merged`: every
@@ -322,7 +346,10 @@ class WPContextInjector(io.ComfyNode):
             is_internal = bool(row.get("internal", False))
             if is_internal:
                 internal_keys.add(stripped)
-            _emit_trace(stripped, stored, "str(template)", is_internal)
+            _emit_trace(
+                stripped, stored, "str(template)", is_internal,
+                _template_detail(template_str, merged),
+            )
 
         if internal_keys:
             ctx["__wp_internal_keys__"] = sorted(internal_keys)

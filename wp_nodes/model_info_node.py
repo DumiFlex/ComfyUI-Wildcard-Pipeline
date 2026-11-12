@@ -144,9 +144,8 @@ class WPModelInfo(io.ComfyNode):
                 "message": f"WP Model Info skipped a variant rule: {problem}",
             })
 
-        family = pins["family"] or model_info.family_from_config_name(
-            _config_class_name(model),
-        )
+        config_class = _config_class_name(model)
+        family = pins["family"] or model_info.family_from_config_name(config_class)
         stem = model_info.model_stem(file_name)
         variant = pins["variant"] or model_info.detect_variant(stem, rules)
 
@@ -193,6 +192,22 @@ class WPModelInfo(io.ComfyNode):
             model_info.VARIANT_VAR: _pin_source("variant", wired, cfg.variant, "rules"),
             model_info.NAME_VAR: name_source,
         }
+        # WP Debug: what each value was read from.
+        matched = next(
+            (r for r in rules if stem and not pins["variant"] and r.regex.search(stem)),
+            None,
+        )
+        details: dict[str, dict[str, Any]] = {
+            model_info.FAMILY_VAR: (
+                {"config_class": config_class} if config_class and not pins["family"] else {}
+            ),
+            model_info.VARIANT_VAR: {
+                **({"rule": matched.pattern, "rule_variant": matched.variant} if matched else {}),
+                **({"rules_count": len(rules)} if not pins["variant"] else {}),
+                **({"stem": stem} if stem else {}),
+            },
+            model_info.NAME_VAR: {"file": file_name} if file_name else {},
+        }
         traces = [
             {
                 "node": "WP_ModelInfo",
@@ -200,6 +215,7 @@ class WPModelInfo(io.ComfyNode):
                 "internal": name in internal_vars,
                 "type": sources[name],
                 "value": value,
+                **({"detail": details[name]} if details[name] else {}),
             }
             for name, value in values.items()
         ]

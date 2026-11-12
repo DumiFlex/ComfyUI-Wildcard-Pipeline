@@ -265,3 +265,21 @@ def test_bool_accessor_reads_across_nodes_in_the_assembler():
     ctx = with_resolver_tables(strip_internals(render), render)
     out = template.resolve_variables("$rain | $rain.bool | $wind.bool", ctx)
     assert out == "heavy rain | true | false"
+
+
+def test_trace_details_say_why_a_toggle_is_off_and_how_pick_one_chose():
+    payload, *_ = _run().values
+    trace = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    child = trace["use_own_clothes"]["detail"]
+    assert child == {"switch": True, "needs": "LoRA character", "held_off": True}
+    cfg = json.loads(json.dumps(PICK))
+    cfg["group_upstream"] = True
+    up = ContextPayload(
+        context={"time": "noon", "night": "yes", "look": "Dusk"}, debug={}, internals={},
+    )
+    payload, *_ = _run(cfg, upstream=up).values
+    trace = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    pick = trace["look"]["detail"]
+    assert pick["picked"] == "Dusk" and pick["forced_by"] == "Dusk"
+    assert pick["upstream_on"] == ["Night"]
+    assert trace["night"]["detail"]["upstream_read"] == "yes"

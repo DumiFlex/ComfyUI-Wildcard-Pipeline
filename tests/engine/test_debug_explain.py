@@ -164,3 +164,81 @@ def test_warnings_name_the_module_that_raised_them():
     (warn,) = [x for x in ctx["__wp_warnings__"] if x["type"] == "unknown_ref"]
     assert warn["owner_uid"] == "w1" and warn["owner_id"] == "w1"
     assert warn["detail"]["name"] == "hat"
+
+
+# ── Options table, pool steps, seeds (WP Debug "why did it never pick X") ──
+
+
+def test_wildcard_lists_every_option_and_why_it_is_out():
+    w = _wildcard(
+        "w1", "mood", [("calm", 1), ("tense", 3), ("angry", 2), ("sad", 0)], name="Mood",
+        enabled_options=["calm", "tense", "sad"], option_weights={"tense": 5},
+        locked_seed=7,
+    )
+    w["payload"]["options"][0]["sub_categories"] = ["soft"]
+    w["payload"]["options"][1]["sub_categories"] = ["soft"]
+    w["payload"]["options"][3]["sub_categories"] = ["soft"]
+    w["instance"]["category_filter"] = "soft"
+    d = _row(_explain_run([w]), "w1")["detail"]
+    rows = {r["id"]: r for r in d["options"]}
+    assert rows["angry"]["cut"] == "filter" and rows["angry"]["weight"] is None
+    assert "cut" not in rows["calm"] and rows["calm"]["weight"] == 1
+    tense = rows["tense"]
+    assert tense["base"] == 3 and tense["override"] == 5 and tense["weight"] == 5
+    assert rows["sad"]["cut"] == "weight"
+    assert d["steps"] == {"library": 4, "filter": 3, "toggles": 3, "live": 2}
+    assert d["locked_seed"] is True
+
+
+def test_toggled_off_option_is_marked_toggle():
+    w = _wildcard("w1", "mood", [("calm", 1), ("tense", 1)], enabled_options=["calm"])
+    d = _row(_explain_run([w]), "w1")["detail"]
+    assert {r["id"]: r.get("cut") for r in d["options"]} == {"calm": None, "tense": "toggle"}
+    assert d["steps"]["toggles"] == 1
+
+
+def test_options_table_is_capped():
+    from engine.modules.wildcard_handler import OPTIONS_SHOWN
+    w = _wildcard("w1", "n", [(f"o{i}", 1) for i in range(OPTIONS_SHOWN + 5)])
+    d = _row(_explain_run([w]), "w1")["detail"]
+    assert len(d["options"]) == OPTIONS_SHOWN and d["options_more"] == 5
+
+
+def test_multi_pick_reports_its_separator():
+    w = _wildcard(
+        "w1", "outfit", [("a", 1), ("b", 1), ("c", 1)],
+        pick_min=2, pick_max=2, pick_separator=" + ",
+    )
+    d = _row(_explain_run([w]), "w1")["detail"]
+    assert d["separator"] == " + " and d["range"] == [2, 2]
+
+
+def test_match_variable_reports_the_value_it_read():
+    w = _wildcard("w1", "style", [("pony", 1), ("sdxl", 1)], match_variable="model_variant")
+    d = _row(_explain_run([w], model_variant="pony"), "w1")["detail"]
+    assert d["match_variable"] == "model_variant" and d["match_value"] == "pony"
+
+
+def test_fixed_values_report_source_rows_and_toggled_off():
+    fv = {
+        "type": "fixed_values", "id": "f1", "_uid": "f1",
+        "payload": {"values": [
+            {"id": "a", "name": "quality", "value": "{best|best} quality"},
+            {"id": "b", "name": "steps", "value": "28"},
+        ]},
+        "instance": {"enabled_options": ["a"]},
+    }
+    d = _row(_explain_run([fv]), "f1")["detail"]
+    assert d["source"] == "library" and d["toggled_off"] == ["steps"]
+    assert d["rows"] == [{"name": "quality", "raw": "{best|best} quality"}]
+
+
+def test_combine_reports_template_and_reads():
+    cb = {
+        "type": "combine", "id": "c1", "_uid": "c1",
+        "payload": {"template": "$mood $missing light", "output_var": "scene", "input_vars": []},
+        "instance": {},
+    }
+    d = _row(_explain_run([cb], mood="calm"), "c1")["detail"]
+    assert d["template"] == "$mood $missing light" and d["template_source"] == "library"
+    assert d["reads"] == {"mood": "calm", "missing": None}

@@ -10,11 +10,12 @@
 import { computed, ref } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugCondition from "./DebugCondition.vue";
-import { ruleActions, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
+import { ruleActions, type RawOptionRow, type RawRuleDetail, type TraceStep, type WarningRow } from "./debug-model";
 import { isNegativeMode } from "../../extension/derivation-conditions";
 import Button from "@/kit/Button.vue";
 import Disclosure from "@/kit/Disclosure.vue";
 import CopyButton from "@/kit/CopyButton.vue";
+import Chip from "@/kit/Chip.vue";
 
 const props = defineProps<{
   step: TraceStep;
@@ -41,6 +42,10 @@ const nodeFacts = computed((): string[] => {
     if (typeof det?.seed === "number") out.push(`frame seed ${det.seed}`);
     if (typeof det?.combo === "number") out.push(`sweep combination ${det.combo} of ${det.combos ?? "?"}`);
     if (typeof det?.value_line === "number") out.push(`value line ${det.value_line} of ${det.values ?? "?"}`);
+    if (det?.strategy) out.push(`seeds: ${det.strategy}`);
+    if (typeof det?.skipped === "number") out.push(`${det.skipped} frame${det.skipped === 1 ? "" : "s"} skipped`);
+    const pins = Object.keys(det?.pins ?? {}).length;
+    if (pins) out.push(`sweep pins ${pins} module${pins === 1 ? "" : "s"}${det?.hold_others ? ", holds the rest" : ""}`);
     return out;
   }
   if (s.kind === "model") {
@@ -51,15 +56,40 @@ const nodeFacts = computed((): string[] => {
       "wired in": "from the node's text input",
       "loader file": "the checkpoint loader's file name",
     };
-    return [why[s.source] ?? (s.source || "WP Model Info")];
+    const out = [why[s.source] ?? (s.source || "WP Model Info")];
+    if (det?.config_class) out.push(`model class ${det.config_class}`);
+    if (det?.rule) out.push(`rule "${det.rule}" → ${det.rule_variant ?? ""}`);
+    else if (typeof det?.rules_count === "number") {
+      out.push(det.rules_count ? `none of ${det.rules_count} rule${det.rules_count === 1 ? "" : "s"} matched` : "no variant rules");
+    }
+    if (det?.stem && s.bindings[0] === "model_variant") out.push(`file name ${det.stem}`);
+    if (det?.file) out.push(`file ${det.file}`);
+    return out;
   }
   if (s.kind === "toggle") {
-    const out = [s.source.startsWith("Pick one") ? "Pick one: the picked row's value" : "switch: true or false"];
+    const pick = s.source.startsWith("Pick one");
+    const out = [
+      pick ? "Pick one: the picked row's value"
+      : s.toggleHasValue ? `switch with a value: its text while on, empty while off (now ${s.toggleBool ? "on" : "off"})`
+      : "switch: true or false",
+    ];
     if (s.source.endsWith("set upstream")) out.push("set by an upstream variable");
+    if (!pick && typeof det?.switch === "boolean") out.push(`switch on the node: ${det.switch ? "on" : "off"}`);
+    if (det && "upstream_read" in det) {
+      out.push(det.upstream_read == null ? "upstream didn't set it" : `upstream read "${det.upstream_read}"`);
+    }
+    if (det?.needs) out.push(det.held_off ? `off: needs ${det.needs}, which is off` : `needs ${det.needs}`);
+    if (pick) {
+      out.push(det?.picked ? `picked ${det.picked}` : "nothing picked");
+      if (det?.forced_by) out.push(`upstream named "${det.forced_by}"`);
+      if (det?.upstream_on?.length) out.push(`upstream turned on ${det.upstream_on.join(", ")}`);
+    }
     return out;
   }
   if (s.kind === "injector") {
-    return [s.isTemplate ? "template filled from the node's inputs" : `wired ${s.valueType || "value"}`];
+    const out = [s.isTemplate ? "template filled from the node's inputs" : `wired ${s.valueType || "value"}`];
+    if (det?.input) out.push(`from input ${det.input}`);
+    return out;
   }
   return [];
 });
@@ -71,6 +101,48 @@ const chanceText = computed(() => {
   const pct = c * 100;
   return `${pct < 1 ? pct.toFixed(1) : Math.round(pct)}% odds`;
 });
+
+/** The pool after each step, leaving out steps that removed nothing. */
+const poolChain = computed((): string[] => {
+  const st = d.value?.steps;
+  if (!st) return [];
+  const out = [`${st.library} option${st.library === 1 ? "" : "s"}`];
+  if (st.filter !== st.library) out.push(`${st.filter} after the filter`);
+  if (st.toggles !== st.filter) out.push(`${st.toggles} after toggles`);
+  out.push(`${st.live} drawable`);
+  return out;
+});
+
+const CUT_LABEL: Record<string, string> = {
+  filter: "filtered out",
+  toggle: "toggled off",
+  constraint: "excluded by a constraint",
+  weight: "weight 0",
+};
+const pickedIds = computed(() => new Set<string>([d.value?.option_id, ...(d.value?.option_ids ?? [])].filter((x): x is string => typeof x === "string")));
+function isPicked(o: RawOptionRow): boolean {
+  return typeof o.id === "string" && pickedIds.value.has(o.id);
+}
+/** Picked first, then drawable, then the ones that are out. */
+const optionRows = computed((): RawOptionRow[] => {
+  const rows = d.value?.options ?? [];
+  const rank = (o: RawOptionRow): number => (isPicked(o) ? 0 : o.cut ? 2 : 1);
+  return [...rows].sort((a, b) => rank(a) - rank(b));
+});
+const optionsOpen = ref<boolean | null>(null);
+/** Open by default when nothing could be drawn: that's what went wrong. */
+const optionsShown = computed(() => optionsOpen.value ?? (d.value?.steps?.live === 0));
+function fmtWeight(w: number | null | undefined): string {
+  if (w == null) return "—";
+  return Number.isInteger(w) ? String(w) : w.toFixed(2).replace(/0+$/, "");
+}
+function chanceOf(o: RawOptionRow): string {
+  const total = (d.value?.options ?? []).reduce((n, r) => n + (r.cut ? 0 : r.weight ?? 0), 0);
+  if (o.cut || !o.weight || !total) return "";
+  const pct = (o.weight / total) * 100;
+  return `${pct < 1 ? pct.toFixed(1) : Math.round(pct)}%`;
+}
+const readRows = computed(() => Object.entries(d.value?.reads ?? {}));
 
 function refName(uuid: string | undefined): string {
   if (!uuid) return "";
@@ -137,21 +209,62 @@ function modeGlyph(mode: string | undefined): string {
         <span v-if="d.fallback" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-fallback">fallback used</span>
         <span v-if="d.mode === 'pinned' && d.swept" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-swept"><i class="pi pi-replay" /> swept: this frame's option</span>
         <span v-else-if="d.mode === 'pinned'" class="wp-dbg-fact wp-dbg-fact--accent"><i class="pi pi-thumbtack" /> pinned option</span>
-        <span v-if="d.mode === 'match_variable'" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-match-var">matched <code>${{ d.match_variable }}</code></span>
+        <span v-if="d.mode === 'match_variable'" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-match-var">matched <code>${{ d.match_variable }}</code><template v-if="d.match_value != null"> = <code>{{ d.match_value || '""' }}</code></template></span>
         <span v-if="d.mode === 'match_fallback'" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-match-var">no option matched <code>${{ d.match_variable }}</code>, fallback used</span>
         <span v-if="chanceText" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-chance">{{ chanceText }}</span>
         <span v-if="typeof d.pool === 'number'" class="wp-dbg-fact">
           {{ d.pool }} option{{ d.pool === 1 ? "" : "s" }}<template v-if="typeof d.live === 'number' && d.live !== d.pool">, {{ d.live }} drawable</template>
         </span>
         <span v-if="d.option_ids" class="wp-dbg-fact">
-          {{ d.option_ids.length }} pick{{ d.option_ids.length === 1 ? "" : "s" }}<template v-if="d.range"> (asked {{ d.range[0] === d.range[1] ? d.range[0] : `${d.range[0]}–${d.range[1]}` }})</template><template v-if="d.independent">, repeats allowed</template>
+          {{ d.option_ids.length }} pick{{ d.option_ids.length === 1 ? "" : "s" }}<template v-if="d.range"> (asked {{ d.range[0] === d.range[1] ? d.range[0] : `${d.range[0]}–${d.range[1]}` }})</template>{{ d.independent ? ", repeats allowed" : ", no repeats" }}
         </span>
+        <span v-if="d.option_ids && d.separator != null && d.separator !== ', '" class="wp-dbg-fact" data-test="dbg-separator">joined by <code>"{{ d.separator }}"</code></span>
+        <span v-if="d.locked_seed" class="wp-dbg-fact"><i class="pi pi-lock" /> locked seed</span>
         <span v-if="d.filter" class="wp-dbg-fact">filter <code>{{ d.filter }}</code></span>
         <span v-for="(val, name) in d.filter_vars ?? {}" :key="`fv-${name}`" class="wp-dbg-fact" data-test="dbg-filter-var">
           <code>${{ name }}</code> read <code>{{ val || '""' }}</code>
         </span>
         <span v-if="d.exclude_null" class="wp-dbg-fact">no empty option</span>
       </div>
+      <div v-if="poolChain.length" class="wp-dbg-detail__chain" data-test="dbg-pool-chain" :class="{ 'is-dead': d.steps?.live === 0 }">
+        <template v-for="(p, i) in poolChain" :key="i"><span v-if="i" class="wp-dbg-dim" aria-hidden="true">→</span><span>{{ p }}</span></template>
+      </div>
+      <Disclosure
+        v-if="d.options?.length"
+        size="sm"
+        lazy
+        :open="optionsShown"
+        :trigger-attrs="{ 'data-test': 'dbg-options-head' }"
+        @update:open="(v: boolean) => (optionsOpen = v)"
+      >
+        <template #summary>
+          <span class="wp-dbg-detail__label">Options ({{ (d.options?.length ?? 0) + (d.options_more ?? 0) }})</span>
+        </template>
+        <ul class="wp-dbg-opts" data-test="dbg-options">
+          <li
+            v-for="o in optionRows"
+            :key="String(o.id)"
+            class="wp-dbg-opt"
+            :class="{ 'is-picked': isPicked(o), 'is-out': !!o.cut }"
+            data-test="dbg-option"
+          >
+            <i :class="['pi', isPicked(o) ? 'pi-check-circle' : o.cut ? 'pi-ban' : 'pi-circle']" class="wp-dbg-opt__mark" aria-hidden="true" />
+            <span class="wp-dbg-opt__value" :title="o.value">
+              <template v-if="o.null"><em class="wp-dbg-dim">empty option</em></template>
+              <template v-else>{{ o.value }}</template>
+            </span>
+            <Chip v-if="o.fallback" size="xs" tone="info">fallback</Chip>
+            <Chip v-if="o.cut" size="xs" :tone="o.cut === 'constraint' ? 'warn' : 'default'" data-test="dbg-option-cut">{{ CUT_LABEL[o.cut] }}</Chip>
+            <span class="wp-dbg-opt__weight" :title="o.override != null ? `library weight ${fmtWeight(o.base)}, this node sets ${fmtWeight(o.override)}` : 'weight'">
+              <template v-if="o.override != null"><s>{{ fmtWeight(o.base) }}</s> {{ fmtWeight(o.override) }}</template>
+              <template v-else>{{ fmtWeight(o.base) }}</template>
+              <template v-if="!o.cut && o.weight != null && o.weight !== (o.override ?? o.base)"> → {{ fmtWeight(o.weight) }}</template>
+            </span>
+            <span class="wp-dbg-opt__chance">{{ chanceOf(o) }}</span>
+          </li>
+          <li v-if="d.options_more" class="wp-dbg-dim">and {{ d.options_more }} more</li>
+        </ul>
+      </Disclosure>
       <div v-if="step.appliedBy.length" class="wp-dbg-detail__block">
         <div class="wp-dbg-detail__label">Re-weighted by</div>
         <div v-for="(c, i) in step.appliedBy" :key="i" class="wp-dbg-detail__line" data-test="dbg-applied-constraint">
@@ -260,6 +373,39 @@ function modeGlyph(mode: string | undefined): string {
       Run the graph again to see which branch fired.
     </p>
 
+    <!-- Fixed values -->
+    <template v-if="step.kind === 'fixed' && d">
+      <div class="wp-dbg-detail__facts" data-test="dbg-fixed-facts">
+        <span class="wp-dbg-fact wp-dbg-fact--accent">{{ d.source === "override" ? "this node's own rows" : "the library's rows" }}</span>
+        <span v-if="d.held" class="wp-dbg-fact">held from frame 0</span>
+        <span v-if="d.locked_seed" class="wp-dbg-fact"><i class="pi pi-lock" /> locked seed</span>
+        <span v-if="d.toggled_off?.length" class="wp-dbg-fact">toggled off: {{ d.toggled_off.map((n) => `$${n}`).join(", ") }}</span>
+      </div>
+      <div v-if="d.rows?.some((r) => r.raw)" class="wp-dbg-detail__block">
+        <div class="wp-dbg-detail__label">Written as</div>
+        <div v-for="r in d.rows.filter((x) => x.raw)" :key="r.name" class="wp-dbg-detail__line">
+          <code>${{ r.name }}</code><span class="wp-dbg-dim">from</span>
+          <RichTextPreview :value="r.raw ?? ''" :uuid-to-name="uuidToName" :uuid-to-kind="uuidToKind" surface="fixed_values" />
+        </div>
+      </div>
+    </template>
+
+    <!-- Templates: combine, Injector rows, Toggles Pick one -->
+    <div v-if="d?.template || d?.raw" class="wp-dbg-detail__block" data-test="dbg-template">
+      <div class="wp-dbg-detail__label">
+        {{ d.template ? (d.template_source === "override" ? "Template (this node's)" : "Template") : "Value as written" }}
+      </div>
+      <RichTextPreview :value="d.template || d.raw || ''" :uuid-to-name="uuidToName" :uuid-to-kind="uuidToKind" surface="wildcard" />
+    </div>
+    <div v-if="readRows.length" class="wp-dbg-detail__block" data-test="dbg-reads">
+      <div class="wp-dbg-detail__label">Read</div>
+      <div v-for="[name, val] in readRows" :key="name" class="wp-dbg-detail__line">
+        <code>${{ name }}</code>
+        <template v-if="val === null"><Chip size="xs" tone="warn">not set</Chip></template>
+        <template v-else><span class="wp-dbg-dim">=</span><span class="wp-dbg-read">{{ val || '""' }}</span></template>
+      </div>
+    </div>
+
     <!-- Node rows: Context Loop, Model Info, Toggles, Injector -->
     <div v-if="nodeFacts.length" class="wp-dbg-detail__facts" data-test="dbg-node-facts">
       <span v-for="(f, i) in nodeFacts" :key="i" class="wp-dbg-fact" :class="{ 'wp-dbg-fact--accent': i === 0 }">{{ f }}</span>
@@ -278,6 +424,20 @@ function modeGlyph(mode: string | undefined): string {
           {{ step.constraint.exceptions }} exception{{ step.constraint.exceptions === 1 ? "" : "s" }}
         </span>
         <span v-if="step.constraint.only" class="wp-dbg-fact wp-dbg-fact--accent" title="An Only rule turns its row into an allow-list">uses Only</span>
+      </div>
+      <div v-if="step.appliedTo.length" class="wp-dbg-detail__block" data-test="dbg-constraint-targets">
+        <div class="wp-dbg-detail__label">Re-weighted</div>
+        <div class="wp-dbg-detail__line">
+          <Button
+            v-for="t in step.appliedTo"
+            :key="t.key"
+            variant="link"
+            size="sm"
+            class="wp-dbg-link"
+            hint="Show this step in the trace"
+            @click="emit('goto-step', t.key)"
+          >{{ t.order }} · {{ t.name }}</Button>
+        </div>
       </div>
     </template>
 
@@ -390,6 +550,26 @@ function modeGlyph(mode: string | undefined): string {
 .wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; background: var(--wp-kind-constraint); }
 .wp-dbg-dim code { font-family: var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-detail__note { margin: 0; font-style: italic; }
+.wp-dbg-detail__chain { display: flex; flex-wrap: wrap; gap: 5px; font-size: 10.5px; color: var(--wp-text-muted); }
+.wp-dbg-detail__chain.is-dead > span:last-child { color: var(--wp-warn); font-weight: 600; }
+.wp-dbg-read { font-family: var(--wp-font-mono); color: var(--wp-text); overflow-wrap: anywhere; }
+.wp-dbg-opts { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; }
+.wp-dbg-opt {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 2px 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  font-size: 11px;
+}
+.wp-dbg-opt.is-picked { background: color-mix(in oklab, var(--wp-accent) 12%, transparent); }
+.wp-dbg-opt.is-out .wp-dbg-opt__value { color: var(--wp-text-dim); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--wp-text-dim) 60%, transparent); }
+/* Kit chips at the row's text size. */
+.wp-dbg-opt .wp-chip, .wp-dbg-detail__line .wp-chip { height: 16px; min-height: 0; box-sizing: border-box; padding: 0 6px; font: 600 9.5px/1 var(--wp-font-sans); flex: none; }
+.wp-dbg-opt__mark { flex: none; font-size: 10px; color: var(--wp-text-dim); }
+.wp-dbg-opt.is-picked .wp-dbg-opt__mark { color: var(--wp-accent-text, var(--wp-accent)); }
+.wp-dbg-opt__value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--wp-font-mono); color: var(--wp-text); }
+.wp-dbg-opt__weight { flex: none; font: 500 10px/1 var(--wp-font-mono); color: var(--wp-text-muted); }
+.wp-dbg-opt__weight s { color: var(--wp-text-dim); }
+.wp-dbg-opt__chance { flex: none; width: 3.5em; text-align: right; font: 600 10px/1 var(--wp-font-mono); color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-dbg-rule {
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-radius, 4px);

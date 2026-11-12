@@ -77,6 +77,48 @@ export interface RawDetail {
   fallback?: boolean;
   range?: [number, number];
   independent?: boolean;
+  /** Multi-pick: what joins the picks. */
+  separator?: string;
+  /** `match_variable`: the value the variable held. */
+  match_value?: string;
+  /** Every option of the use: library weight, final weight (null when the
+   *  filter or a toggle took it out), why it can't be drawn. */
+  options?: RawOptionRow[];
+  /** Options past the shown ones (only counted). */
+  options_more?: number;
+  /** Pool size after each step: library → filter → toggles → drawable. */
+  steps?: { library: number; filter: number; toggles: number; live: number };
+  /** Rolled with the instance's locked seed. */
+  locked_seed?: boolean;
+  // fixed values
+  /** "override" (the node's own rows) or "library". */
+  source?: string;
+  toggled_off?: string[];
+  rows?: Array<{ name: string; raw?: string }>;
+  // combine + Injector templates
+  template?: string;
+  template_source?: string;
+  /** Each `$name` the template read; null when nothing set it. */
+  reads?: Record<string, string | null>;
+  // Model Info rows
+  config_class?: string;
+  rule?: string;
+  rule_variant?: string;
+  /** Model Info: how many variant rules it had (absent when pinned). */
+  rules_count?: number;
+  stem?: string;
+  file?: string;
+  // Toggles rows
+  switch?: boolean;
+  upstream_read?: string | null;
+  needs?: string;
+  held_off?: boolean;
+  picked?: string;
+  forced_by?: string;
+  upstream_on?: string[];
+  raw?: string;
+  // Injector rows
+  input?: string;
   constraints?: Array<{ id?: string; uid?: string; name?: string; source?: string; source_value?: unknown }>;
   // derivation
   rules?: RawRuleDetail[];
@@ -95,6 +137,25 @@ export interface RawDetail {
   value_line?: number;
   values?: number;
   bypass?: boolean;
+  strategy?: string;
+  skipped?: number;
+  /** This frame's sweep pins: module uid → option id. */
+  pins?: Record<string, string>;
+  hold_others?: boolean;
+}
+
+export interface RawOptionRow {
+  id?: string | null;
+  value?: string;
+  base?: number;
+  weight?: number | null;
+  /** Why it can't be drawn: the pool filter, the node's option toggles,
+   *  a constraint, or a weight of 0. */
+  cut?: "filter" | "toggle" | "constraint" | "weight";
+  /** The node's weight override, when it differs from the library's. */
+  override?: number;
+  null?: boolean;
+  fallback?: boolean;
 }
 
 export interface RawTraceEntry {
@@ -212,6 +273,8 @@ export interface TraceStep {
   refs: RefRow[];
   constraint: ConstraintInfo | null;
   appliedBy: AppliedConstraint[];
+  /** Constraint steps: the wildcard steps it re-weighted this run. */
+  appliedTo: Array<{ key: string; name: string; order: number }>;
   warningCount: number;
 }
 
@@ -720,6 +783,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       refs: refsByOwner.get(`${nodeId}|${str(t._uid)}`) ?? [],
       constraint,
       appliedBy: [],
+      appliedTo: [],
       warningCount: 0,
     };
   });
@@ -739,6 +803,9 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
         source: str(c.source),
         sourceValue: formatValue(c.source_value),
       });
+      if (own && !own.appliedTo.some((t) => t.key === s.key)) {
+        own.appliedTo.push({ key: s.key, name: s.name || s.bindings[0] || s.kindLabel, order: s.order });
+      }
     }
   }
 

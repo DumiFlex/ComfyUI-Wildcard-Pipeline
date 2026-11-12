@@ -100,3 +100,84 @@ describe("DebugStepDetail derivation rules", () => {
     expect(rows[1].text()).toContain("extra arms");
   });
 });
+
+function mountStep(entries: unknown[], index = 0) {
+  const model = buildModel({ __wp_trace__: entries });
+  return {
+    model,
+    w: mount(DebugStepDetail, {
+      props: { step: model.steps[index], warnings: [], uuidToName: new Map(), uuidToKind: new Map(), canFocus: false },
+    }),
+  };
+}
+
+describe("DebugStepDetail per-kind details", () => {
+  it("lists a wildcard's options, picked first and the cut ones last with why", async () => {
+    const { w } = mountStep([{
+      id: "w0000001", _uid: "u1", type: "wildcard", status: "ok", name: "Mood",
+      writes: [{ variable: "mood", value: "calm" }],
+      detail: {
+        option_id: "calm", chance: 0.5, pool: 3, live: 2,
+        steps: { library: 4, filter: 3, toggles: 3, live: 2 },
+        options: [
+          { id: "angry", value: "angry", base: 1, weight: null, cut: "filter" },
+          { id: "tense", value: "tense", base: 1, weight: 0, cut: "constraint" },
+          { id: "dreamy", value: "dreamy", base: 1, override: 3, weight: 3 },
+          { id: "calm", value: "calm", base: 1, weight: 1 },
+        ],
+      },
+    }]);
+    expect(w.find('[data-test="dbg-pool-chain"]').text()).toBe("4 options→3 after the filter→2 drawable");
+    // Folded while something could be drawn.
+    expect(w.find('[data-test="dbg-options"]').exists()).toBe(false);
+    await w.find('[data-test="dbg-options-head"]').trigger("click");
+    const rows = w.findAll('[data-test="dbg-option"]');
+    expect(rows.map((r) => r.find(".wp-dbg-opt__value").text())).toEqual(["calm", "dreamy", "angry", "tense"]);
+    expect(rows[0].classes()).toContain("is-picked");
+    expect(rows[1].text()).toContain("75%");
+    expect(rows[2].find('[data-test="dbg-option-cut"]').text()).toBe("filtered out");
+    expect(rows[3].find('[data-test="dbg-option-cut"]').text()).toBe("excluded by a constraint");
+  });
+
+  it("opens the options when nothing could be drawn", () => {
+    const { w } = mountStep([{
+      id: "w0000001", type: "wildcard", status: "ok", writes: [{ variable: "mood", value: "" }],
+      detail: { pool: 0, live: 0, steps: { library: 1, filter: 1, toggles: 0, live: 0 }, options: [{ id: "a", value: "a", base: 1, weight: null, cut: "toggle" }] },
+    }]);
+    expect(w.find('[data-test="dbg-options"]').exists()).toBe(true);
+    expect(w.find('[data-test="dbg-pool-chain"]').classes()).toContain("is-dead");
+  });
+
+  it("shows a combine's template and flags a $var nothing set", () => {
+    const { w } = mountStep([{
+      id: "c0000001", type: "combine", status: "ok", writes: [{ variable: "scene", value: "calm light" }],
+      detail: { template: "$mood light $weather", template_source: "library", reads: { mood: "calm", weather: null } },
+    }]);
+    expect(w.find('[data-test="dbg-template"]').text()).toContain("light");
+    const reads = w.find('[data-test="dbg-reads"]').text();
+    expect(reads).toContain("$mood");
+    expect(reads).toContain("calm");
+    expect(reads).toContain("not set");
+  });
+
+  it("lists the steps a constraint re-weighted", () => {
+    const { w } = mountStep([
+      { id: "k0000001", _uid: "k1", type: "constraint", status: "ok", name: "Fits", detail: { uid: "k1", reach: { mode: "all" } } },
+      {
+        id: "w0000001", _uid: "u1", type: "wildcard", status: "ok", name: "Mood", writes: [{ variable: "mood", value: "calm" }],
+        detail: { constraints: [{ id: "k0000001", uid: "k1", name: "Fits", source: "s", source_value: "x" }] },
+      },
+    ]);
+    expect(w.find('[data-test="dbg-constraint-targets"]').text()).toContain("2 · Mood");
+  });
+
+  it("says why a toggle is off and what upstream read", () => {
+    const { w } = mountStep([{
+      node: "WP_Toggles", node_id: "5", binding: "rain", type: "toggle", value: "false", source: "upstream",
+      detail: { switch: true, upstream_read: "no", needs: "Weather", held_off: true },
+    }]);
+    const facts = w.find('[data-test="dbg-node-facts"]').text();
+    expect(facts).toContain('upstream read "no"');
+    expect(facts).toContain("off: needs Weather, which is off");
+  });
+});

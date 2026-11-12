@@ -11,6 +11,8 @@ Resolution (``needs`` links, Pick one) lives in ``engine/toggles.py``.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import negatives, template, toggles
@@ -66,6 +68,7 @@ class WPToggles(io.ComfyNode):
         values = toggles.resolve(cfg)
         set_vars = {t.var for t in cfg.toggles if t.id in from_upstream}
         group = cfg.group_var if cfg.mode == "one" else ""
+        raw_values = dict(values)
         on_off = toggles.bools(cfg)
         valued = {t.var for t in cfg.toggles if t.value and t.var in values}
         # A value may read upstream variables and the toggles' own. Inline
@@ -136,6 +139,7 @@ class WPToggles(io.ComfyNode):
                 flags.pop(k, None)
         if flags or "__wp_internal_flags__" in out_internals:
             out_internals["__wp_internal_flags__"] = flags
+        details = _trace_details(cfg, values, group, raw_values, upstream_ctx)
         traces = [
             {
                 "node": "WP_Toggles",
@@ -147,6 +151,7 @@ class WPToggles(io.ComfyNode):
                 **({"has_value": True} if name in valued and name != group else {}),
                 **({"negative": filed[name]} if name in filed else {}),
                 **({"source": "upstream"} if name in set_vars else {}),
+                **({"detail": details[name]} if details.get(name) else {}),
             }
             for name, value in values.items()
         ]
@@ -182,3 +187,42 @@ class WPToggles(io.ComfyNode):
             PipelineContext.Type(context=ctx, debug=debug, internals=out_internals),
             *toggles.output_values(cfg),
         )
+
+
+def _trace_details(
+    cfg: toggles.Config,
+    values: dict[str, str],
+    group: str,
+    raw_values: dict[str, str],
+    upstream_ctx: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """WP Debug: why each toggle ended up on or off, and how Pick one chose."""
+    eff = toggles.effective(cfg)
+    by_id = {t.id: t for t in cfg.toggles}
+    out: dict[str, dict[str, Any]] = {}
+    for t in cfg.toggles:
+        if not t.var or t.var not in values:
+            continue
+        d: dict[str, Any] = {"switch": t.on}
+        if raw_values.get(t.var, "") != values[t.var]:
+            d["raw"] = raw_values.get(t.var, "")[:240]
+        if t.upstream:
+            raw = upstream_ctx.get(t.var)
+            d["upstream_read"] = None if raw is None else str(raw)[:80]
+        if cfg.mode == "any" and t.needs:
+            parent = by_id.get(t.needs)
+            d["needs"] = parent.name if parent else ""
+            if t.on and not eff[t.id]:
+                d["held_off"] = True
+        out[t.var] = d
+    if group and group in values:
+        picked = next((t for t in cfg.toggles if eff.get(t.id)), None)
+        d = {"picked": picked.name if picked else ""}
+        if cfg.forced and cfg.forced in by_id:
+            d["forced_by"] = str(upstream_ctx.get(group, ""))[:80]
+        if cfg.upstream_on:
+            d["upstream_on"] = [by_id[i].name for i in cfg.upstream_on if i in by_id]
+        if raw_values.get(group, "") != values[group]:
+            d["raw"] = raw_values.get(group, "")[:240]
+        out[group] = d
+    return out
