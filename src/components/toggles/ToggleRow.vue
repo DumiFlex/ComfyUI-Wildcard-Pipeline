@@ -108,7 +108,7 @@ function flip(): void {
 </script>
 
 <template>
-  <div class="wp-tgr" :class="{ 'is-wide': tile && look === 'buttons' }" :style="indent ? { marginLeft: `${indent}px` } : undefined" :data-wp-vars="t.var || undefined">
+  <div class="wp-tgr" :class="{ 'is-tile': tile }" :style="indent ? { marginLeft: `${indent}px` } : undefined" :data-wp-vars="t.var || undefined">
     <div
       class="wp-tgr__row"
       :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing, 'has-icon-color': !!t.icon_color, 'has-text-color': !!t.text_color }"
@@ -296,6 +296,12 @@ function flip(): void {
 .wp-tgr__chip { display: flex; flex: 1 1 0; min-width: 0; }
 .wp-tgr__chip :deep(.wp-switch--chip) { width: 100%; min-width: 0; justify-content: center; }
 .wp-tgr__row.is-chip .wp-tgr__sub { flex: 0 1 auto; max-width: 50%; }
+/* In a grid every tile in a line is as tall as the tallest (a name + var
+ * tile), and a chip fills its tile, so a chip next to a switch or a checkbox
+ * isn't a smaller box. */
+.wp-tgr.is-tile > .wp-tgr__row { flex: 1 1 auto; }
+.wp-tgr.is-tile .wp-tgr__row.is-chip { align-items: stretch; }
+.wp-tgr.is-tile .wp-tgr__chip :deep(.wp-switch--chip) { height: auto; min-height: var(--wp-control-h-sm); }
 .wp-tgr__sub {
   display: inline-flex;
   align-items: center;

@@ -16,7 +16,7 @@
  *
  * Toggles belong to the label above them. One sortable list holds labels
  * and toggles, so a toggle drags into or out of a group and a label drags
- * with its toggles (`dragRow`); the edit panel's Group field moves one too.
+ * with its toggles (`dropToggleRow`); the edit panel's Group field moves one too.
  *
  * Value contract: `modelValue` is a `TogglesConfig`; every edit emits the
  * whole next config (`src/widgets/toggles.ts` fits the outputs to it).
@@ -53,7 +53,8 @@ import {
   type TogglesMode,
   type TogglesItem,
   type PickStyle,
-  dragRow,
+  dropToggleRow,
+  type ToggleDropEdge,
   visibleRows,
 } from "../../extension/toggles";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";
@@ -275,7 +276,7 @@ function removeToggle(t: ToggleRow): void {
 }
 /** Remove a label; its toggles join the group above. */
 function removeLabel(l: LabelRow): void {
-  setRows(cfg.value.rows.filter((r) => r.id !== l.id));
+  setRows(rowsOf(groupsOf({ ...cfg.value, rows: cfg.value.rows.filter((r) => r.id !== l.id) })));
 }
 
 function toggleEdit(t: ToggleRow): void {
@@ -353,7 +354,10 @@ function needsOptions(t: ToggleRow): { value: string; label: string }[] {
 }
 
 function groupOptions(): { value: string; label: string }[] {
-  return groups.value.map((g) => ({ value: g.label?.id ?? "", label: g.label ? (g.label.name || "Group") : "No label (top)" }));
+  // One "no group" choice, however many runs of loose toggles there are.
+  return groups.value
+    .filter((g, i) => g.label || i === 0)
+    .map((g) => ({ value: g.label?.id ?? "", label: g.label ? (g.label.name || "Group") : "No label (top)" }));
 }
 function groupIdOf(t: ToggleRow): string {
   return groups.value.find((g) => g.toggles.some((x) => x.id === t.id))?.label?.id ?? "";
@@ -364,6 +368,29 @@ type LabelledGroup = ToggleGroup & { label: LabelRow };
 const labelled = computed(() => groups.value.filter((g): g is LabelledGroup => g.label !== null));
 /** The edit view's rows: labels and the toggles of unfolded groups. */
 const shownRows = computed(() => visibleRows(cfg.value));
+/** A group's key: its label's id; `top` for the toggles above the first
+ *  label, and `loose-<first toggle>` for a run dropped below a group. */
+function groupKey(g: ToggleGroup, i: number): string {
+  return g.label?.id ?? (i === 0 ? "top" : `loose-${g.toggles[0]?.id ?? i}`);
+}
+/** Where an edit-view drag would land, as the kit list asks it: no line
+ *  when it can't land there; inside a group the line is indented and wears
+ *  the group's colour, below a group it spans the row. */
+function dropPlanFor(d: { from: number; over: number; edge: ToggleDropEdge }) {
+  const from = shownRows.value[d.from];
+  const over = shownRows.value[d.over];
+  return from && over ? dropToggleRow(cfg.value, from.id, over.id, d.edge) : null;
+}
+function dropLineFor(d: { from: number; over: number; edge: ToggleDropEdge }): { inset?: number; color?: string } | boolean {
+  const plan = dropPlanFor(d);
+  if (!plan) return false;
+  const moved = shownRows.value[d.from];
+  return plan.group && moved?.kind === "toggle" ? { inset: 22, color: labelColor(plan.group) } : true;
+}
+function onDrop(d: { from: number; over: number; edge: ToggleDropEdge }): void {
+  const plan = dropPlanFor(d);
+  if (plan) setRows(plan.rows);
+}
 function groupOfLabel(l: LabelRow): ToggleGroup {
   return groups.value.find((g) => g.label?.id === l.id) ?? { label: l, toggles: [] };
 }
@@ -488,7 +515,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       </span>
     </div>
 
-    <template v-for="g in groups" :key="g.label?.id ?? '__top'">
+    <template v-for="(g, gi) in groups" :key="groupKey(g, gi)">
       <!-- Clean view: plain rows, no grips. -->
       <div v-if="!editMode" class="wp-tg__group-box">
         <div
@@ -527,7 +554,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             class="wp-tg__sockline is-on"
             :data-wp-out="mergedOuts(socketLines(g))"
             :data-wp-socket="mergedSockets(socketLines(g))"
-            :data-test="`tg-sockmerged-${g.label?.id ?? 'top'}`"
+            :data-test="`tg-sockmerged-${groupKey(g, gi)}`"
           >
             <span class="wp-tg__sockpad"><WpIconButton variant="bare" icon="pi-caret-right" label="Show each toggle's wires" data-test="tg-sock-expand" @click="toggleMerged(g)" /></span>
             <span v-tooltip="sockNames(g, 'in')" class="wp-tg__sockname">{{ sockCount(g, "in") }}</span>
@@ -539,7 +566,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             class="wp-tg__sockline"
             :data-wp-out="line.right ? `toggle_${line.right.out}` : undefined"
             :data-wp-socket="line.left ? ctlInputName(line.left.id) : undefined"
-            :data-test="`tg-sockline-${g.label?.id ?? 'top'}-${i}`"
+            :data-test="`tg-sockline-${groupKey(g, gi)}-${i}`"
           >
             <!-- One caret column for every line, so the names line up. -->
             <span v-if="sockPairs(g).length > 1" class="wp-tg__sockpad">
@@ -573,8 +600,8 @@ function foldedOuts(g: ToggleGroup): string | undefined {
     </template>
 
     <template v-if="editMode">
-      <!-- One list for toggles and labels, so a toggle drags into or out of
-           a group and a label drags with its toggles (`dragRow`). -->
+      <!-- One list for toggles and labels, so a toggle drags into, out of or
+           below a group and a label drags with its toggles (`dropToggleRow`). -->
       <SortableList
         v-if="shownRows.length"
         :model-value="shownRows"
@@ -583,7 +610,9 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         label="Toggles and labels"
         size="sm"
         class="wp-tg__list"
-        @move="(m: { from: number; to: number }) => setRows(dragRow(cfg, m.from, m.to))"
+        end-zone
+        :drop-line="dropLineFor"
+        @drop="onDrop"
       >
         <template #item="{ item }">
           <div
@@ -722,19 +751,16 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 .wp-tg--edit .wp-tg__label { min-height: 38px; }
 .wp-tg__member.is-grouped { padding-left: 8px; border-left: 2px solid var(--wp-tg-group, var(--wp-border)); }
 .wp-tg__group-box { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-/* Grid layout: tiles wrap to the node's width, never resize it. */
+/* Grid layout: each tile is as wide as what it shows (name, var, control),
+ * tiles wrap to the node's width, never resize it, and the tiles in a line
+ * grow to fill it, so nothing is cut short or stretched to two columns. */
 .wp-tg__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   min-width: 0;
 }
-/* A Buttons toggle (two words) takes two tiles once two fit, so its name
- * isn't cut to "Tog…". */
-.wp-tg__grid { container-type: inline-size; }
-@container (min-width: 250px) {
-  .wp-tg__grid > .wp-tgr.is-wide { grid-column: span 2; }
-}
+.wp-tg__grid > .wp-tgr { flex: 1 1 auto; min-width: 96px; max-width: 100%; }
 /* Grid: a thin line under the tiles per wired toggle, so its control dot
  * (left) and BOOLEAN output (right) sit level with its name. */
 .wp-tg__sockline {

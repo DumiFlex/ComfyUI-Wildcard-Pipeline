@@ -49,6 +49,9 @@ export interface ToggleRow {
   invert?: true;
   /** Clean view: no `$variable` line under the name. */
   hide_var?: true;
+  /** In no group though a label is above it: dropped below a group. Only on
+   *  toggles after the first label (`rowsOf` sets it). */
+  ungrouped?: true;
   /** What the variable gets while on, instead of "true" ("" while off); in
    *  Pick one also what the picked variable gets instead of the name. May
    *  read `$vars`. `$name.bool` still reads the switch. */
@@ -285,6 +288,7 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
     if (o.invert === true) t.invert = true;
     if (o.hide_var === true) t.hide_var = true;
+    if (o.ungrouped === true) t.ungrouped = true;
     if (o.visible === true) t.visible = true;
     if (iconName(o.icon)) t.icon = iconName(o.icon);
     if (hex(o.icon_color)) t.icon_color = hex(o.icon_color);
@@ -530,18 +534,42 @@ export interface ToggleGroup {
   toggles: ToggleRow[];
 }
 
-/** Rows as label groups (toggles belong to the label above them). */
+/** Rows as label groups: toggles belong to the label above them, except an
+ *  `ungrouped` one, which starts a run of toggles in no group below it. */
 export function groupsOf(cfg: TogglesConfig): ToggleGroup[] {
   const groups: ToggleGroup[] = [{ label: null, toggles: [] }];
   for (const r of cfg.rows) {
     if (r.kind === "label") groups.push({ label: r, toggles: [] });
-    else groups[groups.length - 1].toggles.push(r);
+    else {
+      if (r.ungrouped && groups[groups.length - 1].label) groups.push({ label: null, toggles: [] });
+      groups[groups.length - 1].toggles.push(r);
+    }
   }
   return groups;
 }
 
+/** Rows from groups, marking the toggles in no group below a label
+ *  `ungrouped` (and no others), so `groupsOf` reads them back the same. */
 export function rowsOf(groups: ToggleGroup[]): TogglesItem[] {
-  return groups.flatMap((g) => (g.label ? [g.label, ...g.toggles] : g.toggles));
+  let labelSeen = false;
+  const out: TogglesItem[] = [];
+  for (const g of groups) {
+    if (g.label) {
+      labelSeen = true;
+      out.push(g.label);
+    }
+    for (const t of g.toggles) {
+      const loose = !g.label && labelSeen;
+      if (loose === !!t.ungrouped) out.push(t);
+      else if (loose) out.push({ ...t, ungrouped: true });
+      else {
+        const rest = { ...t };
+        delete rest.ungrouped;
+        out.push(rest);
+      }
+    }
+  }
+  return out;
 }
 
 /** Depth of a toggle in its needs chain (0 = needs nothing), for the indent. */
@@ -622,48 +650,102 @@ export function visibleRows(cfg: TogglesConfig): TogglesItem[] {
   return groupsOf(cfg).flatMap((g) => (g.label ? [g.label, ...(g.label.collapsed ? [] : g.toggles)] : g.toggles));
 }
 
+/** Where a dragged edit-view row lands: beside row `over`, or `end` below
+ *  the last row. */
+export type ToggleDropEdge = "before" | "after" | "end";
+
 /**
- * Rows after dragging the edit view's row `from` to `to` (indices into
- * {@link visibleRows}). A toggle joins the group of the label above where it
- * lands (a folded one unfolds). A label takes all its toggles along and lands
- * at a group edge: dropped among another group's toggles, it moves down past
- * them, so it never splits a group.
+ * The rows after dropping the edit view's row `fromId` beside `overId`, and
+ * the group it lands in (null: none), or null when it can't land there or
+ * nothing would change.
+ *
+ * A toggle beside another toggle joins that toggle's group; after a label it
+ * goes first in that group (a folded one unfolds); before a label or at the
+ * end it lands below the group above, in no group. A label moves with all
+ * its toggles and only lands between groups, never inside one.
  */
-export function dragRow(cfg: TogglesConfig, from: number, to: number): TogglesItem[] {
-  const shown = visibleRows(cfg);
-  const moved = shown[from];
-  if (!moved || from === to || to < 0 || to >= shown.length) return cfg.rows;
-  const next = [...shown];
-  next.splice(from, 1);
-  next.splice(to, 0, moved);
+export function dropToggleRow(
+  cfg: TogglesConfig,
+  fromId: string,
+  overId: string,
+  edge: ToggleDropEdge,
+): { rows: TogglesItem[]; group: LabelRow | null } | null {
   const groups = groupsOf(cfg);
-  const ownToggles = (labelId: string): ToggleRow[] => groups.find((g) => g.label?.id === labelId)?.toggles ?? [];
-  let list = next;
-  let block: ToggleRow[] = [];
-  if (moved.kind === "label") {
-    block = ownToggles(moved.id);
-    const inBlock = new Set(block.map((t) => t.id));
-    list = next.filter((r) => !inBlock.has(r.id) && r.id !== moved.id);
-    let at = next.filter((r) => !inBlock.has(r.id)).indexOf(moved);
-    while (at < list.length && list[at]?.kind === "toggle") at++;
-    list.splice(at, 0, moved);
-  }
-  const out: TogglesItem[] = [];
-  let lastLabel: LabelRow | null = null;
-  for (const r of list) {
-    if (r.kind === "label") {
-      lastLabel = r;
-      out.push(r);
-      if (r.id === moved.id) out.push(...block);
-      else if (r.collapsed) out.push(...ownToggles(r.id));
-      continue;
+  const groupOf = (id: string): ToggleGroup | undefined =>
+    groups.find((g) => g.label?.id === id || g.toggles.some((t) => t.id === id));
+  const moved = cfg.rows.find((r) => r.id === fromId);
+  const over = cfg.rows.find((r) => r.id === overId);
+  if (!moved || !over) return null;
+  let next: ToggleGroup[];
+  let group: LabelRow | null;
+  if (moved.kind === "toggle") {
+    if (edge !== "end" && over.id === moved.id) return null;
+    next = groups.map((g) => ({ label: g.label, toggles: g.toggles.filter((t) => t.id !== moved.id) }));
+    const find = (id: string): ToggleGroup | undefined =>
+      next.find((g) => g.label?.id === id || g.toggles.some((t) => t.id === id));
+    if (edge === "end" || (over.kind === "label" && edge === "before")) {
+      // Below the group above: in no group.
+      const at = edge === "end" ? next.length : next.findIndex((g) => g.label?.id === over.id);
+      const above = next[at - 1];
+      if (above && !above.label) above.toggles.push(moved);
+      else next.splice(at, 0, { label: null, toggles: [moved] });
+      group = null;
+    } else if (over.kind === "label") {
+      const g = find(over.id);
+      if (!g?.label) return null;
+      g.toggles.unshift(moved);
+      if (g.label.collapsed) g.label = { ...g.label, collapsed: false };
+      group = g.label;
+    } else {
+      const g = find(over.id);
+      if (!g) return null;
+      const i = g.toggles.findIndex((t) => t.id === over.id);
+      g.toggles.splice(edge === "before" ? i : i + 1, 0, moved);
+      group = g.label;
     }
-    if (r.id === moved.id && lastLabel?.collapsed) {
-      const i = out.indexOf(lastLabel);
-      out[i] = { ...lastLabel, collapsed: false };
-      lastLabel = out[i] as LabelRow;
+  } else {
+    // A label lands only between groups: before a label, among toggles in
+    // no group, after a group's last toggle (or a folded / empty label), or
+    // at the end.
+    const own = groupOf(moved.id);
+    if (!own) return null;
+    const og = groupOf(over.id);
+    if (!og) return null;
+    const lastOf = (g: ToggleGroup): string | undefined => (g.label?.collapsed ? g.label.id : g.toggles[g.toggles.length - 1]?.id ?? g.label?.id);
+    let at: { before: string } | { after: string } | "end";
+    if (edge === "end") at = "end";
+    else if (over.kind === "label" && edge === "before") at = { before: over.id };
+    else if (!og.label) at = edge === "before" ? { before: over.id } : { after: over.id };
+    else if (edge === "after" && lastOf(og) === over.id) at = { after: over.id };
+    else return null;
+    if (og === own && at !== "end") return null;
+    const rest = groups.filter((g) => g !== own);
+    next = [];
+    let placed = false;
+    const put = (): void => { next.push(own); placed = true; };
+    for (const g of rest) {
+      if (at !== "end" && "before" in at && g.label?.id === at.before) put();
+      if (at !== "end" && !g.label && g.toggles.some((t) => t.id === ("before" in at ? at.before : at.after))) {
+        const key = "before" in at ? at.before : at.after;
+        const i = g.toggles.findIndex((t) => t.id === key) + ("before" in at ? 0 : 1);
+        const head = g.toggles.slice(0, i);
+        const tail = g.toggles.slice(i);
+        if (head.length || !next.length) next.push({ label: null, toggles: head });
+        put();
+        if (tail.length) next.push({ label: null, toggles: tail });
+        continue;
+      }
+      next.push(g);
+      if (at !== "end" && "after" in at && g.label && lastOf(g) === at.after) put();
     }
-    out.push(r);
+    if (!placed) put();
+    group = own.label;
   }
-  return out;
+  const rows = rowsOf(next.filter((g, i) => i === 0 || g.label || g.toggles.length));
+  const same = rows.length === cfg.rows.length && rows.every((r, i) => {
+    const o = cfg.rows[i];
+    return o?.id === r.id && (r.kind !== "toggle" || o.kind !== "toggle" || !!r.ungrouped === !!o.ungrouped)
+      && (r.kind !== "label" || o.kind !== "label" || !!r.collapsed === !!o.collapsed);
+  });
+  return same ? null : { rows, group };
 }

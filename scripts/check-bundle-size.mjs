@@ -388,7 +388,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // shape-check chunk (Note add-to-library press, Import tab) grew 17.9 ->
 // 33.5 KB gzip, putting the total at ~684.0 KB. Moving the validators to
 // `zod/mini` could win most of it back.
-const TOTAL_LIMIT = 685 * 1024;     // 685 KB
+// RAISED 685 -> 700 KB on 2026-11-12 for kit 0.19.0: the shared row drag
+// (useRowDrag + row-drag.css, now in the Toggles and Injector chunks) and the
+// audit's eight kit pieces put the total at ~687.9 KB.
+const TOTAL_LIMIT = 700 * 1024;     // 700 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
