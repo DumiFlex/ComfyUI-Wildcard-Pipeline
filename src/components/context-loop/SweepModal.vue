@@ -7,12 +7,11 @@
  * run, so the grid can be checked before anything is queued.
  */
 import { computed } from "vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import SweepPanel from "./SweepPanel.vue";
 import { liveAxes, sweepTotal, type SweepConfig } from "./types";
 import type { SweepCandidate } from "./sweep-candidates";
 import Button from "@/kit/Button.vue";
-import Icon from "@/kit/Icon.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -63,17 +62,14 @@ const preview = computed(() => {
 </script>
 
 <template>
-  <ModalShell :visible="true" @close="emit('close')">
-    <div class="wp-swm" data-test="sweep-modal">
-      <div class="wp-swm__head">
-        <span class="wp-swm__head-icon"><Icon name="th-large" :size="15" /></span>
-        <div class="wp-swm__title-block">
-          <div class="wp-swm__title-row"><span class="wp-swm__name">WP Context Loop</span><span class="wp-swm__chip">Sweep</span></div>
-          <div class="wp-swm__sub">Run every combination of the wildcards you pick, one frame each.</div>
-        </div>
-        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="sweep-modal-close" @click="emit('close')" />
+  <Modal :open="true" size="md" flush accent="var(--wp-accent)" icon="th-large" @update:open="(v: boolean) => { if (!v) emit('close'); }">
+    <template #header="{ titleId }">
+      <div class="wp-swm__title-block">
+        <div class="wp-swm__title-row"><span :id="titleId" class="wp-swm__name">WP Context Loop</span><span class="wp-swm__chip">Sweep</span></div>
+        <div class="wp-swm__sub">Run every combination of the wildcards you pick, one frame each.</div>
       </div>
-
+    </template>
+    <div class="wp-swm" data-test="sweep-modal">
       <div class="wp-swm__body">
         <SweepPanel
           :model-value="modelValue"
@@ -94,23 +90,21 @@ const preview = computed(() => {
         </div>
       </div>
 
-      <div class="wp-swm__foot">
-        <span class="wp-swm__foot-hint">Changes save as you make them.</span>
-        <span class="wp-swm__spacer" />
-        <Button size="sm" variant="primary" data-test="sweep-modal-done" @click="emit('close')">Done</Button>
-      </div>
     </div>
-  </ModalShell>
+    <template #footer>
+      <span class="wp-swm__foot-hint">Changes save as you make them.</span>
+      <span class="wp-swm__spacer" />
+      <Button size="sm" variant="primary" data-test="sweep-modal-done" @click="emit('close')">Done</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-swm { width: 520px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column; background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: min(6px, var(--wp-radius-cap, 999px)); overflow: hidden; color: var(--wp-text); font-size: 12px; box-shadow: var(--wp-shadow-lg); }
-.wp-swm__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-shrink: 0; border-bottom: 1px solid var(--wp-border); background: color-mix(in srgb, var(--wp-accent) 9%, var(--wp-bg2)); }
-.wp-swm__head-icon { color: var(--wp-accent); width: 24px; display: flex; justify-content: center; }
-.wp-swm__title-block { flex: 1; min-width: 0; }
+.wp-swm { display: flex; flex-direction: column; min-height: 0; color: var(--wp-text); font-size: 12px; }
+.wp-swm__title-block { flex: 1 1 auto; min-width: 0; }
 .wp-swm__title-row { display: flex; align-items: center; gap: 8px; }
 .wp-swm__name { font: 600 13px var(--wp-font-sans); }
-.wp-swm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 22%, transparent); color: var(--wp-accent); }
+.wp-swm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-modal-accent) 22%, transparent); color: var(--wp-modal-accent); }
 .wp-swm__sub { font: 10.5px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 3px; }
 
 .wp-swm__body { overflow-y: auto; padding: 12px 14px; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; font-size: 11px; }
@@ -122,7 +116,6 @@ const preview = computed(() => {
 .wp-swm__frame-vals { color: var(--wp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-swm__frame-more { padding: 4px 0 0 42px; font: 10.5px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 
-.wp-swm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
-.wp-swm__foot-hint { font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-swm__foot-hint { align-self: center;  font: 10px var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-swm__spacer { flex: 1; }
 </style>
