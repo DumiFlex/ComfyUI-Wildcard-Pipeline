@@ -193,3 +193,33 @@ def test_pick_value_missing_variable_warns():
     warns = payload.debug["__wp_warnings__"]
     assert any(w["type"] == "unknown_var" and "$nowhere" in w["message"] for w in warns)
     assert all(w["node_id"] == "7" for w in warns)
+
+
+def test_pick_one_files_the_picked_negative():
+    up = ContextPayload(
+        context={"shade": "dark"},
+        debug={},
+        internals={negatives.NEG_KEY: {"time": [{"text": "old", "pick": None, "source": "x"}]}},
+    )
+    cfg = {"mode": "one", "group_var": "time", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Day", "var": "day", "on": False,
+         "negative": "night sky"},
+        {"id": "2", "kind": "toggle", "name": "Night", "var": "night", "on": True,
+         "negative": " $shade sun "},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert payload.internals[negatives.NEG_KEY]["time"] == [
+        {"text": "dark sun", "pick": None, "source": "WP_Toggles"},
+    ]
+
+
+def test_pick_one_without_negative_clears_old_one():
+    up = ContextPayload(
+        context={}, debug={},
+        internals={negatives.NEG_KEY: {"time": [{"text": "old", "pick": None, "source": "x"}]}},
+    )
+    cfg = {"mode": "one", "group_var": "time", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Day", "var": "day", "on": True},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert "time" not in payload.internals[negatives.NEG_KEY]

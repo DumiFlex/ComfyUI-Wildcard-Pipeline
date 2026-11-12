@@ -51,9 +51,18 @@ export interface ToggleRow {
   hide_var?: true;
   /** Pick one: what the picked variable gets instead of the name (may read `$vars`). */
   value?: string;
+  /** Pick one: negative text the picked variable carries (send-to-negative). */
+  negative?: string;
   /** The variable shows in the Assembler and prints in a prompt (the
    *  globe "internal" button turned off). Absent: internal, for rules only. */
   visible?: true;
+  /** Looks only (absent: the theme's). A PrimeIcons name without `pi-`,
+   *  shown before the name; colours are `#rrggbb`. `tint` colours the
+   *  control (switch, check, radio, chip, buttons). */
+  icon?: string;
+  icon_color?: string;
+  text_color?: string;
+  tint?: string;
 }
 
 export const TOGGLE_CONTROLS = ["mute", "bypass"] as const;
@@ -63,8 +72,12 @@ export interface LabelRow {
   id: string;
   kind: "label";
   name: string;
-  /** Variable colour 1..8. */
+  /** Variable colour 1..8 (used while `hex` is absent). */
   color: number;
+  /** Own colour `#rrggbb`, chosen in the colour picker. */
+  hex?: string;
+  /** PrimeIcons name without `pi-`, before the name. */
+  icon?: string;
   collapsed?: boolean;
 }
 
@@ -187,6 +200,15 @@ export function toggleRows(cfg: TogglesConfig): ToggleRow[] {
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const ICON_RE = /^[a-z0-9-]{1,40}$/;
+/** A `#rrggbb` colour, or "" for anything else. */
+const hex = (v: unknown): string => (typeof v === "string" && HEX_RE.test(v.trim()) ? v.trim().toLowerCase() : "");
+/** A PrimeIcons name (without `pi-`), or "" for anything else. */
+const iconName = (v: unknown): string => {
+  const s = str(v).replace(/^pi-/, "");
+  return ICON_RE.test(s) ? s : "";
+};
 
 export function parseTogglesConfig(raw: unknown): TogglesConfig {
   let data: unknown = raw;
@@ -210,6 +232,8 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (o.kind === "label") {
       const c = typeof o.color === "number" && o.color >= 1 && o.color <= 8 ? Math.round(o.color) : 1;
       const label: LabelRow = { id, kind: "label", name: str(o.name), color: c };
+      if (hex(o.hex)) label.hex = hex(o.hex);
+      if (iconName(o.icon)) label.icon = iconName(o.icon);
       if (o.collapsed === true) label.collapsed = true;
       rows.push(label);
       continue;
@@ -231,11 +255,16 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (str(o.off_label)) t.off_label = str(o.off_label);
     if (str(o.needs)) t.needs = str(o.needs);
     if (typeof o.value === "string" && o.value) t.value = o.value;
+    if (typeof o.negative === "string" && o.negative.trim()) t.negative = o.negative;
     if (o.upstream === true) t.upstream = true;
     if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
     if (o.invert === true) t.invert = true;
     if (o.hide_var === true) t.hide_var = true;
     if (o.visible === true) t.visible = true;
+    if (iconName(o.icon)) t.icon = iconName(o.icon);
+    if (hex(o.icon_color)) t.icon_color = hex(o.icon_color);
+    if (hex(o.text_color)) t.text_color = hex(o.text_color);
+    if (hex(o.tint)) t.tint = hex(o.tint);
     const groups = Array.isArray(o.groups) ? o.groups.map(str).filter(Boolean) : [];
     if (groups.length) t.groups = [...new Set(groups)];
     rows.push(t);

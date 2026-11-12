@@ -77,6 +77,12 @@ class WPToggles(io.ComfyNode):
             )
         else:
             value_warnings = []
+        # The pick's negative goes with the Pick one variable, so an
+        # Assembler that prints it sends it to the negative prompt. Inline
+        # picks stay as written here too (no seed).
+        neg_text = toggles.picked_negative(cfg) if group in values else ""
+        if neg_text and ("$" in neg_text or "{" in neg_text):
+            neg_text = template.resolve_variables(neg_text, {**upstream_ctx, **values})
 
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = upstream.internals if upstream is not None else {}
@@ -92,6 +98,11 @@ class WPToggles(io.ComfyNode):
         if isinstance(neg_table, dict) and any(k in neg_table for k in values):
             out_internals[negatives.NEG_KEY] = {
                 k: v for k, v in neg_table.items() if k not in values
+            }
+        if neg_text.strip():
+            out_internals[negatives.NEG_KEY] = {
+                **(out_internals.get(negatives.NEG_KEY) or {}),
+                group: [{"text": neg_text.strip(), "pick": None, "source": "WP_Toggles"}],
             }
         # Each toggle chooses whether its variable shows in the Assembler
         # (`visible`); the Pick one variable shows with `group_visible`.

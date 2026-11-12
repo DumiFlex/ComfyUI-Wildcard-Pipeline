@@ -9,21 +9,25 @@
  *
  * Two views: the clean view shows only the rows and their controls; the
  * pencil in ComfyUI's selection toolbar (`editRequest`) opens the edit view
- * (mode, grips, row editors, add buttons) and Done closes it. A node with no toggles opens in the edit view.
- * The view is per session, never saved.
+ * (mode, Pick one options, grips, row buttons, add buttons) and Done closes
+ * it. A node with no toggles opens in the edit view. The view is per
+ * session, never saved. A row's pencil opens that toggle's own settings in
+ * a window (`ToggleEditWindow.vue`) with a preview of the row.
  *
- * Toggles belong to the label above them. Labels move with their toggles
- * (outer list), toggles move inside their group (inner lists); the edit
- * panel's Group field moves one to another label.
+ * Toggles belong to the label above them. One sortable list holds labels
+ * and toggles, so a toggle drags into or out of a group and a label drags
+ * with its toggles (`dragRow`); the edit panel's Group field moves one too.
  *
  * Value contract: `modelValue` is a `TogglesConfig`; every edit emits the
  * whole next config (`src/widgets/toggles.ts` fits the outputs to it).
  */
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
+import ColorField from "@/kit/ColorField.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import SortableList from "@/kit/SortableList.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import { vTooltip } from "@/kit/tooltip";
@@ -56,6 +60,9 @@ import type { ControlState } from "../../extension/toggle-control";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { vToggleRow } from "@/kit/toggle-row";
 
+// The window loads on first open only: most canvases never edit a toggle.
+const ToggleEditWindow = defineAsyncComponent(() => import("./ToggleEditWindow.vue"));
+
 const props = withDefaults(
   defineProps<{
     modelValue: TogglesConfig;
@@ -65,15 +72,20 @@ const props = withDefaults(
     controls?: Record<string, ControlState>;
     /** Canvas group titles, for the control's group picker. */
     canvasGroups?: string[];
-    /** Bumped by the pencil in ComfyUI's selection toolbar: flips the
-     *  edit view (extension/node-toolbar.ts). */
+    /** Bumped by the pencil in ComfyUI's selection toolbar: opens the
+     *  edit window (extension/node-toolbar.ts). */
     editRequest?: number;
     /** Variables upstream of the node, for the Pick one Value's `$` list. */
     upstreamVars?: string[];
     /** Who writes each upstream variable (the Value's chip hover card). */
     varProducers?: Map<string, VarProducerLike> | undefined;
+    /** The node's title, for the toggle window's header. */
+    nodeTitle?: string;
   }>(),
-  { nodeMode: 0, controls: () => ({}), canvasGroups: () => [], editRequest: 0, upstreamVars: () => [], varProducers: undefined },
+  {
+    nodeMode: 0, controls: () => ({}), canvasGroups: () => [], editRequest: 0, upstreamVars: () => [],
+    varProducers: undefined, nodeTitle: "",
+  },
 );
 const emit = defineEmits<{ "update:modelValue": [next: TogglesConfig] }>();
 
@@ -152,6 +164,7 @@ function shownOn(t: ToggleRow): boolean {
 
 /* ── rows ─────────────────────────────────────────────────────────────── */
 
+/** The toggle whose window is open. */
 const editing = ref<string | null>(null);
 const root = ref<HTMLElement | null>(null);
 /** Edit view (see the header comment). */
@@ -172,17 +185,11 @@ watch(
   },
 );
 
-async function focusEditor(): Promise<void> {
-  await nextTick();
-  root.value?.querySelector<HTMLInputElement>(".wp-tgr__edit input")?.select();
-}
-
 function addToggle(): void {
   const t = newToggle(cfg.value);
   if (pinCount.value >= MAX_OUTPUTS) t.pin = false;
   setRows([...cfg.value.rows, t]);
   editing.value = t.id;
-  void focusEditor();
 }
 function addLabel(): void {
   const used = new Set(cfg.value.rows.filter((r): r is LabelRow => r.kind === "label").map((r) => r.color));
@@ -205,19 +212,39 @@ function removeLabel(l: LabelRow): void {
   setRows(cfg.value.rows.filter((r) => r.id !== l.id));
 }
 
-function rename(t: ToggleRow, raw: string): void {
-  const name = raw.trim() || t.name;
-  // A variable that still follows the old name follows the new one.
-  const follows = !t.var || t.var === uniqueVar(varFromName(t.name), cfg.value, t.id);
-  const v = follows ? uniqueVar(varFromName(name) || t.var, cfg.value, t.id) : t.var;
-  patchToggle(t.id, { name, var: v });
-}
-function setVar(t: ToggleRow, v: string): void {
-  patchToggle(t.id, { var: v });
-}
 function toggleEdit(t: ToggleRow): void {
   editing.value = editing.value === t.id ? null : t.id;
-  if (editing.value) void focusEditor();
+}
+/** The toggle whose window is open (gone if it was removed meanwhile). */
+const editingRow = computed(() => (editing.value ? byId.value.get(editing.value) : undefined));
+function windowProps(t: ToggleRow) {
+  return { ...rowProps(t), nodeTitle: props.nodeTitle };
+}
+/** Done in a toggle's window: store its draft, moving it to its group. */
+function applyWindow(t: ToggleRow, next: ToggleRow, groupId: string): void {
+  editing.value = null;
+  let row: ToggleRow = { ...next, id: t.id, kind: "toggle" };
+  const name = row.name.trim() || t.name;
+  if (name !== t.name && row.var === t.var) {
+    // A variable that still follows the old name follows the new one.
+    const follows = !t.var || t.var === uniqueVar(varFromName(t.name), cfg.value, t.id);
+    if (follows) row = { ...row, var: uniqueVar(varFromName(name) || t.var, cfg.value, t.id) };
+  }
+  row = { ...row, name };
+  const rows = cfg.value.rows.map((r) => (r.id === t.id ? row : r));
+  if (groupId === groupIdOf(t)) {
+    setRows(rows);
+    return;
+  }
+  const next2: ToggleGroup[] = groupsOf({ ...cfg.value, rows }).map((g) => ({ label: g.label, toggles: g.toggles.filter((x) => x.id !== t.id) }));
+  const target = next2.find((g) => (g.label?.id ?? "") === groupId);
+  if (!target) {
+    setRows(rows);
+    return;
+  }
+  target.toggles.push(row);
+  if (target.label?.collapsed) target.label = { ...target.label, collapsed: false };
+  setRows(rowsOf(next2));
 }
 /** `$` names a Pick one Value can read: upstream's, then the toggles' own. */
 const valueVars = computed(() => {
@@ -265,16 +292,6 @@ function groupOptions(): { value: string; label: string }[] {
 function groupIdOf(t: ToggleRow): string {
   return groups.value.find((g) => g.toggles.some((x) => x.id === t.id))?.label?.id ?? "";
 }
-/** Move a toggle to the end of another label's group. */
-function moveToGroup(t: ToggleRow, labelId: string): void {
-  const next: ToggleGroup[] = groups.value.map((g) => ({ label: g.label, toggles: g.toggles.filter((x) => x.id !== t.id) }));
-  const target = next.find((g) => (g.label?.id ?? "") === labelId);
-  if (!target) return;
-  target.toggles.push(t);
-  if (target.label?.collapsed) target.label = { ...target.label, collapsed: false };
-  setRows(rowsOf(next));
-}
-
 /* ── ordering ─────────────────────────────────────────────────────────── */
 
 type LabelledGroup = ToggleGroup & { label: LabelRow };
@@ -284,15 +301,28 @@ const shownRows = computed(() => visibleRows(cfg.value));
 function groupOfLabel(l: LabelRow): ToggleGroup {
   return groups.value.find((g) => g.label?.id === l.id) ?? { label: l, toggles: [] };
 }
+/** A label's colour as CSS: its own pick, else its variable colour. */
+function labelColor(l: LabelRow): string {
+  return l.hex ?? `var(--wp-var-${l.color})`;
+}
 /** A grouped toggle wears its label's colour on its left edge. */
-function groupColorOf(t: ToggleRow): number | undefined {
-  return groups.value.find((x) => x.toggles.some((y) => y.id === t.id))?.label?.color;
+function groupColorOf(t: ToggleRow): string | undefined {
+  const l = groups.value.find((x) => x.toggles.some((y) => y.id === t.id))?.label;
+  return l ? labelColor(l) : undefined;
 }
 
 /* ── labels ───────────────────────────────────────────────────────────── */
 
-function nextColor(l: LabelRow): void {
-  patchLabel(l.id, { color: (l.color % 8) + 1 });
+/** The colour picker's value for a label: its own pick, else the swatch it
+ *  wears now, so the picker opens on the colour you see. */
+function labelPickerValue(l: LabelRow): string {
+  if (l.hex) return l.hex;
+  const el = root.value;
+  const v = el ? getComputedStyle(el).getPropertyValue(`--wp-var-${l.color}`).trim() : "";
+  return v || "none";
+}
+function setLabelColor(l: LabelRow, v: string): void {
+  patchLabel(l.id, { hex: /^#[0-9a-f]{6}$/i.test(v.slice(0, 7)) ? v.slice(0, 7).toLowerCase() : undefined });
 }
 function onCount(g: ToggleGroup): number {
   return g.toggles.filter((t) => eff.value.get(t.id)).length;
@@ -382,7 +412,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         <div
           v-if="g.label"
           class="wp-tg__label"
-          :class="`var-${g.label.color}`"
+          :style="{ color: labelColor(g.label) }"
           :data-wp-out="foldedOuts(g)"
           :data-test="`tg-label-${g.label.id}`"
         >
@@ -393,6 +423,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             :data-test="`tg-fold-${g.label.id}`"
             @click="patchLabel(g.label.id, { collapsed: !g.label.collapsed })"
           />
+          <i v-if="g.label.icon" class="pi wp-tg__label-icon" :class="`pi-${g.label.icon}`" aria-hidden="true" />
           <span class="wp-tg__label-text">{{ g.label.name || "Group" }}</span>
           <span class="wp-tg__rule" />
           <span class="wp-tg__count">{{ onCount(g) }}/{{ g.toggles.length }} on</span>
@@ -425,7 +456,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
           <div
             v-if="item.kind === 'label'"
             class="wp-tg__label"
-            :class="`var-${item.color}`"
+            :style="{ color: labelColor(item) }"
             :data-wp-out="foldedOuts(groupOfLabel(item))"
             :data-test="`tg-label-${item.id}`"
           >
@@ -448,12 +479,23 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             />
             <span class="wp-tg__rule" />
             <span class="wp-tg__count">{{ groupOfLabel(item).toggles.length }}<template v-if="item.collapsed"> · {{ onCount(groupOfLabel(item)) }} on</template></span>
-            <WpIconButton
-              icon="pi-palette"
-              :label="`Colour ${item.color} of 8`"
-              hint="Next colour"
+            <IconPicker
+              :model-value="item.icon ?? null"
+              all
+              compact
+              size="sm"
+              :color="labelColor(item)"
+              aria-label="Group icon"
+              :data-test="`tg-label-icon-${item.id}`"
+              @update:model-value="(v: string | null) => patchLabel(item.id, { icon: v || undefined })"
+            />
+            <ColorField
+              :model-value="labelPickerValue(item)"
+              presets
+              compact
+              aria-label="Group colour"
               :data-test="`tg-color-${item.id}`"
-              @click="nextColor(item)"
+              @update:model-value="(v: string) => setLabelColor(item, v)"
             />
             <WpIconButton
               icon="pi-times"
@@ -468,16 +510,13 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             v-else
             class="wp-tg__member"
             :class="{ 'is-grouped': groupColorOf(item) }"
-            :style="groupColorOf(item) ? { '--wp-tg-group': `var(--wp-var-${groupColorOf(item)})` } : undefined"
+            :style="groupColorOf(item) ? { '--wp-tg-group': groupColorOf(item) } : undefined"
           >
             <ToggleRowView
               v-bind="rowProps(item)"
               @set-on="(v: boolean) => setOn(item, v)"
               @patch="(p: Partial<ToggleRow>) => patchToggle(item.id, p)"
-              @rename="(n: string) => rename(item, n)"
-              @set-var="(v: string) => setVar(item, v)"
               @edit="toggleEdit(item)"
-              @move-group="(id: string) => moveToGroup(item, id)"
               @remove="removeToggle(item)"
             />
           </div>
@@ -492,6 +531,13 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       </div>
     </template>
     <div v-else-if="!toggles.length" class="wp-tg__ghost">No toggles yet: select the node and press the pencil above it.</div>
+    <ToggleEditWindow
+      v-if="editingRow"
+      :key="editingRow.id"
+      v-bind="windowProps(editingRow)"
+      @done="(next: ToggleRow, groupId: string) => editingRow && applyWindow(editingRow, next, groupId)"
+      @cancel="editing = null"
+    />
   </div>
 </template>
 
@@ -513,6 +559,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 .wp-tg__pickstyle { display: inline-flex; align-items: center; gap: 8px; flex-basis: 100%; }
 .wp-tg__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .wp-tg__mode-cap { font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tg__label-icon { font-size: 11px; }
 .wp-tg__label-text {
   font: 600 11px var(--wp-font-sans, sans-serif);
   padding: 0 4px;
