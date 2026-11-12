@@ -26,6 +26,7 @@
     "kit:baseline": "WP_WRITE_KIT_BASELINE=1 vitest run scripts/kit-guard.test.mjs",
     "test": "vitest run --passWithNoTests",
     "docs:help": "WP_WRITE_NODE_HELP=1 vitest run src/manager/docs/__tests__/node-help.test.ts",
+    "notes:assets": "WP_WRITE_NOTE_ASSETS=1 vitest run src/components/note/note-assets.test.ts",
     "docs:index": "WP_WRITE_DOCS_INDEX=1 vitest run src/manager/docs/__tests__/docs-index.test.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage --passWithNoTests",

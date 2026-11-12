@@ -7,7 +7,7 @@ import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import RadioGroup from "@/kit/RadioGroup.vue";
-import NoteMarkdown from "./note-markdown";
+import NoteCard from "./NoteCard.vue";
 // The text and its preview edit in their own window (loaded on first open).
 const NoteTextModal = defineAsyncComponent(() => import("./NoteTextModal.vue"));
 import { NOTE_ACTIONS, NOTE_CONTEXTS } from "./note-actions";
@@ -15,7 +15,6 @@ import { useNoteLibrary } from "./note-library-state";
 import { prunePictures } from "./note-images";
 import type { NoteImage } from "../../extension/note";
 import IconPicker from "@/kit/IconPicker.vue";
-import { vTooltip } from "@/kit/tooltip";
 import BookmarkFields from "../bookmark/BookmarkFields.vue";
 import type { BookmarkJump, KeyOwner } from "../../extension/bookmarks";
 import {
@@ -56,7 +55,6 @@ const library = useNoteLibrary(() => props.config.text, () => props.editing);
 provide(NOTE_ACTIONS, library.actions);
 provide(NOTE_CONTEXTS, library.contexts);
 
-const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP Note");
 const toneStyle = computed(() => (props.config.color ? { "--wp-note-tone": noteColorCss(props.config.color) } : undefined));
 const isHex = computed(() => props.config.color.startsWith("#"));
 /** The preset swatch that is picked (the accent is `""`); none for a custom hex. */
@@ -95,13 +93,12 @@ function onBookmark(on: boolean): void {
 function onJump(part: Partial<BookmarkJump>): void {
   if (props.config.bookmark) patch({ bookmark: { ...props.config.bookmark, ...part } });
 }
-const bookmarkHint = computed(() => {
-  const b = props.config.bookmark;
-  return b ? `Also a bookmark${b.shortcut ? ` · ${b.shortcut}` : ""}` : "";
-});
 
 // ── text window ────────────────────────────────────────────────────
 const textOpen = ref(false);
+/** The node's width when the window opened, so its preview wraps the same way. */
+const textWidth = ref<number | undefined>(undefined);
+watch(textOpen, (on) => { if (on) textWidth.value = root.value?.offsetWidth || undefined; });
 function onText(next: { text: string; images: Record<string, NoteImage> }): void {
   textOpen.value = false;
   patch({ text: next.text, images: prunePictures(next.text, next.images) });
@@ -121,9 +118,6 @@ const textCount = computed(() => {
   const pics = Object.keys(props.config.images).length;
   return [`${lines} line${lines === 1 ? "" : "s"}`, pics ? `${pics} picture${pics === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
 });
-
-/** Any link in the text: a label shows a mark for it. */
-const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.config.text));
 </script>
 
 <template>
@@ -136,37 +130,7 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
   >
     <!-- Read view. The panel lets clicks through to the canvas (drag,
          select, double-click to edit); only its buttons take them. -->
-    <div v-if="!editing" class="wp-note__panel" data-test="note-panel">
-      <div class="wp-note__head">
-        <span v-if="config.tone === 'step'" class="wp-note__step" data-test="note-step">{{ config.step }}</span>
-        <span v-else-if="config.tone === 'icon'" class="wp-note__badge" aria-hidden="true"><i class="pi" :class="`pi-${config.icon}`"></i></span>
-        <span v-if="hasTitle || config.look === 'label'" class="wp-note__title" data-test="note-title-text">{{ title }}</span>
-        <!-- A label keeps its text and docs link for the hover card; these
-             marks say there is something to see. -->
-        <span v-if="config.look === 'label' && config.text.trim()" class="wp-note__marks" aria-hidden="true">
-          <i class="pi pi-align-left" data-test="note-has-text"></i>
-          <i v-if="hasLink" class="pi pi-link" data-test="note-has-link"></i>
-        </span>
-        <i
-          v-if="pinned"
-          v-tooltip="'Pinned'"
-          class="pi pi-thumbtack wp-note__bm wp-note__pinmark"
-          aria-label="Pinned"
-          data-test="note-pinned-mark"
-        ></i>
-        <i
-          v-if="config.bookmark"
-          v-tooltip="bookmarkHint"
-          class="pi pi-bookmark-fill wp-note__bm"
-          :aria-label="bookmarkHint"
-          data-test="note-bookmark-mark"
-        ></i>
-      </div>
-      <div v-if="config.look !== 'label'" class="wp-note__body">
-        <NoteMarkdown v-if="config.text.trim()" :text="config.text" :images="config.images" />
-        <p v-else class="wp-note__empty">Double-click to write this note.</p>
-      </div>
-    </div>
+    <NoteCard v-if="!editing" :config="config" :title="title" :pinned="pinned" />
 
     <!-- Keys typed here never reach ComfyUI's keybindings (Delete, Ctrl+Z,
          single-letter shortcuts…). Escape still closes an open picker:
@@ -309,11 +273,10 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
     </form>
     <NoteTextModal
       v-if="textOpen"
-      :text="config.text"
-      :images="config.images"
+      :config="config"
       :title="title"
-      :look="config.look"
-      :tone-css="config.color ? noteColorCss(config.color) : ''"
+      :pinned="pinned"
+      :width="textWidth"
       @done="onText"
       @close="textOpen = false"
     />
@@ -323,7 +286,12 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
 <style scoped>
 /* The kit picker's list, sized for a node: as wide as the panel, a short
  * scroll area, cells packed by width instead of a fixed 8 columns. */
-.wp-note__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
+.wp-note__icons :deep(.wp-iconpick__panel) { max-height: 184px; }
+/* As wide as the space it has. The kit fixes the full set's panel at 264 px
+   (more with a scrollbar) with selectors as strong as ours, so name them. */
+.wp-note__icons.wp-iconpick :deep(.wp-iconpick__panel),
+.wp-note__icons.wp-iconpick :deep(.wp-iconpick__panel[data-all]),
+.wp-note__icons.wp-iconpick :deep(.wp-iconpick__panel[data-all][data-wp-bar~="y"]) { width: auto; }
 .wp-note__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
 .wp-note__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-note {
@@ -338,98 +306,6 @@ const hasLink = computed(() => /\]\((?:https?:\/\/|docs:|wp:)/i.test(props.confi
   pointer-events: none;
 }
 
-/* ── panel looks ─────────────────────────────────────────────────── */
-.wp-note__panel {
-  position: relative;
-  border-radius: min(12px, var(--wp-radius-cap, 999px));
-  padding: 12px 14px 12px 16px;
-  box-shadow: var(--wp-shadow-md, 0 4px 14px rgb(0 0 0 / 0.35));
-}
-/* Card: solid panel, a tone edge on the left. */
-.wp-note--card .wp-note__panel {
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border);
-  overflow: hidden;
-}
-.wp-note--card .wp-note__panel::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--wp-note-tone);
-}
-/* Sticky: tinted with the tone, dashed tone outline inside. */
-.wp-note--sticky .wp-note__panel {
-  background: color-mix(in srgb, var(--wp-note-tone) 18%, var(--wp-bg-2));
-  border: 1px solid color-mix(in srgb, var(--wp-note-tone) 55%, transparent);
-  outline: 1px dashed color-mix(in srgb, var(--wp-note-tone) 45%, transparent);
-  outline-offset: -6px;
-}
-/* Label: a small solid tag, title only. Sized to its text (the node follows
-   it, see widgets/note.ts), up to a cap where the title ellipsizes. */
-.wp-note--label .wp-note__panel {
-  display: inline-flex;
-  width: max-content;
-  max-width: 480px;
-  padding: 6px 12px 6px 8px;
-  border-radius: var(--wp-radius-cap, 999px);
-  background: var(--wp-note-tone);
-  color: white;
-}
-
-.wp-note__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 24px;
-}
-.wp-note__step,
-.wp-note__badge {
-  flex: none;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--wp-radius-cap, 999px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-.wp-note__step { background: var(--wp-note-tone); color: white; }
-.wp-note__badge {
-  background: color-mix(in srgb, var(--wp-note-tone) 22%, transparent);
-  color: var(--wp-note-tone);
-}
-.wp-note__badge .pi { font-size: 13px; }
-.wp-note--label .wp-note__step,
-.wp-note--label .wp-note__badge { background: rgb(255 255 255 / 0.22); color: inherit; }
-.wp-note__title {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.wp-note--label .wp-note__title { font-size: 14px; flex: 0 1 auto; }
-.wp-note__marks { display: inline-flex; gap: 4px; flex: none; opacity: 0.8; }
-.wp-note__marks .pi { font-size: 11px; }
-/* Also a bookmark: a small mark in the head (its tooltip names the key). */
-.wp-note__bm {
-  flex: none;
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--wp-note-tone);
-  pointer-events: auto;
-}
-.wp-note__bm + .wp-note__bm { margin-left: 2px; }
-.wp-note__pinmark { color: var(--wp-text-dim); font-size: 11px; }
-.wp-note--label .wp-note__bm { color: inherit; opacity: 0.85; }
-
-.wp-note__body { margin-top: 8px; color: var(--wp-text-muted, inherit); }
-.wp-note__empty { margin: 0; color: var(--wp-text-dim); }
 /* ── edit form ───────────────────────────────────────────────────── */
 /* The form lets presses on its background through, so the note drags while
  * it is open (frameless-node.css: wp-frameless__pass). */

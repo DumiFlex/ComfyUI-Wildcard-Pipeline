@@ -5,11 +5,13 @@ import NoteMarkdown from "./note-markdown";
 import { noteColorCss, type NoteConfig } from "../../extension/note";
 
 /** The hover card of a Label note: its text (with its links and icons) and
- *  an Edit button. Placed above the label (below when there is no room). */
+ *  an Edit button. Placed above the label (below when there is no room).
+ *  Without an anchor it sits in the page with no Edit button: the note text
+ *  window's preview of a label. */
 const props = defineProps<{
-  config: NoteConfig;
+  config: Pick<NoteConfig, "text" | "images" | "color">;
   title: string;
-  anchor: DOMRect;
+  anchor?: DOMRect | undefined;
 }>();
 
 const emit = defineEmits<{ (e: "edit"): void }>();
@@ -21,8 +23,8 @@ const EDGE = 8;
 
 function place(): void {
   const el = card.value;
-  if (!el) return;
   const a = props.anchor;
+  if (!el || !a) return;
   const w = el.offsetWidth;
   const hgt = el.offsetHeight;
   let top = a.top - hgt - GAP;
@@ -34,8 +36,7 @@ onMounted(place);
 watch(() => [props.anchor, props.config, props.title], () => nextTick(place));
 
 const style = computed(() => ({
-  left: `${pos.value.left}px`,
-  top: `${pos.value.top}px`,
+  ...(props.anchor ? { left: `${pos.value.left}px`, top: `${pos.value.top}px` } : {}),
   ...(props.config.color ? { "--wp-note-tone": noteColorCss(props.config.color) } : {}),
 }));
 const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP Note");
@@ -45,8 +46,9 @@ const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP
   <div
     ref="card"
     class="wp-note-peek"
+    :class="{ 'wp-note-peek--static': !anchor }"
     :style="style"
-    role="tooltip"
+    :role="anchor ? 'tooltip' : undefined"
     data-test="note-peek"
   >
     <div v-if="hasTitle" class="wp-note-peek__title">{{ title }}</div>
@@ -54,7 +56,7 @@ const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP
       <NoteMarkdown v-if="config.text.trim()" :text="config.text" :images="config.images" />
       <p v-else class="wp-note-peek__empty">No text yet.</p>
     </div>
-    <div class="wp-note-peek__actions">
+    <div v-if="anchor" class="wp-note-peek__actions">
       <Button class="wp-note-peek__edit" size="sm" variant="ghost" icon="pi-pencil" data-test="note-peek-edit" @click="emit('edit')">Edit</Button>
     </div>
   </div>
@@ -80,6 +82,7 @@ const hasTitle = computed(() => props.title.trim() !== "" && props.title !== "WP
   color: var(--wp-text-muted, var(--wp-text));
   overflow-wrap: anywhere;
 }
+.wp-note-peek--static { position: relative; z-index: auto; max-width: 340px; }
 .wp-note-peek__title { font-weight: 650; color: var(--wp-text); margin-bottom: 4px; }
 .wp-note-peek__empty { margin: 0; color: var(--wp-text-dim); }
 .wp-note-peek__actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
