@@ -10,6 +10,12 @@ Write a prompt with `$variables` in it and get the finished prompt, plus a match
 - **negative_template** `STRING`: Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative).
 - **prompt (out)** `STRING`: The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner.
 - **negative (out)** `STRING`: The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode.
+
+## On the node
+
+- **Load / Save (toolbar)**: Load a template from your library into both boxes, or save this one (prompt and negative) to it.
+- **Mark unused internal (toolbar)**: The eye button. Marks every upstream variable that neither box reads as internal, so it stops showing here; combines and rules still read it. Variables another Assembler on the same context reads are kept, and so is a module that also writes a variable in use. Undo in the message puts it back.
+- **Clear (toolbar)**: Empties the template and the negative template, after asking.
 <!-- fields:end -->
 
 ## How to use

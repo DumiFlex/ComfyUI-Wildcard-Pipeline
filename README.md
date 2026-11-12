@@ -116,7 +116,7 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 | Node | What it does |
 |---|---|
 | **WP Context** | Holds your module stack and outputs the picked variables. Chain several together. |
-| **WP Prompt Assembler** | Fills `$variables` in a template and collects their negative words into a second output. |
+| **WP Prompt Assembler** | Fills `$variables` in a template and collects their negative words into a second output. One button hides the variables no Assembler prints. |
 | **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed, or sweep every combination of chosen wildcard options. |
 | **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
 | **WP Model Info** | Reads the loaded checkpoint into `$model_family` / `$model_variant` (Pony, Illustrious, …) so rules can pick LoRAs and tags per model. |

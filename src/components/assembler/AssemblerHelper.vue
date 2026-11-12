@@ -69,6 +69,10 @@ const props = defineProps<{
   /** Open the load-template-from-library picker. Toolbar Load button.
    *  Optional. */
   onLoadTemplate?: () => void;
+  /** Mark every upstream variable neither box reads as internal (keeping
+   *  any another Assembler on the same context reads). Toolbar button;
+   *  optional. */
+  onMarkUnused?: () => void;
   /** Per-var module-kind lookup. When known, each chip renders a
    *  small pi-icon matching the source module's kind (wildcard,
    *  fixed_values, combine, derivation, constraint,
@@ -124,6 +128,17 @@ const templateVarsInternal = computed(() => {
   const matches = sanitized.match(VAR_RE);
   if (!matches) return [];
   return [...new Set(matches.map((m) => m.slice(1)).filter((v) => !v.startsWith("__")))];
+});
+
+/** Upstream variables neither the prompt nor the negative box reads — what
+ *  the Mark unused button would look at (other Assemblers are checked when
+ *  it is pressed). */
+const unusedHere = computed(() => {
+  const used = new Set<string>();
+  for (const text of [props.template, props.negativeTemplate ?? ""]) {
+    for (const m of text.replace(/\$\$/g, ESCAPE_PLACEHOLDER).matchAll(VAR_RE)) used.add(m[1]);
+  }
+  return upstreamNames.value.filter((v) => !used.has(v));
 });
 
 /**
@@ -495,6 +510,19 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             :hint="props.template ? 'Save this template to the library' : 'Template is empty'"
             aria-label="Save template"
             @click="onSaveTemplate"
+          />
+          <Button
+            v-if="onMarkUnused"
+            size="sm"
+            variant="outline"
+            icon="pi-eye-slash"
+            :disabled="unusedHere.length === 0"
+            data-test="asm-mark-unused"
+            :hint="unusedHere.length
+              ? `Mark the ${unusedHere.length} unused ${unusedHere.length === 1 ? 'variable' : 'variables'} internal (keeps any that another Assembler uses)`
+              : 'Every variable here is in the prompt or the negative'"
+            aria-label="Mark unused variables internal"
+            @click="onMarkUnused"
           />
           <Button
             v-if="onClearTemplate"

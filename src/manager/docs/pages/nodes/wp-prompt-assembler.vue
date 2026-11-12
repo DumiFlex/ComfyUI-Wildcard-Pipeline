@@ -72,6 +72,29 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </DocDetails>
     </DocSection>
 
+    <DocSection title="Hide the variables you don't use">
+      <p>
+        A big Context offers many variables, and most of them feed other variables rather than the
+        prompt. The eye button in the <b>variables</b> toolbar (beside Load, Save and Clear) marks
+        every variable that neither this template nor the negative template reads as
+        <b>internal</b>, so the chip strip and the <code>$</code> list only offer what you print.
+      </p>
+      <ul>
+        <li>Internal only hides a variable from Assemblers. Combines, rules, constraints and the Var
+          nodes still read it, so <VarToken>$hero</VarToken> used inside
+          <VarToken>$scene</VarToken> keeps working.</li>
+        <li>Every other Assembler on the same context is checked first: a variable one of them
+          prints (<code>$x.0</code>, <code>$x.AXIS</code> and <code>$x.neg</code> count) is kept.</li>
+        <li>A Context module has one internal switch for all the variables it writes, so a fixed
+          values module that also writes a variable in use is left as it is.</li>
+        <li>It flips the same switches you would: the globe on a module, an Injector row, a toggle,
+          a Model Info row or a Loop variable. The message says what it marked and what it kept and
+          why; <b>Undo</b> in it puts everything back.</li>
+        <li>An Assembler whose template comes from a wire can't tell what it uses, so nothing it can
+          see is marked.</li>
+      </ul>
+    </DocSection>
+
     <DocSection title="The negative output">
       <p>
         Wildcard options, fixed values, combines and derivations can carry negative words. The
