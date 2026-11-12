@@ -108,7 +108,7 @@ function flip(): void {
 </script>
 
 <template>
-  <div class="wp-tgr" :style="indent ? { marginLeft: `${indent}px` } : undefined" :data-wp-vars="t.var || undefined">
+  <div class="wp-tgr" :class="{ 'is-wide': tile && look === 'buttons' }" :style="indent ? { marginLeft: `${indent}px` } : undefined" :data-wp-vars="t.var || undefined">
     <div
       class="wp-tgr__row"
       :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing, 'has-icon-color': !!t.icon_color, 'has-text-color': !!t.text_color }"

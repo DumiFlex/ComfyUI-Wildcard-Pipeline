@@ -95,13 +95,39 @@ export function rowFor(root: HTMLElement, name: string): HTMLElement | null {
   return null;
 }
 
+/** `el`'s top inside `root`, in layout px: transforms don't count, so a
+ *  row being dragged or sliding aside (`SortableList`) keeps its dot where
+ *  the row sits in the list until it really moves. */
+function offsetIn(el: HTMLElement, root: HTMLElement): number {
+  const abs = (x: HTMLElement): number => {
+    let y = 0;
+    for (let n: HTMLElement | null = x; n; n = n.offsetParent as HTMLElement | null) y += n.offsetTop;
+    return y;
+  };
+  // A scrolled box between them moves the row without changing offsets.
+  let scrolled = 0;
+  for (let n = el.parentElement; n && n !== root; n = n.parentElement) scrolled += n.scrollTop;
+  return abs(el) - abs(root) - scrolled;
+}
+
+/** Centre of `el` below `top` (a page y), in units of `scale`, measured from
+ *  `root`'s box plus `el`'s layout offset inside it (see `offsetIn`). */
+export function layoutCentre(el: HTMLElement, root: HTMLElement, top: number, scale: number): number {
+  // No layout parent (a fixed box, or no layout at all as in jsdom): its box.
+  if (!el.offsetParent) {
+    const r = el.getBoundingClientRect();
+    return (r.top + r.height / 2 - top) / scale;
+  }
+  const rootTop = root.getBoundingClientRect().top;
+  return (rootTop - top) / scale + offsetIn(el, root) + el.offsetHeight / 2;
+}
+
 /** Centre of `name`'s row below `top`, in units of `scale`; null when no
  *  row on screen names it. */
 function centreOf(root: HTMLElement, name: string, top: number, scale: number): number | null {
   const el = rowFor(root, name);
   if (!el) return null;
-  const r = el.getBoundingClientRect();
-  return (r.top + r.height / 2 - top) / scale;
+  return layoutCentre(el, root, top, scale);
 }
 
 function syncLegacy(entry: Entry): boolean {

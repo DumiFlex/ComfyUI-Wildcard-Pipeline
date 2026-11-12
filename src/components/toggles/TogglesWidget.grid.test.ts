@@ -69,6 +69,10 @@ describe("TogglesWidget Grid layout", () => {
     expect(line.attributes("data-wp-out")).toBe("toggle_1");
     expect(line.attributes("data-wp-socket")).toBeTruthy();
     expect(w.find('[data-test="tg-sockline-top-0"]').exists()).toBe(false);
+    // A count per side, not every name, so many wires don't crowd it.
+    expect(line.text()).toContain("2 in");
+    expect(line.text()).toContain("1 out");
+    expect(line.text()).not.toContain("Sunset");
     await w.find('[data-test="tg-sock-expand"]').trigger("click");
     expect(lastConfig(w)?.sockets_merged).toBeUndefined();
     w.unmount();
@@ -107,8 +111,25 @@ describe("TogglesWidget Grid layout", () => {
     await w.setProps({ modelValue: merged });
     expect(w.find('[data-test="tg-sockmerged-0000000a"]').exists()).toBe(true);
     await w.setProps({ editRequest: 1 });
-    await w.find('[data-test="tg-glayout-0000000a-rows"]').trigger("click");
+    await w.find('[data-test="tg-glayout-0000000a"]').trigger("click");
     expect(lastConfig(w)?.rows.find((r) => r.id === "0000000a")).not.toHaveProperty("layout", "grid");
+    w.unmount();
+  });
+});
+
+describe("TogglesWidget folded group", () => {
+  it("puts its toggles' control inputs on the folded title too", () => {
+    const c: TogglesConfig = {
+      ...defaultTogglesConfig(),
+      rows: [
+        { id: "0000000a", kind: "label", name: "G", color: 1, collapsed: true },
+        row("00000001", "A", false, { control: "mute", pin: true, out: 1 }),
+      ],
+    };
+    const w = mount(TogglesWidget, { props: { modelValue: c } });
+    const title = w.find('[data-test="tg-label-0000000a"]');
+    expect(title.attributes("data-wp-socket")).toBe(ctlInputName("00000001"));
+    expect(title.attributes("data-wp-out")).toBe("toggle_1");
     w.unmount();
   });
 });

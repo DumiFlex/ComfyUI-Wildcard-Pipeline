@@ -27,6 +27,7 @@
  * workflow (`onSerialize`) and under Nodes 2.0, which skips widget inputs
  * that have no matching widget.
  */
+import { layoutCentre } from "./row-outputs";
 import { isVueNodes } from "./renderer";
 
 interface SocketSlot {
@@ -120,8 +121,7 @@ function measure(entry: Entry, names: readonly string[], top: number, scale: num
   for (const name of names) {
     const field = fieldFor(entry.root, name);
     if (field) {
-      const r = field.getBoundingClientRect();
-      out.set(name, (r.top + r.height / 2 - top) / scale);
+      out.set(name, layoutCentre(field, entry.root, top, scale));
     } else if (isNative(entry.node, name)) {
       out.set(name, null);
     } else {

@@ -150,6 +150,18 @@ function sockPairs(g: ToggleGroup): SockLine[] {
 function isMerged(g: ToggleGroup): boolean {
   return (g.label ? !!g.label.sockets_merged : !!cfg.value.sockets_merged) && sockPairs(g).length > 1;
 }
+/** Merged line: a count per side ("3 in", "4 out"), the names in its
+ *  tooltip, so many wires don't crowd the line. */
+function sockSide(g: ToggleGroup, side: "in" | "out"): ToggleRow[] {
+  return g.toggles.filter((t) => (side === "in" ? !!t.control : !!(t.pin && t.out)));
+}
+function sockCount(g: ToggleGroup, side: "in" | "out"): string {
+  const n = sockSide(g, side).length;
+  return n ? `${n} ${side}` : "";
+}
+function sockNames(g: ToggleGroup, side: "in" | "out"): string {
+  return sockSide(g, side).map((t) => t.name).join(", ");
+}
 /** The control icon shown beside a left name. */
 function ctlIcon(t: ToggleRow): string {
   return props.controls[t.id]?.control === "mute" ? "pi-volume-off" : "pi-forward";
@@ -381,6 +393,13 @@ function setLabelColor(l: LabelRow, v: string): void {
 function onCount(g: ToggleGroup): number {
   return g.toggles.filter((t) => eff.value.get(t.id)).length;
 }
+/** Control input names a folded label shows the dots of, so they stay level
+ *  with the group instead of stacking at the node's top. */
+function foldedSockets(g: ToggleGroup): string | undefined {
+  if (!g.label?.collapsed) return undefined;
+  const names = g.toggles.filter((t) => t.control).map((t) => ctlInputName(t.id));
+  return names.length ? names.join(" ") : undefined;
+}
 /** Output names a folded label shows the dots of. */
 function foldedOuts(g: ToggleGroup): string | undefined {
   if (!g.label?.collapsed) return undefined;
@@ -477,6 +496,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
           class="wp-tg__label"
           :style="{ color: labelColor(g.label) }"
           :data-wp-out="foldedOuts(g)"
+          :data-wp-socket="foldedSockets(g)"
           :data-test="`tg-label-${g.label.id}`"
         >
           <WpIconButton
@@ -509,9 +529,9 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             :data-wp-socket="mergedSockets(socketLines(g))"
             :data-test="`tg-sockmerged-${g.label?.id ?? 'top'}`"
           >
-            <WpIconButton variant="bare" icon="pi-caret-right" label="Show each toggle's wires" data-test="tg-sock-expand" @click="toggleMerged(g)" />
-            <span class="wp-tg__sockname">{{ socketLines(g).filter((t) => t.control).map((t) => t.name).join(" · ") }}</span>
-            <span class="wp-tg__sockname is-right">{{ socketLines(g).filter((t) => t.pin && t.out).map((t) => t.name).join(" · ") }}</span>
+            <span class="wp-tg__sockpad"><WpIconButton variant="bare" icon="pi-caret-right" label="Show each toggle's wires" data-test="tg-sock-expand" @click="toggleMerged(g)" /></span>
+            <span v-tooltip="sockNames(g, 'in')" class="wp-tg__sockname">{{ sockCount(g, "in") }}</span>
+            <span v-tooltip="sockNames(g, 'out')" class="wp-tg__sockname is-right">{{ sockCount(g, "out") }}</span>
           </div>
           <div
             v-for="(line, i) in isMerged(g) ? [] : sockPairs(g)"
@@ -521,8 +541,10 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             :data-wp-socket="line.left ? ctlInputName(line.left.id) : undefined"
             :data-test="`tg-sockline-${g.label?.id ?? 'top'}-${i}`"
           >
-            <WpIconButton v-if="i === 0 && sockPairs(g).length > 1" variant="bare" icon="pi-caret-down" label="Merge the wires onto one line" data-test="tg-sock-merge" @click="toggleMerged(g)" />
-            <span v-else-if="sockPairs(g).length > 1" class="wp-tg__sockpad" aria-hidden="true" />
+            <!-- One caret column for every line, so the names line up. -->
+            <span v-if="sockPairs(g).length > 1" class="wp-tg__sockpad">
+              <WpIconButton v-if="i === 0" variant="bare" icon="pi-caret-down" label="Merge the wires onto one line" data-test="tg-sock-merge" @click="toggleMerged(g)" />
+            </span>
             <span class="wp-tg__sockname" :class="{ 'is-on': line.left && !!eff.get(line.left.id) }">
               <template v-if="line.left">
                 {{ line.left.name }}
@@ -530,7 +552,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
                   v-if="controls[line.left.id]"
                   v-tooltip="controls[line.left.id]?.hint"
                   class="pi wp-tg__sockctl"
-                  :class="[ctlIcon(line.left), { 'is-active': controls[line.left.id]?.active }]"
+                  :class="[ctlIcon(line.left), `is-${controls[line.left.id]?.control}`, { 'is-active': controls[line.left.id]?.active }]"
                   role="img"
                   :aria-label="controls[line.left.id]?.hint"
                 />
@@ -569,6 +591,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             class="wp-tg__label"
             :style="{ color: labelColor(item) }"
             :data-wp-out="foldedOuts(groupOfLabel(item))"
+            :data-wp-socket="foldedSockets(groupOfLabel(item))"
             :data-test="`tg-label-${item.id}`"
           >
             <WpIconButton
@@ -590,15 +613,6 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             />
             <span class="wp-tg__rule" />
             <span class="wp-tg__count">{{ groupOfLabel(item).toggles.length }}<template v-if="item.collapsed"> · {{ onCount(groupOfLabel(item)) }} on</template></span>
-            <WpSegmented
-              :model-value="item.layout ?? nodeLayout"
-              :options="LAYOUTS"
-              size="sm"
-              icon-only
-              aria-label="Group layout"
-              :test-prefix="`tg-glayout-${item.id}`"
-              @update:model-value="(v: string) => setGroupLayout(item, v)"
-            />
             <IconPicker
               :model-value="item.icon ?? null"
               all
@@ -616,6 +630,14 @@ function foldedOuts(g: ToggleGroup): string | undefined {
               aria-label="Group colour"
               :data-test="`tg-color-${item.id}`"
               @update:model-value="(v: string) => setLabelColor(item, v)"
+            />
+            <WpIconButton
+              icon="pi-th-large"
+              :pressed="(item.layout ?? nodeLayout) === 'grid'"
+              label="Show this group as a grid"
+              hint="Grid: this group's toggles as tiles that wrap to the node's width. Off: one row each."
+              :data-test="`tg-glayout-${item.id}`"
+              @click="setGroupLayout(item, (item.layout ?? nodeLayout) === 'grid' ? 'rows' : 'grid')"
             />
             <WpIconButton
               icon="pi-times"
@@ -707,6 +729,12 @@ function foldedOuts(g: ToggleGroup): string | undefined {
   gap: 2px;
   min-width: 0;
 }
+/* A Buttons toggle (two words) takes two tiles once two fit, so its name
+ * isn't cut to "Tog…". */
+.wp-tg__grid { container-type: inline-size; }
+@container (min-width: 250px) {
+  .wp-tg__grid > .wp-tgr.is-wide { grid-column: span 2; }
+}
 /* Grid: a thin line under the tiles per wired toggle, so its control dot
  * (left) and BOOLEAN output (right) sit level with its name. */
 .wp-tg__sockline {
@@ -714,7 +742,9 @@ function foldedOuts(g: ToggleGroup): string | undefined {
   align-items: center;
   gap: 6px;
   height: 20px;
-  padding: 0 8px;
+  /* Left like a label row, so the merge caret sits under a group's fold
+   * caret. */
+  padding: 0 8px 0 2px;
   font-size: 11px;
   color: var(--wp-text-dim, var(--wp-text3));
   min-width: 0;
@@ -722,10 +752,13 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 .wp-tg__sockline.is-on, .wp-tg__sockname.is-on { color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-tg__sockname.is-right { text-align: right; }
 .wp-tg__sockname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-tg__sockctl { font-size: 10px; opacity: 0.6; }
+.wp-tg__sockctl { font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); opacity: 0.7; }
 /* Keeps every name level with the first line's, which holds the caret. */
-.wp-tg__sockpad { flex: none; width: var(--wp-icon-btn-size, 20px); }
-.wp-tg__sockctl.is-active { color: var(--wp-accent); opacity: 1; }
+.wp-tg__sockpad { flex: none; width: 14px; display: inline-flex; align-items: center; justify-content: center; }
+/* Same colours as the row's control icon (ToggleRow). */
+.wp-tg__sockctl.is-active { opacity: 1; }
+.wp-tg__sockctl.is-active.is-bypass { color: var(--wp-violet); }
+.wp-tg__sockctl.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }
 .wp-tg__label {
   display: flex;
   align-items: center;
