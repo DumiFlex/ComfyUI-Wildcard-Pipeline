@@ -139,9 +139,90 @@ tutorial(
       await t.uncallout("out");
     });
 
+    await t.h.step("A value and a negative", async () => {
+      await t.say("A toggle can also carry words. Edit the first WP Toggles and add a toggle called Rain.");
+      await openEdit(tg);
+      await t.click(t.node(tg).locator('[data-test="tg-add"]'));
+      await t.beat(700);
+      await t.fill(winField("tg-name"), "Rain", { cps: 14 });
+      await t.press("Tab");
+      await t.beat(300);
+      await t.fill(winField("tg-var"), "rain", { cps: 14 });
+      await t.press("Tab");
+      await t.beat(400);
+      await t.waitVoice();
+      await t.fill(winField("tg-value"), "in the rain", { cps: 14 });
+      await t.beat(400);
+      await t.callout("value", win().locator('[data-test="tg-value"]').first(), "On: $rain prints this", 5);
+      await t.say("Give it a Value, and while it's on, rain holds those words instead of true. While it's off, it holds nothing.");
+      await t.waitVoice();
+      await t.uncallout("value");
+      await t.click(win().locator('[data-test="tg-negative-add"]'));
+      await t.beat(500);
+      await t.fill(winField("tg-negative"), "sunny sky", { cps: 14 });
+      await t.beat(400);
+      await t.callout("neg", win().locator('[data-test="tg-negative"]').first(), "Goes to the negative prompt", 5);
+      await t.say("A Negative goes with it, to the negative prompt, only while the toggle is on.");
+      await t.waitVoice();
+      await t.uncallout("neg");
+      await t.fill(winField("tg-off-value"), "under a clear sky", { cps: 14 });
+      await t.beat(400);
+      await t.callout("off", win().locator('[data-test="tg-off-value"]').first(), "Off: $rain prints this instead", 5);
+      await t.say("An Off value is what it holds while it's off. It can have its own negative too.");
+      await t.waitVoice();
+      await t.uncallout("off");
+      await winDone();
+      const rain = t.node(tg).locator('[data-test^="tg-row-"]').filter({ hasText: "Rain" });
+      await t.callout("globe", rain.locator('[data-test^="tg-internal-"]').first(), "Off: the Assembler can print it", 4);
+      await t.say("Turn off its globe, so the Assembler can print it.");
+      await t.click(rain.locator('[data-test^="tg-internal-"]').first());
+      await t.beat(500);
+      await t.waitVoice();
+      await t.uncallout("globe");
+      await t.click(t.node(tg).locator('[data-test="tg-edit-done"]'));
+      await t.beat(800);
+      await t.deselect();
+      await t.say("Add rain to the end of the prompt, switch Rain on, and run.");
+      const box = t.node(nodes.asm).locator("textarea, [contenteditable='true']").first();
+      await t.click(box);
+      await t.page.keyboard.press("ControlOrMeta+End");
+      await t.type(", $rain", { cps: 14 });
+      await t.press("Escape");
+      await t.beat(400);
+      await t.click(t.node(tg).locator('[data-test^="tg-row-"]').filter({ hasText: "Rain" }).locator('[data-test^="tg-ctl-"]').first());
+      await t.beat(500);
+      await t.waitVoice();
+      await runFor(/in the rain/);
+      await t.callout("out", t.node(nodes.text), "The value in the prompt", 5);
+      await t.say("Rain's words are in the prompt.");
+      await t.waitVoice();
+      await t.uncallout("out");
+      const neg = t.node(nodes.asm).locator('[data-test="asm-neg-preview"]');
+      // The step is about this word: fail rather than box a preview without it.
+      await neg.filter({ hasText: "sunny sky" }).waitFor({ state: "visible", timeout: 15_000 })
+        .catch(() => { throw new StepError("The Assembler's negative preview doesn't show sunny sky."); });
+      await t.callout("negp", neg, "sunny sky", 5);
+      await t.say("And sunny sky is in the negative.");
+      await t.waitVoice();
+      await t.uncallout("negp");
+      await t.say("Switch Rain off, and run again.");
+      await t.click(t.node(tg).locator('[data-test^="tg-row-"]').filter({ hasText: "Rain" }).locator('[data-test^="tg-ctl-"]').first());
+      await t.beat(500);
+      await runFor(/under a clear sky/);
+      // "hidden" also passes when the whole negative preview goes (nothing left to send).
+      await neg.filter({ hasText: "sunny sky" }).waitFor({ state: "hidden", timeout: 15_000 })
+        .catch(() => { throw new StepError("sunny sky is still in the negative preview with Rain off."); });
+      await t.callout("out", t.node(nodes.text), "The Off value", 5);
+      await t.say("Now it's the Off value, and sunny sky has left the negative.");
+      await t.waitVoice();
+      await t.uncallout("out");
+      await t.say("Rules still get the switch: rain dot bool is true or false, whatever the values.");
+      await t.waitVoice();
+    });
+
     await t.h.step("Pick one", async () => {
       await t.say("A toggle can also pick the words itself. Add a second WP Toggles after the first, and set it to Pick one.");
-      const tg2 = await t.addNode("WP Toggles", { x: 300, y: 470 });
+      const tg2 = await t.addNode("WP Toggles", { x: 300, y: 540 });
       await t.wire(tg, "context", tg2, "upstream");
       await t.wire(tg2, "context", nodes.ctx1, "upstream");
       await openEdit(tg2);
@@ -177,9 +258,17 @@ tutorial(
         await winDone();
       }
       await t.normalSpeed();
+      await t.say("Layout can draw the toggles as a grid of tiles instead of rows.");
+      await t.click(t.node(tg2).locator('[data-test="tg-layout-grid"]'));
+      await t.beat(500);
+      await t.waitVoice();
       await t.click(t.node(tg2).locator('[data-test="tg-edit-done"]'));
       await t.beat(800);
       await t.deselect();
+      await t.callout("grid", t.node(tg2), "Three tiles, one picked", 4);
+      await t.say("Here they are, one tile each.");
+      await t.waitVoice();
+      await t.uncallout("grid");
       await t.waitVoice();
       await t.say("Switch off Time of day on the first Context, so the toggle decides the time, and pick Night.");
       await t.click(t.moduleRow(nodes.ctx1, "Time of day").locator('[data-test="module-enabled"]'));

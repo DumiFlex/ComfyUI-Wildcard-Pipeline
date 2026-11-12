@@ -93,7 +93,8 @@ tutorial(
       await t.beat(700);
       await t.waitVoice();
       await t.say("Same base seed, same strategy, same batch: a loop is repeatable.");
-      await t.click(modal.locator('[data-test="seed-modal-done"]'));
+      // The Done button sits in the kit Modal's footer, outside the seed-modal body.
+      await t.click(page.locator('[data-test="seed-modal-done"]').last());
       await t.beat(700);
       await t.waitVoice();
     });
@@ -126,7 +127,7 @@ tutorial(
       await t.say("Three times of day by four hair styles: twelve frames. The role isn't swept, so Hold other picks keeps one role on all of them.");
       await t.waitVoice();
       await t.uncallout("total");
-      await t.click(modal.locator('[data-test="sweep-modal-done"]'));
+      await t.click(page.locator('[data-test="sweep-modal-done"]').last());
       await t.beat(700);
       await t.say("Run.");
       await t.fastForward(async () => {

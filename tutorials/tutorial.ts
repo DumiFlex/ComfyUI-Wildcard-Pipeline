@@ -817,6 +817,35 @@ export class Tutor {
         const hit = el.closest("[data-node-id]") ?? el;
         y = hit.getBoundingClientRect().bottom + 40;
       }
+      // A group is drawn on the canvas, so elementFromPoint can't see it, and a double click on its
+      // body no longer opens the search: go below the group too.
+      type Ds = { scale: number; offset: [number, number] };
+      type Grp = { _bounding?: ArrayLike<number>; bounding?: ArrayLike<number>; pos?: ArrayLike<number>; size?: ArrayLike<number> };
+      const w = window as unknown as { app?: { canvas?: { ds?: Ds; canvas?: HTMLCanvasElement }; graph?: { groups?: Grp[]; _groups?: Grp[] } } };
+      const ds = w.app?.canvas?.ds;
+      const rect = w.app?.canvas?.canvas?.getBoundingClientRect();
+      const box = (g: Grp): number[] | null => {
+        const b = g._bounding ?? g.bounding;
+        if (b && b.length >= 4) return [Number(b[0]), Number(b[1]), Number(b[2]), Number(b[3])];
+        if (g.pos && g.size) return [Number(g.pos[0]), Number(g.pos[1]), Number(g.size[0]), Number(g.size[1])];
+        return null;
+      };
+      if (ds && rect) {
+        const toCanvasY = (sy: number) => (sy - rect.top) / ds.scale - ds.offset[1];
+        const toScreenY = (cy: number) => (cy + ds.offset[1]) * ds.scale + rect.top;
+        const gx = (x - rect.left) / ds.scale - ds.offset[0];
+        const inside = (cy: number) => (w.app?.graph?.groups ?? w.app?.graph?._groups ?? [])
+          .map(box)
+          .find((b) => !!b && gx >= (b[0] ?? 0) && gx <= (b[0] ?? 0) + (b[2] ?? 0) && cy >= (b[1] ?? 0) && cy <= (b[1] ?? 0) + (b[3] ?? 0));
+        const hit = inside(toCanvasY(y));
+        if (hit) {
+          // Below the group when that is on screen, else above it; otherwise leave the point.
+          const below = toScreenY((hit[1] ?? 0) + (hit[3] ?? 0)) + 50;
+          const above = toScreenY(hit[1] ?? 0) - 50;
+          if (below < window.innerHeight - 80 && !inside(toCanvasY(below))) y = below;
+          else if (above > rect.top + 60 && !inside(toCanvasY(above))) y = above;
+        }
+      }
       return { x, y: Math.min(y, window.innerHeight - 60) };
     }, wanted);
     // The search box opens on a double click on empty canvas; when the click is taken for something

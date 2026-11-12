@@ -69,7 +69,7 @@ tutorial(
       if (!have) {
         await t.fastForward(async () => {
           const r = await t.h.api("/wp/api/tags/download", { method: "POST" });
-          if (!r.ok) throw new StepError("The tag list couldn't be downloaded on this machine.");
+          if (r.status < 200 || r.status >= 300) throw new StepError("The tag list couldn't be downloaded on this machine.");
         }, 0);
       }
       await t.go("/wp/settings/autocomplete");
