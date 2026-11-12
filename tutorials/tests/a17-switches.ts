@@ -165,6 +165,12 @@ tutorial(
       await t.say("A Negative goes with it, to the negative prompt, only while the toggle is on.");
       await t.waitVoice();
       await t.uncallout("neg");
+      await t.fill(winField("tg-off-value"), "under a clear sky", { cps: 14 });
+      await t.beat(400);
+      await t.callout("off", win().locator('[data-test="tg-off-value"]').first(), "Off: $rain prints this instead", 5);
+      await t.say("An Off value is what it holds while it's off. It can have its own negative too.");
+      await t.waitVoice();
+      await t.uncallout("off");
       await winDone();
       const rain = t.node(tg).locator('[data-test^="tg-row-"]').filter({ hasText: "Rain" });
       await t.callout("globe", rain.locator('[data-test^="tg-internal-"]').first(), "Off: the Assembler can print it", 4);
@@ -196,7 +202,15 @@ tutorial(
       await t.say("And sunny sky is in the negative.");
       await t.waitVoice();
       await t.uncallout("negp");
-      await t.say("Rules still get the switch: rain dot bool is true or false, whatever the value.");
+      await t.say("Switch Rain off, and run again.");
+      await t.click(t.node(tg).locator('[data-test^="tg-row-"]').filter({ hasText: "Rain" }).locator('[data-test^="tg-ctl-"]').first());
+      await t.beat(500);
+      await runFor(/under a clear sky/);
+      await t.callout("out", t.node(nodes.text), "The Off value", 5);
+      await t.say("Now it's the Off value, and sunny sky has left the negative.");
+      await t.waitVoice();
+      await t.uncallout("out");
+      await t.say("Rules still get the switch: rain dot bool is true or false, whatever the values.");
       await t.waitVoice();
     });
 
