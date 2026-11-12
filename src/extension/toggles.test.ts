@@ -229,6 +229,24 @@ describe("toggle variables in the graph walkers", () => {
     expect(collectUpstreamRenderableVariables(g, asm)).toEqual([]);
   });
 
+  it("the preview carries each variable's negative (Any on and Pick one)", () => {
+    const any = cfg([
+      t("a", "rain", true, { value: "in the rain", negative: "sunny sky", visible: true }),
+      t("b", "fog", false, { value: "fog", off_negative: "clear air", visible: true }),
+      t("c", "wind", true, { visible: true }),
+    ]);
+    const steps = togglesPreviewModules({ widgets: [{ name: "wp_toggles", value: JSON.stringify(any) }] });
+    expect(steps[0]?.entries).toEqual([
+      { variable_name: "rain", value: "in the rain", negative: "sunny sky" },
+      { variable_name: "fog", value: "", negative: "clear air" },
+      { variable_name: "wind", value: "true" },
+    ]);
+    const one = { ...cfg([t("a", "day", false), t("b", "night", true, { value: "at night", negative: "daylight" })], "one"), group_var: "time", group_visible: true };
+    const picked = togglesPreviewModules({ widgets: [{ name: "wp_toggles", value: JSON.stringify(one) }] });
+    const entries = picked.flatMap((s) => s.entries as { variable_name: string; negative?: string }[]);
+    expect(entries.find((e) => e.variable_name === "time")?.negative).toBe("daylight");
+  });
+
   it("the preview splits shown and internal variables", () => {
     const c = cfg([t("a", "dawn", true), t("b", "dusk", false, { visible: true })]);
     const steps = togglesPreviewModules({ widgets: [{ name: "wp_toggles", value: JSON.stringify(c) }] });

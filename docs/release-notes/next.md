@@ -22,6 +22,7 @@
 
 ### Fixes
 
+- **Toggle negatives show in the Assembler's negative preview.** A toggle's Negative (or Off negative), and the picked toggle's negative in Pick one, went to the negative prompt on Run but never showed in the Assembler's negative preview. The preview shows them now.
 - **WP Var nodes read `$name.bool`.** WP Var → Bool (and the other Var nodes) can now read a toggle's switch as `$name.bool`. A toggle with a Value holds that value in its variable, so the **Batches and grids** example's Quick preview stopped picking the small image size. Its Var → Bool now reads `$quick_preview.bool`.
 - **WP Toggles variables reach the Assembler.** The Pick one variable (like `$time`) never showed in a downstream Prompt Assembler, even with its box ticked, so the Assembler said "No upstream variables yet". It shows now, and the box is called **Show in Assembler**. Each toggle also has a globe on its row in the edit view, on by default: it keeps the toggle's true/false variable internal, for rules only, and turning it off lets the Assembler print it, in Any on and Pick one alike. **Show** now hides the `$variable` under the name in the edit view too, so you can see what it does.
 - **Pop-up panels in the manager have their padding back.** Since the move to Tailwind 4, the manager's pop-up panels (the Test Runner's **Add to stack** picker and others built on the same panel) lost their inner padding, so the search box, kind chips, match count and Sort sat flush against the panel's edges. They have room on every side again.
