@@ -421,8 +421,9 @@ def batches_and_grids() -> None:
             "**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole "
             "grid, **Full** for the real thing.\n\n"
             "- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\n"
-            "- Each choice also writes its own true / false: **Var → Bool** reads "
-            "`$quick_preview` and the **If/Else Switch** picks the smaller latent.\n\n"
+            "- Each choice also has its own switch: **Var → Bool** reads "
+            "`$quick_preview.bool` (on or off; `$quick_preview` itself holds the value) and "
+            "the **If/Else Switch** picks the smaller latent.\n\n"
             "[WP Toggles](docs:wp-toggles){button pi-sliders-h} "
             "[Var → Bool](docs:wp-var-to-bool){button pi-check-square}",
             step=3, color="warning", bookmark=view(3440, 640, 0.6, "3", 3))})
@@ -437,8 +438,8 @@ def batches_and_grids() -> None:
                    props={"var_name": "$steps"},
                    widgets={"wp_var_name": "$steps", "index": 0, "default": 30})
     quick = wf.add("WP_VarToBool", (2960, ny + 460), (460, 180), title="Quick preview?",
-                   props={"var_name": "$quick_preview"},
-                   widgets={"wp_var_name": "$quick_preview", "index": 0, "default": False})
+                   props={"var_name": "$quick_preview.bool"},
+                   widgets={"wp_var_name": "$quick_preview.bool", "index": 0, "default": False})
     small = wf.add("EmptyLatentImage", (3480, ny), (420, 110), title="Quick size",
                    widgets={"width": 512, "height": 768, "batch_size": 1})
     full = wf.add("EmptyLatentImage", (3480, ny + 170), (420, 110), title="Full size",
