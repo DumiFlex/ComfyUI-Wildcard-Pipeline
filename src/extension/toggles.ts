@@ -389,6 +389,15 @@ export function ownToggleNegatives(cfg: TogglesConfig): Record<string, string> {
   return out;
 }
 
+/** Pick one: the picked toggle's negative ("" when none), what the Pick one
+ *  variable carries (mirror of `engine/toggles.py::picked_negative`). */
+export function pickedToggleNegative(cfg: TogglesConfig): string {
+  if (cfg.mode !== "one" || !cfg.group_var || !VAR_RE.test(cfg.group_var)) return "";
+  const eff = effectiveToggles(cfg);
+  const picked = toggleRows(cfg).find((t) => eff.get(t.id));
+  return picked?.negative?.trim() ?? "";
+}
+
 /** Variables the node writes that stay out of the prompt (mirror of
  *  `engine/toggles.py::internal_vars`): a toggle not `visible` (the
  *  last row writing a variable decides) and the Pick one variable unless
@@ -575,7 +584,14 @@ export function staticToggleInternals(node: TogglesNodeLike): Set<string> {
 export function togglesPreviewModules(node: TogglesNodeLike): Record<string, unknown>[] {
   const cfg = nodeTogglesConfig(node);
   const hidden = internalToggleVars(cfg);
-  const all = Object.entries(resolveToggles(cfg)).map(([variable_name, value]) => ({ variable_name, value }));
+  // Each variable's negative rides along, so the Assembler's negative
+  // preview shows what Run sends (the node files them the same way).
+  const negs = ownToggleNegatives(cfg);
+  const picked = pickedToggleNegative(cfg);
+  if (picked && cfg.group_var) negs[cfg.group_var] = picked;
+  const all = Object.entries(resolveToggles(cfg)).map(([variable_name, value]) => ({
+    variable_name, value, ...(negs[variable_name] ? { negative: negs[variable_name] } : {}),
+  }));
   const step = (id: string, entries: typeof all, internal: boolean): Record<string, unknown> => ({
     id, type: "fixed_values", enabled: true,
     meta: { name: "WP Toggles" }, entries, instance: internal ? { internal: true } : {},
