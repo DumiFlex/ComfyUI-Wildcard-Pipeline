@@ -574,6 +574,19 @@ export function staticToggleValues(node: TogglesNodeLike): Record<string, string
   return resolveToggles(nodeTogglesConfig(node));
 }
 
+/** Each variable the node writes → the negative it carries now ("" for none):
+ *  its Negative while on, Off negative while off, and the pick's negative on
+ *  the Pick one variable. */
+export function staticToggleNegatives(node: TogglesNodeLike): Record<string, string> {
+  const cfg = nodeTogglesConfig(node);
+  const own = ownToggleNegatives(cfg);
+  const picked = pickedToggleNegative(cfg);
+  if (picked && cfg.group_var) own[cfg.group_var] = picked;
+  const out: Record<string, string> = {};
+  for (const v of Object.keys(resolveToggles(cfg))) out[v] = own[v] ?? "";
+  return out;
+}
+
 /** The node's variables that stay out of the prompt (graph walkers). */
 export function staticToggleInternals(node: TogglesNodeLike): Set<string> {
   return internalToggleVars(nodeTogglesConfig(node));
