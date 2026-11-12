@@ -32,6 +32,7 @@ import {
   toggleRows,
   type TogglesConfig,
 } from "../extension/toggles";
+import { ctlInputName } from "../extension/toggle-control";
 
 const TogglesWidget = defineAsyncComponent(
   () => import("../components/toggles/TogglesWidget.vue"),
@@ -41,6 +42,7 @@ interface ToggleOutput {
   name: string;
   type: string;
   label?: string;
+  localized_name?: string;
   links?: number[] | null;
 }
 
@@ -102,6 +104,19 @@ function relabel(node: TogglesHostNode, cfg: TogglesConfig): void {
     slot.name = `toggle_${t.out}`;
     slot.type = "BOOLEAN";
     slot.label = t.name;
+    // The hover tooltip reads `localized_name` before `name` ("toggle_4"
+    // is a slot number, not `$toggle_4`).
+    slot.localized_name = t.name;
+  }
+  // A control dot's tooltip says the toggle's name, not its `ctl_<id>`.
+  for (const t of toggleRows(cfg)) {
+    const input: { name: string; label?: string; localized_name?: string } | undefined = t.control
+      ? node.inputs?.find((i) => i.name === ctlInputName(t.id))
+      : undefined;
+    if (input) {
+      input.label = t.name;
+      input.localized_name = t.name;
+    }
   }
 }
 
