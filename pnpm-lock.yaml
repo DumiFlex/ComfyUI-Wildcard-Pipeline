@@ -24,12 +24,12 @@ importers:
         specifier: ^4.4.5
         version: 4.6.4(vue@3.5.44(typescript@5.9.3))
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@comfyorg/comfyui-frontend-types':
         specifier: ^1.57.6
-        version: 1.57.6(vue@3.5.44(typescript@5.9.3))(zod@3.25.76)
+        version: 1.57.6(vue@3.5.44(typescript@5.9.3))(zod@4.6.7)
       '@commitlint/cli':
         specifier: ^19.5.0
         version: 19.8.1(@types/node@25.6.0)(typescript@5.9.3)
@@ -2224,8 +2224,8 @@ packages:
     resolution: {integrity: sha512-4LCcse/U2MHZ63HAJVE+v71o7yOdIe4cZ70Wpf8D/IyjDKYQLV5GD46B+hSTjJsvV5PztjvHoU580EftxjDZFQ==}
     engines: {node: '>=12.20'}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -2296,11 +2296,11 @@ snapshots:
 
   '@comfyorg/comfyui-desktop-bridge-types@0.5.0': {}
 
-  '@comfyorg/comfyui-frontend-types@1.57.6(vue@3.5.44(typescript@5.9.3))(zod@3.25.76)':
+  '@comfyorg/comfyui-frontend-types@1.57.6(vue@3.5.44(typescript@5.9.3))(zod@4.6.7)':
     dependencies:
       '@comfyorg/comfyui-desktop-bridge-types': 0.5.0
       vue: 3.5.44(typescript@5.9.3)
-      zod: 3.25.76
+      zod: 4.6.7
 
   '@commitlint/cli@19.8.1(@types/node@25.6.0)(typescript@5.9.3)':
     dependencies:
@@ -4246,4 +4246,4 @@ snapshots:
 
   yocto-queue@1.2.2: {}
 
-  zod@3.25.76: {}
+  zod@4.6.7: {}
