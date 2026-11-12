@@ -86,6 +86,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
         conditions. Its <b>Negative</b> goes with the variable while it is on, so an Assembler that
         prints <VarToken>$rain</VarToken> also sends "sunny, dry" to its negative output.
       </p>
+      <p>
+        In Any on a toggle can also say what to write while it is <b>off</b>: its <b>Off value</b>
+        and <b>Off negative</b>. A Buttons toggle Anime / Real with the Value "anime style" and the
+        Off value "photorealistic" writes one or the other, and each side's negative keeps the other
+        look out. Leave them empty and off prints nothing, as before.
+      </p>
     </DocSection>
 
     <DocSection title="Mute or bypass nodes">

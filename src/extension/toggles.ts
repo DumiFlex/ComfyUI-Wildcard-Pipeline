@@ -56,6 +56,11 @@ export interface ToggleRow {
   /** Negative text the variable carries while on (send-to-negative); in
    *  Pick one the picked variable carries it too. */
   negative?: string;
+  /** What the variable gets while OFF ("" when absent). With a Value or an
+   *  Off value the toggle writes text, not true/false. */
+  off_value?: string;
+  /** Negative text the variable carries while off. */
+  off_negative?: string;
   /** The variable shows in the Assembler and prints in a prompt (the
    *  globe "internal" button turned off). Absent: internal, for rules only. */
   visible?: true;
@@ -259,6 +264,8 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (str(o.needs)) t.needs = str(o.needs);
     if (typeof o.value === "string" && o.value) t.value = o.value;
     if (typeof o.negative === "string" && o.negative.trim()) t.negative = o.negative;
+    if (typeof o.off_value === "string" && o.off_value) t.off_value = o.off_value;
+    if (typeof o.off_negative === "string" && o.off_negative.trim()) t.off_negative = o.off_negative;
     if (o.upstream === true) t.upstream = true;
     if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
     if (o.invert === true) t.invert = true;
@@ -319,16 +326,21 @@ export function effectiveToggles(cfg: TogglesConfig): Map<string, boolean> {
   return out;
 }
 
+/** Whether a toggle writes text (a Value or an Off value), not true/false. */
+export function writesText(t: ToggleRow): boolean {
+  return !!(t.value || t.off_value);
+}
+
 /** Variable → its value (+ the Pick one variable), as the node writes: a
- *  toggle with a Value writes it while on and "" while off, one without
- *  writes "true" / "false". */
+ *  toggle with a Value or an Off value writes the Value while on and the Off
+ *  value ("" when none) while off; one with neither writes "true" / "false". */
 export function resolveToggles(cfg: TogglesConfig): Record<string, string> {
   const eff = effectiveToggles(cfg);
   const values: Record<string, string> = {};
   for (const t of toggleRows(cfg)) {
     if (!t.var || !VAR_RE.test(t.var)) continue;
     const on = eff.get(t.id) === true;
-    values[t.var] = t.value ? (on ? t.value : "") : on ? "true" : "false";
+    values[t.var] = writesText(t) ? (on ? t.value ?? "" : t.off_value ?? "") : on ? "true" : "false";
   }
   if (cfg.mode === "one" && cfg.group_var && VAR_RE.test(cfg.group_var)) {
     const picked = toggleRows(cfg).find((t) => eff.get(t.id));
@@ -346,14 +358,15 @@ export function toggleBools(cfg: TogglesConfig): Record<string, boolean> {
   return out;
 }
 
-/** Toggle variable → its negative, for toggles that are on and have one
- *  (mirror of `engine/toggles.py::own_negatives`). */
+/** Toggle variable → its negative: the Negative while on, the Off negative
+ *  while off (mirror of `engine/toggles.py::own_negatives`). */
 export function ownToggleNegatives(cfg: TogglesConfig): Record<string, string> {
   const eff = effectiveToggles(cfg);
   const out: Record<string, string> = {};
   for (const t of toggleRows(cfg)) {
     if (!t.var || !VAR_RE.test(t.var)) continue;
-    if (eff.get(t.id) && t.negative?.trim()) out[t.var] = t.negative.trim();
+    const text = (eff.get(t.id) ? t.negative : t.off_negative)?.trim();
+    if (text) out[t.var] = text;
     else delete out[t.var];
   }
   return out;

@@ -295,6 +295,22 @@ describe("parseTogglesConfig negative", () => {
   });
 });
 
+describe("parseTogglesConfig off value", () => {
+  it("keeps an Off value and Off negative, drops blank ones", () => {
+    const cfg = parseTogglesConfig(JSON.stringify({
+      mode: "any",
+      rows: [
+        { id: "t1", name: "Style", var: "style", off_value: "photo", off_negative: "anime" },
+        { id: "t2", name: "Rain", var: "rain", off_value: "", off_negative: "  " },
+      ],
+    }));
+    expect(cfg.rows.find((r) => r.id === "t1")).toMatchObject({ off_value: "photo", off_negative: "anime" });
+    const t2 = cfg.rows.find((r) => r.id === "t2");
+    expect(t2).not.toHaveProperty("off_value");
+    expect(t2).not.toHaveProperty("off_negative");
+  });
+});
+
 describe("parseTogglesConfig looks", () => {
   it("keeps icons and #rrggbb colours, drops anything else", () => {
     const cfg = parseTogglesConfig({

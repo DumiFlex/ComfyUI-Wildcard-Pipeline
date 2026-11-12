@@ -1,5 +1,5 @@
 {
- "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first). A case's optional internal lists the variables kept out of the prompt (internal_vars / internalToggleVars), sorted. values is what each variable holds (a toggle with a value writes it while on, \"\" while off); bools is each toggle variable's on/off ($name.bool, bools / toggleBools); negatives, when present, the toggle negatives filed under their own variables (own_negatives / ownToggleNegatives).",
+ "_comment": "Shared by engine/toggles.py (tests/engine/test_toggles.py) and src/extension/toggles.ts (toggles.test.ts). outputs lists the pinned outputs only; the node pads to 16 with false. A case's optional upstream is the upstream Context (applied with with_upstream / withUpstream first). A case's optional internal lists the variables kept out of the prompt (internal_vars / internalToggleVars), sorted. values is what each variable holds (a toggle with a value or an off_value writes the value while on and the off_value, or \"\", while off); bools is each toggle variable's on/off ($name.bool, bools / toggleBools); negatives, when present, the toggle negatives filed under their own variables (negative while on, off_negative while off) (own_negatives / ownToggleNegatives).",
  "cases": [
   {
    "name": "plain switches",
@@ -1039,6 +1039,69 @@
    "negatives": {
     "rain": "sunny"
    }
+  },
+  {
+   "name": "any on off values",
+   "config": {
+    "version": 1,
+    "mode": "any",
+    "group_var": "",
+    "rows": [
+     {
+      "id": "00000031",
+      "kind": "toggle",
+      "name": "Style",
+      "var": "style",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "buttons",
+      "value": "anime style",
+      "off_value": "photorealistic",
+      "negative": "photo, 3d",
+      "off_negative": "anime, cartoon",
+      "on_label": "Anime",
+      "off_label": "Real"
+     },
+     {
+      "id": "00000032",
+      "kind": "toggle",
+      "name": "Rain",
+      "var": "rain",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "buttons",
+      "off_value": "clear sky",
+      "off_negative": "rain"
+     },
+     {
+      "id": "00000033",
+      "kind": "toggle",
+      "name": "Fog",
+      "var": "fog",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "buttons",
+      "value": "thick fog"
+     }
+    ]
+   },
+   "values": {
+    "style": "photorealistic",
+    "rain": "",
+    "fog": ""
+   },
+   "bools": {
+    "style": false,
+    "rain": true,
+    "fog": false
+   },
+   "negatives": {
+    "style": "anime, cartoon"
+   },
+   "outputs": []
   }
  ]
 }

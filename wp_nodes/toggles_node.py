@@ -70,7 +70,7 @@ class WPToggles(io.ComfyNode):
         group = cfg.group_var if cfg.mode == "one" else ""
         raw_values = dict(values)
         on_off = toggles.bools(cfg)
-        valued = {t.var for t in cfg.toggles if t.value and t.var in values}
+        valued = {t.var for t in cfg.toggles if t.writes_text and t.var in values}
         # A value may read upstream variables and the toggles' own. Inline
         # {a|b} picks need a seed the node doesn't have, so they stay as
         # written (the Assembler's seedless surface), like the Context
@@ -91,8 +91,9 @@ class WPToggles(io.ComfyNode):
             return text.strip()
 
         # Negatives go with their variable, so an Assembler that prints it
-        # sends them to the negative prompt: each toggle's while it is on,
-        # and the pick's with the Pick one variable.
+        # sends them to the negative prompt: each toggle's Negative while it
+        # is on (its Off negative while off), and the pick's with the Pick one
+        # variable.
         own_negs = {k: resolve_neg(v) for k, v in toggles.own_negatives(cfg).items()}
         neg_text = resolve_neg(toggles.picked_negative(cfg)) if group in values else ""
 
