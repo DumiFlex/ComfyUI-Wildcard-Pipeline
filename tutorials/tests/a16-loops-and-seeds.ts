@@ -93,7 +93,8 @@ tutorial(
       await t.beat(700);
       await t.waitVoice();
       await t.say("Same base seed, same strategy, same batch: a loop is repeatable.");
-      await t.click(modal.locator('[data-test="seed-modal-done"]'));
+      // The Done button sits in the kit Modal's footer, outside the seed-modal body.
+      await t.click(page.locator('[data-test="seed-modal-done"]').last());
       await t.beat(700);
       await t.waitVoice();
     });
