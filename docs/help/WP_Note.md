@@ -30,7 +30,7 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Lists and quote**: Puts - , 1. or > before each selected line (press again to take it off).
 - **Link** (Ctrl+K): A Docs page (type to find any page of these docs, then pick a section or the whole page), a Web address, a Library button (below) or a Community pack (owner/pack, or paste the pack's address), drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.
 - **Icon**: Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is.
-- **Pictures**: Add a picture from a file, or paste or drop one into the text; it goes on a line of its own where the caret is. Or pick one the extension ships (the node toolbar with its ? help button). The panel lists the note's pictures with a Width slider (a share of the note), Own size and Remove.
+- **Pictures**: Add a picture from a file, or paste or drop one into the text; it goes on a line of its own where the caret is. Or pick one the extension ships (the node toolbar with its ? help button, or any docs screenshot), with a search box to find it. The panel stays open after adding and lists the note's pictures with a Width slider (a share of the note), Own size and Remove.
 <!-- fields:end -->
 
 Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.
