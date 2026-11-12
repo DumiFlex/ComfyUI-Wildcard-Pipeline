@@ -59,9 +59,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--wp-row-gap);
-  /* Drop-bar anchor — the floating <BundleDropBar :container-uid="null">
-   * is absolutely positioned and needs this as its offset parent so
-   * its top/left coordinates resolve against the top-level scope. */
   position: relative;
 }
 
@@ -478,27 +475,43 @@
 .wp-module.wp-mod--drift { border-color: var(--wp-warn);            background: color-mix(in srgb, var(--wp-warn) 8%, var(--wp-bg3)); }
 .wp-module.wp-mod--err   { border-color: var(--wp-danger);          background: color-mix(in srgb, var(--wp-danger) 8%, var(--wp-bg3)); }
 
-/* Gap metaphor: target row gets margin so a slot opens; the
- * `.wp-gap-bar` element paints inside that slot. Margin transitions
- * via the row's existing `transition: transform/...` rule below; we
- * extend it to cover `margin`. */
-.wp-module.wp-gap-before,
-.wp-bundle-header.wp-gap-before,
-.wp-w-footer.wp-gap-before { margin-top: 14px; }
-.wp-module.wp-gap-after { margin-bottom: 14px; }
-/* Margins snap (no transition) so back-to-back zone changes don't
- * leave half-open gaps mid-flight. Transform/opacity/etc still animate
- * via TransitionGroup's FLIP rules + the wp-list-* classes below. */
+/* Drop gap + line: the kit's row-drag.css (the Context Injector's look).
+ * The row or bundle frame the drop lands beside gets `wp-rowdrag--before`
+ * / `--after`: a 14px gap opens with a glowing line in it, in the bundle's
+ * colour inside a bundle. The gap eases open (margins transition here
+ * too, since this rule outranks the kit's). */
 .wp-modules .wp-module {
   transition: transform var(--wp-motion-fade) var(--wp-motion-curve-flip),
+    margin-top var(--wp-motion-fade) var(--wp-motion-curve-flip),
+    margin-bottom var(--wp-motion-fade) var(--wp-motion-curve-flip),
     background var(--wp-motion-quick) ease, border-color var(--wp-motion-quick) ease, opacity var(--wp-motion-quick) ease;
 }
 .wp-bundle-header { transition: border-bottom-color var(--wp-motion-fade) ease, background var(--wp-motion-quick) ease; }
 .wp-bundle {
-  transition: border-width var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease, box-shadow var(--wp-motion-quick) ease;
+  transition: border-width var(--wp-motion-quick) ease, background var(--wp-motion-quick) ease, box-shadow var(--wp-motion-quick) ease,
+    margin-top var(--wp-motion-fade) var(--wp-motion-curve-flip), margin-bottom var(--wp-motion-fade) var(--wp-motion-curve-flip),
+    opacity var(--wp-motion-quick) ease;
 }
-.wp-bundle.wp-gap-before { margin-top: 14px; }
-.wp-bundle.wp-gap-after { margin-bottom: 14px; }
+/* A closed bundle takes a drop as a whole: the frame lights up (drop
+ * target, above) and a line in its colour runs under the header, the
+ * same line the kit draws in a gap. It opens when the drop lands. */
+.wp-bundle.wp-bundle--drop-into::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 3px;
+  z-index: 3;
+  height: 3px;
+  background: var(--wp-bundle-color, var(--wp-bundle-default));
+  border-radius: min(2px, var(--wp-radius-cap, 999px));
+  box-shadow: 0 0 8px var(--wp-bundle-color, var(--wp-bundle-default));
+  pointer-events: none;
+  animation: wp-rowdrag-line-in var(--wp-motion-quick, 120ms) ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wp-bundle.wp-bundle--drop-into::after { animation: none; }
+}
 
 /* Source ghost — lift the row while it's mid-drag. */
 .wp-module--dragging {

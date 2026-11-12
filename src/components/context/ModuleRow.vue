@@ -27,7 +27,7 @@ const {
   isModified, isDrifted, isMissingFromLibrary, isTypeConflict,
   severityFor, conflictTooltip, conflictBadgeText,
   modifiedTooltip, summaryFor, summaryTokens, siblingInfo,
-  rowGap,
+  rowGap, rowLineStyle,
   toggleCollapsed, toggleEnabled, removeModule,
   toggleLockOnCard, toggleInternalOnCard,
   onDragStart, onDragEnd, openContextMenu, onCardKeydown,
@@ -42,7 +42,7 @@ const {
     :data-module-id="module.id"
     :data-module-idx="idx"
     :data-kind="module.type"
-    class="wp-module"
+    class="wp-module wp-rowdrag-row"
     tabindex="0"
     draggable="true"
     :class="{
@@ -53,17 +53,18 @@ const {
       'wp-state-modified': isModified(module),
       'wp-state-drift': isDrifted(module),
       'wp-state-missing': isMissingFromLibrary(module) && !module.example,
-      'wp-gap-before': rowGap(idx) === 'before',
-      'wp-gap-after': rowGap(idx) === 'after',
+      'wp-rowdrag--before': rowGap(idx) === 'before',
+      'wp-rowdrag--after': rowGap(idx) === 'after',
       'wp-module--dragging': module._uid === ctx.draggingModuleUid.value,
       'wp-drop-pulse': !!module._uid && ctx.recentDropUids.value.has(module._uid),
       'wp-mod--mod': isModified(module),
       'wp-mod--drift': isDrifted(module),
       'wp-mod--err': isMissingFromLibrary(module) && !module.example,
     }"
-    :style="!!module._uid && ctx.recentDropUids.value.has(module._uid)
-      ? { animationDelay: ctx.pulseDelayFor(module._uid) }
-      : undefined"
+    :style="{
+      ...rowLineStyle(idx),
+      ...(!!module._uid && ctx.recentDropUids.value.has(module._uid) ? { animationDelay: ctx.pulseDelayFor(module._uid) } : {}),
+    }"
     @dragstart="(ev) => onDragStart(ev, module, idx)"
     @dragend="onDragEnd"
     @contextmenu.stop.prevent="(ev) => openContextMenu(ev, module, idx)"

@@ -50,6 +50,9 @@ import DocRef from "../../../components/docs/DocRef.vue";
         <li>On the canvas, select rows in a WP Context, right-click and choose <b>Save as bundle</b>.</li>
         <li>In the manager, create one on the <b>Bundles</b> page and add modules to it.</li>
         <li>Drop a saved bundle into a Context with <b>Add Bundle</b>.</li>
+        <li>Drag a row into a bundle on the canvas: a line in the bundle's colour shows where it lands.
+          On a closed bundle, drop on the middle of its header to put the row inside (the bundle opens);
+          its top and bottom edges drop the row beside it.</li>
       </ul>
     </DocSection>
 

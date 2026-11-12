@@ -28,6 +28,9 @@ export interface ModuleRowCtx {
   summaryTokens: (m: ModuleEntry) => Array<{ kind: string; text: string; varName?: string }>;
   siblingInfo: (m: ModuleEntry) => { index: number; total: number } | null;
   rowGap: (idx: number) => "before" | "after" | null;
+  /** The kit drop line's colour variable on this row when it anchors the
+   *  drop (a bundle's colour inside that bundle). */
+  rowLineStyle: (idx: number) => Record<string, string> | undefined;
   draggingModuleUid: Ref<string | null>;
   recentDropUids: Ref<Set<string>>;
   pulseDelayFor: (uid: string | null | undefined) => string;

@@ -20,7 +20,6 @@ import { inject } from "vue";
 import type { BundleInstance, ModuleEntry } from "../../../widgets/_shared";
 import { BundleFrameCtxKey } from "./bundle-frame-ctx";
 import BundleHeader from "./BundleHeader.vue";
-import BundleDropBar from "./BundleDropBar.vue";
 import ModuleRow from "../ModuleRow.vue";
 
 type BundleChild =
@@ -43,18 +42,21 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
 
 <template>
   <div
-    class="wp-bundle"
+    class="wp-bundle wp-rowdrag-row"
     :class="{
       'wp-bundle--collapsed': bundle.collapsed,
       'wp-bundle--disabled': !bundle.enabled,
       'wp-bundle--nested': nested,
       'wp-bundle--drop-target': ctx.isBundleDropTarget(bundle._uid),
-      'wp-gap-before': ctx.bundleHeaderGap(bundle._uid) === 'before',
-      'wp-gap-after': ctx.bundleHeaderGap(bundle._uid) === 'after',
+      'wp-bundle--drop-into': ctx.isBundleDropInto(bundle._uid),
+      'wp-rowdrag--before': ctx.bundleHeaderGap(bundle._uid) === 'before',
+      'wp-rowdrag--after': ctx.bundleHeaderGap(bundle._uid) === 'after',
+      'wp-rowdrag--dragging': ctx.draggingBundleUid.value === bundle._uid,
       'wp-drop-pulse': ctx.recentDropUids.value.has(bundle._uid),
     }"
     :style="{
       '--wp-bundle-color': bundle.color ? bundle.color : 'var(--wp-bundle-default)',
+      ...ctx.bundleLineStyle(bundle._uid),
       ...(ctx.recentDropUids.value.has(bundle._uid) ? { animationDelay: ctx.pulseDelayFor(bundle._uid) } : {}),
     }"
     :data-bundle-uid="bundle._uid"
@@ -84,7 +86,6 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
       @dragend="ctx.onDragEnd()"
     />
     <div class="wp-bundle-children">
-      <BundleDropBar :container-uid="bundle._uid" />
       <template v-for="child in children" :key="child.key">
         <BundleFrame
           v-if="child.kind === 'bundle'"
@@ -133,9 +134,8 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
   padding: 0;
   overflow: hidden;
 }
-/* Drop-bar anchor — the floating indicator inside .wp-bundle-children
- * is absolutely positioned; the container needs to be the offset
- * parent. Both nested + outer frames share this rule. */
+/* Offset parent for anything absolutely placed in a bundle's body.
+ * Both nested + outer frames share this rule. */
 .wp-bundle > .wp-bundle-children {
   position: relative;
 }
