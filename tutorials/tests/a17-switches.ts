@@ -19,6 +19,14 @@ tutorial(
     const page = t.page;
     const rowEdit = '[data-test^="tg-edit-"]:not([data-test="tg-edit-done"])';
     const field = (node: string, test: string) => t.node(node).locator(`[data-test="${test}"] input, input[data-test="${test}"]`).first();
+    // A toggle's own settings open in a window (kit Modal) over the canvas, not inside the node.
+    const win = () => page.getByRole("dialog").filter({ has: page.locator('[data-test="tg-window-done"]') }).last();
+    const winField = (test: string) =>
+      win().locator(`[data-test="${test}"] input, input[data-test="${test}"], [data-test="${test}"] textarea, textarea[data-test="${test}"], [data-test="${test}"] [contenteditable="true"], [data-test="${test}"][contenteditable="true"]`).first();
+    const winDone = async () => {
+      await t.click(win().locator('[data-test="tg-window-done"]'));
+      await t.beat(500);
+    };
     // Selects a Toggles node and opens its edit view with the pencil above it.
     const openEdit = async (node: string) => {
       const box = await t.node(node).boundingBox();
@@ -86,19 +94,18 @@ tutorial(
       await openEdit(tg);
       await t.click(t.node(tg).locator(rowEdit).first());
       await t.beat(700);
-      await t.fill(field(tg, "tg-name"), "Lighting", { cps: 14 });
+      await t.fill(winField("tg-name"), "Lighting", { cps: 14 });
       await t.press("Tab");
       await t.beat(400);
-      await t.fill(field(tg, "tg-var"), "use_lighting", { cps: 14 });
+      await t.fill(winField("tg-var"), "use_lighting", { cps: 14 });
       await t.press("Tab");
       await t.beat(500);
       await t.waitVoice();
-      await t.callout("var", t.node(tg).locator('[data-test="tg-var"]'), "$use_lighting: true or false", 5);
+      await t.callout("var", win().locator('[data-test="tg-var"]').first(), "$use_lighting: true or false", 5);
       await t.say("Each toggle writes its variable into the context as true or false, for every node after it. It's for rules only, so it never prints in the prompt.");
       await t.waitVoice();
       await t.uncallout("var");
-      await t.click(t.node(tg).locator('[data-test="tg-done"]'));
-      await t.beat(400);
+      await winDone();
       await t.click(t.node(tg).locator('[data-test="tg-edit-done"]'));
       await t.beat(800);
       await t.deselect();
@@ -141,7 +148,7 @@ tutorial(
       await t.click(t.node(tg2).locator('[data-test="tg-mode-one"]'));
       await t.beat(600);
       await t.waitVoice();
-      await t.say("It writes time, the picked toggle's value, and Show in prompt lets it print.");
+      await t.say("It writes time, the picked toggle's value, and Show in Assembler lets it print.");
       await t.fill(field(tg2, "tg-group-var"), "time", { cps: 14 });
       await t.press("Tab");
       await t.beat(400);
@@ -161,14 +168,13 @@ tutorial(
         if (i === 0) await t.click(t.node(tg2).locator(rowEdit).first());
         else await t.click(t.node(tg2).locator('[data-test="tg-add"]'));
         await t.beat(600);
-        await t.fill(field(tg2, "tg-name"), name, { cps: 14 });
+        await t.fill(winField("tg-name"), name, { cps: 14 });
         await t.press("Tab");
         await t.beat(300);
-        await t.fill(field(tg2, "tg-value"), value, { cps: 14 });
+        await t.fill(winField("tg-value"), value, { cps: 14 });
         await t.press("Tab");
         await t.beat(300);
-        await t.click(t.node(tg2).locator('[data-test="tg-done"]'));
-        await t.beat(400);
+        await winDone();
       }
       await t.normalSpeed();
       await t.click(t.node(tg2).locator('[data-test="tg-edit-done"]'));
@@ -194,10 +200,9 @@ tutorial(
       await openEdit(tg);
       await t.click(t.node(tg).locator(rowEdit).first());
       await t.beat(700);
-      await t.click(t.node(tg).locator('[data-test="tg-control-bypass"]'));
+      await t.click(win().locator('[data-test="tg-control-bypass"]'));
       await t.beat(600);
-      await t.click(t.node(tg).locator('[data-test="tg-done"]'));
-      await t.beat(400);
+      await winDone();
       await t.click(t.node(tg).locator('[data-test="tg-edit-done"]'));
       await t.beat(800);
       await t.deselect();
