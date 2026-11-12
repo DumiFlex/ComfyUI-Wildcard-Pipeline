@@ -47,6 +47,7 @@ import { collectTransitiveDeps } from "../../../../manager/community/transitive-
 import { downloadDepsForDangling } from "../../../../manager/community/download-and-reattach";
 import { installEnvelope } from "../../../../manager/import-export/install";
 import Button from "@/kit/Button.vue";
+import Modal from "@/kit/Modal.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -87,6 +88,17 @@ const emit = defineEmits<{
   "save-to-library": [];
   "clear-all-overrides": [];
 }>();
+/** The kit Modal closes on Escape, the backdrop and its ×: that is Cancel. */
+function onModalOpen(open: boolean): void {
+  if (!open) emit("cancel");
+}
+/** Ctrl/Cmd+Enter saves from anywhere in the window. */
+function onModalKey(ev: KeyboardEvent): void {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+    ev.preventDefault();
+    emit("save");
+  }
+}
 
 const isLibraryTracked = computed(() => Boolean(props.module.payload_hash));
 // See WildcardInstanceModal — PushToLibraryModal owns the update vs fork
@@ -675,20 +687,20 @@ function onSpaClick(): void {
 </script>
 
 <template>
-  <div class="cnm">
-    <header class="wp-cnm__head">
-      <i class="pi pi-link wp-cnm__head-icon" aria-hidden="true" />
+  <Modal :open="true" size="lg" flush accent="var(--wp-kind-constraint, var(--wp-accent))" icon="link" @update:open="onModalOpen" @keydown="onModalKey">
+    <template #header="{ titleId }">
       <div class="wp-cnm__title-block">
         <div class="wp-cnm__title-row">
-          <span class="wp-cnm__name" data-test="cnm-name">{{ module.meta?.name ?? module.type }}</span>
+          <span :id="titleId" class="wp-cnm__name" data-test="cnm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-cnm__chip" data-test="cnm-chip">constraint</span>
           <InstanceIdChip :id="module.id" :uid="module._uid" />
         </div>
         <div class="wp-cnm__sub">Library entry · source pick → modifies target option weights</div>
       </div>
-      <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="cnm-close" @click="emit('cancel')" />
-    </header>
-
+    </template>
+  <div class="cnm">
+    <slot name="banner" />
+    
     <ConstraintReattachSection
       v-if="hasDangling"
       :dangling-source="danglingSource"
@@ -745,7 +757,20 @@ function onSpaClick(): void {
       :target-name="targetName"
       @update:model-value="onTargetSelect"
     />
-    <footer class="wp-cnm__foot">
+        </div>
+
+    <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
+         from the community before any network/install side effect. -->
+    <ConfirmModal
+      :open="downloadConfirmOpen"
+      title="Download dependencies"
+      :body="downloadConfirmBody"
+      confirm-label="Download & install"
+      @confirm="confirmDownload"
+      @cancel="downloadConfirmOpen = false"
+    />
+  </div>
+    <template #footer>
       <a
         v-if="isLibraryTracked"
         class="wp-cnm__spa-link"
@@ -777,52 +802,26 @@ function onSpaClick(): void {
       >Save to library</Button>
       <Button size="sm" data-test="cnm-cancel" @click="emit('cancel')">Cancel</Button>
       <Button size="sm" variant="primary" data-test="cnm-save" @click="emit('save')">Save</Button>
-    </footer>
-    </div>
-
-    <!-- Feature 2: confirm pulling the missing dependency (+ its closure)
-         from the community before any network/install side effect. -->
-    <ConfirmModal
-      :open="downloadConfirmOpen"
-      title="Download dependencies"
-      :body="downloadConfirmBody"
-      confirm-label="Download & install"
-      @confirm="confirmDownload"
-      @cancel="downloadConfirmOpen = false"
-    />
-  </div>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
 .cnm {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  width: 820px;
-  max-width: 100%;
-  max-height: 80vh;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
 }
-/* Head styling lives in src/components/context/editors/_modal-head.css
+/* The frame, the coloured header and the footer row are the kit Modal's;
+ * the title block's styles live in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). */
 .wp-cnm__dock {
   position: sticky;
   bottom: 0;
   z-index: 2;
   background: var(--wp-bg2);
-}
-.wp-cnm__foot {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--wp-bg3);
-  border-top: 1px solid var(--wp-border);
 }
 .wp-cnm__spa-link {
   display: inline-flex;

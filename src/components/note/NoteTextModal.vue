@@ -5,7 +5,7 @@
  * the node's own card (its look, tone, colour, title and width); a label
  * shows its tag and the hover card that holds its text. It edits a draft
  * (text + pictures); Done writes it to the node, Cancel drops it. The
- * frame is the kit's Modal.
+ * frame is the kit's Modal, its header tinted in the note's colour.
  */
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
@@ -67,7 +67,7 @@ function onKey(ev: KeyboardEvent): void {
 </script>
 
 <template>
-  <Modal :open="true" size="lg" @update:open="onOpen" @keydown="onKey">
+  <Modal :open="true" size="lg" :accent="toneCss || 'var(--wp-accent)'" icon="align-left" @update:open="onOpen" @keydown="onKey">
     <template #header="{ titleId }">
       <div class="wp-note-tx__head">
         <div class="wp-note-tx__title-row">
@@ -137,8 +137,8 @@ function onKey(ev: KeyboardEvent): void {
   letter-spacing: 0.06em;
   padding: 2px 6px;
   border-radius: min(2px, var(--wp-radius-cap, 999px));
-  background: color-mix(in srgb, var(--wp-accent) 22%, transparent);
-  color: var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-modal-accent, var(--wp-accent)) 22%, transparent);
+  color: var(--wp-modal-accent, var(--wp-accent));
 }
 .wp-note-tx__sub { font-size: 11px; color: var(--wp-text-dim); margin-top: 3px; }
 .wp-note-tx__hint { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; font-size: 11px; color: var(--wp-text-dim); }

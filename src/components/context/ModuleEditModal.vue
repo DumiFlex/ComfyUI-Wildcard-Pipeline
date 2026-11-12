@@ -2,7 +2,6 @@
 import Button from "@/kit/Button.vue";
 import { ref, computed, watch } from "vue";
 
-import ModalShell from "@/kit/ModalShell.vue";
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
 import { type ResolvedValue } from "../../widgets/richTokenize";
 import {
@@ -85,17 +84,6 @@ watch([() => props.visible, () => props.module], () => {
     draft.value = null;
   }
 }, { immediate: true });
-
-// Keys arrive from ModalShell, not from window: the modal shield stops
-// inside-modal keys at the overlay so they cannot reach ComfyUI's global
-// shortcuts, which means a window listener here would never fire.
-function onKeydown(ev: KeyboardEvent) {
-  if (!props.visible) return;
-  if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
-    ev.preventDefault();
-    save();
-  }
-}
 
 // Modified-state — true when ANY registry field on `instance` is
 // non-null. The `_ui` namespace is excluded by virtue of not appearing
@@ -426,24 +414,10 @@ function cancel() {
 </script>
 
 <template>
-  <ModalShell :visible="visible" @close="cancel" @keydown="onKeydown">
-    <!-- Column so the frame banner stacks ABOVE the per-kind modal card
-         (each per-kind modal renders a plain card; ModalShell's wrapper is
-         a centered flex ROW, so a bare banner sibling would land beside the
-         card). align-self:stretch on the banner spans it to the card width. -->
-    <div class="wp-frame-edit-body">
-    <!-- Frame-context banner — shown when the user is editing overrides
-         for a specific iteration frame (#k). Sits above all per-kind
-         modal bodies. Invisible on base editing (currentFrame == null). -->
-    <div
-      v-if="currentFrame != null"
-      class="wp-modal-frame-banner"
-      data-test="modal-frame-banner"
-    >
-      <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-      <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
-    </div>
-
+  <!-- Each kind's window is a kit Modal of its own (coloured header in the
+       kind's colour, id chip, its own footer buttons). The frame banner goes
+       in at the top of its body through the window's `banner` slot. -->
+  <template v-if="visible">
     <!-- v2 wildcard branch — single-pane tailored modal renders its
          own header/footer/body. No v1 chrome (no .wp-medit wrapper,
          no tab strip, no LibraryRoundTripActions footer). -->
@@ -461,7 +435,14 @@ function cancel() {
       @cancel="cancel"
       @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
-    />
+    >
+      <template #banner>
+        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
+          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
+          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
+        </div>
+      </template>
+    </WildcardInstanceModal>
 
     <!-- v2 fixed-values branch — single-pane tailored modal. -->
     <FixedValuesInstanceModal
@@ -474,7 +455,14 @@ function cancel() {
       @cancel="cancel"
       @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
-    />
+    >
+      <template #banner>
+        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
+          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
+          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
+        </div>
+      </template>
+    </FixedValuesInstanceModal>
 
     <!-- v2 combine branch — single-pane tailored modal. Library-defining
          edits stay in SPA; modal exposes only runtime + per-instance
@@ -493,7 +481,14 @@ function cancel() {
       @cancel="cancel"
       @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
-    />
+    >
+      <template #banner>
+        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
+          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
+          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
+        </div>
+      </template>
+    </CombineInstanceModal>
 
     <!-- v2 derivation branch — single-pane tailored modal. Library
          (rule conditions / branches / actions) stays in SPA; modal
@@ -516,7 +511,14 @@ function cancel() {
       @cancel="cancel"
       @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
-    />
+    >
+      <template #banner>
+        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
+          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
+          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
+        </div>
+      </template>
+    </DerivationInstanceModal>
 
     <!-- v2 constraint branch — single-pane tailored modal. Library
          (matrix shape, source/target wildcard pair, exception authoring)
@@ -535,9 +537,15 @@ function cancel() {
       @cancel="cancel"
       @save-to-library="onSaveToLibraryClick"
       @clear-all-overrides="onClearAllOverrides"
-    />
-    </div>
-  </ModalShell>
+    >
+      <template #banner>
+        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
+          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
+          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
+        </div>
+      </template>
+    </ConstraintInstanceModal>
+  </template>
 
   <!-- Themed confirm dialog — replaces window.confirm() for any
        prompt the modal raises (reset overrides, reset to library,
@@ -570,18 +578,10 @@ function cancel() {
  * `.wp-medit` chrome was the v1 tabbed shell — removed alongside
  * the v1 dispatch in the 2026-05-10 cleanup. */
 
-.wp-frame-edit-body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  min-height: 0;
-  max-height: 100%;
-}
 .wp-modal-frame-banner {
-  align-self: stretch;
   display: flex;
   gap: 10px;
+  margin: 10px 14px 0;
   align-items: center;
   justify-content: space-between;
   padding: 7px 11px;
