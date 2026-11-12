@@ -11,7 +11,8 @@ import {
 } from "../../widgets/_shared";
 import { reorderInjectorRows } from "../../widgets/injector";
 import { shortConflictLabel, scanInjectorConflicts } from "../../extension/conflicts";
-import { applyFlip, captureRects, MOTION_FLIP_MS } from "@/kit/flip";
+import { applyFlip, captureRects } from "@/kit/flip";
+import { useRowDrag } from "@/kit/row-drag";
 import InjectorRowComp from "./InjectorRow.vue";
 import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import InjectorBindingModal from "./InjectorBindingModal.vue";
@@ -404,26 +405,13 @@ watch(
   { immediate: true },
 );
 
-// ── Drag-to-reorder. Persists the new row order with sequential
-// slot_name reassignment (reorderInjectorRows): the wire at each
-// physical input_N socket then feeds whatever variable now sits at
-// that index. dragSrcIdx is captured on dragstart and cleared on
-// drop / dragend so a cancelled drag doesn't leak state.
-//
-// FLIP animation: captureRects BEFORE the row mutation snapshots
-// each row's current Y position keyed by `data-uid`. After Vue
-// re-renders the new order (nextTick), applyFlip computes the
-// inverse-transform per row and tweens back to identity — the rows
-// appear to slide to their new positions instead of jump-cutting.
-// shared/flip.ts honors the wp-a11y-no-motion body class so the
-// animation no-ops under reduce-motion settings.
-const dragSrcIdx = ref<number | null>(null);
-// Kind of the row being dragged, captured on dragstart. The list-level
-// dragover handler reads this to confine the drop target to the
-// dragged row's OWN kind-group (socket drags land only among socket
-// rows; template drags only among template rows) so the two groups
-// never interleave. Cleared on drop / dragend alongside dragSrcIdx.
-const dragSrcKind = ref<"socket" | "general" | null>(null);
+// ── Drag-to-reorder: the kit's useRowDrag (row-drag.ts + row-drag.css),
+// which every reorderable list shares. Persists the new row order with
+// sequential slot_name reassignment (reorderInjectorRows): the wire at
+// each physical input_N socket then feeds whatever variable now sits at
+// that index. A row lands only among rows of its OWN kind (socket rows
+// among sockets, template rows among templates), so the two groups never
+// interleave; the kit slides the rows into place and pulses the moved one.
 const listEl = ref<HTMLElement | null>(null);
 
 /** Half-open `[start, end)` index range of the kind-group a row at
@@ -443,170 +431,27 @@ function rowGroupBounds(idx: number): { start: number; end: number } {
     : { start: 0, end: socketEnd };
 }
 
-// Parent-coordinated drop indicator. Tracks the row + edge the
-// pointer is currently over so only ONE row shows the gap+bar
-// indicator at a time. Per-row local state would race: HTML5 fires
-// the previous row's dragleave AFTER the new row's dragenter, so a
-// brief frame can have two rows showing indicators. Lifting here
-// gives a single source: each row emits row-drag-over on its own
-// dragover; we just overwrite the target.
-const dragOverUid = ref<string | null>(null);
-const dragOverEdge = ref<"before" | "after" | null>(null);
-function dropIndicatorFor(uid: string): "before" | "after" | null {
-  return uid === dragOverUid.value ? dragOverEdge.value : null;
-}
-function clearDropIndicator(): void {
-  dragOverUid.value = null;
-  dragOverEdge.value = null;
-}
-/** UIDs of rows that just landed via drag-drop. Template binds the
- *  `.wp-drop-pulse` class while a UID is present; entries clear after
- *  the keyframe duration (420ms in shared/row-primitives.css). */
-const recentDropUids = ref<Set<string>>(new Set());
-const DROP_PULSE_MS = 420;
-
-function onRowDragStart(fromIdx: number): void {
-  dragSrcIdx.value = fromIdx;
-  const row = value.value.rows[fromIdx];
-  dragSrcKind.value = row?.kind === "general" ? "general" : "socket";
-}
-
-// List-level dragover. Tracking at LIST level (not per-row) so the
-// drop-target stays stable when individual rows shift by margin-top
-// /bottom (the slot opens via `.wp-inj-row--drop-before/after`
-// rules). Per-row dragover ran into oscillation: row 2 dragover
-// opens its top gap → row 2 shifts down → pointer now sits in the
-// gap above row 2 → row 1's dragover fires → row 1 opens its
-// bottom gap → row 1 shifts down → flip-flop. List-level handler
-// reads pointer Y vs each row's rect once, so shifts inside the
-// list don't change the target computation. Mirrors
-// ContextWidget.onListDragOver.
-function onListDragOver(ev: DragEvent): void {
-  if (dragSrcIdx.value === null) return;
-  if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-  const list = listEl.value;
-  if (!list) return;
-  // Filter candidate rows to the dragged row's OWN kind-group. Socket
-  // rows never see template rows as drop targets and vice-versa, so
-  // the two groups can't interleave mid-drag. Each row carries
-  // data-kind="socket"|"general"; we discriminate on it. When
-  // dragSrcKind is unset (extremely defensive — would only happen if
-  // a drag started before kind was recorded), the empty filter falls
-  // through to the "no target" branch and the drop becomes a no-op.
-  const srcKind = dragSrcKind.value;
-  const allRows = Array.from(list.querySelectorAll<HTMLElement>(".wp-inj-row[data-uid]"));
-  const rows = srcKind
-    ? allRows.filter((el) => el.dataset.kind === srcKind)
-    : [];
-  let targetUid: string | null = null;
-  let edge: "before" | "after" | null = null;
-  for (const el of rows) {
-    const r = el.getBoundingClientRect();
-    if (ev.clientY <= r.top + r.height / 2) {
-      targetUid = el.dataset.uid ?? null;
-      edge = "before";
-      break;
-    }
-    if (ev.clientY < r.bottom) {
-      targetUid = el.dataset.uid ?? null;
-      edge = "after";
-      break;
-    }
-  }
-  if (!targetUid && rows.length > 0) {
-    // Pointer past all rows in this group → drop at the END of the
-    // DRAGGED ROW'S GROUP. Falling back to the whole list's last row
-    // would let a socket drag drop "after" the final template row,
-    // re-interleaving the two groups; clamping to the group's last
-    // row keeps the invariant intact.
-    const lastEl = rows[rows.length - 1];
-    targetUid = lastEl.dataset.uid ?? null;
-    edge = "after";
-  }
-  if (targetUid && edge) {
-    if (dragOverUid.value !== targetUid) dragOverUid.value = targetUid;
-    if (dragOverEdge.value !== edge) dragOverEdge.value = edge;
-  }
-}
-
-// List-level drop. Reads the last-tracked target from state instead
-// of recomputing from the drop event's clientY — by the time drop
-// fires, the gap may have already opened (margin shifted the rows),
-// so the pointer Y at drop time can pick a different target than
-// the visual indicator showed during dragover. Trust the indicator.
-function onListDrop(ev: DragEvent): void {
-  ev.preventDefault();
-  if (dragSrcIdx.value === null) {
-    clearDropIndicator();
-    return;
-  }
-  const targetUid = dragOverUid.value;
-  const edge = dragOverEdge.value;
-  clearDropIndicator();
-  if (!targetUid || !edge) return;
-  const overIdx = value.value.rows.findIndex((r) => r._uid === targetUid);
-  if (overIdx < 0) return;
-  onRowDrop(overIdx, edge);
-}
-
-function onRowDrop(overIdx: number, edge: "before" | "after"): void {
-  const from = dragSrcIdx.value;
-  dragSrcIdx.value = null;
-  dragSrcKind.value = null;
-  clearDropIndicator();
-  if (from === null || from === overIdx) return;
-  // Convert the (overIdx, edge) pair into a single splice-style
-  // target index. "before idx N" => insert at N; "after idx N" =>
-  // insert at N+1. reorderInjectorRows handles the post-removal
-  // shift internally.
-  const toIdx = edge === "before" ? overIdx : overIdx + 1;
-  const nextRows = reorderInjectorRows(value.value.rows, from, toIdx);
-  if (nextRows === value.value.rows) return;
-
-  // Capture the moved row's uid so we can pulse it AFTER the reorder.
-  // reorderInjectorRows reassigns slot_name in place (sequential
-  // input_N), but _uid is stable per row identity.
-  const movedUid = value.value.rows[from]?._uid;
-
-  // Snapshot row positions BEFORE the mutation. applyFlip below
-  // diffs against these to compute the slide distance per row.
-  const container = listEl.value;
-  const before = container
-    ? captureRects(container, (el) => el.dataset.uid ?? null)
-    : null;
-
-  value.value = { ...value.value, rows: nextRows };
-  persist();
-
-  if (container && before) {
-    // Wait one render tick so Vue commits the new row order to the
-    // DOM before we re-measure rects in applyFlip.
-    void nextTick(() => {
-      applyFlip(container, before, (el) => el.dataset.uid ?? null);
-    });
-  }
-
-  // Drop-pulse on the dropped row. Delay the class apply by
-  // MOTION_FLIP_MS so the FLIP slide finishes first — without the
-  // delay the pulse ring would paint mid-swap on a row that's still
-  // animating into position (matches ContextWidget's pulseDrop
-  // pattern). Skip entirely under reduce-motion.
-  if (movedUid && !document.body.classList.contains("wp-a11y-no-motion")) {
-    setTimeout(() => {
-      recentDropUids.value = new Set([...recentDropUids.value, movedUid]);
-      setTimeout(() => {
-        const next = new Set(recentDropUids.value);
-        next.delete(movedUid);
-        recentDropUids.value = next;
-      }, DROP_PULSE_MS);
-    }, MOTION_FLIP_MS);
-  }
-}
-
-function onRowDragEnd(): void {
-  dragSrcIdx.value = null;
-  dragSrcKind.value = null;
-  clearDropIndicator();
+const drag = useRowDrag({
+  list: listEl,
+  rowSelector: ".wp-inj-row[data-uid]",
+  keyOf: (el) => el.dataset.uid ?? null,
+  dataType: "text/wp-injector-row",
+  candidate: (el, from) => el.dataset.kind === kindOfUid(from),
+  onDrop: (from, t) => {
+    const rows = value.value.rows;
+    const fromIdx = rows.findIndex((r) => r._uid === from);
+    const overIdx = rows.findIndex((r) => r._uid === t.key);
+    if (fromIdx < 0 || overIdx < 0) return;
+    // "before N" inserts at N, "after N" (or below the last) at N + 1;
+    // reorderInjectorRows handles the post-removal shift.
+    const nextRows = reorderInjectorRows(rows, fromIdx, t.edge === "before" ? overIdx : overIdx + 1);
+    if (nextRows === rows) return;
+    value.value = { ...value.value, rows: nextRows };
+    persist();
+  },
+});
+function kindOfUid(uid: string): "socket" | "general" {
+  return value.value.rows.find((r) => r._uid === uid)?.kind === "general" ? "general" : "socket";
 }
 
 // ── Move-to-edge (top / bottom) ────────────────────────────────────
@@ -869,13 +714,14 @@ defineExpose({ addRow, addGeneralRow, removeRow });
     <div
       ref="listEl"
       class="wp-inj-list"
-      @dragover.prevent="onListDragOver"
-      @drop.prevent="onListDrop"
+      @dragover="drag.over"
+      @drop="drag.drop"
     >
       <InjectorRowComp
         v-for="(row, idx) in value.rows"
         :key="row._uid"
-        :class="{ 'wp-drop-pulse': recentDropUids.has(row._uid) }"
+        :class="drag.classes(row._uid)"
+        :style="drag.lineStyle(row._uid)"
         :row="row"
         :index="idx"
         :reorderable="row.kind === 'general' ? generalRowCount > 1 : socketRowCount > 1"
@@ -884,11 +730,10 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         :display-label="row.kind === 'general' ? undefined : (row.slot_label ?? slotLabels[row.slot_name])"
         :conflict-severity="conflictByUid[row._uid]?.severity"
         :conflict-label="conflictByUid[row._uid]?.label"
-        :drop-indicator="dropIndicatorFor(row._uid)"
         @update="(patch) => updateRow(row._uid, patch)"
         @disconnect="row.kind === 'general' ? removeRow(row._uid) : emit('disconnect-slot', row.slot_name)"
-        @row-drag-start="(p) => onRowDragStart(p.fromIdx)"
-        @row-drag-end="onRowDragEnd"
+        @row-drag-start="(p) => drag.start(p.ev, row._uid)"
+        @row-drag-end="drag.end"
         @row-contextmenu="(p) => openRowContextMenu(p.ev, p.idx)"
       />
       <div

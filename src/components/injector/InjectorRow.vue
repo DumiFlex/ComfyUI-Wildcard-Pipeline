@@ -32,13 +32,6 @@ const props = defineProps<{
    *  events. When false (default), drag is a no-op so external
    *  consumers (tests, isolated mounts) aren't surprised by dnd. */
   reorderable?: boolean;
-  /** Parent-coordinated drop indicator. `null` = no indicator on
-   *  this row; `'before'` / `'after'` = paint the accent gap+bar at
-   *  the corresponding edge. Lifted to InjectorWidget so only ONE
-   *  row carries the indicator at a time — HTML5 dragleave races
-   *  with the next dragenter, so per-row local state can leave a
-   *  stale indicator on a row the pointer just left. */
-  dropIndicator?: "before" | "after" | null;
 }>();
 
 /** A general-template row: no slot, durable, resolved after all socket
@@ -52,7 +45,7 @@ const slotLabel = computed(() => props.displayLabel ?? props.row.slot_name);
 const emit = defineEmits<{
   (e: "update", patch: Partial<InjectorRow>): void;
   (e: "disconnect"): void;
-  (e: "row-drag-start", payload: { fromIdx: number }): void;
+  (e: "row-drag-start", payload: { fromIdx: number; ev: DragEvent }): void;
   (e: "row-drag-end"): void;
   /** Right-click on the row root. Parent opens a shared ContextMenu
    *  with edit / disable / collapse / move-top / move-bottom /
@@ -106,35 +99,14 @@ function onBindingInput(ev: Event): void {
   emit("update", { binding: next });
 }
 
-// Drag-to-reorder state. Only `isDragging` is local now — the visual
-// drop indicator (`dropIndicator` prop) is driven by InjectorWidget
-// based on `row-drag-over` events so a single source of truth picks
-// the active target row + edge. Pre-lift this state caused stale
-// indicators on rows the pointer just left (HTML5 dragleave races
-// with the next row's dragenter).
-const isDragging = ref(false);
-
+// Drag-to-reorder: dragstart / dragend fire on the source row, so they
+// stay here; the list-level target, gap, line, slide and pulse are the
+// kit's useRowDrag in InjectorWidget (its classes fall through to this root).
 function onDragStart(ev: DragEvent): void {
   if (!props.reorderable || props.index === undefined) return;
-  isDragging.value = true;
-  if (ev.dataTransfer) {
-    ev.dataTransfer.effectAllowed = "move";
-    // Set a payload so the platform considers this a valid drag —
-    // some browsers/HiDPI hosts no-op dragstart when dataTransfer
-    // is empty. The actual payload is read back via the parent's
-    // tracked fromIdx; this is just a marker.
-    ev.dataTransfer.setData("text/wp-injector-row", String(props.index));
-  }
-  emit("row-drag-start", { fromIdx: props.index });
+  emit("row-drag-start", { fromIdx: props.index, ev });
 }
-
-// dragover + drop are handled at the LIST level by InjectorWidget so
-// the drop-target stays stable when individual rows shift via
-// margin-top/bottom (the gap-opening pattern oscillates per-row
-// dragover otherwise). dragstart / dragend stay per-row because
-// HTML5 fires them on the source element.
 function onDragEnd(): void {
-  isDragging.value = false;
   emit("row-drag-end");
 }
 </script>
@@ -149,9 +121,6 @@ function onDragEnd(): void {
     :class="{
       'wp-inj-row--disconnected': props.isConnected === false,
       'wp-inj-row--disabled': !row.enabled,
-      'wp-inj-row--dragging': isDragging,
-      'wp-inj-row--drop-before': dropIndicator === 'before',
-      'wp-inj-row--drop-after': dropIndicator === 'after',
       'wp-inj-row--has-template': hasTemplate,
       'wp-inj-row--general': isGeneral,
       'wp-conflict-info': conflictSeverity === 'info',
@@ -298,6 +267,7 @@ function onDragEnd(): void {
   </div>
 </template>
 
+<style scoped src="@/kit/row-drag.css"></style>
 <style scoped>
 @import "../shared/row-primitives.css";
 
@@ -328,11 +298,14 @@ function onDragEnd(): void {
     margin-bottom var(--wp-motion-fade) var(--wp-motion-curve-flip);
 }
 .wp-inj-row:last-child { margin-bottom: 0; }
-/* Drop-after on the last row still needs the gap — the `:last-child`
- * rule above would otherwise zero it out (more specific than the
- * `--drop-after` class alone). Chain both selectors to win on
- * specificity. */
-.wp-inj-row.wp-inj-row--drop-after:last-child { margin-bottom: 14px; }
+/* The kit's row-drag gap (row-drag.css loads before this block, so the
+ * row's own margins above would win without the extra class), also on
+ * the last row, whose `:last-child` rule zeroes its margin. */
+.wp-inj-row.wp-rowdrag--before { margin-top: var(--wp-rowdrag-gap, 14px); }
+.wp-inj-row.wp-rowdrag--after,
+.wp-inj-row.wp-rowdrag--end,
+.wp-inj-row.wp-rowdrag--after:last-child,
+.wp-inj-row.wp-rowdrag--end:last-child { margin-bottom: var(--wp-rowdrag-gap, 14px); }
 
 /* Header row — original flat layout lives here. All header controls
  * stay on one line via flex-row, while the parent row can expand
@@ -342,56 +315,11 @@ function onDragEnd(): void {
   align-items: center;
   gap: var(--wp-row-gap, 6px);
 }
-/* Drag-to-reorder. Row root carries `draggable` when reorderable;
- * the row gets a grab cursor on hover so the affordance is
- * discoverable without a separate handle glyph. Interactive
- * children (toggle, binding input, action buttons) carry
- * draggable="false" so click + text-selection still work normally.
- *
- * Dragging row: dimmed via opacity so the user sees their grab.
- * Drop target: 2px accent bar above (before-edge) or below
- * (after-edge) — mirrors the cross-platform "drop here" affordance. */
-/* Cursor: ModuleRow pattern — only `.wp-drag-handle` shows grab/grabbing
- * (from shared/row-primitives.css). Row root keeps the default cursor
- * so hovering over the binding input, buttons, or summary doesn't
- * suggest the whole row is grab-target. Drag still works from anywhere
- * on the row since `draggable=true` lives on root; the cursor is just
- * an affordance hint, not a permission gate. */
-.wp-inj-row--dragging { opacity: 0.4; }
-/* Drop-zone gap + bar — mirrors ModuleRow's wp-gap-before/after
- * pattern: target row gets extra margin so a 14px slot opens, then a
- * 3px accent bar paints inside that slot via a ::before/::after
- * pseudo-element. Bar carries a soft accent glow so the user sees
- * where the row will land at a glance. Margins animate via the
- * `transition: margin` on `.wp-inj-row` so the gap eases open as the
- * pointer crosses the row's midline. */
-.wp-inj-row {
-  position: relative;
-  /* Margin axis added on top of the existing background/border-color
-   * transitions so the slot opens smoothly instead of snap-jumping
-   * when `wp-inj-row--drop-before/after` toggles. */
-}
-.wp-inj-row--drop-before { margin-top: 14px; }
-.wp-inj-row--drop-after  { margin-bottom: 14px; }
-.wp-inj-row--drop-before::before,
-.wp-inj-row--drop-after::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--wp-accent);
-  border-radius: min(2px, var(--wp-radius-cap, 999px));
-  box-shadow: 0 0 8px var(--wp-accent);
-  pointer-events: none;
-  animation: wp-inj-drop-bar-in var(--wp-motion-quick) ease-out;
-}
-.wp-inj-row--drop-before::before { top: -8px; }
-.wp-inj-row--drop-after::after   { bottom: -8px; }
-@keyframes wp-inj-drop-bar-in {
-  from { opacity: 0; transform: scaleX(0.6); }
-  to   { opacity: 1; transform: scaleX(1); }
-}
+/* Drag-to-reorder: the whole row is the drag source (interactive
+ * children carry draggable="false"); only `.wp-drag-handle` shows the
+ * grab cursor. The dim, gap, line and pulse are the kit's row-drag.css
+ * (the `wp-rowdrag--*` classes InjectorWidget binds on this root). */
+.wp-inj-row { position: relative; }
 
 /* Enter / leave / flash classes consumed by the kit's flip.ts (@/kit/flip)
  * when InjectorWidget calls withEnterAnimation /
