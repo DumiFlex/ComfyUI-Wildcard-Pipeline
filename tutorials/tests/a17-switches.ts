@@ -198,6 +198,9 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("out");
       const neg = t.node(nodes.asm).locator('[data-test="asm-neg-preview"]');
+      // The step is about this word: fail rather than box a preview without it.
+      await neg.filter({ hasText: "sunny sky" }).waitFor({ state: "visible", timeout: 15_000 })
+        .catch(() => { throw new StepError("The Assembler's negative preview doesn't show sunny sky."); });
       await t.callout("negp", neg, "sunny sky", 5);
       await t.say("And sunny sky is in the negative.");
       await t.waitVoice();
@@ -206,6 +209,10 @@ tutorial(
       await t.click(t.node(tg).locator('[data-test^="tg-row-"]').filter({ hasText: "Rain" }).locator('[data-test^="tg-ctl-"]').first());
       await t.beat(500);
       await runFor(/under a clear sky/);
+      await page.waitForFunction(
+        (el) => !(el?.textContent ?? "").includes("sunny sky"),
+        await neg.elementHandle(), { timeout: 15_000 },
+      ).catch(() => { throw new StepError("sunny sky is still in the negative preview with Rain off."); });
       await t.callout("out", t.node(nodes.text), "The Off value", 5);
       await t.say("Now it's the Off value, and sunny sky has left the negative.");
       await t.waitVoice();
