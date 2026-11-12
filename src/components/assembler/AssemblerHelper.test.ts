@@ -338,6 +338,24 @@ describe("AssemblerHelper var-color rendering", () => {
     expect(btn.element.disabled).toBe(false);
   });
 
+  it("mark-unused button fires and is off when both boxes use every variable", async () => {
+    const onMarkUnused = vi.fn();
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["mood", "hero"], template: "$mood", onMarkUnused },
+    });
+    const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-mark-unused"]');
+    expect(btn.element.disabled).toBe(false);
+    await btn.trigger("click");
+    expect(onMarkUnused).toHaveBeenCalledTimes(1);
+    await wrapper.setProps({ negativeTemplate: "$negatives, $hero.neg" });
+    expect(btn.element.disabled).toBe(true);
+  });
+
+  it("mark-unused button is absent without a handler", () => {
+    const wrapper = mount(AssemblerHelper, { props: { upstreamVars: ["mood"], template: "" } });
+    expect(wrapper.find('[data-test="asm-mark-unused"]').exists()).toBe(false);
+  });
+
   it("preview area shows empty-state ghost when template is empty", () => {
     const wrapper = mount(AssemblerHelper, {
       props: { upstreamVars: ["mood"], template: "" },

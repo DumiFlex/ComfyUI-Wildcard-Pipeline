@@ -219,6 +219,11 @@ export const NODE_FIELDS = {
       { term: "prompt (out)", sockets: ["out:prompt"], desc: "The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner." },
       { term: "negative (out)", sockets: ["out:negative"], desc: "The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode." },
     ],
+    controls: [
+      { term: "Load / Save (toolbar)", desc: "Load a template from your library into both boxes, or save this one (prompt and negative) to it." },
+      { term: "Mark unused internal (toolbar)", desc: "The eye button. Marks every upstream variable that neither box reads as internal, so it stops showing here; combines and rules still read it. Variables another Assembler on the same context reads are kept, and so is a module that also writes a variable in use. Undo in the message puts it back." },
+      { term: "Clear (toolbar)", desc: "Empties the template and the negative template, after asking." },
+    ],
   },
   WP_PromptCleaner: {
     ports: [

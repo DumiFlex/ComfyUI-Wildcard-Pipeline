@@ -2228,6 +2228,25 @@ export function findDownstreamAssemblers(rootGraph: LiteGraphLike, node: LiteNod
 }
 
 /**
+ * The PIPELINE_CONTEXT chain above `node`, closest first (the node itself is
+ * not included). Same walk the chip list and producer map use, so callers
+ * that act on a writer (Assembler › Mark unused internal) see the chain the
+ * Assembler sees. Muted / bypassed nodes are left in; callers skip them.
+ */
+export function upstreamChainOf(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLike[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  return chain;
+}
+
+/**
  * Resolve a downstream link target through any subgraph boundaries:
  *   - target_id === -20: link enters the SubgraphOutputNode → resume from
  *     the parent SubgraphNode's matching output in the parent graph.

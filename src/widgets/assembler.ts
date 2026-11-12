@@ -72,6 +72,39 @@ function writeNegativeTemplate(node: AssemblerNode, next: string) {
   if (w) w.value = next;
 }
 
+/**
+ * Toolbar › Mark unused internal: flag every upstream variable neither box
+ * reads as internal, keeping any another Assembler on the same context reads
+ * (`extension/mark-unused.ts`). Toast with Undo.
+ */
+async function markUnused(node: AssemblerNode): Promise<void> {
+  const start = (node as unknown as { graph?: LiteGraphLike }).graph
+    ?? (app.graph as unknown as LiteGraphLike);
+  const root = findRootGraph(start);
+  const mu = await import("../extension/mark-unused");
+  const plan = mu.planMarkUnused(root, node as unknown as LiteNodeLike);
+  if (plan.wired) {
+    pushToast("This Assembler's template comes from a wire, so it can't tell what the prompt uses.", { severity: "warning" });
+    return;
+  }
+  if (!plan.marked.length) {
+    pushToast(mu.summary(plan) || "Every variable here is in use.", { severity: "info", lifeMs: 8000 });
+    return;
+  }
+  const changes = mu.applyMarkUnused(plan);
+  pushToast(mu.summary(plan), {
+    severity: "success",
+    lifeMs: 12000,
+    action: {
+      label: "Undo",
+      onSelect: () => {
+        const skipped = mu.undoMarkUnused(changes);
+        if (skipped) pushToast(`${skipped} node${skipped === 1 ? " was" : "s were"} edited since and left as they are.`, { severity: "warning" });
+      },
+    },
+  });
+}
+
 /** `node.properties` key marking an Assembler whose negative box follows the
  *  opt-in rule (no `$negatives` = only the box's own text). Every new node
  *  gets it; a node loaded without it was saved under the old rule and gets
@@ -675,6 +708,7 @@ export function mountHelper(node: AssemblerNode) {
             onLoadTemplate: () => {
               loadOpen.value = true;
             },
+            onMarkUnused: () => { void markUnused(node); },
             onRequestMinWidth: (w: number) => {
               if (w === dynamicMinWidth) return;
               dynamicMinWidth = w;
