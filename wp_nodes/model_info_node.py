@@ -203,7 +203,7 @@ class WPModelInfo(io.ComfyNode):
             ),
             model_info.VARIANT_VAR: {
                 **({"rule": matched.pattern, "rule_variant": matched.variant} if matched else {}),
-                **({"rules": len(rules)} if not pins["variant"] else {}),
+                **({"rules_count": len(rules)} if not pins["variant"] else {}),
                 **({"stem": stem} if stem else {}),
             },
             model_info.NAME_VAR: {"file": file_name} if file_name else {},

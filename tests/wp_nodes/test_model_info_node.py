@@ -203,4 +203,5 @@ def test_trace_details_name_the_class_rule_and_file():
     assert trace["model_name"]["detail"]["file"] == "SDXL/ponyDiffusionV6XL.safetensors"
     variant = trace["model_variant"]["detail"]
     assert variant["stem"] == "ponyDiffusionV6XL"
-    assert variant.get("rule_variant") == out.values[0].context["model_variant"] or "rule" not in variant
+    got = out.values[0].context["model_variant"]
+    assert variant.get("rule_variant") == got or "rule" not in variant

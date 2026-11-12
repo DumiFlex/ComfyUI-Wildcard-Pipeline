@@ -53,6 +53,21 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </Banner>
     </DocSection>
 
+    <DocSection title="What a trace step tells you">
+      <p>Click a step in the Trace tab to see why it came out the way it did. Each kind says what matters for it:</p>
+      <ul>
+        <li><b>Wildcard</b>: the odds of the pick, the pool after each step (options → after the pool filter → after the node's option toggles → drawable), a locked or held seed, a multi-pick's count, whether repeats were allowed and what joins the picks, the value Match variable read, and the constraints that re-weighted it. <b>Options</b> lists every option with its weight (the node's override beside the library's), its chance, and why an option can't come up: filtered out, toggled off, excluded by a constraint, or weight 0. It opens by itself when nothing could be drawn.</li>
+        <li><b>Derivation</b>: each rule, which branch fired, every test with the value it read, and each action.</li>
+        <li><b>Fixed values</b>: whether the node's own rows or the library's were used, rows turned off, and a value's text before it was filled in.</li>
+        <li><b>Combine</b>: the template and what each <code>$variable</code> in it read, with one nothing set flagged.</li>
+        <li><b>Constraint</b>: its reach, how often it applied and which steps it re-weighted (click one to go there).</li>
+        <li><b>WP Context Loop</b>: the frame, its seed and seed strategy, skipped frames and the sweep pins.</li>
+        <li><b>WP Model Info</b>: the model class the family came from, the rule that matched the variant (or that none did) and the file name.</li>
+        <li><b>WP Toggles</b>: the switch on the node, what an upstream variable said, a parent it needs that is off, and for Pick one which row was picked and why.</li>
+        <li><b>WP Context Injector</b>: the input a value came from, and a template with what each <code>$name</code> filled with.</li>
+      </ul>
+    </DocSection>
+
     <DocSection title="Rows from other nodes">
       <p>
         Besides the modules in your Context nodes, WP Debug shows what the other context nodes
