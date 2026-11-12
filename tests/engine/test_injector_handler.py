@@ -455,3 +455,20 @@ def test_binding_warnings_say_what_was_skipped():
     assert "$_meta" in by_type["injector_reserved_binding"]["message"]
     assert "has spaces" in by_type["injector_invalid_binding"]["message"]
     assert all(w["severity"] == "warning" for w in warnings)
+
+
+def test_trace_detail_names_the_input_and_how_a_template_filled():
+    rows = json.dumps({
+        "version": 1,
+        "rows": [
+            _row("input_1", "plain"),
+            _row_with_template("input_0", "phrase", "hi $input_0 $nope"),
+        ],
+    })
+    out = WPContextInjector.execute(wp_rows=rows, upstream=None, input_0="x", input_1="y")
+    trace = {t["binding"]: t for t in out.values[0].debug["__wp_trace__"]}
+    assert trace["plain"]["detail"] == {"input": "input_1"}
+    assert trace["phrase"]["detail"] == {
+        "input": "input_0", "template": "hi $input_0 $nope",
+        "reads": {"input_0": "x", "nope": None},
+    }

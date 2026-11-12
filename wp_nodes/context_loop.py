@@ -353,6 +353,14 @@ class WPContextLoop(io.ComfyNode):
                 detail["values"] = len(wired_values)
             if bypass:
                 detail["bypass"] = True
+            if has_override:
+                detail["strategy"] = strategy
+            if len(kept) < total_count:
+                detail["skipped"] = total_count - len(kept)
+            if sweep_pins:
+                # This frame's sweep pins: module uid → option id.
+                detail["pins"] = dict(sweep_pins[idx % combos])
+                detail["hold_others"] = bool(sweep["hold_others"])
             rows: list[dict[str, Any]] = []
             for name, value in context_vars.items():
                 row: dict[str, Any] = {

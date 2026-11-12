@@ -194,3 +194,13 @@ def test_internal_variables_stay_out_of_the_assembler():
     )
     assert res.values[0].startswith("[sdxl] [")
     assert "pony" not in res.values[0]
+
+
+def test_trace_details_name_the_class_rule_and_file():
+    out = _run(model=_model(SDXL))
+    trace = {t["binding"]: t for t in out.values[0].debug["__wp_trace__"]}
+    assert trace["model_family"]["detail"] == {"config_class": "SDXL"}
+    assert trace["model_name"]["detail"]["file"] == "SDXL/ponyDiffusionV6XL.safetensors"
+    variant = trace["model_variant"]["detail"]
+    assert variant["stem"] == "ponyDiffusionV6XL"
+    assert variant.get("rule_variant") == out.values[0].context["model_variant"] or "rule" not in variant
