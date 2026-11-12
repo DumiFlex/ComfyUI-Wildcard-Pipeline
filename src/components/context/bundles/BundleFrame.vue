@@ -119,6 +119,11 @@ if (!ctx) throw new Error("BundleFrame requires BundleFrameCtx — provided by C
    */
   margin: 2px 0 4px 0;
 }
+/* The drop gap still opens beside a nested frame: its own margins above
+ * outrank the kit's one-class wp-rowdrag rules, so the gap and its line
+ * get the same weight here. */
+.wp-bundle.wp-bundle--nested.wp-rowdrag--before { margin-top: var(--wp-rowdrag-gap, 14px); }
+.wp-bundle.wp-bundle--nested.wp-rowdrag--after { margin-bottom: var(--wp-rowdrag-gap, 14px); }
 .wp-bundle.wp-bundle--nested > .wp-bundle-children {
   padding: 4px 5px 5px 5px;
 }
