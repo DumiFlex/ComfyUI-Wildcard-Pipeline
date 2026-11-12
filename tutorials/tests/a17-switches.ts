@@ -252,9 +252,17 @@ tutorial(
         await winDone();
       }
       await t.normalSpeed();
+      await t.say("Layout can draw the toggles as a grid of tiles instead of rows.");
+      await t.click(t.node(tg2).locator('[data-test="tg-layout-grid"]'));
+      await t.beat(500);
+      await t.waitVoice();
       await t.click(t.node(tg2).locator('[data-test="tg-edit-done"]'));
       await t.beat(800);
       await t.deselect();
+      await t.callout("grid", t.node(tg2), "Three tiles, one picked", 4);
+      await t.say("Here they are, one tile each.");
+      await t.waitVoice();
+      await t.uncallout("grid");
       await t.waitVoice();
       await t.say("Switch off Time of day on the first Context, so the toggle decides the time, and pick Night.");
       await t.click(t.moduleRow(nodes.ctx1, "Time of day").locator('[data-test="module-enabled"]'));
