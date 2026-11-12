@@ -66,7 +66,8 @@ describe("updateClips", () => {
     const { below, el, canvas } = setup();
     registerOverlapClip(below, el);
     updateClips(canvas);
-    expect(el.style.clipPath).toBe('path("M0 0h150v100h-150Z")');
+    // jsdom 31 re-serialises the path with spaces; compare it squashed.
+    expect(el.style.clipPath.replace(/\s*([A-Za-z])\s*/g, "$1")).toBe('path("M0 0h150v100h-150Z")');
   });
 
   it("leaves the widget whole when its node is on top", () => {

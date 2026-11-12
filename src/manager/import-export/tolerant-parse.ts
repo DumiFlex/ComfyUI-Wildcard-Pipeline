@@ -11,7 +11,7 @@
  * caller is responsible for separately preserving the original payload
  * bytes in original_payload_json (the verbatim-local mirror).
  */
-import type { SafeParseReturnType } from "zod";
+import type { ZodSafeParseResult } from "zod";
 
 import { getValidator, type ModuleSubtype } from "@/validators";
 
@@ -20,18 +20,18 @@ export function parseTolerantAsCurrentShape(
   currentVersion: number,
   kind: "module",
   subtype: ModuleSubtype,
-): SafeParseReturnType<unknown, Record<string, unknown>>;
+): ZodSafeParseResult<Record<string, unknown>>;
 export function parseTolerantAsCurrentShape(
   payload: Record<string, unknown>,
   currentVersion: number,
   kind: "bundle",
-): SafeParseReturnType<unknown, Record<string, unknown>>;
+): ZodSafeParseResult<Record<string, unknown>>;
 export function parseTolerantAsCurrentShape(
   payload: Record<string, unknown>,
   currentVersion: number,
   kind: "module" | "bundle",
   subtype?: ModuleSubtype,
-): SafeParseReturnType<unknown, Record<string, unknown>> {
+): ZodSafeParseResult<Record<string, unknown>> {
   const spec = kind === "module"
     ? {
         kind: "module" as const,
@@ -67,8 +67,8 @@ export function parseTolerantAsCurrentShape(
       return childResult.success ? childResult.data : child;
     });
     const reshaped = { ...payload, children: strippedChildren };
-    return validator.safeParse(reshaped) as SafeParseReturnType<unknown, Record<string, unknown>>;
+    return validator.safeParse(reshaped) as ZodSafeParseResult<Record<string, unknown>>;
   }
 
-  return validator.safeParse(payload) as SafeParseReturnType<unknown, Record<string, unknown>>;
+  return validator.safeParse(payload) as ZodSafeParseResult<Record<string, unknown>>;
 }
