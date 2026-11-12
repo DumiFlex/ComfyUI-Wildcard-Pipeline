@@ -347,7 +347,7 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         test-prefix="tg-mode"
         @update:model-value="setMode"
       />
-      <label v-if="isOne" class="wp-tg__group">
+      <label v-if="isOne" class="wp-tg__group" :data-wp-vars="cfg.group_var || undefined">
         <span class="wp-tg__group-cap">writes</span>
         <Input
           size="sm"

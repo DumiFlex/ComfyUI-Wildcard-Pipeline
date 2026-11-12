@@ -31,6 +31,39 @@ const emit = defineEmits<{
 
 const d = computed(() => props.step.detail);
 
+/** What a node row (not a module) did, as short facts. */
+const nodeFacts = computed((): string[] => {
+  const s = props.step;
+  const det = s.detail;
+  if (s.kind === "loop") {
+    const out = [s.source || "Context Loop"];
+    if (det?.bypass) out.push("loop bypassed: one run");
+    if (typeof det?.seed === "number") out.push(`frame seed ${det.seed}`);
+    if (typeof det?.combo === "number") out.push(`sweep combination ${det.combo} of ${det.combos ?? "?"}`);
+    if (typeof det?.value_line === "number") out.push(`value line ${det.value_line} of ${det.values ?? "?"}`);
+    return out;
+  }
+  if (s.kind === "model") {
+    const why: Record<string, string> = {
+      "from the model": "read from the wired model",
+      "file-name rule": "matched a variant rule on the file name",
+      pinned: "pinned on the node",
+      "wired in": "from the node's text input",
+      "loader file": "the checkpoint loader's file name",
+    };
+    return [why[s.source] ?? (s.source || "WP Model Info")];
+  }
+  if (s.kind === "toggle") {
+    const out = [s.source.startsWith("Pick one") ? "Pick one: the picked row's value" : "switch: true or false"];
+    if (s.source.endsWith("set upstream")) out.push("set by an upstream variable");
+    return out;
+  }
+  if (s.kind === "injector") {
+    return [s.isTemplate ? "template filled from the node's inputs" : `wired ${s.valueType || "value"}`];
+  }
+  return [];
+});
+
 const chanceText = computed(() => {
   const c = d.value?.chance;
   if (typeof c !== "number") return "";
@@ -102,7 +135,10 @@ function modeGlyph(mode: string | undefined): string {
       <div class="wp-dbg-detail__facts">
         <span v-if="d.held" class="wp-dbg-fact">held from frame 0</span>
         <span v-if="d.fallback" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-fallback">fallback used</span>
-        <span v-if="d.mode === 'pinned'" class="wp-dbg-fact wp-dbg-fact--accent"><i class="pi pi-thumbtack" /> pinned option</span>
+        <span v-if="d.mode === 'pinned' && d.swept" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-swept"><i class="pi pi-replay" /> swept: this frame's option</span>
+        <span v-else-if="d.mode === 'pinned'" class="wp-dbg-fact wp-dbg-fact--accent"><i class="pi pi-thumbtack" /> pinned option</span>
+        <span v-if="d.mode === 'match_variable'" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-match-var">matched <code>${{ d.match_variable }}</code></span>
+        <span v-if="d.mode === 'match_fallback'" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-match-var">no option matched <code>${{ d.match_variable }}</code>, fallback used</span>
         <span v-if="chanceText" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-chance">{{ chanceText }}</span>
         <span v-if="typeof d.pool === 'number'" class="wp-dbg-fact">
           {{ d.pool }} option{{ d.pool === 1 ? "" : "s" }}<template v-if="typeof d.live === 'number' && d.live !== d.pool">, {{ d.live }} drawable</template>
@@ -111,6 +147,9 @@ function modeGlyph(mode: string | undefined): string {
           {{ d.option_ids.length }} pick{{ d.option_ids.length === 1 ? "" : "s" }}<template v-if="d.range"> (asked {{ d.range[0] === d.range[1] ? d.range[0] : `${d.range[0]}–${d.range[1]}` }})</template><template v-if="d.independent">, repeats allowed</template>
         </span>
         <span v-if="d.filter" class="wp-dbg-fact">filter <code>{{ d.filter }}</code></span>
+        <span v-for="(val, name) in d.filter_vars ?? {}" :key="`fv-${name}`" class="wp-dbg-fact" data-test="dbg-filter-var">
+          <code>${{ name }}</code> read <code>{{ val || '""' }}</code>
+        </span>
         <span v-if="d.exclude_null" class="wp-dbg-fact">no empty option</span>
       </div>
       <div v-if="step.appliedBy.length" class="wp-dbg-detail__block">
@@ -220,6 +259,11 @@ function modeGlyph(mode: string | undefined): string {
     <p v-else-if="step.kind === 'derivation' && step.status === 'ok'" class="wp-dbg-dim wp-dbg-detail__note">
       Run the graph again to see which branch fired.
     </p>
+
+    <!-- Node rows: Context Loop, Model Info, Toggles, Injector -->
+    <div v-if="nodeFacts.length" class="wp-dbg-detail__facts" data-test="dbg-node-facts">
+      <span v-for="(f, i) in nodeFacts" :key="i" class="wp-dbg-fact" :class="{ 'wp-dbg-fact--accent': i === 0 }">{{ f }}</span>
+    </div>
 
     <!-- Constraint -->
     <template v-if="step.constraint">

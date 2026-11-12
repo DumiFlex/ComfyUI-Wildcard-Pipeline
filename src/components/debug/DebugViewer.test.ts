@@ -129,13 +129,14 @@ describe("DebugViewer", () => {
     expect(step.find('[data-test="dbg-rule"]').exists()).toBe(true);
   });
 
-  it("groups the trace by Context node, named by its codename", async () => {
+  it("groups the trace by Context node, with its title and codename", async () => {
     const nodeInfo = vi.fn((id: string) => ({ title: id === "1" ? "Scene" : "Details", codename: `code-${id}` }));
     const w = mountRun({ nodeInfo });
     await openTab(w, "trace");
     const heads = w.findAll('[data-test="dbg-group-head"]');
-    expect(heads.map((h) => h.text().replace(/\s+/g, ""))).toEqual(["code-1seed3", "code-2seed7"]);
-    expect(heads[0].get('[data-test="dbg-group-title"]').attributes("title")).toBe("Scene · node id 1");
+    expect(heads.map((h) => h.text().replace(/\s+/g, ""))).toEqual(["Scenecode-1seed3", "Detailscode-2seed7"]);
+    expect(heads[0].get('[data-test="dbg-group-codename"]').text()).toBe("code-1");
+    expect(heads[0].get('[data-test="dbg-group-title"]').attributes("title")).toBe("node id 1");
   });
 
   it("names a node without a codename by its title, and a missing one by its id", async () => {
@@ -223,7 +224,8 @@ describe("DebugViewer", () => {
     await openTab(w, "trace");
     await w.find('[data-step-key="0"] .wp-dbg-step__row').trigger("click");
     await w.find('[data-test="dbg-focus-node"]').trigger("click");
-    expect(focusNode).toHaveBeenCalledWith("1");
+    // With the step, so the canvas can blink that module.
+    expect(focusNode).toHaveBeenCalledWith("1", { uid: "tim00001u", vars: ["time"] });
     const plain = mountRun();
     await openTab(plain, "trace");
     await plain.find('[data-step-key="0"] .wp-dbg-step__row').trigger("click");
@@ -303,6 +305,11 @@ describe("DebugViewer", () => {
     expect(w.find('[data-test="dbg-iter-label"]').text()).toBe("frame 2 / 3");
     await w.find('[data-test="dbg-iter-next"]').trigger("click");
     expect(w.emitted("update:iterationIndex")?.[0]).toEqual([2]);
+  });
+
+  it("shows the Loop's own frame number when it differs from the item count", () => {
+    const w = mountRun({ iterationCount: 2, iterationIndex: 1 }, { __wp_loop_index__: 4, __wp_trace__: [] });
+    expect(w.find('[data-test="dbg-iter-label"]').text()).toBe("frame 5 · 2 / 2");
   });
 
   it("shows the raw snapshot JSON", async () => {

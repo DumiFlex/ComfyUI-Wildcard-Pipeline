@@ -11,7 +11,7 @@
 import SearchInput from "@/kit/SearchInput.vue";
 import { computed, nextTick, ref, watch } from "vue";
 import { highlightJson } from "./highlight";
-import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
+import ContextMenu, { type ContextMenuHeader, type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import Button from "@/kit/Button.vue";
 import CopyButton from "@/kit/CopyButton.vue";
@@ -21,6 +21,9 @@ import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";
 import {
   buildModel,
+  KIND_ICONS,
+  kindColor,
+  NODE_KINDS,
   parseSnapshot,
   stepSearchText,
   unresolvedUuids,
@@ -42,7 +45,7 @@ const props = withDefaults(
     /** Title + codename of the graph node with this id ("" when unknown). */
     nodeInfo?: (nodeId: string) => NodeInfo;
     /** Select + centre a graph node. Omitted in tests / off-canvas. */
-    focusNode?: ((nodeId: string) => void) | null;
+    focusNode?: ((nodeId: string, target?: { uid?: string; vars?: string[] }) => void) | null;
   }>(),
   {
     nodeMode: 0,
@@ -65,6 +68,22 @@ const activeTab = ref<TabId>("vars");
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const raw = computed(() => parseSnapshot(props.snapshot));
 const model = computed(() => (raw.value ? buildModel(raw.value) : null));
+
+/** The picker counts the items Debug received; a Loop that skipped frames
+ *  (or an Image Filter that kept some) numbers them differently, so show
+ *  the Loop's own frame number when it isn't the same. */
+const frameLabel = computed(() => {
+  const pos = `${props.iterationIndex + 1} / ${props.iterationCount}`;
+  const li = model.value?.loopIndex;
+  if (typeof li === "number" && li !== props.iterationIndex) return `frame ${li + 1} · ${pos}`;
+  return `frame ${pos}`;
+});
+const frameTitle = computed(() => {
+  const li = model.value?.loopIndex;
+  return typeof li === "number" && li !== props.iterationIndex
+    ? `Loop frame ${li + 1}; item ${props.iterationIndex + 1} of the ${props.iterationCount} this Debug received`
+    : "";
+});
 
 function gotoIteration(next: number): void {
   if (next < 0 || next >= props.iterationCount || next === props.iterationIndex) return;
@@ -194,8 +213,22 @@ async function gotoStep(key: string): Promise<void> {
   el?.scrollIntoView?.({ block: "nearest" });
 }
 const canFocus = computed(() => typeof props.focusNode === "function");
-function focusNode(id: string): void {
-  props.focusNode?.(id);
+/** Select the node; with a step, also blink the row that step came from
+ *  (a Context module by uid, any other node's field by the variable). */
+function focusNode(id: string, s?: TraceStep): void {
+  if (!s) { props.focusNode?.(id); return; }
+  const uid = s.uid || s.detail?.uid;
+  props.focusNode?.(id, {
+    ...(typeof uid === "string" && uid ? { uid } : {}),
+    vars: [...s.bindings],
+  });
+}
+/** Select the node that wrote `$name` and blink the field that wrote it. */
+function showVar(v: VarRow): void {
+  if (!v.writerNodeId) return;
+  const step = v.writerKey ? stepsByKey.value.get(v.writerKey) : undefined;
+  const uid = step && !NODE_KINDS.has(step.kind) ? step.uid : "";
+  props.focusNode?.(v.writerNodeId, { ...(uid ? { uid } : {}), vars: [v.name] });
 }
 
 // Keep expansions only while the steps they name still exist.
@@ -279,7 +312,7 @@ interface MenuState {
   x: number;
   y: number;
   items: ContextMenuItem[];
-  header?: { icon: string; label: string };
+  header?: ContextMenuHeader;
 }
 const menu = ref<MenuState>({ visible: false, x: 0, y: 0, items: [] });
 const ctxActiveKey = ref<string | null>(null);
@@ -306,40 +339,66 @@ function pinItem(key: string): ContextMenuItem {
     icon: on ? "pi-star-fill" : "pi-star",
     subtitle: on ? "Let the filter hide it again" : "Keep it visible while filtering",
     onSelect: () => togglePin(key),
-    divider: true,
   };
+}
+/** Groups of menu items, a divider between non-empty groups (never under
+ *  the header, which draws its own line). */
+function grouped(...groups: ContextMenuItem[][]): ContextMenuItem[] {
+  const out: ContextMenuItem[] = [];
+  for (const g of groups) {
+    if (!g.length) continue;
+    g.forEach((item, i) => out.push(i === 0 && out.length ? { ...item, divider: true } : { ...item, divider: false }));
+  }
+  return out;
 }
 function openVarMenu(ev: MouseEvent, v: VarRow): void {
   const key = `var:${v.name}`;
-  const items: ContextMenuItem[] = [
-    pinItem(key),
+  const go: ContextMenuItem[] = [];
+  if (v.writerKey) {
+    const k = v.writerKey;
+    go.push({ label: "Show in trace", icon: "pi-bolt", onSelect: () => { void gotoStep(k); } });
+  }
+  if (canFocus.value && v.writerNodeId) {
+    go.push({ label: "Show on node", icon: "pi-arrow-up-right", onSelect: () => showVar(v) });
+  }
+  const copy: ContextMenuItem[] = [
     { label: "Copy value", icon: "pi-clone", disabled: !v.value, onSelect: () => { void clipboardWrite(v.value); } },
     { label: `Copy $${v.name}`, icon: "pi-dollar", onSelect: () => { void clipboardWrite(`$${v.name}`); } },
   ];
-  if (v.writerKey) {
-    const k = v.writerKey;
-    items.push({ label: "Show in trace", icon: "pi-bolt", divider: true, onSelect: () => { void gotoStep(k); } });
+  if (v.negatives.length) {
+    const neg = v.negatives.map((n) => n.text).join(", ");
+    copy.push({ label: "Copy negative", icon: "pi-minus-circle", onSelect: () => { void clipboardWrite(neg); } });
   }
-  openMenu(ev, key, items, { icon: "pi-dollar", label: `Variable · $${v.name}` });
+  const kind = v.writerKind ?? "unknown";
+  openMenu(ev, key, grouped(go, copy, [pinItem(key)]), {
+    icon: v.writerKind ? KIND_ICONS[kind].replace(/^pi\s+/, "") : "pi-arrow-down",
+    iconColor: v.writerKind ? kindColor(kind) : undefined,
+    label: `$${v.name}`,
+  });
 }
 function openStepMenu(ev: MouseEvent, s: TraceStep): void {
   const first = s.writes[0];
-  const items: ContextMenuItem[] = [
-    pinItem(s.key),
+  const go: ContextMenuItem[] = [
     { label: expanded.value.has(s.key) ? "Collapse" : "Expand", icon: "pi-chevron-down", onSelect: () => toggleStep(s.key) },
+  ];
+  if (canFocus.value && s.nodeId) {
+    const id = s.nodeId;
+    go.push({ label: "Show node", icon: "pi-arrow-up-right", onSelect: () => focusNode(id, s) });
+  }
+  const copy: ContextMenuItem[] = [
     { label: "Copy value", icon: "pi-clone", disabled: !first?.value, onSelect: () => { void clipboardWrite(first?.value ?? ""); } },
   ];
   if (s.bindings[0]) {
     const b = s.bindings[0];
-    items.push({ label: `Copy $${b}`, icon: "pi-dollar", onSelect: () => { void clipboardWrite(`$${b}`); } });
+    copy.push({ label: `Copy $${b}`, icon: "pi-dollar", onSelect: () => { void clipboardWrite(`$${b}`); } });
   }
-  if (s.seed) items.push({ label: "Copy seed", icon: "pi-hashtag", onSelect: () => { void clipboardWrite(s.seed); } });
-  if (s.id) items.push({ label: "Copy module id", icon: "pi-id-card", onSelect: () => { void clipboardWrite(s.id); } });
-  if (canFocus.value && s.nodeId) {
-    const id = s.nodeId;
-    items.push({ label: "Show node", icon: "pi-arrow-up-right", divider: true, onSelect: () => focusNode(id) });
-  }
-  openMenu(ev, s.key, items, { icon: "pi-bolt", label: `Step ${s.order} · ${s.name || s.kindLabel}` });
+  if (s.seed) copy.push({ label: "Copy seed", icon: "pi-hashtag", onSelect: () => { void clipboardWrite(s.seed); } });
+  if (s.id) copy.push({ label: "Copy module id", icon: "pi-id-card", onSelect: () => { void clipboardWrite(s.id); } });
+  openMenu(ev, s.key, grouped(go, copy, [pinItem(s.key)]), {
+    icon: KIND_ICONS[s.kind].replace(/^pi\s+/, ""),
+    iconColor: kindColor(s.kind),
+    label: `${s.order} · ${s.name || s.kindLabel}`,
+  });
 }
 </script>
 
@@ -364,7 +423,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             hint="Previous iteration"
             @click="gotoIteration(iterationIndex - 1)"
           />
-          <span class="wp-dbg-iter__label" data-test="dbg-iter-label">frame {{ iterationIndex + 1 }} / {{ iterationCount }}</span>
+          <span class="wp-dbg-iter__label" data-test="dbg-iter-label" :title="frameTitle">{{ frameLabel }}</span>
           <Button size="sm" variant="ghost" :disabled="iterationIndex>= iterationCount - 1"
             data-test="dbg-iter-next"
             title="Next iteration"
@@ -449,8 +508,13 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
             :uuid-to-name="uuidToName"
             :uuid-to-kind="uuidToKind"
             :ctx-active-key="ctxActiveKey"
+            :node-info="nodeInfo"
+            :steps-by-key="stepsByKey"
+            :warnings-by-step="warningsByStep"
+            :can-focus="canFocus"
             @goto-step="gotoStep"
             @row-menu="openVarMenu"
+            @show-var="showVar"
           />
           <div v-else class="wp-dbg-empty">
             <i class="pi pi-dollar wp-dbg-empty__icon" aria-hidden="true" />

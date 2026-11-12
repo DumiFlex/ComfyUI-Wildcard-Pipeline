@@ -53,6 +53,38 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </Banner>
     </DocSection>
 
+    <DocSection title="Rows from other nodes">
+      <p>
+        Besides the modules in your Context nodes, WP Debug shows what the other context nodes
+        wrote. The Variables tab groups the variables by the node that set them, under the node's title
+        (and a Context's codename), and each node's rows show what matters for that node. The Trace tab
+        stays the run itself: every row is a numbered step in the order it ran, and these nodes differ only
+        by their icon, colour and a short note on where the value came from:
+      </p>
+      <ul>
+        <li><b>WP Context Loop</b> (orange): <code>$iteration</code>, <code>$iteration_total</code> and <code>$iteration_value</code>, under a line saying which frame this is, the frame's seed when the Loop sets seeds (click to copy), the sweep combination and the value line.</li>
+        <li><b>WP Model Info</b> (lime): Family, Variant and Name, each saying where it came from: the model, a file-name rule, a pin, a wire or the loader's file.</li>
+        <li><b>WP Toggles</b> (indigo): each toggle's variable as <code>true</code> / <code>false</code>, or its value text when the toggle has one (empty while off), with its <code>.bool</code> state and negative under it. In Pick one, each pick still has its own on/off variable (<code>true</code> is the picked one) and the Pick one variable holds the picked value. The source says when an upstream variable set a toggle.</li>
+        <li><b>WP Context Injector</b> (blue): each wired value with its type (STR, INT, FLOAT, BOOL, or TPL for a template).</li>
+      </ul>
+      <p>
+        <b>Show node</b> (in a step's details, a row's right-click menu, or the arrow on a node row) selects the
+        node on the canvas and makes the module or field that row came from blink: a Context's module, a Model
+        Info field, a toggle, an Injector row, or the Loop's iteration field.
+      </p>
+      <p>
+        A long value shows its first three lines (a long list its first three items, a long negative one
+        line) until you press <b>Show all</b> under it; <b>Show less</b> folds it again.
+      </p>
+      <p>
+        Their warnings (an unknown <code>$variable</code> in a Toggles value, a Model Info rule that couldn't be
+        read, a skipped Injector name) show in the Warnings tab and on that node's row. A wildcard pinned by a
+        Loop sweep says <i>swept</i>, one set to Match variable says which variable it matched, and a pool
+        filter that reads a <code>$variable</code> shows the value it read. With a Loop that skips frames, the
+        frame picker shows the Loop's own frame number.
+      </p>
+    </DocSection>
+
     <DocSection title="Where to put it">
       <p>
         After one Context to check that step, or after the last to see everything. Use as many as

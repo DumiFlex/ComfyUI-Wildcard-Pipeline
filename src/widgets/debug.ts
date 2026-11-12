@@ -5,6 +5,7 @@ import { attachThemeDetector } from "../extension/theme-detector";
 import { reactiveFromGraph } from "../extension/reactive";
 import { findRootGraph, showGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
 import { baseCodename } from "../extension/node-codename";
+import { flashInNode, type FlashTarget } from "./flash-target";
 
 const DebugViewer = defineAsyncComponent(() => import("../components/debug/DebugViewer.vue"));
 
@@ -59,8 +60,9 @@ function nodeInfo(id: string): { title: string; codename: string } {
 
 /** Select + centre the node. A node in another graph than the one on screen
  *  (inside a subgraph, or back out at the root) opens that graph first, the
- *  same way the breadcrumb does. */
-export function focusNode(id: string): void {
+ *  same way the breadcrumb does. With a `target`, the row it names (a module,
+ *  or the field that writes a variable) blinks once the node is in view. */
+export function focusNode(id: string, target?: FlashTarget): void {
   const hit = findExecNode(id);
   const canvas = (app as unknown as { canvas?: CanvasLike }).canvas;
   if (!hit || !canvas) return;
@@ -71,6 +73,7 @@ export function focusNode(id: string): void {
     canvas.selectNode?.(node);
     canvas.centerOnNode?.(node);
     canvas.setDirty?.(true, true);
+    if (target) flashInNode(node, target);
   };
   showGraph(canvas, hit.graph, show);
 }

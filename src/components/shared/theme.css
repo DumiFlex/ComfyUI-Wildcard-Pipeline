@@ -127,6 +127,12 @@
    * module family). Slate-blue chosen to read as "external input"
    * without clashing with any module kind. */
   --wp-kind-injector:    #60a5fa;
+  /* The other context-chain nodes WP Debug traces: Context Loop
+   * (orange: frames), Model Info (lime: the checkpoint) and Toggles
+   * (indigo: switches). Picked to stay apart from the module kinds. */
+  --wp-kind-loop:        #fb923c;
+  --wp-kind-model:       #a3e635;
+  --wp-kind-toggle:      #818cf8;
 
   /* Type + spacing scale, mirrored from the SPA's tokens.css.
    *
@@ -393,6 +399,10 @@
   --wp-kind-constraint:  #9d174d;  /* pink-800    — chip 5.29:1 on white */
   /* Fixed moved off cyan-800 — too close to combine emerald-800 on light bg. */
   --wp-kind-fixed:       #1d4ed8;  /* blue-700    — chip 6.61:1 on white */
+  --wp-kind-injector:    #0369a1;  /* sky-700     */
+  --wp-kind-loop:        #9a3412;  /* orange-800  */
+  --wp-kind-model:       #3f6212;  /* lime-800    */
+  --wp-kind-toggle:      #4338ca;  /* indigo-700  */
 
   /* Constraint source/target — darker shades for legibility on light. */
   --wp-constraint-source:      #7c3aed;  /* violet-600  — chip 6.16:1 on white */
@@ -468,6 +478,9 @@
 .wp-kind-chip--derivation { background: color-mix(in oklab, var(--wp-kind-derivation) 22%, transparent); color: var(--wp-kind-derivation); }
 .wp-kind-chip--constraint { background: color-mix(in oklab, var(--wp-kind-constraint) 22%, transparent); color: var(--wp-kind-constraint); }
 .wp-kind-chip--injector   { background: color-mix(in oklab, var(--wp-kind-injector)   22%, transparent); color: var(--wp-kind-injector);   }
+.wp-kind-chip--loop       { background: color-mix(in oklab, var(--wp-kind-loop)       22%, transparent); color: var(--wp-kind-loop);       }
+.wp-kind-chip--model      { background: color-mix(in oklab, var(--wp-kind-model)      22%, transparent); color: var(--wp-kind-model);      }
+.wp-kind-chip--toggle     { background: color-mix(in oklab, var(--wp-kind-toggle)     22%, transparent); color: var(--wp-kind-toggle);     }
 
 /* Pairing badge — appears when multiple constraints share a target
  * wildcard. Each constraint module and its claimed downstream target

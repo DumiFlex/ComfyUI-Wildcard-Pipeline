@@ -65,6 +65,12 @@ export interface RawDetail {
   pool?: number;
   live?: number;
   filter?: string;
+  /** Pool filter by variable (v11): what each `$name` in the filter read. */
+  filter_vars?: Record<string, string>;
+  /** `match_variable` picks: the variable the option text had to equal. */
+  match_variable?: string;
+  /** A Context Loop sweep pinned this frame's option. */
+  swept?: boolean;
   exclude_null?: boolean;
   held?: boolean;
   /** Schema v9: nothing else was left, so the fallback option was used. */
@@ -80,6 +86,15 @@ export interface RawDetail {
   cells?: number;
   exceptions?: number;
   only?: boolean;
+  // Context Loop rows
+  frame?: number;
+  of?: number;
+  seed?: number;
+  combo?: number;
+  combos?: number;
+  value_line?: number;
+  values?: number;
+  bypass?: boolean;
 }
 
 export interface RawTraceEntry {
@@ -99,6 +114,14 @@ export interface RawTraceEntry {
   seed?: number;
   constraint_source?: string;
   constraint_target?: string;
+  /** WP Toggles: "upstream" when an upstream variable set the switch. */
+  source?: string;
+  /** WP Toggles: the toggle's on/off state (what `$name.bool` reads). */
+  bool?: boolean;
+  /** WP Toggles: the row wrote the toggle's value text, not true/false. */
+  has_value?: boolean;
+  /** WP Toggles: the negative it filed for its variable. */
+  negative?: string;
   error?: string | { type?: string; message?: string } | null;
   detail?: RawDetail;
 }
@@ -116,7 +139,7 @@ export interface RawRef {
 
 // ── View model ──────────────────────────────────────────────────────────
 
-export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "toggle" | "unknown";
+export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "toggle" | "loop" | "unknown";
 export type StepStatus = "ok" | "off" | "frame" | "error" | "unknown" | "never";
 export type Severity = "info" | "warning" | "error";
 
@@ -176,6 +199,14 @@ export interface TraceStep {
   error: string | null;
   /** Injector rows: the value type on the wire and whether it was templated. */
   valueType: string;
+  /** Node rows (Model Info, Toggles, Context Loop): where the value came
+   *  from, in words ("from the model", "set upstream", "frame 3 of 8"). */
+  source: string;
+  /** Toggle rows: on/off (`$name.bool`), null for other rows and Pick one. */
+  toggleBool: boolean | null;
+  /** Toggle rows: the variable holds the toggle's value text (empty while
+   *  off) instead of true/false. */
+  toggleHasValue: boolean;
   isTemplate: boolean;
   detail: RawDetail | null;
   refs: RefRow[];
@@ -207,6 +238,9 @@ export interface VarRow {
   writerKey: string | null;
   writerKind: Kind | null;
   writerName: string;
+  /** Graph node of that step ("" when unknown), so the view can name a
+   *  node-written variable after its node. */
+  writerNodeId: string;
   /** How many steps wrote this variable (>1 means it was overwritten). */
   writeCount: number;
   /** Set by an upstream node's pass-through, not by any traced module. */
@@ -286,6 +320,12 @@ export const WARNING_LABELS: Record<string, string> = {
   unknown_constraint_mode: "Unknown constraint mode",
   fixed_values_overrides_malformed: "Fixed-values overrides malformed",
   handler_error: "Module failed",
+  injector_reserved_binding: "Reserved injector name",
+  injector_invalid_binding: "Invalid injector name",
+  model_info_nothing_detected: "Model Info found nothing",
+  model_info_bad_rule: "Model Info rule skipped",
+  toggles_problem: "Toggles setup problem",
+  toggles_upstream_many: "Upstream turned on several",
 };
 
 export const OP_LABELS: Record<string, string> = {
@@ -319,8 +359,41 @@ const KIND_LABELS: Record<Kind, string> = {
   injector: "injector",
   model: "model info",
   toggle: "toggle",
+  loop: "loop",
   unknown: "module",
 };
+
+/** PrimeIcons mark per kind, so each source reads at a glance in the
+ *  Variables and Trace tabs (same marks as the Assembler chips). */
+export const KIND_ICONS: Record<Kind, string> = {
+  wildcard: "pi pi-sparkles",
+  fixed: "pi pi-tag",
+  combine: "pi pi-link",
+  derivation: "pi pi-arrow-right-arrow-left",
+  constraint: "pi pi-filter",
+  injector: "pi pi-bolt",
+  model: "pi pi-microchip",
+  toggle: "pi pi-check-square",
+  loop: "pi pi-replay",
+  unknown: "pi pi-circle",
+};
+
+/** Kinds written by a node of their own rather than a module in a Context. */
+export const NODE_KINDS = new Set<Kind>(["injector", "model", "toggle", "loop"]);
+
+/** The node each node kind comes from, for rows the canvas can't name. */
+export const NODE_KIND_TITLES: Partial<Record<Kind, string>> = {
+  injector: "WP Context Injector",
+  model: "WP Model Info",
+  toggle: "WP Toggles",
+  loop: "WP Context Loop",
+};
+
+/** A kind's colour token (`--wp-kind-*`). */
+export function kindColor(kind: Kind | null | undefined): string {
+  if (!kind || kind === "unknown") return "var(--wp-text-dim)";
+  return `var(--wp-kind-${kind})`;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -361,6 +434,7 @@ function kindOf(entry: RawTraceEntry): Kind {
   if (entry.node === "WP_ContextInjector") return "injector";
   if (entry.node === "WP_ModelInfo") return "model";
   if (entry.node === "WP_Toggles") return "toggle";
+  if (entry.node === "WP_ContextLoop") return "loop";
   switch (entry.type) {
     case "wildcard": return "wildcard";
     case "fixed_values": return "fixed";
@@ -427,7 +501,8 @@ function warningDetailText(type: string, detail: Record<string, unknown>): strin
     return str(detail.name) ? "placeholder, or a module that was deleted" : "";
   }
   if (type === "unknown_var" || type === "var_out_of_surface") {
-    return str(detail.surface) ? `in a ${str(detail.surface)}` : "";
+    const surface = str(detail.surface);
+    return surface ? `in ${/^[aeiou]/i.test(surface) ? "an" : "a"} ${surface}` : "";
   }
   if (type === "unknown_tag_axis") {
     const declared = asList<string>(detail.declared);
@@ -446,6 +521,9 @@ function negativeSourceLabel(variable: string, source: string, carriers: Map<str
   const carrier = carriers.get(source);
   if (carrier) return carrier;
   if (source === "injector") return "Injector";
+  // WP Toggles files a toggle's (or Pick one's) negative under the variable
+  // it writes, so it is the variable's own.
+  if (source === "WP_Toggles") return "";
   if (source === "derivation") return "derivation";
   return `$${source}`;
 }
@@ -467,6 +545,41 @@ export function negativeLines(
     else out.push({ text, source });
   }
   return out;
+}
+
+const MODEL_SOURCES: Record<string, string> = {
+  model: "from the model",
+  rules: "file-name rule",
+  pinned: "pinned",
+  wired: "wired in",
+  loader: "loader file",
+};
+
+/** Where a node row's value came from, in words. */
+export function sourceText(kind: Kind, entry: RawTraceEntry): string {
+  const type = str(entry.type);
+  if (kind === "model") return MODEL_SOURCES[type] ?? "";
+  if (kind === "toggle") {
+    const what = type === "pick" ? "Pick one" : "switch";
+    return entry.source === "upstream" ? `${what}, set upstream` : what;
+  }
+  if (kind === "loop") {
+    const d = entry.detail;
+    if (!d || typeof d.frame !== "number") return "";
+    return typeof d.of === "number" ? `frame ${d.frame} of ${d.of}` : `frame ${d.frame}`;
+  }
+  return "";
+}
+
+/** A toggle row's on/off state: its `bool` field, else a true/false value
+ *  (toggles without a value text). Pick one rows have none. */
+export function toggleBoolOf(kind: Kind, entry: RawTraceEntry): boolean | null {
+  if (kind !== "toggle" || str(entry.type) === "pick") return null;
+  if (typeof entry.bool === "boolean") return entry.bool;
+  const v = typeof entry.value === "string" ? entry.value.trim().toLowerCase() : entry.value;
+  if (v === "true" || v === true) return true;
+  if (v === "false" || v === false) return false;
+  return null;
 }
 
 // ── Build ───────────────────────────────────────────────────────────────
@@ -540,7 +653,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       overwrite: !!w.overwrite,
       negative: str(w.negative).trim(),
     }));
-    if ((kind === "injector" || kind === "model" || kind === "toggle") && t.binding) {
+    if (NODE_KINDS.has(kind) && t.binding) {
       writes.push({ variable: t.binding, value: formatValue(t.value), overwrite: false, negative: "" });
     }
     const declared = writes.length
@@ -576,7 +689,11 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     const key = String(i);
     const nodeId = str(t.node_id);
     if (t._uid) stepKeyByOwner.set(`${nodeId}|${t._uid}`, key);
-    if (t.id && !stepKeyByModuleId.has(t.id)) stepKeyByModuleId.set(t.id, key);
+    // Engine warnings name a module by its instance `_uid` (constraints key
+    // their hit counters per instance) or its library id.
+    for (const id of [str(t._uid), str(t.id)]) {
+      if (id && !stepKeyByModuleId.has(id)) stepKeyByModuleId.set(id, key);
+    }
     return {
       key,
       order: i + 1,
@@ -595,6 +712,9 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       internal: !!t.internal,
       error: errorText(t.error),
       valueType: kind === "injector" ? (isTemplate ? "str" : injectorType).toUpperCase() : "",
+      source: sourceText(kind, t),
+      toggleBool: toggleBoolOf(kind, t),
+      toggleHasValue: kind === "toggle" && t.has_value === true,
       isTemplate,
       detail,
       refs: refsByOwner.get(`${nodeId}|${str(t._uid)}`) ?? [],
@@ -622,6 +742,18 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     }
   }
 
+  // Node rows (Toggles, Model Info, Injector, Loop) carry no module ids, so
+  // their warnings find their row by node: the row for the warning's
+  // variable, else the node's Pick one row, else its first row.
+  const nodeStepFor = (nodeId: string, o: Record<string, unknown>): string | null => {
+    const mine = steps.filter((s) => s.nodeId === nodeId && NODE_KINDS.has(s.kind));
+    if (!mine.length) return null;
+    const names = [str(o.binding), str(asRecord(o.detail).name)].filter(Boolean);
+    const byName = mine.find((s) => s.bindings.some((b) => names.includes(b)));
+    if (byName) return byName.key;
+    const pick = mine.find((s) => s.source.startsWith("Pick one"));
+    return (pick ?? mine[0]).key;
+  };
   const warnings: WarningRow[] = rawWarnings.map((w, i) => {
     const o = asRecord(w);
     const type = str(o.type) || "unknown";
@@ -630,6 +762,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     let stepKey = owner ? stepKeyByOwner.get(owner) ?? null : null;
     if (!stepKey && str(o.module_id)) stepKey = stepKeyByModuleId.get(str(o.module_id)) ?? null;
     if (!stepKey && str(o.owner_id)) stepKey = stepKeyByModuleId.get(str(o.owner_id)) ?? null;
+    if (!stepKey && str(o.node_id)) stepKey = nodeStepFor(str(o.node_id), o);
     return {
       key: String(i),
       type,
@@ -715,6 +848,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
       writerKey: writer?.key ?? null,
       writerKind: writer?.kind ?? null,
       writerName: writer?.name ?? "",
+      writerNodeId: writer?.nodeId ?? "",
       writeCount: writeCount.get(name) ?? 0,
       fromUpstream: !writer,
       negatives: negativeLines(name, negTable[name], carriers),

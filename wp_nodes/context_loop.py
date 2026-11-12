@@ -193,6 +193,9 @@ class WPContextLoop(io.ComfyNode):
             # not run the whole loop once per entry.
             is_input_list=True,
             not_idempotent=False,
+            # The node id stamps the Loop's trace rows so WP Debug groups
+            # them under this node.
+            hidden=[io.Hidden.unique_id],
         )
 
     @classmethod
@@ -333,6 +336,40 @@ class WPContextLoop(io.ComfyNode):
                 internals["__wp_internal_flags__"] = dict(internal_flags)
             return context_vars, internals
 
+        hidden = getattr(cls, "hidden", None)
+        node_id = getattr(hidden, "unique_id", None) if hidden is not None else None
+
+        def frame_trace(idx: int, context_vars: dict[str, str]) -> list[dict[str, Any]]:
+            # One WP Debug trace row per variable the Loop writes, so Debug
+            # names the Loop as their writer and shows the frame it ran.
+            detail: dict[str, Any] = {"frame": idx + 1, "of": total_count}
+            if has_override and derived:
+                detail["seed"] = int(derived[idx])
+            if sweep_pins:
+                detail["combo"] = idx % combos + 1
+                detail["combos"] = combos
+            if wired_values:
+                detail["value_line"] = min(idx // combos, len(wired_values) - 1) + 1
+                detail["values"] = len(wired_values)
+            if bypass:
+                detail["bypass"] = True
+            rows: list[dict[str, Any]] = []
+            for name, value in context_vars.items():
+                row: dict[str, Any] = {
+                    "node": "WP_ContextLoop",
+                    "binding": name,
+                    "internal": bool(internal_flags.get(name)),
+                    "type": "value" if name == value_var_name else (
+                        "total" if name == total_var_name else "iteration"
+                    ),
+                    "value": value,
+                    "detail": detail,
+                }
+                if node_id is not None:
+                    row["node_id"] = str(node_id)
+                rows.append(row)
+            return rows
+
         payloads = []
         for idx in kept:
             context_vars, internals = frame(idx)
@@ -344,7 +381,7 @@ class WPContextLoop(io.ComfyNode):
                 internals[FRAME0_KEY] = {"context": ctx0, "internals": int0}
             payloads.append(ContextPayload(
                 context=context_vars,
-                debug={},
+                debug={"__wp_trace__": frame_trace(idx, context_vars)},
                 internals=internals,
             ))
         # Surface the per-iteration series to the node UI so the frontend can
