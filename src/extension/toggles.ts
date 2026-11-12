@@ -87,6 +87,10 @@ export interface LabelRow {
   /** PrimeIcons name without `pi-`, before the name. */
   icon?: string;
   collapsed?: boolean;
+  /** This group's clean-view layout. Absent: the node's (`layout`). */
+  layout?: "rows" | "grid";
+  /** Grid: this group's socket lines merged into one. */
+  sockets_merged?: true;
 }
 
 export type TogglesItem = ToggleRow | LabelRow;
@@ -103,6 +107,15 @@ export interface TogglesConfig {
   group_upstream?: true;
   /** Pick one: how every row looks (absent: radio). Row `style` is Any on's. */
   pick_style?: Exclude<PickStyle, "radio">;
+  /** Clean view layout, both modes: `grid` puts each toggle in a tile and
+   *  wraps the tiles by node width; absent, one row per toggle. A group's
+   *  own `layout` wins over it. */
+  layout?: "grid";
+  /** Grid: the socket lines under the toggles above the first group are
+   *  merged into one line that carries every wired toggle's dots (like the
+   *  Injector's merged inputs); a group keeps its own `sockets_merged`.
+   *  Absent: one line per wired toggle. */
+  sockets_merged?: true;
   /** Set by `withUpstream` only, never saved: the toggle the upstream
    *  `group_var` picked, and the toggles upstream set to a yes word. */
   forced?: string;
@@ -243,6 +256,8 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
       if (hex(o.hex)) label.hex = hex(o.hex);
       if (iconName(o.icon)) label.icon = iconName(o.icon);
       if (o.collapsed === true) label.collapsed = true;
+      if (o.layout === "rows" || o.layout === "grid") label.layout = o.layout;
+      if (o.sockets_merged === true) label.sockets_merged = true;
       rows.push(label);
       continue;
     }
@@ -290,6 +305,8 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
   if (PICK_STYLES.includes(d.pick_style as PickStyle) && d.pick_style !== "radio") {
     cfg.pick_style = d.pick_style as Exclude<PickStyle, "radio">;
   }
+  if (d.layout === "grid") cfg.layout = "grid";
+  if (d.sockets_merged === true) cfg.sockets_merged = true;
   return cfg;
 }
 

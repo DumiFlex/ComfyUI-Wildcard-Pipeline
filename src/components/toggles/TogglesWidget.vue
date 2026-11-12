@@ -56,7 +56,7 @@ import {
   dragRow,
   visibleRows,
 } from "../../extension/toggles";
-import type { ControlState } from "../../extension/toggle-control";
+import { ctlInputName, type ControlState } from "../../extension/toggle-control";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { vToggleRow } from "@/kit/toggle-row";
 
@@ -120,6 +120,60 @@ const PICK_STYLE_OPTIONS: { value: PickStyle; label: string; hint: string }[] = 
   { value: "switch", label: "Switch", hint: "A sliding switch on every row; turning one on turns the others off" },
   { value: "checkbox", label: "Check", hint: "A checkbox on every row; ticking one clears the others" },
 ];
+
+const LAYOUTS = [
+  { value: "rows", label: "Rows", icon: "pi-bars", hint: "One row per toggle" },
+  { value: "grid", label: "Grid", icon: "pi-th-large", hint: "Tiles that wrap to the node's width; wired toggles get a line for their dots under the grid" },
+];
+/** The node's layout, the default for every group. */
+const nodeLayout = computed(() => cfg.value.layout ?? "rows");
+/** Clean view as a grid of tiles (both modes): the group's own layout, else
+ *  the node's. */
+function isGrid(g: ToggleGroup): boolean {
+  return (g.label?.layout ?? nodeLayout.value) === "grid";
+}
+/** A group's layout; picking the node's own clears it, so it follows the
+ *  node again. */
+function setGroupLayout(l: LabelRow, v: string): void {
+  patchLabel(l.id, { layout: v === nodeLayout.value ? undefined : v === "grid" ? "grid" : "rows" });
+}
+/** One socket line under a grid: the toggles with a control dot stack on
+ *  the left, the ones with a BOOLEAN output on the right, each side packed
+ *  on its own, so a line can carry two different toggles' dots. */
+interface SockLine { left: ToggleRow | undefined; right: ToggleRow | undefined }
+function sockPairs(g: ToggleGroup): SockLine[] {
+  const lefts = g.toggles.filter((t) => t.control);
+  const rights = g.toggles.filter((t) => t.pin && t.out);
+  return Array.from({ length: Math.max(lefts.length, rights.length) }, (_, i) => ({ left: lefts[i], right: rights[i] }));
+}
+/** Its socket lines are merged into one (needs two or more). */
+function isMerged(g: ToggleGroup): boolean {
+  return (g.label ? !!g.label.sockets_merged : !!cfg.value.sockets_merged) && sockPairs(g).length > 1;
+}
+/** The control icon shown beside a left name. */
+function ctlIcon(t: ToggleRow): string {
+  return props.controls[t.id]?.control === "mute" ? "pi-volume-off" : "pi-forward";
+}
+/** The toggles that need a socket line under the grid: a control dot on the
+ *  left or a BOOLEAN output on the right, each level with its name. */
+function socketLines(g: ToggleGroup): ToggleRow[] {
+  return g.toggles.filter((t) => t.control || (t.pin && t.out));
+}
+/** Merged: one line carries every wired choice's dots (row-outputs and
+ *  field-sockets both read space-separated names), so the wires meet on one
+ *  line until it is opened again. */
+function mergedOuts(lines: ToggleRow[]): string | undefined {
+  const names = lines.filter((t) => t.pin && t.out).map((t) => `toggle_${t.out}`);
+  return names.length ? names.join(" ") : undefined;
+}
+function mergedSockets(lines: ToggleRow[]): string | undefined {
+  const names = lines.filter((t) => t.control).map((t) => ctlInputName(t.id));
+  return names.length ? names.join(" ") : undefined;
+}
+function toggleMerged(g: ToggleGroup): void {
+  if (g.label) patchLabel(g.label.id, { sockets_merged: g.label.sockets_merged ? undefined : true });
+  else commit({ sockets_merged: cfg.value.sockets_merged ? undefined : true });
+}
 
 const MODES = [
   { value: "any" as TogglesMode, label: "Any on", hint: "Each toggle is on or off by itself" },
@@ -367,6 +421,15 @@ function foldedOuts(g: ToggleGroup): string | undefined {
         />
       </label>
       <span v-else class="wp-tg__spacer" />
+      <WpSegmented
+        :model-value="cfg.layout ?? 'rows'"
+        :options="LAYOUTS"
+        size="sm"
+        icon-only
+        aria-label="Layout"
+        test-prefix="tg-layout"
+        @update:model-value="(v: string) => commit({ layout: v === 'grid' ? 'grid' : undefined })"
+      />
       <Button variant="primary" size="sm" icon="pi-check" data-test="tg-edit-done" @click="closeEdit">Done</Button>
     </div>
     <div v-else-if="isOne" class="wp-tg__bar wp-tg__bar--clean">
@@ -428,7 +491,55 @@ function foldedOuts(g: ToggleGroup): string | undefined {
           <span class="wp-tg__rule" />
           <span class="wp-tg__count">{{ onCount(g) }}/{{ g.toggles.length }} on</span>
         </div>
-        <template v-if="!g.label?.collapsed">
+        <template v-if="!g.label?.collapsed && isGrid(g) && g.toggles.length">
+          <div class="wp-tg__grid" data-test="tg-grid">
+            <ToggleRowView
+              v-for="item in g.toggles"
+              :key="item.id"
+              v-bind="rowProps(item)"
+              :indent="0"
+              tile
+              @set-on="(v: boolean) => setOn(item, v)"
+            />
+          </div>
+          <div
+            v-if="isMerged(g)"
+            class="wp-tg__sockline is-on"
+            :data-wp-out="mergedOuts(socketLines(g))"
+            :data-wp-socket="mergedSockets(socketLines(g))"
+            :data-test="`tg-sockmerged-${g.label?.id ?? 'top'}`"
+          >
+            <WpIconButton variant="bare" icon="pi-caret-right" label="Show each toggle's wires" data-test="tg-sock-expand" @click="toggleMerged(g)" />
+            <span class="wp-tg__sockname">{{ socketLines(g).filter((t) => t.control).map((t) => t.name).join(" · ") }}</span>
+            <span class="wp-tg__sockname is-right">{{ socketLines(g).filter((t) => t.pin && t.out).map((t) => t.name).join(" · ") }}</span>
+          </div>
+          <div
+            v-for="(line, i) in isMerged(g) ? [] : sockPairs(g)"
+            :key="i"
+            class="wp-tg__sockline"
+            :data-wp-out="line.right ? `toggle_${line.right.out}` : undefined"
+            :data-wp-socket="line.left ? ctlInputName(line.left.id) : undefined"
+            :data-test="`tg-sockline-${g.label?.id ?? 'top'}-${i}`"
+          >
+            <WpIconButton v-if="i === 0 && sockPairs(g).length > 1" variant="bare" icon="pi-caret-down" label="Merge the wires onto one line" data-test="tg-sock-merge" @click="toggleMerged(g)" />
+            <span v-else-if="sockPairs(g).length > 1" class="wp-tg__sockpad" aria-hidden="true" />
+            <span class="wp-tg__sockname" :class="{ 'is-on': line.left && !!eff.get(line.left.id) }">
+              <template v-if="line.left">
+                {{ line.left.name }}
+                <i
+                  v-if="controls[line.left.id]"
+                  v-tooltip="controls[line.left.id]?.hint"
+                  class="pi wp-tg__sockctl"
+                  :class="[ctlIcon(line.left), { 'is-active': controls[line.left.id]?.active }]"
+                  role="img"
+                  :aria-label="controls[line.left.id]?.hint"
+                />
+              </template>
+            </span>
+            <span class="wp-tg__sockname is-right" :class="{ 'is-on': line.right && !!eff.get(line.right.id) }">{{ line.right?.name }}</span>
+          </div>
+        </template>
+        <template v-else-if="!g.label?.collapsed">
           <ToggleRowView
             v-for="item in g.toggles"
             :key="item.id"
@@ -479,6 +590,15 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             />
             <span class="wp-tg__rule" />
             <span class="wp-tg__count">{{ groupOfLabel(item).toggles.length }}<template v-if="item.collapsed"> · {{ onCount(groupOfLabel(item)) }} on</template></span>
+            <WpSegmented
+              :model-value="item.layout ?? nodeLayout"
+              :options="LAYOUTS"
+              size="sm"
+              icon-only
+              aria-label="Group layout"
+              :test-prefix="`tg-glayout-${item.id}`"
+              @update:model-value="(v: string) => setGroupLayout(item, v)"
+            />
             <IconPicker
               :model-value="item.icon ?? null"
               all
@@ -580,6 +700,32 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 .wp-tg--edit .wp-tg__label { min-height: 38px; }
 .wp-tg__member.is-grouped { padding-left: 8px; border-left: 2px solid var(--wp-tg-group, var(--wp-border)); }
 .wp-tg__group-box { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* Grid layout: tiles wrap to the node's width, never resize it. */
+.wp-tg__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 2px;
+  min-width: 0;
+}
+/* Grid: a thin line under the tiles per wired toggle, so its control dot
+ * (left) and BOOLEAN output (right) sit level with its name. */
+.wp-tg__sockline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--wp-text-dim, var(--wp-text3));
+  min-width: 0;
+}
+.wp-tg__sockline.is-on, .wp-tg__sockname.is-on { color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-tg__sockname.is-right { text-align: right; }
+.wp-tg__sockname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-tg__sockctl { font-size: 10px; opacity: 0.6; }
+/* Keeps every name level with the first line's, which holds the caret. */
+.wp-tg__sockpad { flex: none; width: var(--wp-icon-btn-size, 20px); }
+.wp-tg__sockctl.is-active { color: var(--wp-accent); opacity: 1; }
 .wp-tg__label {
   display: flex;
   align-items: center;

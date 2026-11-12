@@ -129,6 +129,19 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </p>
     </DocSection>
 
+    <DocSection title="Rows or a grid">
+      <p>
+        The <b>Layout</b> switch in the edit bar draws the node as Rows (one row per toggle, the
+        default) or as a Grid: each toggle in a tile, the tiles wrapping to the node's width, in
+        both modes and every style. Each label has the same switch for its own group, so one group
+        can be a grid while another stays rows. Under a grid's tiles, thin lines carry the dots:
+        mute/bypass dots stack on the left with their toggle's name and BOOLEAN outputs on the
+        right with theirs, each side packed on its own, so one line can hold two toggles. The arrow on the first line merges the group's lines into one that carries
+        every dot, like the Context Injector's merged wires. Rows keep their dots on the row, and
+        the edit view always shows rows so you can reorder them.
+      </p>
+    </DocSection>
+
     <DocSection title="Merge the Boolean nodes you have">
       <p>
         Select Boolean nodes, right-click one and pick <b>Merge into WP Toggles</b>. Each becomes a
