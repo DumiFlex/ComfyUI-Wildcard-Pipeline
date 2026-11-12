@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@dumiflex/wp-kit':
-        specifier: ^0.18.0
-        version: 0.18.0(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))
+        specifier: ^0.18.1
+        version: 0.18.1(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))
       pinia:
         specifier: ^2.2.6
         version: 2.3.1(typescript@6.0.3)(vue@3.5.45(typescript@6.0.3))
@@ -240,8 +240,8 @@ packages:
     resolution: {integrity: sha512-/yCrWGCoA1SVKOks25EGadP9Pnj0oAIHGpl2wH2M2Y46dPM2ueb8wyCVOD7O3WCTkaJ0IkKvzhl1JY7+uCT2Dw==}
     engines: {node: '>=v18'}
 
-  '@dumiflex/wp-kit@0.18.0':
-    resolution: {integrity: sha512-md2NF4dJJIUKXSpgUnXzzvwhznq6hYspyfjRC2T51ifBrqqfyFd5zNMN/K5gdNK6eepO74ugK0Dgt+iFTBPEHA==}
+  '@dumiflex/wp-kit@0.18.1':
+    resolution: {integrity: sha512-TS6/xh2Ur4IL8iDQgEFLmhe741uYY3kpRLuI37uJorp2T6AvpkxXLB64i+rVAm7ISACqIFvvjC1DExbSCImhqQ==}
     engines: {node: '>=22'}
     peerDependencies:
       primeicons: ^7.0.0 || ^8.0.0
@@ -2365,7 +2365,7 @@ snapshots:
       '@types/conventional-commits-parser': 5.0.2
       chalk: 5.6.2
 
-  '@dumiflex/wp-kit@0.18.0(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))':
+  '@dumiflex/wp-kit@0.18.1(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))':
     dependencies:
       primeicons: 8.0.2
       vue: 3.5.45(typescript@6.0.3)
