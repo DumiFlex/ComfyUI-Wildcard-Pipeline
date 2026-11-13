@@ -197,17 +197,29 @@ tutorial(
       await t.press("Enter");
       await t.beat(500);
       await t.waitVoice();
-      await t.say("Drag it above Rain with its grip. Everything under a label belongs to it, until the next label.");
-      // The name is an input's value (hasText can't see it), and a new label is always the last row.
+      await t.say("A new label lands at the bottom, empty. A toggle belongs to a label only once it sits inside it, so drag Rain into Weather by its grip.");
+      // A label moves with its own toggles and lands only between groups, so dragging the label above
+      // Rain would leave Rain outside it. Drag the toggles in instead: dropped on a label's lower half, a
+      // toggle goes first in that group; on a grouped toggle's lower half, it goes after it.
+      const gripOf = (name: string) => t.node(n.tg).locator(".wp-sortable__row", { has: t.page.locator('[data-test^="tg-row-"]', { hasText: name }) }).first().locator(".wp-sortable__grip").first();
       const labelRow = t.node(n.tg).locator(".wp-sortable__row", { has: t.page.locator(".wp-tg__label") }).last();
-      const grip = labelRow.locator(".wp-sortable__grip").first();
-      const lb = await grip.boundingBox({ timeout: 5000 }).catch(() => null);
-      const rb = await row(n.tg, "Rain").boundingBox({ timeout: 5000 }).catch(() => null);
-      if (!lb || !rb) throw new StepError("The new label's grip or the Rain row isn't on screen.");
-      await t.drag({ x: lb.x + lb.width / 2, y: lb.y + lb.height / 2 }, { x: lb.x + lb.width / 2, y: rb.y + 4 });
-      await t.beat(700);
+      const dragInto = async (name: string, over: typeof labelRow) => {
+        const g = await gripOf(name).boundingBox({ timeout: 5000 }).catch(() => null);
+        const o = await over.boundingBox({ timeout: 5000 }).catch(() => null);
+        if (!g || !o) throw new StepError(`${name}'s grip or the row to drop it on isn't on screen.`);
+        await t.drag({ x: g.x + g.width / 2, y: g.y + g.height / 2 }, { x: g.x + g.width / 2, y: o.y + o.height * 0.75 });
+        await t.beat(700);
+      };
+      await dragInto("Rain", labelRow);
+      await t.waitVoice();
+      await t.say("It moves in under the label and takes its colour. Now Puddles, dropped just below Rain.");
+      await dragInto("Puddles", t.node(n.tg).locator(".wp-sortable__row", { has: t.page.locator('[data-test^="tg-row-"]', { hasText: "Rain" }) }).first());
       await t.waitVoice();
       await editDone(n.tg);
+      const weather = t.node(n.tg).locator(".wp-tg__group-box", { has: t.page.locator(".wp-tg__label-text", { hasText: "Weather" }) }).first();
+      for (const name of ["Rain", "Puddles"]) {
+        if (!(await weather.locator('[data-test^="tg-row-"]', { hasText: name }).count())) throw new StepError(`${name} didn't land inside the Weather label.`);
+      }
       const fold = t.node(n.tg).locator('[data-test^="tg-fold-"]').first();
       await t.callout("fold", fold, "Fold the group", 4);
       await t.say("Fold it to keep a long node short. Folded toggles keep working.");
