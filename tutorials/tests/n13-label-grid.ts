@@ -106,6 +106,11 @@ tutorial(
     // ---- 2. a bare node -------------------------------------------------------------------------
     const n = await t.h.step("Inputs and outputs", async () => {
       await t.go("/");
+      // The example's Bookmarks dock stays open on a bare canvas ("No bookmarks yet"): close it.
+      if (await page.locator('[data-test="bm-dock"]').isVisible().catch(() => false)) {
+        await page.locator('button[aria-label="Bookmarks (Wildcard Pipeline)"]').first().click().catch(() => undefined);
+        await t.beat(300);
+      }
       await t.speedUp();
       const img = await t.addNode("EmptyImage", { x: 230, y: 190 });
       await setWidgets(img, { width: 512, height: 512, batch_size: 4, color: 0x5b7fa6 });
@@ -145,6 +150,21 @@ tutorial(
       await t.say("The top line says what came in: one batch of four. The node also shows the grid itself, so it can end a branch on its own.");
       await t.waitVoice();
       await t.uncallout("run");
+      // The node's own picture is small at this zoom: a big Preview Image beside it makes every change readable.
+      await t.speedUp();
+      const big = await t.addNode("Preview Image", { x: 1530, y: 420 });
+      await page.evaluate((id) => {
+        const g = window.app?.graph;
+        const node = (g?.getNodeById(id) ?? g?.getNodeById(Number(id))) as { size: [number, number] } | null | undefined;
+        if (node) node.size = [620, 660];
+        window.app?.canvas?.setDirty(true, true);
+      }, big);
+      await t.wire(lg, "grid", big, "images");
+      await t.normalSpeed();
+      await t.say("To see each change clearly, a Preview Image beside it shows the grid large. Run.");
+      await t.run();
+      await t.beat(900);
+      await t.waitVoice();
       return { img, text, lg, back };
     });
 
