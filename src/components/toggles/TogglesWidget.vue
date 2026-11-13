@@ -550,7 +550,12 @@ function foldedOuts(g: ToggleGroup): string | undefined {
 
     <template v-for="(g, gi) in groups" :key="groupKey(g, gi)">
       <!-- Clean view: plain rows, no grips. -->
-      <div v-if="!editMode" class="wp-tg__group-box">
+      <div
+        v-if="!editMode"
+        class="wp-tg__group-box"
+        :data-wp-part="`group:${groupKey(g, gi)}`"
+        :data-wp-part-label="g.label ? `${g.label.name || 'Group'} (whole group)` : 'Toggles outside a group'"
+      >
         <div
           v-if="g.label"
           class="wp-tg__label"
@@ -577,6 +582,8 @@ function foldedOuts(g: ToggleGroup): string | undefined {
               v-for="item in g.toggles"
               :key="item.id"
               v-bind="rowProps(item)"
+              :data-wp-part="`toggle:${item.id}`"
+              :data-wp-part-label="item.name || 'Toggle'"
               :indent="0"
               tile
               @set-on="(v: boolean) => setOn(item, v)"
@@ -626,6 +633,8 @@ function foldedOuts(g: ToggleGroup): string | undefined {
             v-for="item in g.toggles"
             :key="item.id"
             v-bind="rowProps(item)"
+            :data-wp-part="`toggle:${item.id}`"
+            :data-wp-part-label="item.name || 'Toggle'"
             @set-on="(v: boolean) => setOn(item, v)"
           />
         </template>

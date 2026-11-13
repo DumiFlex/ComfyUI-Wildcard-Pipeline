@@ -153,7 +153,7 @@ const keys = [
     <DocSection title="Refine before it goes on">
       <p>
         In <b>Detail</b>, the side panel edits the frame's positive and negative prompt and
-        paints a mask for the upscaler. Edits travel with the picks; tiles show ✎ for an edited
+        paints a mask for a refine pass. Edits travel with the picks; tiles show ✎ for an edited
         prompt and ◐ for a painted mask.
       </p>
       <ul>
@@ -199,6 +199,12 @@ const keys = [
         <li><b>Undo</b> and <b>Redo</b> (Ctrl+Z, Ctrl+Shift+Z) step through strokes, Invert and
           Clear while the painter is open.</li>
       </ul>
+      <Banner tone="warn" note>
+        Wire the <code>masks</code> output into a <b>Set Latent Noise Mask</b> on the filter's own
+        <code>latent</code>, not behind an <b>Upscale Latent</b>. The sampler keeps every part you
+        didn't paint exactly as it gets it, and an upscaled latent left as it is decodes blocky. To
+        refine and upscale, upscale after the masked pass.
+      </Banner>
       <DocImage
         src="images/docs/wp-image-filter-mask.png"
         ratio="1720 / 860"

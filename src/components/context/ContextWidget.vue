@@ -759,7 +759,7 @@ function onReveal(ev: Event): void {
          the canvas, NOT editable. Cross-node UI (constraint reach pick-list,
          pair popovers) shows the same codename to say WHICH node a target
          lives in. Sits above the toolbar/hero so it shows in every state. -->
-    <div class="wp-node-id">
+    <div class="wp-node-id" data-wp-part="codename" data-wp-part-label="Node name">
       <span class="wp-node-id__tag">node</span>
       <span
         class="wp-node-id__chip wp-node-id__chip--fixed"
@@ -794,6 +794,8 @@ function onReveal(ev: Event): void {
       >
         <!-- Toolbar: module count + bulk-drift refresh + collapse/expand/toggle-all. -->
         <ContextToolbar
+          data-wp-part="toolbar"
+          data-wp-part-label="Toolbar"
           :enabled-count="enabledCount"
           :total-count="totalCount"
           :drifted-count="driftedCount"
@@ -814,12 +816,18 @@ function onReveal(ev: Event): void {
       <template v-for="item in topLevelItems" :key="item.key">
         <BundleFrame
           v-if="item.kind === 'bundle'"
+          :data-wp-part="`bundle:${item.key}`"
+          :data-wp-part-label="`${item.bundle!.name ?? 'Bundle'} (bundle)`"
+          data-wp-part-section="Modules"
           :bundle="item.bundle!"
           :children="item.children!"
           :nested="false"
         />
         <ModuleRow
           v-else
+          :data-wp-part="`module:${item.module!._uid}`"
+          :data-wp-part-label="item.module!.meta.name || 'Module'"
+          data-wp-part-section="Modules"
           :module="item.module!"
           :idx="item.idx!"
           :data-uid="item.module!._uid"
@@ -834,7 +842,7 @@ function onReveal(ev: Event): void {
              reusable scaffolds users typically wanted that button for.
              SPA library still reachable via the right-click context
              menu on any module. -->
-        <ContextAddActions class="wp-w-footer" @module="openPicker" @bundle="openBundlePicker" />
+        <ContextAddActions data-wp-part="add" data-wp-part-label="Add module / bundle" class="wp-w-footer" @module="openPicker" @bundle="openBundlePicker" />
       </div>
 
       <!-- Empty-state hero — shown when modules is empty and there's no
@@ -861,7 +869,7 @@ function onReveal(ev: Event): void {
           Add a wildcard, fixed values pack, combine, derivation or constraint to start
           building this context.
         </div>
-        <ContextAddActions class="wp-empty-hero-actions" @module="openPicker" @bundle="openBundlePicker" />
+        <ContextAddActions data-wp-part="add" data-wp-part-label="Add module / bundle" class="wp-empty-hero-actions" @module="openPicker" @bundle="openBundlePicker" />
       </div>
     </Transition>
 

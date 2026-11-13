@@ -405,7 +405,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
 <template>
   <div ref="root" class="wp-debug" :class="{ 'wp-debug--skipped': isSkipped }">
     <template v-if="model">
-      <header class="wp-dbg-head" data-test="dbg-head">
+      <header class="wp-dbg-head" data-wp-part="summary" data-wp-part-label="Summary" data-test="dbg-head">
         <CopyButton
           v-if="model.seed"
           :text="model.seed"
@@ -461,7 +461,7 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
         </div>
       </header>
 
-      <nav class="wp-dbg-tabs">
+      <nav class="wp-dbg-tabs" data-wp-part="tabs" data-wp-part-label="Tabs">
         <WpTabs
           class="wp-dbg-tabs__list"
           :model-value="activeTab"
