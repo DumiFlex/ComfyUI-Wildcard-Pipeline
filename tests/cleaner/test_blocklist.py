@@ -84,3 +84,31 @@ def test_missing_blocklist_config_no_op():
     result = apply("watermark", mode="tags", config={})
     assert result["text"] == "watermark"
     assert result["stats"] == {"dropped": [], "errors": []}
+
+
+def test_tags_mode_names_the_entry_that_matched():
+    result = apply(
+        "signature watermark, brown eyes, lowres",
+        mode="tags",
+        config={"blocklist": {"kind": "list", "entries": ["lowres", "watermark"]}},
+    )
+    assert result["stats"]["dropped"] == ["signature watermark", "lowres"]
+    assert result["stats"]["matched"] == ["watermark", "lowres"]
+
+
+def test_regex_tags_mode_names_the_pattern_that_matched():
+    result = apply(
+        "bad hands, artist name, blue",
+        mode="tags",
+        config={"blocklist": {"kind": "regex", "entries": [r"bad\s+\w+", "artist"]}},
+    )
+    assert result["stats"]["matched"] == [r"bad\s+\w+", "artist"]
+
+
+def test_text_mode_has_no_matched_list():
+    result = apply(
+        "a watermark here",
+        mode="text",
+        config={"blocklist": {"kind": "list", "entries": ["watermark"]}},
+    )
+    assert "matched" not in result["stats"]

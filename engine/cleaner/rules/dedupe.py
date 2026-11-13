@@ -26,17 +26,21 @@ def apply_exact(text: str, mode: str, config: dict) -> RuleResult:
     if mode != "tags":
         return {"text": text, "stats": {"dropped": []}}
     tags = _split_tags(text)
-    seen: set[str] = set()
+    first: dict[str, str] = {}
     kept: list[str] = []
     dropped: list[str] = []
+    # `matched[i]` is the earlier tag `dropped[i]` repeats (the Last run
+    # window marks it as the reason).
+    matched: list[str] = []
     for tag in tags:
         key = tag.casefold()
-        if key in seen:
+        if key in first:
             dropped.append(tag)
+            matched.append(first[key])
         else:
-            seen.add(key)
+            first[key] = tag
             kept.append(tag)
-    return {"text": _join_tags(kept), "stats": {"dropped": dropped}}
+    return {"text": _join_tags(kept), "stats": {"dropped": dropped, "matched": matched}}
 
 
 def _levenshtein_ratio(a: str, b: str) -> float:
@@ -72,6 +76,10 @@ def apply_fuzzy(text: str, mode: str, config: dict) -> RuleResult:
     tags = _split_tags(text)
     kept: list[str] = []
     dropped: list[str] = []
+    # `matched[i]` is the kept tag `dropped[i]` was close to, `scores[i]`
+    # how close (0-1, two decimals).
+    matched: list[str] = []
+    scores: list[float] = []
     for tag in tags:
         key = tag.casefold()
         is_dup = False
@@ -83,14 +91,20 @@ def apply_fuzzy(text: str, mode: str, config: dict) -> RuleResult:
         for kept_tag in kept:
             if tag_is_atom or contains_atom(kept_tag):
                 if key == kept_tag.casefold():
-                    is_dup = True
+                    is_dup, near, score = True, kept_tag, 1.0
                     break
                 continue
-            if _ratio(key, kept_tag.casefold()) >= _FUZZY_THRESHOLD:
-                is_dup = True
+            score = _ratio(key, kept_tag.casefold())
+            if score >= _FUZZY_THRESHOLD:
+                is_dup, near = True, kept_tag
                 break
         if is_dup:
             dropped.append(tag)
+            matched.append(near)
+            scores.append(round(score, 2))
         else:
             kept.append(tag)
-    return {"text": _join_tags(kept), "stats": {"dropped": dropped}}
+    return {
+        "text": _join_tags(kept),
+        "stats": {"dropped": dropped, "matched": matched, "scores": scores},
+    }

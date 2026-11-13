@@ -80,6 +80,36 @@ def _effective_rules(
     return base
 
 
+def _step(rule: str, before: str, after: str) -> dict[str, Any]:
+    """One trace step: the rule and, only when it changed the text, the text
+    after it (unchanged steps stay small in the UI payload)."""
+    return {"rule": rule, "text": after} if after != before else {"rule": rule}
+
+
+def _run_rules(
+    text: str, mode: str, cfg: dict[str, Any], active: set[RuleId],
+) -> tuple[str, RunReport, list[dict[str, Any]]]:
+    """Run the active rules in registry order: the text, each rule's stats,
+    and one trace step per rule."""
+    out = text
+    report: RunReport = {}
+    steps: list[dict[str, Any]] = []
+    for rule_id, fn in RULE_REGISTRY:
+        if rule_id not in active:
+            continue
+        result = fn(out, mode, cfg)
+        steps.append(_step(rule_id, out, result["text"]))
+        out = result["text"]
+        report[rule_id] = result["stats"]
+    return out, report, steps
+
+
+def _trace(text: str, out: str, mode: str, steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the node's Last run window replays: the text in, the text out and
+    each step between (`src/components/cleaner/types.ts:CleanerTrace`)."""
+    return {"input": text, "output": out, "mode": mode, "steps": steps}
+
+
 class PromptCleaner:
     """Stateless orchestrator. Safe to instantiate once and reuse."""
 
@@ -100,15 +130,8 @@ class PromptCleaner:
             overrides["blocklist"] = True
 
         active = _effective_rules(intensity, overrides)
-        out = text
-        report: RunReport = {}
-        for rule_id, fn in RULE_REGISTRY:
-            if rule_id not in active:
-                continue
-            result = fn(out, mode, cfg)
-            out = result["text"]
-            report[rule_id] = result["stats"]
-        return {"text": out, "report": report}
+        out, report, steps = _run_rules(text, mode, cfg, active)
+        return {"text": out, "report": report, "trace": _trace(text, out, mode, steps)}
 
     def run_negative(
         self,
@@ -129,14 +152,8 @@ class PromptCleaner:
         intensity = cfg.get("intensity", "balanced")
         overrides: dict[str, bool] = dict(cfg.get("negative_rules_override") or {})
         active = _effective_rules(intensity, overrides, INTENSITY_TO_NEG_RULES)
-        out = text
-        report: dict[str, Any] = {}
-        for rule_id, fn in RULE_REGISTRY:
-            if rule_id not in active:
-                continue
-            result = fn(out, mode, cfg)
-            out = result["text"]
-            report[rule_id] = result["stats"]
+        out, rule_report, steps = _run_rules(text, mode, cfg, active)
+        report: dict[str, Any] = dict(rule_report)
 
         from engine.negatives import split_tags, tag_key  # noqa: PLC0415
 
@@ -149,5 +166,7 @@ class PromptCleaner:
                 "dropped": bool(cfg.get("drop_prompt_overlap")),
             }
             if cfg.get("drop_prompt_overlap"):
-                out = ", ".join(t for t in tags if tag_key(t) not in prompt_keys)
-        return {"text": out, "report": report}
+                dropped = ", ".join(t for t in tags if tag_key(t) not in prompt_keys)
+                steps.append(_step("prompt_overlap", out, dropped))
+                out = dropped
+        return {"text": out, "report": report, "trace": _trace(text, out, mode, steps)}

@@ -184,9 +184,29 @@ describe("CleanerWidget — neg column (send-to-negative)", () => {
     );
   });
 
-  it("no negative report = no last-run block and no negative count", () => {
+  it("no run yet = no last-run strip and no negative count", () => {
     const w = mount(CleanerWidget, { props: makeProps() });
     expect(w.find('[data-test="cleaner-last-run"]').exists()).toBe(false);
     expect(w.find('[data-test="cleaner-neg-count"]').exists()).toBe(false);
+  });
+
+  it("a run without a negative still shows the strip, without the negative line", () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({}, {
+        lastRunReport: { dedupe_exact: { dropped: ["a"] } },
+        lastRunTrace: {
+          input: "a, a, b", output: "a, b", mode: "tags",
+          steps: [{ rule: "whitespace" }, { rule: "dedupe_exact", text: "a, b" }],
+        },
+      }),
+    });
+    expect(w.find('[data-test="cleaner-last-run"]').text()).toContain("prompt: 1 rule changed it · 1 duplicate");
+    expect(w.find('[data-test="cleaner-last-run-neg"]').exists()).toBe(false);
+  });
+
+  it("clicking the last-run strip asks to open the Last run window", async () => {
+    const w = mount(CleanerWidget, { props: makeProps({}, { lastRunReport: {} }) });
+    await w.find('[data-test="cleaner-last-run"]').trigger("click");
+    expect(w.emitted("open-last-run")).toHaveLength(1);
   });
 });

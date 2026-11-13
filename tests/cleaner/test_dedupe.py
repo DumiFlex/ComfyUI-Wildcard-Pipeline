@@ -22,7 +22,7 @@ def test_exact_no_op_in_text_mode():
 
 def test_exact_empty_string():
     result = apply_exact("", mode="tags", config={})
-    assert result == {"text": "", "stats": {"dropped": []}}
+    assert result == {"text": "", "stats": {"dropped": [], "matched": []}}
 
 
 def test_fuzzy_drops_near_duplicate():
@@ -41,3 +41,21 @@ def test_fuzzy_no_op_in_text_mode():
     result = apply_fuzzy("smiling smiles", mode="text", config={})
     assert result["text"] == "smiling smiles"
     assert result["stats"] == {"dropped": []}
+
+
+def test_exact_names_the_tag_each_drop_repeats():
+    result = apply_exact("Red, blue, RED, blue", mode="tags", config={})
+    assert result["stats"] == {"dropped": ["RED", "blue"], "matched": ["Red", "blue"]}
+
+
+def test_fuzzy_names_the_kept_tag_and_how_close():
+    result = apply_fuzzy("pixie cut, red, pixie cuts", mode="tags", config={})
+    assert result["stats"]["dropped"] == ["pixie cuts"]
+    assert result["stats"]["matched"] == ["pixie cut"]
+    assert 0.9 <= result["stats"]["scores"][0] < 1
+
+
+def test_fuzzy_exact_atom_repeat_scores_one():
+    result = apply_fuzzy("embedding:bad_v4, embedding:bad_v4", mode="tags", config={})
+    assert result["stats"]["matched"] == ["embedding:bad_v4"]
+    assert result["stats"]["scores"] == [1.0]

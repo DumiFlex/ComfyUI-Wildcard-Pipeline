@@ -6,7 +6,7 @@ Tidy a prompt before the sampler: drop duplicate tags and stray commas, remove e
 ## Inputs and outputs
 
 - **prompt (in)** `STRING`: The text to clean, usually from a WP Prompt Assembler. Any text works.
-- **cleaner widget**: Pick a mode and a preset, switch single rules on or off, and edit the blocklist. After a run it shows how many fixes each rule made.
+- **cleaner widget**: Pick a mode and a preset, switch single rules on or off, and edit the blocklist. After a run it shows how many fixes each rule made, and the Last run strip opens the run's before and after with what each rule changed and why.
 - **negative (in)** `STRING`: Optional. A negative to clean too: type it or wire in the Assembler's negative. Left empty, the negative output is empty.
 - **prompt (out)** `STRING`: The cleaned prompt, for CLIP Text Encode.
 - **blocklist (in)** `STRING`: Optional text from another node, such as one shared word list feeding several cleaners. Its entries join the panel's blocklist (comma- or newline-separated in list mode, one per line in regex mode) and turn the blocklist on; the Blocklist button reads + input. Its dot sits beside that button and shows when you hover it or wire it.
