@@ -192,10 +192,13 @@ tutorial(
       await t.beat(500);
       await t.waitVoice();
       await t.say("Drag it above Rain with its grip. Everything under a label belongs to it, until the next label.");
-      const label = t.node(n.tg).locator('[data-test^="tg-label-"]').filter({ hasText: "Weather" }).first();
-      const lb = await label.boundingBox();
-      const rb = await row(n.tg, "Rain").boundingBox();
-      if (lb && rb) await t.drag({ x: lb.x + 10, y: lb.y + lb.height / 2 }, { x: rb.x + 10, y: rb.y + 4 });
+      // The name is an input's value (hasText can't see it), and a new label is always the last row.
+      const labelRow = t.node(n.tg).locator(".wp-sortable__row", { has: t.page.locator(".wp-tg__label") }).last();
+      const grip = labelRow.locator(".wp-sortable__grip").first();
+      const lb = await grip.boundingBox({ timeout: 5000 }).catch(() => null);
+      const rb = await row(n.tg, "Rain").boundingBox({ timeout: 5000 }).catch(() => null);
+      if (!lb || !rb) throw new StepError("The new label's grip or the Rain row isn't on screen.");
+      await t.drag({ x: lb.x + lb.width / 2, y: lb.y + lb.height / 2 }, { x: lb.x + lb.width / 2, y: rb.y + 4 });
       await t.beat(700);
       await t.waitVoice();
       await editDone(n.tg);
