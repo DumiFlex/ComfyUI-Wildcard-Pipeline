@@ -4,7 +4,9 @@
 // with everything upstream; its own Role replaces the first one's (the blue info dot), and what was
 // built upstream from the old value stays built. The right-click menu: Hold across run, Push vs
 // Save to library, Wrap into bundle, Move. Prompt-only: no model. T09 already shows the seed modes,
-// a lock, Edit for one node and the mod badge; 08 shows bundles.
+// a lock, Edit for one node and the mod badge; 08 shows bundles. Depth pass (13/11): inputs and
+// outputs with the seed and its mode, Add module, row markers, a bundle on a node, how it works,
+// recipes and gotchas.
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
@@ -67,6 +69,30 @@ tutorial(
       return { ctx, asm };
     });
 
+    await t.h.step("Inputs and outputs", async () => {
+      await t.callout("out", t.node(n.ctx), "context (out)", 5);
+      await t.say("context (out) carries every variable on, into an Assembler, a WP Debug, or another Context. upstream (in) is the other end: a Context, an Injector, Model Info, Toggles or a Loop to build on. We'll chain one in a moment.", "The context output carries every variable on, into an Assembler, a WP Debug, or another Context. Upstream is the other end: a Context, an Injector, Model Info, Toggles or a Loop to build on. We'll chain one in a moment.");
+      await t.waitVoice();
+      await t.uncallout("out");
+      const seed = t.node(n.ctx).locator('[data-widget-name="seed"]');
+      await t.callout("seed", seed, "Decides every pick", 4);
+      await t.say("seed decides every random pick in this node. Type 42, and every row rolls again.", "Seed decides every random pick in this node. Type 42, and every row rolls again.");
+      await t.fill(seed.locator("input").first(), "42", { cps: 10 });
+      await t.press("Tab");
+      await t.beat(1000);
+      await t.waitVoice();
+      await t.uncallout("seed");
+      const mode = t.node(n.ctx).locator('[data-widget-name="control_after_generate"]');
+      if (await mode.isVisible().catch(() => false)) {
+        await t.callout("mode", mode, "What happens after a run", 4);
+        await t.say("Under it, what happens to the seed after each run: fixed keeps it, increment adds one, randomize rolls a new one. Fixed repeats the same prompt.");
+        await t.waitVoice();
+        await t.uncallout("mode");
+      }
+      await t.say("Add module, at the bottom, adds rows from your library: wildcards, fixed values, combines, rules, constraints and bundles.");
+      await t.waitVoice();
+    });
+
     await t.h.step("Switch a row off", async () => {
       const box = t.moduleRow(n.ctx, "Eyes").locator('[data-test="module-enabled"]');
       await t.callout("tick", box, "Off, but kept", 4);
@@ -91,6 +117,13 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("btns");
       await t.say("If they crowd the node, the Display playground in Settings can show them only on hover.");
+      await t.waitVoice();
+    });
+
+    await t.h.step("Markers on a row", async () => {
+      await t.say("A row can carry a small mark. mod: you changed the row on this node, so it differs from the library. drift: the library item changed after you added it; right-click, Refresh from library, to take the change.", "A row can carry a small mark. Mod: you changed the row on this node, so it differs from the library. Drift: the library item changed after you added it; right-click, Refresh from library, to take the change.");
+      await t.waitVoice();
+      await t.say("missing: the item isn't in your library, often in a workflow from someone else. The row still works from its own copy; right-click, Save to library, to keep it. held: Hold across run is on.", "Missing: the item isn't in your library, often in a workflow from someone else. The row still works from its own copy; right-click, Save to library, to keep it. Held: Hold across run is on.");
       await t.waitVoice();
     });
 
@@ -126,6 +159,21 @@ tutorial(
       return c2;
     });
 
+    await t.h.step("A bundle on a Context", async () => {
+      await t.say("A bundle adds several rows as one. Add the Look bundle to the second Context.");
+      await t.pickModules(ctx2, ["Look"]);
+      await t.beat(800);
+      await t.waitVoice();
+      await t.expandBundles(ctx2, "Look");
+      await t.callout("b", t.bundleFrame(ctx2, "Look"), "Its rows, in order", 5);
+      await t.say("Open it, and its children are rows like any other: lock one, switch one off, or edit one for this node only. Fold it to keep the node short.");
+      await t.waitVoice();
+      await t.uncallout("b");
+      await t.foldBundle(ctx2, "Look");
+      await t.say("When the library's bundle changes, the node says library updated. Right-click it, Reset to library snapshot, to take the new version.");
+      await t.waitVoice();
+    });
+
     await t.h.step("The right-click menu", async () => {
       await t.say("Right-click a row for the rest.");
       const menu = await menuOn(n.ctx, "Hair");
@@ -150,6 +198,15 @@ tutorial(
       await t.beat(600);
       await t.deselect();
       if (!(await t.node(ctx2).isVisible())) throw new StepError("The second Context left the screen.");
+    });
+
+    await t.h.step("How it works, recipes and gotchas", async () => {
+      await t.say("When a run reaches the Context, it takes what came from upstream, rolls each ticked row in order on its own seed, and writes the variables into the context it passes on. The canvas preview runs the same rolls, so the Assembler shows them before you run.");
+      await t.waitVoice();
+      await t.say("Recipes: one Context per stage, like person, outfit, place, each with a Debug after it. A Context Loop before the first, for a set of frames. An Injector before it, so its rules can read a value from another node.");
+      await t.waitVoice();
+      await t.say("Gotchas: a rule above what it reads comes out empty, a later Context replaces a variable without rebuilding what was made from it, and a locked row ignores the seed until you unlock it.");
+      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {
