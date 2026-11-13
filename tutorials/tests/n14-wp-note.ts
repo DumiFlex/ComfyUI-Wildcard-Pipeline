@@ -81,7 +81,8 @@ tutorial(
       const panel = t.page.locator('[data-test="note-link-panel"]').last();
       await t.click(panel.locator('[data-test="note-link-kind-docs"]'));
       await t.beat(300);
-      await t.click(panel.locator('[data-test="note-link-page"] input, input[data-test="note-link-page"]').first());
+      // The kit Combobox puts data-test on its popover root, not on the text field: find the field by role.
+      await t.click(panel.getByRole("combobox", { name: "Docs page" }));
       await t.type("Seeds", { cps: 14, rest: false });
       await t.beat(600);
       await t.click(t.page.getByRole("option", { name: /Seeds/ }).first());
