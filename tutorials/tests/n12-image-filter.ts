@@ -116,7 +116,6 @@ tutorial(
         await t.say("Two more wires. A Set Latent Noise Mask in front of the refine pass, so it only changes what you paint.");
         // The mask goes on the picked latent at its own size. Behind the Upscale Latent By, every
         // part you don't paint would stay the upscaled latent as it is, and that decodes blocky.
-        const latentLine = "It takes the filter's latent before the upscale, so everything you don't paint stays the draft as it was.";
         // Both ends of every wire on screen at once, clear of the bookmark dock on the left and the
         // caption at the bottom: a wire dragged to a node off screen drops on empty canvas.
         await fit([filter, up, refine]);
@@ -124,7 +123,7 @@ tutorial(
         const mask = await t.addNode("Set Latent Noise Mask", { x: (box?.x ?? 900) + 120, y: (box?.y ?? 300) + (box?.height ?? 300) + 90 });
         await fit([filter, up, refine, mask]);
         await t.waitVoice();
-        await t.say(latentLine);
+        await t.say("It takes the filter's latent before the upscale, so everything you don't paint stays the draft as it was.");
         await t.wire(filter, "latent", mask, "samples");
         await t.wire(mask, "LATENT", refine, "latent_image");
         await t.wire(filter, "masks", mask, "mask");
