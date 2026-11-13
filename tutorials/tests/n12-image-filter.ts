@@ -95,9 +95,17 @@ tutorial(
       const id = await find("WP_ImageFilter");
       if (!id) throw new StepError("The example has no Image Filter.");
       await t.zoomOn(id, { scale: 0.9 });
-      await t.callout("clip", t.node(id).locator('[data-slot-key$="-in-10"]').first(), "clip: re-encodes edits", 6);
-      await t.say("Every input has a matching output, sliced to your picks. clip is the one without: wire your CLIP here, and a prompt you edit in the picker is encoded again.");
+      await t.say("Every input has a matching output, sliced to your picks.");
       await t.waitVoice();
+      // The dot and its name together, held for the whole line and a beat after it (it flashed by before).
+      const clipDot = t.node(id).locator('[data-slot-key$="-in-10"]').first();
+      const clipName = t.node(id).getByText("clip", { exact: true }).first();
+      const clipParts = (await clipName.isVisible().catch(() => false)) ? [clipDot, clipName] : [clipDot];
+      await t.callout("clip", clipParts, "clip: re-encodes edits", 6);
+      await t.beat(600);
+      await t.say("clip is the one without: wire your CLIP here, and a prompt you edit in the picker is encoded again.");
+      await t.waitVoice();
+      await t.beat(1500);
       await t.uncallout("clip");
       return id;
     });
