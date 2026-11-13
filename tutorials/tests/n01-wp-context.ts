@@ -2,7 +2,7 @@
 // empty (Move to bottom fixes it). Inputs and outputs, the seed and its mode. The tick box. The row
 // buttons shown working: a lock keeps Hair through a seed change, the globe hides $hair from the
 // prompt while Subject still reads it. Edit for this node (a weight, the seed lock) → the mod mark,
-// Push to library (cancelled), Reset overrides. Duplicate → the duplicate badge. A second Context
+// Push to library (cancelled), Reset overrides. Duplicate → a copy with its own variable ($hair_2). A second Context
 // downstream; its own Role replaces the first one's. Hair dragged onto the second Context and back.
 // A bundle on a node. The right-click menu. Drift: the library's Eyes changed through the API →
 // drift mark → Refresh from library (the library is put back at the end); missing. Prompt-only.
@@ -215,11 +215,14 @@ tutorial(
       await t.beat(1000);
       await t.waitVoice();
       const rows = t.node(n.ctx).locator(".wp-module").filter({ has: page.locator(".wp-module-name", { hasText: /^\s*Hair\s*$/ }) });
-      const badge = rows.last().locator(".wp-conflict-badge").first();
-      if (await badge.isVisible().catch(() => false)) await t.callout("dup", badge, "Two rows write $hair", 5);
-      await t.say("Two rows now write the same variable. The amber badge says so: the lower one wins, and the first pick is wasted. A copy is useful when you change it, for a second variable or other weights; otherwise remove it.");
+      // The copy gets its own variable ($hair_2) and both rows a "#n of 2" chip: nothing is overwritten.
+      const copy = rows.last().locator('[data-test="sibling-chip"]').locator("..");
+      await t.callout("dup", copy, "Its own variable: $hair_2", 5);
+      await t.say("The copy writes its own variable, dollar hair underscore 2, so it rolls a second hair of its own. The chips number the copies, one of two and two of two.");
       await t.waitVoice();
       await t.uncallout("dup");
+      await t.say("Use it when a prompt needs two picks from one list, like two hair colours or two companions, and print dollar hair underscore 2 where the second one goes. Here one is enough, so remove it.");
+      await t.waitVoice();
       await t.click(rows.last().locator('[data-test="row-action-remove"]'));
       await t.beat(800);
     });
