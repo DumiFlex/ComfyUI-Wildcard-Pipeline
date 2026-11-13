@@ -226,7 +226,8 @@ tutorial(
 
     const ctx2 = await t.h.step("What comes from upstream", async () => {
       await t.say("Contexts chain. Add a second one and wire the first into its upstream.");
-      const c2 = await t.addNode("WP Context", { x: 820, y: 640 });
+      // 150 px higher than before, so its rows stay above the caption in the drag and bundle steps.
+      const c2 = await t.addNode("WP Context", { x: 820, y: 490 });
       await t.wire(n.ctx, "context", c2, "upstream");
       await t.wire(c2, "context", n.asm, "context");
       await t.beat(800);
