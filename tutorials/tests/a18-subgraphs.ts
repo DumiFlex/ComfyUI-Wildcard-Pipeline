@@ -133,8 +133,11 @@ tutorial(
         await t.say("Right-click, Show on subgraph node, does the same.");
         await t.waitVoice();
         await t.say("Back out to the main graph.");
+        // The breadcrumb's back arrow (left of "Unsaved Workflow / New Subgraph") goes up one level.
+        const back = page.locator('[data-testid="subgraph-breadcrumb-back"]').first();
         const crumb = page.locator('[class*="breadcrumb"]').getByText(/^\s*(Graph|Unsaved Workflow.*)\s*$/).first();
-        if (await crumb.isVisible().catch(() => false)) await t.click(crumb);
+        if (await back.isVisible().catch(() => false)) await t.click(back);
+        else if (await crumb.isVisible().catch(() => false)) await t.click(crumb);
         else await page.evaluate(() => (window.app?.canvas as { setGraph?: (g: unknown) => void } | undefined)?.setGraph?.(window.app?.graph));
         await t.beat(1500);
         await t.waitVoice();
