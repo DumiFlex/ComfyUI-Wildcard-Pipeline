@@ -29,9 +29,9 @@ Tidy a prompt before the sampler: drop duplicate tags and stray commas, remove e
 
 | Preset | Rules |
 |---|---|
-| gentle | spaces only |
+| gentle | spaces and commas only (`blurry, , lowres` becomes `blurry, lowres`) |
 | balanced | empty brackets, LoRA spacing, spaces, punctuation, duplicate tags |
-| aggressive | all of balanced, plus merge weights and near-duplicates ("bad hand" and "bad hands") |
+| aggressive | all of balanced, plus merge weights and near-duplicates (`a knight`, `knight` and `knights` keep the first; tags 90% alike letter by letter, the same tag at another weight too) |
 
 **CUSTOM** shows when you've switched rules away from the preset; click the preset again to go back.
 
@@ -54,9 +54,11 @@ In tags mode the whole tag with the word goes; in text mode just the word. Never
 
 ## Cleaning the negative
 
-With a negative wired in, the rule list gets a second column for it. It follows the prompt column, except near-duplicates and the blocklist are off. **Drop negative tags also in prompt** (off by default) removes a word from the negative when the prompt asks for it; the run stats name the overlap either way.
+With a negative wired in, the rule list gets a second column for it. It follows the prompt column, except near-duplicates and the blocklist are off. **Drop negative tags also in prompt** (off by default) removes a word from the negative when the prompt asks for it; either way the Last run strip names the overlap on an amber line.
 
 ## Tips
 
 - Hover a rule for what it does.
 - After a run, the count next to each rule shows what it removed.
+- Each rule runs once, in list order, on what the rule before left, so a rule can show 0 because an earlier one already fixed it.
+- Duplicate removal never touches `BREAK` or `AND`, and punctuation keeps emoticon tags such as `:3` and `-_-`.

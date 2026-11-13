@@ -7,7 +7,7 @@
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
-const MESSY = "masterpiece, a knight ,, forest,  (best quality:1.2), (), Masterpiece, <lora:detail:0.8>,(best quality:1.1), knight, knights";
+const MESSY = "masterpiece, a knight ,, forest,  (best quality:1.2), (), Masterpiece, <lora:detail:0.8>,((best quality:1.1)), knight, knights";
 const NEG = "blurry, , lowres, blurry, forest";
 
 tutorial(
@@ -73,11 +73,11 @@ tutorial(
       await t.say("Intensity is a preset of rules. Balanced, the default, never changes what the prompt means.");
       await t.waitVoice();
       await t.uncallout("int");
-      await t.say("Gentle only fixes spaces. Run.");
+      await t.say("Gentle only fixes spaces and commas. Run.");
       await t.click(t.node(n.cl).locator('[data-test="cleaner-intensity-gentle"]'));
       await run();
       await t.waitVoice();
-      await t.say("Aggressive also merges the two weights on best quality into one, and drops near-duplicates like knight and knights. Run.");
+      await t.say("Aggressive also merges stacked weights, and fuzzy dedupe drops near repeats: the second best quality, and knight and knights, since a knight is already there. Run.");
       await t.click(t.node(n.cl).locator('[data-test="cleaner-intensity-aggressive"]'));
       await run();
       await t.waitVoice();
@@ -91,7 +91,7 @@ tutorial(
     });
 
     await t.h.step("Single rules", async () => {
-      await t.say("RULES lists every rule. Whitespace and punctuation tidy spacing and commas. Empty groups drops brackets with nothing in them. Merge weights joins one tag's weights. LoRA spacing fixes the spaces around a LoRA tag.");
+      await t.say("RULES lists every rule. Whitespace and punctuation tidy spacing and commas. Empty groups drops brackets with nothing in them. Merge weights folds stacked weights into one. LoRA spacing fixes the spaces around a LoRA tag.");
       await t.waitVoice();
       await t.say("Tag dedupe drops exact repeats, in any capitals. Fuzzy dedupe drops near repeats. Blocklist removes words you list.");
       await t.waitVoice();

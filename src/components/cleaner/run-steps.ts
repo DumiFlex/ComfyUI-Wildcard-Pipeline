@@ -113,6 +113,9 @@ function explain(rule: StepRule, stats: Record<string, unknown>, before: string)
   const matched = strings(stats.matched);
   if (!matched.length) return { reasons, marks };
   const scores = Array.isArray(stats.scores) ? stats.scores : [];
+  // Fuzzy dedupe says why each drop went: "form" (same words once
+  // singular, `knight` / `knights`) or "close" (the similarity score).
+  const kinds = strings(stats.kinds);
   const spans = tagSpans(before);
   const usedDrops = new Set<number>();
   dropped.forEach((item, i) => {
@@ -130,7 +133,9 @@ function explain(rule: StepRule, stats: Record<string, unknown>, before: string)
     }
     const raw: unknown = scores[i];
     const score = typeof raw === "number" ? Math.round(raw * 100) : null;
-    const verb = rule === "fuzzy_dedupe" && score !== null && score < 100 ? `is ${score}% like` : "repeats";
+    const verb = rule !== "fuzzy_dedupe" ? "repeats"
+      : kinds[i] === "form" ? "is another form of"
+      : score !== null && score < 100 ? `is ${score}% like` : "repeats";
     reasons.push({ item, verb, cause });
     const kept = spans.find((s) => s.tag === cause);
     if (kept && !marks.some((m) => m.start === kept.start)) {

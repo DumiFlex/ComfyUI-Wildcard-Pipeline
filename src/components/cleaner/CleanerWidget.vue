@@ -80,13 +80,13 @@ const ALL_RULES: {
     id: "whitespace",
     label: "whitespace",
     statKey: "fixed",
-    tooltip: "Collapse runs of spaces, trim outer whitespace, collapse double commas, drop leading/trailing commas, normalize comma-space.",
+    tooltip: "Collapse runs of spaces, trim outer whitespace, collapse double commas and empty slots ('a, , b'), drop the space before a comma, drop leading/trailing commas, normalize comma-space.",
   },
   {
     id: "punctuation",
     label: "punctuation",
     statKey: "stripped",
-    tooltip: "Drop tags that are only punctuation (e.g. lone '.'). Strip leading/trailing punctuation from each tag (tags mode) or from the whole string (text mode).",
+    tooltip: "Drop tags that are only punctuation (e.g. lone '.'). Strip leading/trailing punctuation from each tag (tags mode) or from the whole string (text mode, keeping a closing . ! ?). Emoticon tags like :3 and -_- stay.",
   },
   {
     id: "empty_groups",
@@ -110,14 +110,14 @@ const ALL_RULES: {
     id: "dedupe_exact",
     label: "tag dedupe",
     statKey: "dropped",
-    tooltip: "Drop later occurrences of an identical tag (case-insensitive, leftmost wins). Tags mode only.",
+    tooltip: "Drop later occurrences of an identical tag (case-insensitive, leftmost wins). BREAK and AND are kept. Tags mode only.",
     tagsOnly: true,
   },
   {
     id: "fuzzy_dedupe",
     label: "fuzzy dedupe",
     statKey: "dropped",
-    tooltip: "Drop near-duplicate tags via Levenshtein similarity ≥0.9 (e.g. 'pixie cut' / 'pixie cuts'). Tags mode only.",
+    tooltip: "Drop near-duplicate tags: the same words up to plurals and a leading a/an/the ('a knight' / 'knight' / 'knights'), or ≥90% alike letter by letter ('detailed backround'). Weight variants count too. Tags mode only.",
     tagsOnly: true,
   },
   {
@@ -300,14 +300,19 @@ const negativeRunLine = computed(() => {
   const parts = [plural(droppedCount(r, ["dedupe_exact", "fuzzy_dedupe"]), "duplicate")];
   const blocked = droppedCount(r, ["blocklist"]);
   if (blocked > 0) parts[0] += `, ${blocked} blocklisted`;
-  const overlap = r.prompt_overlap;
-  if (overlap && overlap.tags.length > 0) {
-    const quoted = overlap.tags.map((t) => `"${t}"`).join(", ");
-    parts.push(
-      `${plural(overlap.tags.length, "tag")} also in prompt${overlap.dropped ? " (dropped)" : ""}: ${quoted}`,
-    );
-  }
   return `negative: ${parts.join(" · ")}`;
+});
+/** Tags the negative shares with the prompt: shown apart from the red
+ *  negative line, in amber while they are still in both (the model is told
+ *  to draw them and not draw them), plain once the toggle dropped them. */
+const negativeOverlap = computed(() => {
+  const overlap = props.negativeReport?.prompt_overlap;
+  if (!overlap || overlap.tags.length === 0) return null;
+  const quoted = overlap.tags.map((t) => `"${t}"`).join(", ");
+  return {
+    text: `${plural(overlap.tags.length, "tag")} also in prompt${overlap.dropped ? " (dropped)" : ""}: ${quoted}`,
+    dropped: overlap.dropped,
+  };
 });
 
 function ruleStat(rid: RuleId): string {
@@ -462,6 +467,12 @@ function isOverridden(rid: RuleId): boolean {
           <span class="wp-cleaner__section-label">LAST RUN</span>
           <span class="wp-cleaner__lastrun-line">{{ promptRunLine }}</span>
           <span v-if="negativeReport" class="wp-cleaner__lastrun-line wp-cleaner__lastrun-line--neg" data-test="cleaner-last-run-neg">{{ negativeRunLine }}</span>
+          <span
+            v-if="negativeOverlap"
+            class="wp-cleaner__lastrun-line"
+            :class="negativeOverlap.dropped ? 'wp-cleaner__lastrun-line--dropped' : 'wp-cleaner__lastrun-line--overlap'"
+            data-test="cleaner-last-run-overlap"
+          >{{ negativeOverlap.dropped ? "" : "⚠ " }}{{ negativeOverlap.text }}</span>
         </span>
         <i class="pi pi-chevron-right wp-cleaner__blocklist-chev" aria-hidden="true" />
       </Button>
@@ -613,6 +624,8 @@ function isOverridden(rid: RuleId): boolean {
 }
 .wp-cleaner__lastrun-line { word-break: break-word; }
 .wp-cleaner__lastrun-line--neg { color: var(--wp-danger); }
+.wp-cleaner__lastrun-line--overlap { color: var(--wp-amber); }
+.wp-cleaner__lastrun-line--dropped { color: var(--wp-text-muted); }
 .wp-cleaner__rule {
   position: relative;
   display: grid;

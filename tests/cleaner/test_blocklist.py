@@ -112,3 +112,10 @@ def test_text_mode_has_no_matched_list():
         config={"blocklist": {"kind": "list", "entries": ["watermark"]}},
     )
     assert "matched" not in result["stats"]
+
+
+def test_text_mode_keeps_the_last_full_stop():
+    from engine.cleaner.rules.blocklist import apply as bl
+
+    out = bl("A black cat sat. A dog.", mode="text", config={"blocklist": {"entries": ["cat"]}})
+    assert out["text"] == "A black sat. A dog."

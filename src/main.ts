@@ -47,6 +47,7 @@ const {
   promoteMod,
   showMod,
   eyeMod,
+  textareaLabelMod,
   loadImageFilterPicker,
   loadBookmarkDock,
   loadNodeHelp,
@@ -329,6 +330,13 @@ app.registerExtension({
     bookmarkMod.installHiddenFilter();
     // The eye in ComfyUI's subgraph Parameters panel shows WP panels too.
     eyeMod.installSubgraphEye(app as unknown as Parameters<typeof eyeMod.installSubgraphEye>[0]);
+    // ComfyUI's text-box name label floats over the text once a WP node's
+    // box scrolls; fade it out there (Nodes 2.0 only).
+    textareaLabelMod.installTextareaLabelFix((id) => {
+      const graph = (app as unknown as { canvas?: { graph?: { getNodeById(id: string | number): { type?: string } | null } } }).canvas?.graph;
+      const type = graph?.getNodeById(id)?.type ?? graph?.getNodeById(Number(id))?.type;
+      return typeof type === "string" && type.startsWith("WP_");
+    });
     // A bookmark joining the graph (added, pasted or loaded) brings the
     // dock up unless the user closed it.
     bookmarkMod.onBookmarkAdded(maybeShowBookmarkDock);

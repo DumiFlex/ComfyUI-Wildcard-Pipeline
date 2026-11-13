@@ -54,6 +54,7 @@ export * as badgeSlotMod from "./extension/badge-slot";
 export * as promoteMod from "./extension/subgraph-promote";
 export * as showMod from "./extension/show-on-subgraph";
 export * as eyeMod from "./extension/subgraph-eye";
+export * as textareaLabelMod from "./extension/textarea-label";
 export * as graphMod from "./extension/graph";
 export * as assemblerVarsMod from "./extension/assembler-vars";
 export * as toastStoreMod from "./components/shared/toast-store";

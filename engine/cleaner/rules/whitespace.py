@@ -3,9 +3,13 @@
 Rules applied in one pass over the input:
   1. Collapse runs of horizontal whitespace into a single space.
   2. Strip leading + trailing whitespace.
-  3. Collapse runs of commas (`,,,` -> `,`).
-  4. Drop leading + trailing standalone commas.
-  5. Normalize `comma-space` separator in tags mode.
+  3. Collapse runs of commas, empty slots included (`,,,` and `a, , b`
+     -> one comma). An empty slot between two commas is spacing, not a
+     tag, so this rule owns it; `punctuation` handles tags that are only
+     punctuation (`a, ., b`).
+  4. Drop the space before a comma (`knight ,` -> `knight,`).
+  5. Drop leading + trailing standalone commas.
+  6. Normalize `comma-space` separator in tags mode.
 
 Counts every kind of fix into stats.fixed so the UI can show
 `ws:N` next to the rule row.
@@ -18,6 +22,7 @@ from engine.cleaner.types import RuleResult
 
 _WS_RUN = re.compile(r"[ \t]+")
 _COMMA_RUN = re.compile(r",[ \t,]*,")
+_SPACE_BEFORE_COMMA = re.compile(r"[ \t]+,")
 
 
 def apply(text: str, mode: str, config: dict) -> RuleResult:
@@ -38,6 +43,11 @@ def apply(text: str, mode: str, config: dict) -> RuleResult:
     if collapsed_commas != out:
         fixed += 1
     out = collapsed_commas
+
+    tightened = _SPACE_BEFORE_COMMA.sub(",", out)
+    if tightened != out:
+        fixed += 1
+    out = tightened
 
     while out.startswith(","):
         out = out[1:].lstrip()
