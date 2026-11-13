@@ -3,6 +3,7 @@ import { DOC_PAGES } from "../manager/docs/registry";
 import { nodeEditors } from "./_stashes";
 import {
   EDIT_COMMAND,
+  SHOW_COMMAND,
   HELP_COMMAND,
   NODE_DOC_PAGES,
   docPageFor,
@@ -69,11 +70,11 @@ describe("node toolbar", () => {
     expect(selectedItems(undefined)).toEqual([]);
   });
 
-  it("registers two commands with coloured icons that call through", () => {
+  it("registers its commands with coloured icons that call through", () => {
     const node = { type: "WP_Bookmark", title: "Start" };
     const cmds = toolbarCommands(() => ({ selected_nodes: { 1: node } }));
-    expect(cmds.map((c) => c.id)).toEqual([HELP_COMMAND, EDIT_COMMAND]);
-    for (const c of cmds) expect(c.icon).toContain("wp-tb-icon");
+    expect(cmds.map((c) => c.id)).toEqual([HELP_COMMAND, EDIT_COMMAND, SHOW_COMMAND]);
+    for (const c of cmds) expect(typeof c.icon === "function" ? c.icon() : c.icon).toContain("wp-tb-icon");
     cmds[0]?.function();
     expect(helpTarget.value?.page).toBe("wp-bookmark");
   });

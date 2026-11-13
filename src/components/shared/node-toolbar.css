@@ -26,4 +26,5 @@
 }
 .wp-tb-icon.pi::before { line-height: 1; }
 .wp-tb-icon--edit.pi { font-size: 10px; }
+.wp-tb-icon--show.pi { font-size: 10px; }
 button:hover > .wp-tb-icon.pi { filter: brightness(1.12); }
