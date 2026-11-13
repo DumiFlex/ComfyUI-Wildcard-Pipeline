@@ -14,6 +14,7 @@ import {
   collectLoopFrames,
   findRootGraph,
   internalVarNames,
+  readToggleBools,
   resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
@@ -195,6 +196,9 @@ interface UpstreamSnapshot {
   /** `{ varName: { AXIS: firstTag } }` for every upstream `accepts` axis, so
    *  the preview can resolve a `$var.AXIS` read to the tag it will roll. */
   varAxes: Record<string, Record<string, string>>;
+  /** Each upstream toggle variable's switch, what `$name.bool` reads (a
+   *  toggle with a Value writes the Value, not true / false). */
+  varBools: Record<string, boolean>;
   /** Bindings contributed by upstream WP_ContextInjector nodes. The
    *  preview API doesn't simulate injectors — these keys must come
    *  from the static fallback even when api results are available,
@@ -218,6 +222,7 @@ function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
   if (a.negativeTemplate !== b.negativeTemplate) return false;
   if (JSON.stringify(a.injectorNegatives) !== JSON.stringify(b.injectorNegatives)) return false;
   if (a.chainKey !== b.chainKey) return false;
+  if (JSON.stringify(a.varBools) !== JSON.stringify(b.varBools)) return false;
   // Injector bindings live in `fallbackResolved` only — the API
   // resolver only knows WP_Context modules, so `chainKey` misses
   // changes to injector rows. Diff the resolved map keys + values so
@@ -499,6 +504,7 @@ export function mountHelper(node: AssemblerNode) {
             seeds: stepSeeds,
             fallbackResolved,
             varAxes,
+            varBools: readToggleBools(rawResolved),
             injectorKeys: collectUpstreamInjectorBindings(g, node),
             injectorNegatives: collectUpstreamInjectorNegatives(g, node),
             template: templateOf(node),
@@ -721,6 +727,7 @@ export function mountHelper(node: AssemblerNode) {
             negatives,
             resolvedMap: fresh,
             varAxes: snapshot.value.varAxes,
+            varBools: snapshot.value.varBools,
             rolledAxes: api ? (apiAxes.value ?? undefined) : undefined,
             kindByVar,
             loopFrames: loop ?? undefined,

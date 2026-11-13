@@ -20,7 +20,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { TOGGLES_NODE, nodeTogglesConfig, resolveToggles, staticToggleInternals, staticToggleNegatives, staticToggleValues, togglesPreviewModules, type TogglesConfig } from "./toggles";
+import { TOGGLES_NODE, TOGGLE_BOOLS_KEY, nodeTogglesConfig, resolveToggles, staticToggleInternals, toggleBools, staticToggleNegatives, staticToggleValues, togglesPreviewModules, type TogglesConfig } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
@@ -1667,6 +1667,10 @@ function resolveChainStatic(
     if (n.type === TOGGLES_NODE) {
       const hidden = staticToggleInternals(n);
       const cfg = nodeTogglesConfig(n);
+      // What `$name.bool` reads: the switch, not the Value it writes
+      // (engine `toggles.BOOLS_KEY`, carried on across nodes). Set first, as
+      // the node does, so a toggle's own value can read another's switch.
+      ctx[TOGGLE_BOOLS_KEY] = JSON.stringify({ ...readToggleBools(ctx), ...toggleBools(cfg) });
       for (const [k, v] of Object.entries(resolveToggleTexts(cfg, ctx, catalog))) {
         ctx[k] = v;
         if (hidden.has(k)) internalKeys.add(k);
@@ -2201,6 +2205,22 @@ function resolveToggleTexts(
   return out;
 }
 
+/** The toggle switches carried in a static ctx (`TOGGLE_BOOLS_KEY`), what
+ *  `$name.bool` reads; {} when no Toggles node is upstream. */
+export function readToggleBools(ctx: Record<string, ResolvedValue>): Record<string, boolean> {
+  const raw = ctx[TOGGLE_BOOLS_KEY];
+  if (typeof raw !== "string") return {};
+  try {
+    const t: unknown = JSON.parse(raw);
+    if (!t || typeof t !== "object" || Array.isArray(t)) return {};
+    const out: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(t)) if (typeof v === "boolean") out[k] = v;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** A `$var` read (+ optional `.K` / `.AXIS` accessor) with its ctx value;
  *  an unknown name (accessor included) stays as written. ctx values are
  *  strings in this static resolver, so applyVarAccessor treats `$s.0` as
@@ -2226,6 +2246,8 @@ function expandVar(
   // `$name.bool` reads a toggle's on/off: a toggle with a value holds the
   // value while on and nothing while off.
   if (axis === "bool") {
+    const on = readToggleBools(ctx)[name];
+    if (on !== undefined) return on ? "true" : "false";
     const v = base.trim().toLowerCase();
     return v === "true" || v === "false" ? v : v ? "true" : "false";
   }

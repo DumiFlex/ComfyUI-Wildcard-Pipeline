@@ -7,6 +7,7 @@ import {
   collectUpstreamProducers,
   collectUpstreamRenderableVariables,
   collectUpstreamResolved,
+  readToggleBools,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
   findWildcardHomesElsewhere,
@@ -1022,6 +1023,32 @@ describe("collectUpstreamResolved toggle values", () => {
     expect(out.zed).toBe("rain on a $5 coat, $1");
     expect(out.mail).toBe("rain on a $5 coat, $1 at mail@home");
     expect(out.plain).toBe("mail@home");
+  });
+});
+
+describe("collectUpstreamResolved toggle switches", () => {
+  it("carries each toggle's switch for $name.bool, whatever words it writes", () => {
+    const rows = [
+      { id: "a", kind: "toggle", name: "Lantern", var: "lantern", on: false, pin: false, out: 0, style: "switch", value: "holding a lantern", off_value: "with empty hands" },
+      { id: "b", kind: "toggle", name: "Note", var: "note", on: true, pin: false, out: 0, style: "switch", value: "lantern on: $lantern.bool" },
+    ];
+    const tg: LiteNodeLike = {
+      id: 1,
+      type: "WP_Toggles",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_toggles", value: JSON.stringify({ version: 1, mode: "any", group_var: "", rows }) }],
+    };
+    const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }] };
+    const g = {
+      _nodes: [tg, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: tg, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+    const out = collectUpstreamResolved(g, asm);
+    expect(out.lantern).toBe("with empty hands");
+    expect(readToggleBools(out)).toEqual({ lantern: false, note: true });
+    // Off with an Off value is still false, not "has words, so true".
+    expect(out.note).toBe("lantern on: false");
   });
 });
 

@@ -218,6 +218,20 @@ describe("AssemblerHelper resolvedMap (SP2a — list-valued vars + .K accessor)"
     expect(preview.text()).not.toContain(".1");
   });
 
+  it("reads $name.bool from the toggle's switch, not from the words it writes", () => {
+    const props = {
+      upstreamVars: ["lantern", "rain"],
+      templateVars: ["lantern", "rain"],
+      template: "$lantern [$lantern.bool] [$rain.bool] [$fog.bool]",
+      resolvedMap: { lantern: "with empty hands", rain: "true" },
+    };
+    const off = mount(AssemblerHelper, { props: { ...props, varBools: { lantern: false } } });
+    // Off with an Off value: the words are there, the switch still reads false.
+    expect(off.find('[data-test="asm-preview"]').text()).toBe("with empty hands [false] [true] []");
+    const on = mount(AssemblerHelper, { props: { ...props, resolvedMap: { ...props.resolvedMap, lantern: "holding a lantern" }, varBools: { lantern: true } } });
+    expect(on.find('[data-test="asm-preview"]').text()).toBe("holding a lantern [true] [true] []");
+  });
+
   it("renders an out-of-range $mood.5 as empty, not a leaked accessor", () => {
     const wrapper = mount(AssemblerHelper, {
       props: {

@@ -376,6 +376,10 @@ export function resolveToggles(cfg: TogglesConfig): Record<string, string> {
   return values;
 }
 
+/** Cross-node internal: each toggle variable's on/off, what `$name.bool`
+ *  reads (mirror of `engine/toggles.py::BOOLS_KEY`). */
+export const TOGGLE_BOOLS_KEY = "__wp_toggle_bools__";
+
 /** Each toggle variable's on/off, what `$name.bool` reads (mirror of
  *  `engine/toggles.py::bools`); a later row wins. */
 export function toggleBools(cfg: TogglesConfig): Record<string, boolean> {
