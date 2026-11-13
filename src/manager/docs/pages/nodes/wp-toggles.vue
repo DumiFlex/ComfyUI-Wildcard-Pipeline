@@ -25,7 +25,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <b>WP Toggles</b> replaces a stack of Boolean nodes. Each toggle writes
         <VarToken>$its_variable</VarToken> as <code>true</code> or <code>false</code>, so a derivation
         can branch on it without a Context Injector, and can show a BOOLEAN output at the right of its
-        row for a switch node.
+        row for a switch node (off for a new toggle: turn on <b>BOOLEAN output</b> in its window).
       </p>
       <DocAnnotated
         src="images/docs/wp-toggles.png"

@@ -278,7 +278,7 @@ export const NODE_FIELDS = {
       { term: "Canvas groups", desc: "Groups on the canvas whose nodes When off also covers, by title. No wires needed." },
       { term: "Upstream can set it", desc: "When the upstream Context holds this toggle's variable as a yes/no word (true, yes, on, 1, false, no, off, 0), that value sets the switch for the run." },
       { term: "Group", desc: "Which label it sits under. You can also drag the toggle's grip under another label, or above the first one." },
-      { term: "BOOLEAN output", desc: "Show an output for switch nodes. Off for a toggle only rules read." },
+      { term: "BOOLEAN output", desc: "Show an output for switch nodes. Off for a new toggle; leave it off for a toggle only rules read." },
     ],
   },
   WP_VarToBool: {
