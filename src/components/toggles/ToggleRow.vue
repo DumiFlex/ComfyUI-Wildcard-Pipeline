@@ -105,6 +105,13 @@ function internalHint(): string {
 function flip(): void {
   emit("set-on", !props.shownOn);
 }
+/** Buttons: a click on the side that's already lit flips it too, so any
+ *  click on the pair switches it (the other side goes through the v-model). */
+function flipFromLit(e: MouseEvent): void {
+  if (props.blocked) return;
+  const opt = e.target instanceof Element ? e.target.closest(".wp-segmented__opt") : null;
+  if (opt?.getAttribute("data-active") === "true") emit("set-on", !props.t.on);
+}
 </script>
 
 <template>
@@ -226,7 +233,10 @@ function flip(): void {
           @update:model-value="(v: boolean) => emit('set-on', v)"
         />
       </span>
-      <span v-else-if="look === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl" :style="tintStyle">
+      <!-- Only catches clicks bubbling up from the kit's own option buttons
+           (Space / Enter on them fire a click too), so it needs no keys. -->
+      <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
+      <span v-else-if="look === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl" :style="tintStyle" @click="flipFromLit">
         <WpSegmented
           :model-value="t.on ? 'on' : 'off'"
           :options="[{ value: 'on', label: t.on_label || 'On' }, { value: 'off', label: t.off_label || 'Off' }]"
@@ -364,6 +374,13 @@ function flip(): void {
 .wp-tgr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 /* Mute / bypass icon: dim while it isn't acting, coloured while it is
  * (bypass in the host's bypass violet, mute in amber). */
+/* Buttons: a picked On lights up in the accent like a switch's track, so the
+   toggle's control colour (tint) shows; a picked Off stays neutral. */
+.wp-tgr__ctl :deep(.wp-segmented__opt[data-active="true"]:first-child) {
+  background: color-mix(in srgb, var(--wp-accent) 18%, var(--wp-bg-4));
+  color: var(--wp-accent-text);
+  box-shadow: var(--wp-shadow-sm), inset 0 0 0 1px var(--wp-accent);
+}
 .wp-tgr__ctlicon { flex: none; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); opacity: 0.7; }
 .wp-tgr__ctlicon.is-active { opacity: 1; }
 .wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
