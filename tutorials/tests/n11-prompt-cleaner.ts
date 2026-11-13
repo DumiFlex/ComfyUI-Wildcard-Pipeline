@@ -178,6 +178,61 @@ tutorial(
       }
     });
 
+    await t.h.step("The last run, in a window", async () => {
+      const last = t.node(n.cl).locator('[data-test="cleaner-last-run"]');
+      if (!(await last.isVisible().catch(() => false))) throw new StepError("The Cleaner shows no last-run strip after a run.");
+      await t.say("Click the last-run line, and the whole run opens in a window.");
+      await t.click(last);
+      const win = page.locator('[data-test="cleaner-run"]');
+      try {
+        await win.waitFor({ state: "visible", timeout: 5000 });
+      } catch {
+        throw new StepError("The last-run window didn't open.");
+      }
+      await t.beat(700);
+      await t.waitVoice();
+      const split = win.locator(".wp-diff__split").first();
+      await t.callout("split", split, "Before and after", 5);
+      await t.say("Before on the left, after on the right: the prompt as it came in, and as it went out.");
+      await t.waitVoice();
+      await t.uncallout("split");
+      const rules = win.locator('[data-test^="cleaner-run-rule-"]');
+      if ((await rules.count()) === 0) throw new StepError("The last-run window lists no rules.");
+      await t.callout("rules", rules.first(), "One line per rule that fired", 4);
+      await t.say("Below, one line per rule that changed something, with its count. Open one.");
+      await t.waitVoice();
+      await t.uncallout("rules");
+      await t.click(rules.first());
+      await t.beat(800);
+      const reasons = win.locator(".wp-cleaner-run__reasons").first();
+      if (await reasons.isVisible().catch(() => false)) {
+        await t.callout("why", reasons, "What went, and why", 5);
+        await t.say("Each change says what was dropped, in red, what the rule did, and in blue, the reason: the tag it repeated, or the blocklist word it matched.");
+        await t.waitVoice();
+        await t.uncallout("why");
+      }
+      const marks = win.locator(".wp-diff__mark");
+      if (await marks.first().isVisible().catch(() => false)) {
+        await t.callout("marks", (await marks.all()).slice(0, 4), "This rule's changes", 4);
+        await t.say("And that rule's own changes are marked in blue in its before and after.");
+        await t.waitVoice();
+        await t.uncallout("marks");
+      }
+      const negTab = win.locator('[data-test="cleaner-run-side-negative"]');
+      if (await negTab.isVisible().catch(() => false)) {
+        await t.say("The negative has its own tab, with its own rules and reasons.");
+        await t.click(negTab);
+        await t.beat(1200);
+        await t.waitVoice();
+        await t.click(win.locator('[data-test="cleaner-run-side-prompt"]'));
+        await t.beat(500);
+      }
+      await t.say("Close it with Escape. The window always shows the latest run.");
+      await t.press("Escape");
+      await t.beat(700);
+      await t.waitVoice();
+    });
+
     await t.h.step("How it works", async () => {
       await t.say("The Cleaner runs its rules in a fixed order on the finished text, after every variable is filled in, so it catches gaps an empty pick leaves behind. It never adds words; it only tidies and removes.");
       await t.waitVoice();
