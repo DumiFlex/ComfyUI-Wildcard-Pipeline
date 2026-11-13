@@ -161,7 +161,9 @@ tutorial(
         await t.waitVoice();
         await t.say("The same menu's Move up and Move down order the panels when the subgraph node shows several. They always sit below ComfyUI's own widgets.");
         await t.waitVoice();
-        // Off the sliders button first, so its "Choose what shows" tooltip doesn't sit beside the ×.
+        // The sliders button keeps focus after its menu closes, so its "Choose what shows" tooltip
+        // stays up beside the ×: blur it and move off before the callout.
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await t.moveTo({ x: 960, y: 950 });
         await t.beat(400);
         const hide = t.node(sub).locator('[aria-label="Hide from subgraph node"]').first();
