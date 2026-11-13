@@ -113,7 +113,19 @@ tutorial(
       await t.uncallout("neg");
       await t.click(page.locator('[data-test="ibm-save"]'));
       await t.beat(700);
-      await t.callout("badge", t.node(n.inj).locator('[data-test="inj-row-neg-badge"]').first(), "Has a negative", 4);
+      // Rows start collapsed, which hides the summary line the badge sits on: open the cloak row first.
+      const row0 = rows(n.inj).first();
+      const summary = row0.locator('[data-test="inj-row-summary"]');
+      if (!(await summary.isVisible().catch(() => false))) {
+        await t.say("Open the row with its arrow.");
+        await t.click(row0.locator('[data-test="inj-row-collapse"]'));
+        await t.beat(500);
+        await t.waitVoice();
+      }
+      if (!(await row0.locator('[data-test="inj-row-neg-badge"]').isVisible().catch(() => false))) {
+        throw new StepError("The cloak row's NEG badge isn't showing after opening the row.");
+      }
+      await t.callout("badge", summary, "Its template and a NEG badge", 5);
       await t.say("The row shows its template and a NEG badge.");
       await t.waitVoice();
       await t.uncallout("badge");
