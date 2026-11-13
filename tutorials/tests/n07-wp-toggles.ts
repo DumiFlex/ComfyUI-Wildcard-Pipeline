@@ -153,9 +153,8 @@ tutorial(
       const needs = win().locator('[data-test="tg-needs"]');
       await t.callout("needs", needs, "Only on while Rain is on", 5);
       await t.say("Needs makes it depend on another toggle. Pick Rain.");
-      await t.click(needs);
-      await t.beat(400);
-      await t.click(page.getByRole("option", { name: /^Rain\b/ }).first());
+      // Needs is a native <select> (WpSelect): its options never show, so pick by label.
+      await t.choose(needs, "Rain");
       await t.beat(500);
       await t.waitVoice();
       await t.uncallout("needs");
