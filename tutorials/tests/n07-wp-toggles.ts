@@ -39,8 +39,11 @@ tutorial(
       await t.deselect();
     };
     // A new toggle (edit view open): its window opens; name it, write a variable, a value, and turn its globe off.
+    // A new Toggles node starts with a default "Toggle 1" row: the first toggle renames it.
     const addToggle = async (tg: string, name: string, v: string, value: string) => {
-      await t.click(t.node(tg).locator('[data-test="tg-add"]'));
+      const first = row(tg, "Toggle 1");
+      if (await first.isVisible().catch(() => false)) await t.click(first.locator('[data-test^="tg-edit-"]').first());
+      else await t.click(t.node(tg).locator('[data-test="tg-add"]'));
       await t.beat(700);
       await t.fill(winField("tg-name"), name, { cps: 16 });
       await t.press("Tab");
@@ -243,7 +246,8 @@ tutorial(
       await t.beat(400);
       const times: [string, string][] = [["Dawn", "at dawn"], ["Dusk", "at dusk"], ["Night", "at night"]];
       for (const [i, [name, value]] of times.entries()) {
-        if (i === 0) await t.click(t.node(tg2).locator('[data-test^="tg-edit-"]').first());
+        // tg-edit-done (the header's Done) also starts with tg-edit-, and comes first: skip it.
+        if (i === 0) await t.click(t.node(tg2).locator('[data-test^="tg-edit-"]:not([data-test="tg-edit-done"])').first());
         else await t.click(t.node(tg2).locator('[data-test="tg-add"]'));
         await t.beat(500);
         await t.fill(winField("tg-name"), name, { cps: 20 });
