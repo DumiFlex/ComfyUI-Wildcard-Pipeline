@@ -7,9 +7,10 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 
 - **upstream (in)** `context`: Optional Context to extend. Only nodes after this one see the toggle variables. It can also set toggles (see below).
 - **Pencil (toolbar)**: Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit view: the mode, the Pick one options, the grips to reorder, the row buttons, Add toggle and Add label. Done goes back to the clean view, which shows only the switches.
-- **Any on / Pick one**: Any on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons.
+- **Any on / Pick one**: Any on: every toggle is on or off by itself. Pick one: at most one is on; tick Always one on to keep exactly one on, like radio buttons.
 - **writes (Pick one)**: Optional variable that also gets the picked toggle's value (or its name), so one rule can branch on it.
 - **Globe (row)**: Edit view only. On (the default) keeps the toggle's variable internal: rules read it, the Assembler doesn't offer it and it never prints. Turn it off to use the variable in a prompt. Same in Any on and Pick one.
+- **Always one on (Pick one)**: Like radio buttons: one toggle is always on. Clicking the picked one does nothing; pick another to switch. With none on, the first toggle is picked. Off (the default), the picked toggle can be switched off so none is on.
 - **Show in Assembler (Pick one)**: The picked variable shows in the Assembler and can print in the prompt. Off, it is internal.
 - **Style (Pick one)**: How every row looks in Pick one: Radio (a round dot, the default), Chip (the name across the row, lit when picked), Switch or Check. Turning one on turns the others off.
 - **Layout**: Edit view: Rows (one row per toggle, the default) or Grid (each toggle in a tile, the tiles wrapping to the node's width), in both modes and every style. Each label has a grid button for its own group; setting it back to the node's layout makes the group follow the node again. Under a grid's tiles, thin lines carry the dots: mute/bypass dots stack on the left with their toggle's name, BOOLEAN outputs on the right with theirs, each side packed on its own (so Dawn | Dawn, Sunset | Night). The arrow on the first line merges the group's lines into one that carries every dot and says how many go in and out (the names on hover), and the arrow on the merged line opens them again.
@@ -40,7 +41,7 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 ## Toggles
 
 - **Any on**: each toggle is on or off by itself. A toggle that **needs** another is off while that one is off, and keeps its own choice for when it is on again.
-- **Pick one**: only one toggle is on: the one the upstream picked variable names (with **Upstream can pick**), else the first one upstream set on, else the first one you switched on. Optional **writes** variable gets the picked toggle's **Value**, or its name; internal unless **Show in Assembler**. Its **Style** (Radio, Chip, Switch, Check) sets every row's look.
+- **Pick one**: only one toggle is on: the one the upstream picked variable names (with **Upstream can pick**), else the first one upstream set on, else the first one you switched on. Optional **writes** variable gets the picked toggle's **Value**, or its name; internal unless **Show in Assembler**. **Always one on** makes it work like radio buttons: the picked toggle can't be switched off, only swapped, and with none on the first one is picked. Its **Style** (Radio, Chip, Switch, Check) sets every row's look.
 - **When off**: Nothing, **Mute** or **Bypass** the nodes wired into the row's dot and any **Canvas groups** you pick, while the toggle is off (needs and Pick one count). Done on the canvas when the toggle flips.
 - **Invert**: mute / bypass while the toggle is ON instead. An icon by the name shows a control is wired: coloured while it acts, dim while not; hover for the nodes.
 - **Show** (by the variable): show the `$variable` under the name in the clean view.
