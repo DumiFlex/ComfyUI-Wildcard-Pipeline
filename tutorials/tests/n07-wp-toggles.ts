@@ -1,9 +1,10 @@
 // Nodes 7: WP Toggles in depth. Toggles → Context (Role) → Assembler, watched in the Assembler's
-// preview (no run needed). A Lantern toggle with a Value, shown in the four styles (Switch, Check,
+// preview (runs only for the switch). A Lantern toggle with a Value, shown in the four styles (Switch, Check,
 // Buttons with words of its own, Chip). Rain and Puddles, where Puddles needs Rain: Rain off takes
 // Puddles off and Rain on brings back its choice. A label folds the weather toggles into a group.
 // The other settings in a toggle's window: Upstream can set it, When off (Mute / Bypass, Invert,
-// canvas groups) and the BOOLEAN output for switch nodes. A17 already shows a rule reading a toggle,
+// canvas groups) and the BOOLEAN output, wired into ComfyUI's If/Else Switch and run both ways;
+// $lantern beside $lantern.bool in the prompt. A17 already shows a rule reading a toggle,
 // Pick one, values and negatives, and When off with a Node Group. Prompt-only: no model.
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
@@ -13,10 +14,20 @@ tutorial(
   {
     title: "WP Toggles in depth",
     description: "Every part of WP Toggles: the four styles, toggles that need another, labels that group them, upstream presets, muting and bypassing, and BOOLEAN outputs.",
-    learn: "Switch / Check / Buttons / Chip, Needs, labels and folding, Upstream can set it, When off with Invert and canvas groups, BOOLEAN outputs.",
+    learn: "Switch / Check / Buttons / Chip, Needs, labels and folding, Upstream can set it, When off with Invert and canvas groups, $name.bool, BOOLEAN outputs into a switch node.",
   },
   async (t) => {
     const page = t.page;
+    const resize = (id: string, w: number, h: number) =>
+      page.evaluate(
+        ([nid, ww, hh]) => {
+          const g = window.app?.graph;
+          const nd = (g?.getNodeById(nid) ?? g?.getNodeById(Number(nid))) as { size: [number, number] } | null | undefined;
+          if (nd) nd.size = [ww, hh];
+          window.app?.canvas?.setDirty(true, true);
+        },
+        [id, w, h] as const,
+      );
     const win = () => page.getByRole("dialog").filter({ has: page.locator('[data-test="tg-window-done"]') }).last();
     const winField = (test: string) =>
       win().locator(`[data-test="${test}"] input, input[data-test="${test}"], [data-test="${test}"] textarea, textarea[data-test="${test}"], [data-test="${test}"] [contenteditable="true"], [data-test="${test}"][contenteditable="true"]`).first();
@@ -145,6 +156,25 @@ tutorial(
       await t.click(row(n.tg, "Lantern").getByText("Without", { exact: true }).first());
       await previewSays(n.asm, /holding a lantern/, false);
       await previewSays(n.asm, /with empty hands/, true);
+      await t.waitVoice();
+      // $name.bool reads the switch itself, whatever words the toggle writes.
+      await t.say("Dollar lantern now holds words, but the switch is still there to read: dollar lantern dot bool is true or false. Add it to the end of the prompt.");
+      await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
+      await t.press("ControlOrMeta+End");
+      await t.type(" (lantern: $lantern.bool)", { cps: 14 });
+      await t.press("Escape");
+      await previewSays(n.asm, /lantern: false/, true);
+      await t.waitVoice();
+      await t.callout("bool", preview(n.asm), "The words, and the switch", 5);
+      await t.say("Without: the off words, and false.");
+      await t.waitVoice();
+      await t.say("Click With: its words, and true.");
+      await t.click(row(n.tg, "Lantern").getByText("With", { exact: true }).first());
+      await previewSays(n.asm, /holding a lantern.*lantern: true/, true);
+      await t.waitVoice();
+      await t.uncallout("bool");
+      await t.say("A rule or a Var node that only needs yes or no reads dot bool, so you can change the words without breaking it.");
+      await t.waitVoice();
     });
 
     await t.h.step("One toggle needs another", async () => {
@@ -304,7 +334,7 @@ tutorial(
       await t.uncallout("p");
     });
 
-    await t.h.step("The rest of a toggle's window", async () => {
+    const lanternOut = await t.h.step("The rest of a toggle's window", async () => {
       await openEdit(n.tg);
       await openRow(n.tg, "Lantern");
       const up = win().locator('[data-test="tg-upstream"]');
@@ -332,21 +362,73 @@ tutorial(
       await t.beat(400);
       const pin = win().locator('[data-test="tg-pin"]');
       await t.callout("pin", pin, "A BOOLEAN socket", 4);
-      await t.say("BOOLEAN output gives the toggle its own socket on the node, for any switch node from ComfyUI or another pack.");
-      await t.click(pin);
+      await t.say("BOOLEAN output is off until you tick it. Tick it, and the toggle gets its own socket on the node, for any switch node from ComfyUI or another pack.");
+      const box = pin.locator('input[type="checkbox"], [role="checkbox"]').first();
+      const ticked = async () => (await box.count()) ? box.isChecked().catch(() => false) : pin.isChecked().catch(() => false);
+      if (!(await ticked())) await t.click(pin);
       await t.beat(500);
+      if (!(await ticked())) throw new StepError("BOOLEAN output didn't tick.");
       await t.waitVoice();
       await t.uncallout("pin");
       await winDone();
       await editDone(n.tg);
+      // The socket's name is toggle_<n>; its label is the toggle's name.
+      const lanternOut = await page.evaluate((id) => {
+        const g = window.app?.graph;
+        const node = g?.getNodeById(id) ?? g?.getNodeById(Number(id));
+        return (node?.outputs ?? []).find((o) => (o as { label?: string }).label === "Lantern")?.name ?? "";
+      }, n.tg);
+      if (!lanternOut) throw new StepError("The Toggles node has no Lantern output.");
       await t.callout("out", t.node(n.tg), "Lantern's output", 4);
-      await t.say("The node now has a Lantern output, true or false.");
+      await t.say("The node now has a Lantern output, true while Lantern is on.");
       await t.waitVoice();
       await t.uncallout("out");
+      return lanternOut;
+    });
+
+    await t.h.step("Drive a ComfyUI switch", async () => {
+      await t.say("Here's what it's for. Add ComfyUI's If/Else Switch, and two text boxes for it to choose between: warm lantern glow, and cold moonlight.");
+      await t.speedUp(6);
+      const warm = await t.addNode("Text (Multiline)", { x: 700, y: 560 });
+      await resize(warm, 300, 110);
+      await t.click(t.node(warm).locator("textarea").first());
+      await t.type("warm lantern glow", { cps: 30 });
+      const cold = await t.addNode("Text (Multiline)", { x: 700, y: 740 });
+      await resize(cold, 300, 110);
+      await t.click(t.node(cold).locator("textarea").first());
+      await t.type("cold moonlight", { cps: 30 });
+      await t.deselect();
+      const sw = await t.addNode("If/Else Switch", { x: 1010, y: 620 });
+      await t.wire(warm, "STRING", sw, "on_true");
+      await t.wire(cold, "STRING", sw, "on_false");
+      const shown = await t.addNode("Preview as Text", { x: 1330, y: 660 });
+      await resize(shown, 300, 160);
+      await t.wire(sw, "output", shown, "source");
+      await t.normalSpeed();
+      await t.waitVoice();
+      await t.say("Wire Lantern's output into switch.");
+      await t.wire(n.tg, lanternOut, sw, "switch");
+      await t.waitVoice();
+      await t.say("Lantern is on. Run.");
+      await t.run();
+      await t.beat(900);
+      await t.callout("sw", t.node(shown), "On: warm lantern glow", 5);
+      await t.waitVoice();
+      await t.uncallout("sw");
+      await t.say("Click Without, and run again.");
+      await t.click(row(n.tg, "Lantern").getByText("Without", { exact: true }).first());
+      await t.beat(400);
+      await t.run();
+      await t.beat(900);
+      await t.callout("sw2", t.node(shown), "Off: cold moonlight", 5);
+      await t.waitVoice();
+      await t.uncallout("sw2");
+      await t.say("The same socket can pick between two images, two models or two whole branches, and one click on the toggle flips it.");
+      await t.waitVoice();
     });
 
     await t.h.step("How it works, recipes and gotchas", async () => {
-      await t.say("upstream takes a Context to extend, and context (out) carries every toggle variable on. Each toggle writes true or false, or its Value and Off value, and dollar name dot bool is always true or false.", "Upstream takes a Context to extend, and the context output carries every toggle variable on. Each toggle writes true or false, or its Value and Off value, and dollar name dot bool is always true or false.");
+      await t.say("upstream takes a Context to extend, and context (out) carries the toggles' variables on to every node after it. A toggle with words writes them, or its Off value; one without writes true or false. Dollar name dot bool reads the switch either way, and the BOOLEAN outputs exist only for the toggles you tick.", "Upstream takes a Context to extend, and the context output carries the toggles' variables on to every node after it. A toggle with words writes them, or its Off value; one without writes true or false. Dollar name dot bool reads the switch either way, and the BOOLEAN outputs exist only for the toggles you tick.");
       await t.waitVoice();
       await t.say("Muting and bypassing happen on the canvas as you flip a switch, before the run. The words happen during the run.");
       await t.waitVoice();
