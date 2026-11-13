@@ -2,7 +2,8 @@
 // Assembler → Preview as Text. The second Context and the Assembler become a subgraph; variables still
 // cross its edge (run). Delete the first Context and the subgraph's badge says what broke inside
 // (missing $time, on its header); Undo. Enter the subgraph to see the nodes inside. Show the inner
-// Context's panel on the subgraph node (#398), Choose what shows (#402) unticks Role, and the ×.
+// Context's panel on the subgraph node with the toolbar eye (#403; right-click Show on subgraph node,
+// #398, as a fallback), Choose what shows (#402) unticks Role, Move up / down, and the ×.
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
@@ -103,20 +104,33 @@ tutorial(
       });
 
       await t.h.step("A panel on the subgraph node", async () => {
-        await t.say("Folded away, the Context's modules are out of reach from outside. Right-click the Context in here, and Show on subgraph node.");
+        await t.say("Folded away, the Context's modules are out of reach from outside. Select the Context in here: the eye in its toolbar shows its panel on the subgraph node.");
         const inner = await page.evaluate(() => {
           const g = (window.app?.canvas as { graph?: { nodes?: { id: number | string; type?: string }[] } } | undefined)?.graph;
           return String(g?.nodes?.find((n) => n.type === "WP_Context")?.id ?? "");
         });
         if (!inner) throw new StepError("No WP Context inside the subgraph.");
-        await t.click(await titleBar(inner), { right: true });
-        await t.beat(700);
-        const show = page.getByText("Show on subgraph node", { exact: true }).last();
-        await show.waitFor({ state: "visible", timeout: 5000 }).catch(() => {
-          throw new StepError("The node menu has no Show on subgraph node.");
-        });
-        await t.click(show);
-        await t.beat(900);
+        await t.click(await titleBar(inner));
+        await t.beat(800);
+        const eye = page.locator(".wp-tb-icon--show").first().locator("xpath=ancestor::button[1]");
+        if (await eye.isVisible().catch(() => false)) {
+          await t.callout("eye", eye, "Show on the subgraph node", 4);
+          await t.waitVoice();
+          await t.click(eye);
+          await t.beat(900);
+          await t.uncallout("eye");
+        } else {
+          // An older build without the toolbar eye: the right-click item does the same.
+          await t.click(await titleBar(inner), { right: true });
+          await t.beat(700);
+          const show = page.getByText("Show on subgraph node", { exact: true }).last();
+          await show.waitFor({ state: "visible", timeout: 5000 }).catch(() => {
+            throw new StepError("Neither the toolbar eye nor Show on subgraph node is there.");
+          });
+          await t.click(show);
+          await t.beat(900);
+        }
+        await t.say("Right-click, Show on subgraph node, does the same.");
         await t.waitVoice();
         await t.say("Back out to the main graph.");
         const crumb = page.locator('[class*="breadcrumb"]').getByText(/^\s*(Graph|Unsaved Workflow.*)\s*$/).first();
@@ -142,9 +156,11 @@ tutorial(
         await t.press("Escape");
         await t.beat(700);
         await t.waitVoice();
+        await t.say("The same menu's Move up and Move down order the panels when the subgraph node shows several. They always sit below ComfyUI's own widgets.");
+        await t.waitVoice();
         const hide = t.node(sub).locator('[aria-label="Hide from subgraph node"]').first();
         await t.callout("hide", hide, "Take the copy off", 4);
-        await t.say("The cross takes the copy off again, as does Hide from subgraph node on the node inside. A panel with a socket, like a seed or a template, uses ComfyUI's own parameter list instead.");
+        await t.say("The cross takes the copy off again, as does the eye on the node inside. ComfyUI's own subgraph Parameters panel lists WP panels under hidden parameters too, and its eye shows or hides them the same way.");
         await t.waitVoice();
         await t.uncallout("hide");
       });
