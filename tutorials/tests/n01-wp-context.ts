@@ -281,7 +281,10 @@ tutorial(
 
     await t.h.step("A bundle on a Context", async () => {
       await t.say("A bundle adds several rows as one. Add the Look bundle to the second Context.");
-      await t.pickModules(ctx2, ["Look"]);
+      // Bundles have their own picker (Add Bundle), as in AI3; Add module lists only modules.
+      await t.click(t.node(ctx2).locator('[data-testid="open-bundle-picker"]').first());
+      await t.beat(700);
+      await t.click(page.locator('[data-testid^="bundle-picker-row-"]').filter({ has: page.getByText("Look", { exact: true }) }).first());
       await t.beat(800);
       await t.waitVoice();
       await t.expandBundles(ctx2, "Look");
