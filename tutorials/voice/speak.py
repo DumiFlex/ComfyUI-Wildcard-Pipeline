@@ -65,7 +65,13 @@ def lines_in(files: list[Path]) -> dict[str, str]:
     """Each caption, with what the voice reads for it (its own spoken text, else the rules)."""
     out: dict[str, str] = {}
     for f in files:
-        for m in SAY.finditer(f.read_text(encoding="utf-8")):
+        src = f.read_text(encoding="utf-8")
+        # A say() whose text isn't written out ("t.say(ok ? 'a' : 'b')") is never voiced: shout.
+        for m in re.finditer(r"\.say\(\s*(?![\s\"'`])", src):
+            row = src.count("\n", 0, m.start()) + 1
+            print(f"NOT VOICED: {f.name}:{row} says a line that isn't written out",
+                  file=sys.stderr)
+        for m in SAY.finditer(src):
             text = unescape(m.group("text"))
             spoken = unescape(m.group("spoken")) if m.group("spoken") is not None else None
             if "${" in text or (spoken and "${" in spoken):

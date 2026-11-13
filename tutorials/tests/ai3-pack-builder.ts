@@ -84,6 +84,12 @@ tutorial(
         await t.say("No warnings now: every variable is set and the rules hold.");
         await t.waitVoice();
         await t.uncallout("ok");
+      } else if (!clean) {
+        // Warnings left (or none Fix all can take): say so over the list, never pass over it in silence.
+        await t.callout("left", problems, "What's left", 5);
+        await t.say("The test run still lists a warning or two. Each one says what doesn't roll right, so you can fix it later.");
+        await t.waitVoice();
+        await t.uncallout("left");
       }
     });
 
@@ -97,9 +103,9 @@ tutorial(
       if (await install.isEnabled().catch(() => false)) {
         // Install sits low on the page: bring it up out of the caption's band first.
         await t.scrollTo(install, { at: 0.45 });
-        await t.say(clean
-          ? "Install puts it in your library as one bundle, ready for a Context."
-          : "A warning or two can stay: Install puts it in your library as one bundle, and you fix the rest in its editors.");
+        // One literal per line: voice/speak.py only voices t.say("…") written out, never a ternary.
+        if (clean) await t.say("Install puts it in your library as one bundle, ready for a Context.");
+        else await t.say("A warning or two can stay: Install puts it in your library as one bundle, and you fix the rest in its editors.");
         await t.click(install);
         await aiWait(t, { quiet: 2000 });
         installed = true;
