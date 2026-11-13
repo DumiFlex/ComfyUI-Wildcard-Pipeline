@@ -100,7 +100,7 @@ tutorial(
       await t.speedUp(8);
       // A screen point right of the Save branch group (x 90 is under the sidebar).
       const { tg, ctl } = await muteToggle(t, "Samplers", { x: 1700, y: 600 });
-      await t.normalSpeed();
+      await t.say("Then wire the group's nodes output into the Samplers dot.");
       await t.wire(grp, "nodes", tg, ctl);
       await t.beat(700);
       await t.waitVoice();
