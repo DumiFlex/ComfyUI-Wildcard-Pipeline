@@ -15,8 +15,9 @@ export async function buildVarScene(t: Tutor): Promise<VarScene> {
   await t.go("/");
   await t.setView({ scale: 0.8, offset: [0, 0] });
   await t.speedUp();
-  // addNode takes a SCREEN point (it double-clicks there): keep it clear of the sidebar and top bar.
-  const tg = await t.addNode("WP Toggles", { x: 140, y: 230 });
+  // addNode takes a SCREEN point and centres the node on it: Toggles spans about 60-320, Model Info and
+  // the Context 345-780, and the Var nodes at 900 start near 770.
+  const tg = await t.addNode("WP Toggles", { x: 190, y: 230 });
   const tb = await t.node(tg).boundingBox();
   if (tb) await t.click({ x: tb.x + tb.width / 2, y: tb.y + 14 });
   await t.beat(400);
@@ -35,13 +36,13 @@ export async function buildVarScene(t: Tutor): Promise<VarScene> {
   await t.click(t.node(tg).locator('[data-test="tg-edit-done"]'));
   await t.beat(500);
   await t.deselect();
-  const mi = await t.addNode("WP Model Info", { x: 420, y: 130 });
+  const mi = await t.addNode("WP Model Info", { x: 560, y: 130 });
   await t.wire(tg, "context", mi, "upstream");
   await t.click(t.node(mi).locator('[data-test="mi-pin-family"]'));
   await t.beat(400);
   await t.fill(t.node(mi).locator('input[data-test="mi-pin-input-family"], [data-test="mi-pin-input-family"] input').first(), "sdxl", { cps: 30 });
   await t.press("Enter");
-  const ctx = await t.addNode("WP Context", { x: 420, y: 560 });
+  const ctx = await t.addNode("WP Context", { x: 560, y: 560 });
   await t.wire(mi, "context", ctx, "upstream");
   await t.pickModules(ctx, ["Settings per model"]);
   await t.normalSpeed();
