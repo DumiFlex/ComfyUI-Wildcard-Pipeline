@@ -335,6 +335,13 @@ tutorial(
       await t.setView(back);
     });
 
+    await t.h.step("Recipes and gotchas", async () => {
+      await t.say("Recipes. Context Loop, sampler, Image Filter, then a refine pass on only the picks, as here. The labels output into Label and Grid for a contact sheet of the keepers. Send to Loop, so the next run repeats only the frames you liked.");
+      await t.waitVoice();
+      await t.say("Gotchas. A paused run holds the queue until you answer, so set a timeout for long batches. An edited prompt only reaches the sampler when clip is wired. And a mask only changes what the refine pass is allowed to redraw: give it enough denoise to show.");
+      await t.waitVoice();
+    });
+
     await t.h.step("Outro", async () => {
       await t.say("Draft fast, pick by eye, fix what's close, and spend the time only on the keepers. The Image Filter page in the docs has every field.");
     });

@@ -288,6 +288,18 @@ tutorial(
       await t.uncallout("out");
     });
 
+    await t.h.step("Sweeps and the frame variable", async () => {
+      await t.callout("sw", t.node(n.loop).locator('[data-test="loop-sweep-btn"]'), "Every combination", 4);
+      await t.say("Sweep combinations runs every combination of the options you pick, instead of random rolls: three shots by three lights is nine frames. The Batches and grids example video builds one.");
+      await t.waitVoice();
+      await t.uncallout("sw");
+      const it = [t.node(n.loop).locator('[data-test="loop-iteration-var"]'), t.node(n.loop).locator('[data-test="loop-iteration-internal"]'), t.node(n.loop).locator('[data-test="loop-total-internal"]')];
+      await t.callout("it", it, "The frame number", 4);
+      await t.say("Iteration var names the frame-number variable, dollar iteration. The globe lets it print, and sigma does the same for dollar iteration total, the frame count.");
+      await t.waitVoice();
+      await t.uncallout("it");
+    });
+
     await t.h.step("With the other nodes", async () => {
       await t.say("A plain KSampler uses one image seed for every frame. Add a WP Seed List.");
       const sl = await t.addNode("WP Seed List", { x: 790, y: 760 });
@@ -325,6 +337,11 @@ tutorial(
       await t.say("To see each frame's picks, and which frame had an item off, wire a WP Debug after the Context. The Debug video goes through it.");
       await t.waitVoice();
       await t.uncallout("dbg");
+    });
+
+    await t.h.step("Gotchas", async () => {
+      await t.say("Gotchas. The loop goes before the first Context, or that Context rolls once for every frame. A frame edit stays on this node and isn't saved in a bundle; a rule on dollar iteration is. And count one switches looping off without unwiring.");
+      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {
