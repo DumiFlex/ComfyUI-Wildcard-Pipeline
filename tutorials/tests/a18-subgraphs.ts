@@ -161,6 +161,9 @@ tutorial(
         await t.waitVoice();
         await t.say("The same menu's Move up and Move down order the panels when the subgraph node shows several. They always sit below ComfyUI's own widgets.");
         await t.waitVoice();
+        // Off the sliders button first, so its "Choose what shows" tooltip doesn't sit beside the ×.
+        await t.moveTo({ x: 960, y: 950 });
+        await t.beat(400);
         const hide = t.node(sub).locator('[aria-label="Hide from subgraph node"]').first();
         await t.callout("hide", hide, "Take the copy off", 4);
         await t.say("The cross takes the copy off again, as does the eye on the node inside. ComfyUI's own subgraph Parameters panel lists WP panels under hidden parameters too, and its eye shows or hides them the same way.");

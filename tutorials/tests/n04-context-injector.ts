@@ -64,7 +64,7 @@ tutorial(
       await t.press("Tab");
       await away();
       await t.waitVoice();
-      await t.say("And the Int becomes steps.");
+      await t.say("And the Int becomes steps. Its row says INT, so rules and Var nodes can read it as a number, not as text.");
       await t.wire(steps, "INT", inj, "input_2");
       await t.fill(binding(inj, 2), "steps", { cps: 14 });
       await t.press("Tab");
@@ -182,6 +182,7 @@ tutorial(
       await t.beat(500);
       await t.waitVoice();
       await t.say("And two Preview as Text nodes: one for the prompt, one for the negative.");
+      await t.speedUp(4);
       const out = await t.addNode("Preview as Text", { x: 1180, y: 150 });
       await t.wire(asm, "prompt", out, "source");
       await t.say("The second takes the negative output, so you can see which variable each negative came from.");
