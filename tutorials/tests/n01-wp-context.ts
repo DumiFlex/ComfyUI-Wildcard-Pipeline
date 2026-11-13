@@ -226,9 +226,10 @@ tutorial(
 
     const ctx2 = await t.h.step("What comes from upstream", async () => {
       await t.say("Contexts chain. Add a second one and wire the first into its upstream.");
-      // Right of the Assembler, level with the other two: the only free area, and far above the caption
-      // in the drag and bundle steps (at y 640 its rows sat under the caption; 490 overlapped both nodes).
-      const c2 = await t.addNode("WP Context", { x: 1640, y: 170 });
+      // Below the gap between the first Context and the Assembler. Its lower rows sit under the caption in
+      // the drag and bundle steps; 490 overlaps both nodes, and right of the Assembler pans the first
+      // Context off screen. A setView zoom-out for those two steps is the way to improve it.
+      const c2 = await t.addNode("WP Context", { x: 820, y: 640 });
       await t.wire(n.ctx, "context", c2, "upstream");
       await t.wire(c2, "context", n.asm, "context");
       await t.beat(800);
