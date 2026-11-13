@@ -213,11 +213,10 @@ export function mountNote(node: NoteNode) {
     fitSize();
   }
   // Nothing restored by the next tick: the user just added this note. It
-  // starts pinned. (Pinning in the constructor would also pin every loaded
-  // note: an unpinned one saves no flag, so the default would win.)
+  // opens in its editor, unpinned like any new node; a loaded note keeps
+  // the pin it was saved with.
   setTimeout(() => {
     if (restored) return;
-    setPinned(node, true);
     setEditing(true);
   }, 0);
 
@@ -281,7 +280,7 @@ export function fixFrontendDef(defs: NodeDefLike[], type: string, displayName: s
 /**
  * Registers WP Note: a frontend-only node like ComfyUI's own Note. It is
  * virtual, so it never runs and is left out of the prompt; its text is
- * saved with the workflow. A new note starts pinned.
+ * saved with the workflow. A new note starts unpinned.
  */
 export function registerNoteNode(): void {
   publishTitleHeight();

@@ -55,7 +55,7 @@ export const NODE_FIELDS = {
       { term: "Zoom", pin: "text:Zoom", desc: "Set jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). Keep current leaves it alone." },
       { term: "Shortcut", pin: "css:[aria-label^='Alt plus']@right", desc: "Record, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one, a new one on each press." },
       { term: "Show on canvas", pin: "text:Show on canvas", desc: "Off hides the node when you press Done: not drawn, not clickable, not selectable. The dock's eye shows it again." },
-      { term: "Pinned", pin: "text:Pinned", desc: "ComfyUI's own pin: a pinned bookmark can't be moved by accident." },
+      { term: "Pinned", pin: "text:Pinned", desc: "ComfyUI's own pin: a pinned bookmark can't be moved by accident. New bookmarks start unpinned; a saved workflow keeps each bookmark's pin." },
       { term: "Go", pin: "css:[data-test=bm-go]@right", desc: "Tries the jump." },
     ],
     dock: [
@@ -197,7 +197,7 @@ export const NODE_FIELDS = {
       { term: "Tone", desc: "Step (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge)." },
       { term: "Colour", desc: "Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker." },
       { term: "Look", desc: "Card, Sticky or Label (above)." },
-      { term: "Pinned", desc: "ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned." },
+      { term: "Pinned", desc: "ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start unpinned; a saved workflow keeps each note's pin." },
       { term: "Title", desc: "Shown in bold at the top, or on the pill of a Label." },
       { term: "Text", desc: "Its first line and length on the node; Edit text opens the text window, with the editor beside a live preview. Done (Ctrl+Enter) puts it on the note, Cancel or Escape leaves the note as it was. Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks." },
     ],
