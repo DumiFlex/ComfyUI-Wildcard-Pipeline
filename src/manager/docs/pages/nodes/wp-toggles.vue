@@ -85,7 +85,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <VarToken>$rain</VarToken> print "heavy rain" or nothing. The switch itself is still there as
         <VarToken>$rain.bool</VarToken>, <code>true</code> or <code>false</code>, for rules and
         conditions. Its <b>Negative</b> goes with the variable while it is on, so an Assembler that
-        prints <VarToken>$rain</VarToken> also sends "sunny, dry" to its negative output.
+        prints <VarToken>$rain</VarToken> also sends "sunny, dry" to its negative output. A Value
+        that reads a <VarToken>$variable</VarToken> brings that variable's negatives along too.
       </p>
       <p>
         In Any on a toggle can also say what to write while it is <b>off</b>: its <b>Off value</b>
@@ -127,6 +128,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
         sends those words to its negative output. All rows share one look here:
         the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, so a
         toggle's own Style and Needs are hidden.
+      </p>
+      <p>
+        By default you can also switch the picked toggle off, so none is on. Tick
+        <b>Always one on</b> to make the group work like radio buttons: one toggle is always on,
+        clicking it again does nothing, and you switch by picking another. With none on (or when you
+        tick it), the first toggle is picked.
       </p>
     </DocSection>
 

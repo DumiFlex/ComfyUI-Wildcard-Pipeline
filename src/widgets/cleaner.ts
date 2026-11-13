@@ -2,6 +2,7 @@ import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
   createDomWidgetHost,
+  isMirrorBuild,
   parseWidgetJsonWithRecovery,
   serializeWidgetJson,
   type MountTargetNode,
@@ -45,6 +46,8 @@ interface CleanerHostNode extends MountTargetNode {
  * entries are persisted via the widget JSON.
  */
 export function create(node: CleanerHostNode, inputName: string) {
+  /** Shown on a subgraph node: the dots stay on the node itself. */
+  const mirrored = isMirrorBuild(node);
   const initialRaw = "";
   const parsed = parseWidgetJsonWithRecovery<CleanerNodeConfig>(initialRaw, emptyCleanerConfig());
   const config = ref<CleanerNodeConfig>(parsed.value);
@@ -156,7 +159,7 @@ export function create(node: CleanerHostNode, inputName: string) {
   }
   listenApi(host, "executed", onExecuted);
 
-  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["blocklist"]));
+  if (!mirrored) host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["blocklist"]));
   return host;
 }
 

@@ -23,7 +23,7 @@ A bookmark has no node frame and can't be resized: it is a small pill with its i
 - **Zoom**: Set jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). Keep current leaves it alone.
 - **Shortcut**: Record, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one, a new one on each press.
 - **Show on canvas**: Off hides the node when you press Done: not drawn, not clickable, not selectable. The dock's eye shows it again.
-- **Pinned**: ComfyUI's own pin: a pinned bookmark can't be moved by accident.
+- **Pinned**: ComfyUI's own pin: a pinned bookmark can't be moved by accident. New bookmarks start unpinned; a saved workflow keeps each bookmark's pin.
 - **Go**: Tries the jump.
 
 ## The Bookmarks dock

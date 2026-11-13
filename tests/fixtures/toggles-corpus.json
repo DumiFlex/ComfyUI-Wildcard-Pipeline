@@ -1102,6 +1102,182 @@
     "style": "anime, cartoon"
    },
    "outputs": []
+  },
+  {
+   "name": "pick one with always one on picks the first toggle when none is on",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "time",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Dawn",
+      "var": "dawn",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Noon",
+      "var": "noon",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     }
+    ],
+    "pick_required": true
+   },
+   "values": {
+    "dawn": "true",
+    "noon": "false",
+    "dusk": "false",
+    "time": "Dawn"
+   },
+   "outputs": [
+    true,
+    false
+   ],
+   "bools": {
+    "dawn": true,
+    "noon": false,
+    "dusk": false
+   }
+  },
+  {
+   "name": "pick one with always one on keeps the toggle that is on",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "time",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Dawn",
+      "var": "dawn",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Noon",
+      "var": "noon",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Dusk",
+      "var": "dusk",
+      "on": true,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     }
+    ],
+    "pick_required": true
+   },
+   "values": {
+    "dawn": "false",
+    "noon": "false",
+    "dusk": "true",
+    "time": "Dusk"
+   },
+   "outputs": [
+    false,
+    false
+   ],
+   "bools": {
+    "dawn": false,
+    "noon": false,
+    "dusk": true
+   }
+  },
+  {
+   "name": "pick one without always one on can have none on",
+   "config": {
+    "version": 1,
+    "mode": "one",
+    "group_var": "time",
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "toggle",
+      "name": "Dawn",
+      "var": "dawn",
+      "on": false,
+      "pin": true,
+      "out": 1,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000002",
+      "kind": "toggle",
+      "name": "Noon",
+      "var": "noon",
+      "on": false,
+      "pin": true,
+      "out": 2,
+      "style": "switch",
+      "needs": ""
+     },
+     {
+      "id": "00000003",
+      "kind": "toggle",
+      "name": "Dusk",
+      "var": "dusk",
+      "on": false,
+      "pin": false,
+      "out": 0,
+      "style": "switch",
+      "needs": ""
+     }
+    ]
+   },
+   "values": {
+    "dawn": "false",
+    "noon": "false",
+    "dusk": "false",
+    "time": ""
+   },
+   "outputs": [
+    false,
+    false
+   ],
+   "bools": {
+    "dawn": false,
+    "noon": false,
+    "dusk": false
+   }
   }
  ]
 }

@@ -150,16 +150,22 @@ class WPContextInjector(io.ComfyNode):
 
         def _file_row_negative(
             binding_name: str, row: dict, slots: dict[str, Any],
+            reads: list[str] | None = None,
         ) -> None:
+            # A template row that reads `$var`s carries their negatives, as a
+            # combine does (negatives follow usage), then its own Negative.
+            entries = negatives.entries_for_reads(
+                {negatives.NEG_KEY: neg_table}, [(n, None) for n in reads or []],
+            )
             raw = row.get("negative")
             text = (
                 _render_template(raw.strip(), slots).strip()
                 if isinstance(raw, str) and raw.strip() else ""
             )
             if text:
-                neg_table[binding_name] = [
-                    {"text": text, "pick": None, "source": "injector"},
-                ]
+                entries.append({"text": text, "pick": None, "source": "injector"})
+            if entries:
+                neg_table[binding_name] = entries
             else:
                 neg_table.pop(binding_name, None)
 
@@ -342,7 +348,14 @@ class WPContextInjector(io.ComfyNode):
             merged.update(slot_values)
             stored = _render_template(template_str, merged)
             ctx[stripped] = stored
-            _file_row_negative(stripped, row, merged)
+            # Variables the template read (not raw sockets: those carry no
+            # negatives of their own).
+            var_reads = [
+                m.group(1) for m in _TEMPLATE_TOKEN_RE.finditer(template_str)
+                if m.group(1) and m.group(1) not in slot_values
+                and m.group(1) in merged
+            ]
+            _file_row_negative(stripped, row, merged, var_reads)
             is_internal = bool(row.get("internal", False))
             if is_internal:
                 internal_keys.add(stripped)

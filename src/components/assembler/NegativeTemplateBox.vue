@@ -10,6 +10,7 @@
  */
 import { computed, defineAsyncComponent } from "vue";
 import ListRow from "@/kit/ListRow.vue";
+import EmptyState from "@/kit/EmptyState.vue";
 import type { VarProducer } from "../../extension/graph";
 
 const RichTextInput = defineAsyncComponent(() => import("../../manager/components/RichTextInput.vue"));
@@ -56,20 +57,27 @@ const summary = computed(() => {
       <span class="wp-negbox__line">
         <span class="wp-negbox__label">negative</span>
         <span v-if="collapsed" class="wp-negbox__summary" data-test="neg-template-summary">{{ summary }}</span>
-        <span v-else-if="linked" class="wp-negbox__summary">driven by the connected input</span>
       </span>
     </ListRow>
     <div v-if="!collapsed" class="wp-negbox__body" data-wp-socket="negative_template">
+      <!-- Linked: the wired text is the negative, so say where it comes from
+           instead of a greyed copy of text that no longer counts. -->
+      <EmptyState
+        v-if="linked"
+        icon="link"
+        headline="From the negative_template input"
+        body="Disconnect it to type here."
+        size="inline"
+        data-test="neg-template-linked"
+      />
       <RichTextInput
+        v-else
         :model-value="modelValue"
         surface="assembler"
         multiline
         :rows="2"
         fill
-        :placeholder="linked
-          ? 'Driven by the connected input — disconnect it to edit here.'
-          : '$negatives'"
-        :disabled="linked"
+        placeholder="$negatives"
         :var-suggestions="varSuggestions"
         :var-producers="varProducers"
         graph-aware

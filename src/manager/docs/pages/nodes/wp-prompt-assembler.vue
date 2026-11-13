@@ -120,6 +120,16 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <p>More in <DocRef id="negatives" />.</p>
     </DocSection>
 
+    <DocSection title="In a subgraph">
+      <p>
+        Inside a subgraph, drag the <code>template</code> or <code>negative_template</code> dot to the
+        subgraph's input to edit it from outside. The subgraph node then shows the same editor, with
+        the <code>$</code> list of the variables upstream of the Assembler inside. What you type there is
+        what the Assembler runs with, and it is saved with the workflow. While a wire feeds that input on
+        the outside, the box is read-only.
+      </p>
+    </DocSection>
+
     <DocSection title="Inputs and outputs">
       <DocFields node="WP_PromptAssembler" group="ports" />
     </DocSection>

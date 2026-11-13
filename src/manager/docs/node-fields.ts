@@ -55,7 +55,7 @@ export const NODE_FIELDS = {
       { term: "Zoom", pin: "text:Zoom", desc: "Set jumps to that zoom (0.1–10×; the magnifier takes the zoom you're at). Keep current leaves it alone." },
       { term: "Shortcut", pin: "css:[aria-label^='Alt plus']@right", desc: "Record, then press the keys (Esc cancels, Backspace clears). The bolt picks a free one, a new one on each press." },
       { term: "Show on canvas", pin: "text:Show on canvas", desc: "Off hides the node when you press Done: not drawn, not clickable, not selectable. The dock's eye shows it again." },
-      { term: "Pinned", pin: "text:Pinned", desc: "ComfyUI's own pin: a pinned bookmark can't be moved by accident." },
+      { term: "Pinned", pin: "text:Pinned", desc: "ComfyUI's own pin: a pinned bookmark can't be moved by accident. New bookmarks start unpinned; a saved workflow keeps each bookmark's pin." },
       { term: "Go", pin: "css:[data-test=bm-go]@right", desc: "Tries the jump." },
     ],
     dock: [
@@ -197,7 +197,7 @@ export const NODE_FIELDS = {
       { term: "Tone", desc: "Step (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge)." },
       { term: "Colour", desc: "Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker." },
       { term: "Look", desc: "Card, Sticky or Label (above)." },
-      { term: "Pinned", desc: "ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned." },
+      { term: "Pinned", desc: "ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start unpinned; a saved workflow keeps each note's pin." },
       { term: "Title", desc: "Shown in bold at the top, or on the pill of a Label." },
       { term: "Text", desc: "Its first line and length on the node; Edit text opens the text window, with the editor beside a live preview. Done (Ctrl+Enter) puts it on the note, Cancel or Escape leaves the note as it was. Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks." },
     ],
@@ -214,8 +214,8 @@ export const NODE_FIELDS = {
   WP_PromptAssembler: {
     ports: [
       { term: "context (in)", sockets: ["in:context"], desc: "The variables from a WP Context (or anything that ends in one)." },
-      { term: "template", sockets: ["in:template"], desc: "Your prompt with $variables in it." },
-      { term: "negative_template", sockets: ["in:negative_template"], desc: "Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative)." },
+      { term: "template", sockets: ["in:template"], desc: "Your prompt with $variables in it. Wire another node's text into it to use that text as the template instead: the box then says \"From the template input\", and the $variables in the wired text still fill in." },
+      { term: "negative_template", sockets: ["in:negative_template"], desc: "Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative). It takes a wired text the same way the template does." },
       { term: "prompt (out)", sockets: ["out:prompt"], desc: "The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner." },
       { term: "negative (out)", sockets: ["out:negative"], desc: "The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode." },
     ],
@@ -250,9 +250,10 @@ export const NODE_FIELDS = {
     controls: [
       { term: "upstream (in)", sockets: ["in:upstream"], desc: "Optional Context to extend. Only nodes after this one see the toggle variables. It can also set toggles (see below)." },
       { term: "Pencil (toolbar)", pin: "page:.wp-tb-icon--edit", desc: "Select the node and the indigo pencil in ComfyUI's selection toolbar opens the edit view: the mode, the Pick one options, the grips to reorder, the row buttons, Add toggle and Add label. Done goes back to the clean view, which shows only the switches." },
-      { term: "Any on / Pick one", desc: "Any on: every toggle is on or off by itself. Pick one: exactly one is on, like radio buttons." },
+      { term: "Any on / Pick one", desc: "Any on: every toggle is on or off by itself. Pick one: at most one is on; tick Always one on to keep exactly one on, like radio buttons." },
       { term: "writes (Pick one)", desc: "Optional variable that also gets the picked toggle's value (or its name), so one rule can branch on it." },
       { term: "Globe (row)", desc: "Edit view only. On (the default) keeps the toggle's variable internal: rules read it, the Assembler doesn't offer it and it never prints. Turn it off to use the variable in a prompt. Same in Any on and Pick one." },
+      { term: "Always one on (Pick one)", desc: "Like radio buttons: one toggle is always on. Clicking the picked one does nothing; pick another to switch. With none on, the first toggle is picked. Off (the default), the picked toggle can be switched off so none is on." },
       { term: "Show in Assembler (Pick one)", desc: "The picked variable shows in the Assembler and can print in the prompt. Off, it is internal." },
       { term: "Style (Pick one)", desc: "How every row looks in Pick one: Radio (a round dot, the default), Chip (the name across the row, lit when picked), Switch or Check. Turning one on turns the others off." },
       { term: "Layout", desc: "Edit view: Rows (one row per toggle, the default) or Grid (each toggle in a tile, the tiles wrapping to the node's width), in both modes and every style. Each label has a grid button for its own group; setting it back to the node's layout makes the group follow the node again. Under a grid's tiles, thin lines carry the dots: mute/bypass dots stack on the left with their toggle's name, BOOLEAN outputs on the right with theirs, each side packed on its own (so Dawn | Dawn, Sunset | Night). The arrow on the first line merges the group's lines into one that carries every dot and says how many go in and out (the names on hover), and the arrow on the merged line opens them again." },

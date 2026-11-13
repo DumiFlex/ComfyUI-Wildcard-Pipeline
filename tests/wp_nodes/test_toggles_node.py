@@ -303,3 +303,29 @@ def test_trace_details_say_why_a_toggle_is_off_and_how_pick_one_chose():
     assert pick["picked"] == "Dusk" and pick["forced_by"] == "Dusk"
     assert pick["upstream_on"] == ["Night"]
     assert trace["night"]["detail"]["upstream_read"] == "yes"
+
+
+def test_a_value_carries_the_negatives_of_what_it_reads():
+    up = ContextPayload(
+        context={"weather": "storm", "shade": "dark"}, debug={},
+        internals={negatives.NEG_KEY: {
+            "weather": [{"text": "clear sky", "pick": None, "source": "weather"}],
+            "shade": [{"text": "bright", "pick": None, "source": "shade"}],
+        }},
+    )
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "value": "heavy $weather rain", "negative": "sunny"},
+        {"id": "2", "kind": "toggle", "name": "Mist", "var": "mist", "on": True,
+         "value": "thin mist"},
+    ]}
+    neg = _run(config=cfg, upstream=up).values[0].internals[negatives.NEG_KEY]
+    assert [e["text"] for e in neg["rain"]] == ["clear sky", "sunny"]
+    assert "mist" not in neg
+    # The pick's value reads upstream $shade: its negatives come along.
+    one = {"mode": "one", "group_var": "time", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Night", "var": "night", "on": True,
+         "value": "$shade night", "negative": "noon"},
+    ]}
+    neg = _run(config=one, upstream=up).values[0].internals[negatives.NEG_KEY]
+    assert [e["text"] for e in neg["time"]] == ["bright", "noon"]

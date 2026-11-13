@@ -17,7 +17,8 @@ or a toggle::
 * ``Pick one``: one toggle is on; ``needs`` is ignored. Which one, first
   match wins: the toggle the upstream ``group_var`` names (by name or
   variable, any case; only with ``group_upstream``), then the first toggle
-  upstream set to a yes word, then the first toggle whose switch is on.
+  upstream set to a yes word, then the first toggle whose switch is on,
+  and with ``pick_required`` (always one on) the first toggle.
   ``group_var`` (optional) gets the picked toggle's ``value`` (text that may
   read ``$vars``; the node resolves it) or else its name, ``""`` when none
   is on. It is internal unless ``group_visible``.
@@ -98,6 +99,8 @@ class Config:
     toggles: list[Toggle] = field(default_factory=list)
     group_visible: bool = False
     group_upstream: bool = False
+    #: Pick one: always one on; with none on, the first toggle is picked.
+    pick_required: bool = False
     #: Set by :func:`with_upstream`: the toggle the upstream ``group_var``
     #: picked, and the toggles upstream set to a yes word (row order).
     forced: str = ""
@@ -155,6 +158,7 @@ def parse_config(raw: Any) -> Config:
         toggles=toggles,
         group_visible=data.get("group_visible") is True,
         group_upstream=data.get("group_upstream") is True,
+        pick_required=data.get("pick_required") is True,
     )
 
 
@@ -211,7 +215,10 @@ def picked_id(cfg: Config) -> str | None:
     first_up = next((i for i in cfg.upstream_on if i in ids), None)
     if first_up is not None:
         return first_up
-    return next((t.id for t in cfg.toggles if t.on), None)
+    on = next((t.id for t in cfg.toggles if t.on), None)
+    if on is None and cfg.pick_required and cfg.toggles:
+        return cfg.toggles[0].id
+    return on
 
 
 def effective(cfg: Config) -> dict[str, bool]:

@@ -405,6 +405,41 @@ def test_injector_row_negative_replaces_the_variables_negatives():
     assert upstream.internals[negatives.NEG_KEY]["character"][0]["text"] == "hat"
 
 
+def test_injector_template_row_carries_negatives_of_what_it_reads():
+    import json
+
+    from wp_nodes.injector_node import WPContextInjector
+    from wp_nodes.types import ContextPayload
+
+    upstream = ContextPayload(
+        context={"hat": "a red hat"}, debug={},
+        internals={negatives.NEG_KEY: {
+            "hat": [{"text": "blurry hat", "pick": None, "source": "hat"}],
+        }},
+    )
+    rows = json.dumps({"version": 1, "rows": [
+        {"_uid": "a", "slot_name": "input_0", "binding": "cloak",
+         "enabled": True, "template": "wearing $input_0",
+         "negative": "torn fabric"},
+        # Reads $cloak (a socket row) and $hat (upstream): both carry over.
+        {"_uid": "b", "kind": "general", "binding": "outfit",
+         "enabled": True, "template": "$cloak and $hat, $input_0"},
+        # Its own negative follows the inherited ones.
+        {"_uid": "c", "kind": "general", "binding": "look",
+         "enabled": True, "template": "$cloak", "negative": "dull"},
+        # Only raw sockets: nothing to inherit.
+        {"_uid": "d", "kind": "general", "binding": "raw",
+         "enabled": True, "template": "$input_0 $$cloak"},
+    ]})
+    out = WPContextInjector.execute(
+        wp_rows=rows, upstream=upstream, input_0="cloak",
+    ).values[0]
+    table = out.internals[negatives.NEG_KEY]
+    assert [e["text"] for e in table["outfit"]] == ["torn fabric", "blurry hat"]
+    assert [e["text"] for e in table["look"]] == ["torn fabric", "dull"]
+    assert "raw" not in table
+
+
 def test_trace_writes_carry_the_negative():
     ctx = _run([_wc("hair", [_opt(0, "red hair", "blonde")])])
     write = ctx["__wp_trace__"][0]["writes"][0]
