@@ -144,6 +144,10 @@ interface Props {
   /** True when the host walked a graph. Lets the chip say "no upstream
    *  producer" (canvas, actionable) rather than staying silent (SPA). */
   graphAware?: boolean;
+  /** Names a WP Context Loop upstream sets on some frames only, each with
+   *  its sentence ("$x is set on frame 4 only. …"). Such a name is not
+   *  missing: it gets a calm dotted underline and the sentence on hover. */
+  frameNotes?: Record<string, string>;
   /**
    * Fill the height the host gives us and scroll the overflow, instead of
    * growing to fit the content and offering a drag grip.
@@ -188,6 +192,7 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   varProducers: undefined,
   graphAware: false,
+  frameNotes: undefined,
   fill: false,
 });
 
@@ -619,7 +624,7 @@ function axisKnownFor(atom: Atom): boolean | undefined {
 /** Inline colour / scope-warning attributes for one `$name` run on the
  *  prompt-template surface (see `varSpanAttrsFor`). */
 function varSpanAttrs(name: string): string {
-  return varSpanAttrsFor(name, props.graphAware, props.varSuggestions, props.varProducers);
+  return varSpanAttrsFor(name, props.graphAware, props.varSuggestions, props.varProducers, props.frameNotes);
 }
 
 /** HTML for one text atom. SP2b brace-block scaffolding (the braces, count,
@@ -2694,6 +2699,7 @@ function onHostKeydown(ev: KeyboardEvent): void {
       :in-scope="varSuggestions.includes(varHoverInfo.name)"
       :producer="varProducers?.get(varHoverInfo.name)"
       :graph-aware="graphAware"
+      :scope-note="frameNotes?.[varAccessorParts(varHoverInfo.name).base]"
       data-test="rt-var-card"
     />
 

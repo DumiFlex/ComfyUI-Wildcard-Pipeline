@@ -584,4 +584,59 @@ describe("AssemblerHelper.vue with no Context", () => {
     });
     expect(w.find('[data-test="asm-vars-none"]').exists()).toBe(false);
   });
+
+  describe("loop frames", () => {
+    const loopProps = (frame: number) => ({
+      upstreamVars: frame === 3 ? ["role", "companion"] : ["role"],
+      templateVars: ["role", "companion"],
+      template: "$role with $companion",
+      resolvedMap: (frame === 3 ? { role: "a knight", companion: "a fox" } : { role: "a knight" }) as Record<string, string>,
+      loopFrames: { frame, count: 4, partial: { companion: [3] } },
+    });
+
+    it("shows a name set on other frames as 'on some frames', not missing", () => {
+      const w = mount(AssemblerHelper, { props: loopProps(0) });
+      expect(w.text()).not.toContain("missing");
+      expect(w.find('[data-test="asm-some-frames"]').text()).toBe("1 on some frames");
+      const chip = w.find('[data-test="asm-chip-companion"]');
+      expect(chip.classes()).toContain("wp-asm-var--off-frame");
+      expect(chip.classes()).not.toContain("wp-asm-var--missing");
+      expect(w.find('[data-test="asm-frames-companion"]').text()).toBe("#4");
+      expect(w.find('[data-test="asm-preview-status"]').text()).toBe("1 empty");
+      expect(w.find('[data-test="asm-preview-off"]').text()).toBe("$companion");
+    });
+
+    it("on the frame that sets it, the chip is a normal chip with its frame tag", () => {
+      const w = mount(AssemblerHelper, { props: loopProps(3) });
+      const chip = w.find('[data-test="asm-chip-companion"]');
+      expect(chip.classes()).not.toContain("wp-asm-var--off-frame");
+      expect(w.find('[data-test="asm-frames-companion"]').text()).toBe("#4");
+      expect(w.find('[data-test="asm-preview-status"]').text()).toBe("resolved");
+      expect(w.find('[data-test="asm-preview"]').text()).toContain("a fox");
+    });
+
+    it("still warns about a name no frame sets", () => {
+      const w = mount(AssemblerHelper, {
+        props: { ...loopProps(0), templateVars: ["role", "companion", "nope"], template: "$role $companion $nope" },
+      });
+      expect(w.text()).toContain("1 missing");
+      expect(w.find('[data-test="asm-preview-status"]').text()).toBe("1 unresolved");
+    });
+
+    it("steps frames through onPickFrame, within the loop", async () => {
+      const picked: number[] = [];
+      const w = mount(AssemblerHelper, { props: { ...loopProps(0), onPickFrame: (k: number) => picked.push(k) } });
+      expect(w.find('[data-test="asm-frame-label"]').text()).toBe("1/4");
+      expect(w.find('[data-test="asm-frame-prev"]').attributes("disabled")).toBeDefined();
+      await w.find('[data-test="asm-frame-next"]').trigger("click");
+      expect(picked).toEqual([1]);
+    });
+
+    it("has no stepper without a loop", () => {
+      const w = mount(AssemblerHelper, {
+        props: { upstreamVars: ["role"], templateVars: ["role"], template: "$role", resolvedMap: { role: "x" } },
+      });
+      expect(w.find('[data-test="asm-frame-step"]').exists()).toBe(false);
+    });
+  });
 });

@@ -22,6 +22,8 @@ const props = defineProps<{
   linked: boolean;
   varSuggestions: string[];
   varProducers: Map<string, VarProducer>;
+  /** Names a loop sets on some frames only (see RichTextInput). */
+  frameNotes?: Record<string, string> | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -80,6 +82,7 @@ const summary = computed(() => {
         placeholder="$negatives"
         :var-suggestions="varSuggestions"
         :var-producers="varProducers"
+        :frame-notes="frameNotes"
         graph-aware
         aria-label="Negative template"
         @update:model-value="(v: string) => emit('update:modelValue', v)"

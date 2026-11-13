@@ -361,6 +361,28 @@ def _frame_override(module: Any, frame: int) -> bool | None:
     return None
 
 
+def _frames_switched_on(module: Any) -> list[int]:
+    """0-based frames a base-off module is switched ON for (`frame_enabled`
+    entries that are true), ascending. The Debug viewer names them on the
+    module's "off" row ("off · on #4") so it is clear where it does run."""
+    frame_enabled_map = (
+        module.get("frame_enabled")
+        if isinstance(module, dict)
+        else getattr(module, "frame_enabled", None)
+    )
+    if not isinstance(frame_enabled_map, dict):
+        return []
+    out: list[int] = []
+    for key, on in frame_enabled_map.items():
+        try:
+            k = int(key)
+        except (TypeError, ValueError):
+            continue
+        if on is True and k >= 0:
+            out.append(k)
+    return sorted(set(out))
+
+
 def _coerce_snapshot(module: Any, module_uid: str, ctx: dict[str, Any]) -> Any:
     """The module as a snapshot dict, with this frame's iteration override
     and sweep pin applied. Raises whatever coercion raises."""
@@ -692,6 +714,7 @@ class PipelineEngine:
                 ctx, h, module, warn_mark, explain,
                 enabled=bool(h.enabled) if forced_off else False,
                 status="skipped_frame" if forced_off else "skipped_disabled",
+                on_frames=[] if forced_off else _frames_switched_on(module),
             )
             return
 
@@ -783,8 +806,12 @@ class PipelineEngine:
         error: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         seed: Any = _NO_SEED,
+        on_frames: list[int] | None = None,
     ) -> None:
-        """Append one module's trace row (plus explain-mode extras)."""
+        """Append one module's trace row (plus explain-mode extras).
+
+        `on_frames`: a base-off module's frames it is switched on for (0-based),
+        written only when there are any."""
         if meta is None:
             meta = _extract_static_meta(module)
         row: dict[str, Any] = {
@@ -798,6 +825,8 @@ class PipelineEngine:
         }
         if seed is not _NO_SEED:
             row["seed"] = seed
+        if on_frames:
+            row["on_frames"] = list(on_frames)
         row.update(meta)
         if explain:
             row.update(_finish_module(ctx, warn_mark, h.id, h.uid, h.name))

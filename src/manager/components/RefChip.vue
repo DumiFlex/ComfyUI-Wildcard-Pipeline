@@ -83,6 +83,9 @@ interface Props {
    *  Defaults false so a caller that passes no pool makes no claim: the chip
    *  falls back to "binds at runtime", which is always true. */
   inScope?: boolean;
+  /** VAR chips only: replaces "no upstream producer" when the host knows
+   *  more, e.g. a loop sets the name on some frames only. */
+  scopeNote?: string | undefined;
   /** VAR chips only: WHO writes this name.
    *
    *  Canvas hosts pass the entry from `collectUpstreamProducers` — the winning
@@ -157,6 +160,7 @@ const props = withDefaults(defineProps<Props>(), {
   subCategories: () => [],
   moduleKind: "wildcard",
   inScope: false,
+  scopeNote: undefined,
   producer: undefined,
   graphAware: false,
   remappable: false,
@@ -787,6 +791,7 @@ onBeforeUnmount(() => {
           </div>
         </template>
         <div v-else-if="inScope" class="wp-refchip-pop__count">in scope</div>
+        <div v-else-if="scopeNote" class="wp-refchip-pop__count" data-test="refchip-scope-note">{{ scopeNote }}</div>
         <div v-else class="wp-refchip-pop__count">
           {{ graphAware ? "no upstream producer — binds at runtime" : "binds at runtime" }}
         </div>

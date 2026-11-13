@@ -50,6 +50,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
           to insert it at the cursor.</li>
         <li>A variable nothing sets is underlined in amber and shows as a dashed chip, and prints
           nothing when you run. Click the chip to remove it from the template.</li>
+        <li>With a <b>WP Context Loop</b> upstream, a variable that only some frames set (a module
+          switched on or off per frame) is not missing: its chip is blue with a frame tag such as
+          <code>#4</code>, the header counts it as <b>on some frames</b>, and pointing at it says
+          which frames render it empty. The preview shows one frame, the one picked under the
+          Loop's <b>Edit frame</b>; the <b>‹ 1/4 ›</b> arrows above it step through them
+          (see <DocRef id="iteration-overrides" />).</li>
         <li><code>$$</code> prints a single dollar sign.</li>
         <li><b>Save</b> and <b>Load</b> in the toolbar keep templates in your library (see
           <DocRef id="templates" />).</li>

@@ -23,6 +23,7 @@ import { TOGGLES_NODE, staticToggleInternals, staticToggleNegatives, staticToggl
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
+import { effectiveEnabled, withFrameInstance } from "../components/context/frame-overrides";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
 // ComfyUI subgraphs are nested LGraph instances attached to a parent node
@@ -877,7 +878,7 @@ export function collectUpstreamChain(
    *  `seeds`: filled with one entry per returned step, the Context's own
    *  `seed` widget (null for a model / toggles step, or a seed it can't
    *  read), so the preview rolls each step on the seed the run will use. */
-  opts: { modelSteps?: boolean; seeds?: (number | null)[] } = {},
+  opts: { modelSteps?: boolean; seeds?: (number | null)[]; frame?: number | null } = {},
 ): unknown[][] {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
@@ -922,12 +923,16 @@ export function collectUpstreamChain(
     // gate, the assembler's API preview returns bindings from
     // bundle-disabled modules while the static fallback (which IS
     // gated) doesn't, and chip strip / preview disagree.
+    // `frame`: the server runs a flat module list with no loop, so lay the
+    // frame's switches and instance patches on before sending it.
+    const frame = opts.frame;
+    const modules = frame != null && frame >= 0 ? v.modules.map((m) => frameModule(m, frame)) : v.modules;
     const bundleIndex = buildBundleEnabledMap(v.bundles);
     if (bundleIndex.enabled.size === 0) {
-      out.push(v.modules);
+      out.push(modules);
       continue;
     }
-    const gated = v.modules.map((m) => {
+    const gated = modules.map((m) => {
       if (m.enabled === false) return m;
       // isModuleEffectivelyEnabled walks the parent_uid chain so a
       // disabled outer disables inner-bundle leaves too. AND with the
@@ -965,6 +970,8 @@ export const collectUpstreamValues = collectUpstreamResolved;
 export function collectUpstreamKinds(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
+  /** A loop frame (0-based): modules as that frame runs them. */
+  frame: number | null = null,
 ): Record<string, string> {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
@@ -1051,7 +1058,8 @@ export function collectUpstreamKinds(
       { version: 1, modules: [] },
     );
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
-    for (const m of v.modules) {
+    for (const entry of v.modules) {
+      const m = frame != null ? frameModule(entry, frame) : entry;
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
       // Per-kind binding emission — mirrors writeBindings, recording
       // kind instead of value. fixed_values fans out per row; the
@@ -1481,7 +1489,8 @@ interface ChainMemo {
   ctx: Record<string, ResolvedValue>;
   externalRefs: Set<string>;
 }
-const chainMemo = new WeakMap<LiteNodeLike, ChainMemo>();
+/** Per head node: one entry per view ("base", or "frame/count"). */
+const chainMemo = new WeakMap<LiteNodeLike, Map<string, ChainMemo>>();
 let chainMemoEnabled = true;
 
 /** @internal test hook — measure or compare against the unmemoised path. */
@@ -1506,6 +1515,9 @@ function chainParts(chain: LiteNodeLike[]): unknown[] {
       parts.push(JSON.stringify(staticModelValues(n)), [...internalModelVars(n)].join(","));
     }
     if (n.type === TOGGLES_NODE) parts.push(widgetValue(n, "wp_toggles"));
+    // Wiring the Loop's `values` input adds `$<name>_value` without
+    // touching a widget, so the link has to key the memo too.
+    if (n.type === "WP_ContextLoop") parts.push(loopValuesWired(n));
   }
   return parts;
 }
@@ -1516,12 +1528,14 @@ function sameParts(a: unknown[], b: unknown[]): boolean {
   return true;
 }
 
-function resolveChainMemo(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
-  if (!chainMemoEnabled || chain.length === 0) return resolveChainStatic(chain);
+function resolveChainMemo(chain: LiteNodeLike[], view?: FrameView): Record<string, ResolvedValue> {
+  if (!chainMemoEnabled || chain.length === 0) return resolveChainStatic(chain, undefined, view);
   const head = chain[0];
   const parts = chainParts(chain);
   const version = previewCacheVersion.value;
-  const hit = chainMemo.get(head);
+  const key = view ? `${view.frame}/${view.count}` : "base";
+  let byView = chainMemo.get(head);
+  const hit = byView?.get(key);
   if (hit && hit.version === version && sameParts(hit.parts, parts)) {
     // Keep the lazy fetch alive: `ensure` is a no-op for fresh entries, but it
     // retries expired failures and refetches after `markAllStale`.
@@ -1529,14 +1543,30 @@ function resolveChainMemo(chain: LiteNodeLike[]): Record<string, ResolvedValue> 
     return { ...hit.ctx };
   }
   const externalRefs = new Set<string>();
-  const ctx = resolveChainStatic(chain, externalRefs);
-  chainMemo.set(head, { parts, version, ctx: { ...ctx }, externalRefs });
+  const ctx = resolveChainStatic(chain, externalRefs, view);
+  if (!byView) {
+    byView = new Map();
+    chainMemo.set(head, byView);
+  }
+  // A frame view is keyed by its frame, so a long loop stepped through
+  // frame by frame would grow the map without bound: keep the latest few.
+  if (byView.size > 16) byView.clear();
+  byView.set(key, { parts, version, ctx: { ...ctx }, externalRefs });
   return ctx;
+}
+
+/** One loop frame to resolve the chain at: `frame` is 0-based (`-1` reads
+ *  every module at its base state, with no frame override), `count` the
+ *  Loop's frame count. */
+export interface FrameView {
+  frame: number;
+  count: number;
 }
 
 function resolveChainStatic(
   chain: LiteNodeLike[],
   externalRefs: Set<string> = new Set<string>(),
+  view?: FrameView,
 ): Record<string, ResolvedValue> {
   // First pass: collect every wildcard payload across the whole chain
   // into one `id → payload` catalog so `@{}` refs inside option values
@@ -1663,8 +1693,8 @@ function resolveChainStatic(
       }>(typeof raw === "string" ? raw : "", {});
       const baseName = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
       const totalName = `${baseName}_total`;
-      ctx[baseName] = "1";
-      ctx[totalName] = "1";
+      ctx[baseName] = view && view.frame >= 0 ? String(view.frame + 1) : "1";
+      ctx[totalName] = view ? String(view.count) : "1";
       if (cfg.iteration_internal === true) internalKeys.add(baseName);
       else internalKeys.delete(baseName);
       if (cfg.total_internal === true) internalKeys.add(totalName);
@@ -1682,7 +1712,10 @@ function resolveChainStatic(
       { version: 1, modules: [] },
     );
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
-    for (const m of v.modules) {
+    for (const entry of v.modules) {
+      // A loop frame turns modules on or off and patches their instance
+      // (`frame_enabled`, `iteration_overrides`), as the engine does per frame.
+      const m = view ? frameModule(entry, view.frame) : entry;
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
       // Snapshot VALUES, not just keys: an override rebinds an existing key,
       // so a key-presence check never sees it and the flag could not flip.
@@ -1711,6 +1744,138 @@ function resolveChainStatic(
     ctx["__wp_internal_flags__"] = JSON.stringify(flags);
   }
   return ctx;
+}
+
+/** `m` as loop frame `frame` runs it: the frame's instance patch laid
+ *  over, and `enabled` the frame's own state. */
+function frameModule<M extends ContextWidgetValue["modules"][number]>(m: M, frame: number): M {
+  const on = effectiveEnabled(m, frame);
+  const patched = withFrameInstance(m, frame) as M;
+  if ((patched.enabled !== false) === on) return patched;
+  return { ...patched, enabled: on };
+}
+
+/** The upstream chain of `node`, nearest first (the walk every collector
+ *  shares). */
+function upstreamChain(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLike[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  return chain;
+}
+
+/** Most frames the coverage scan looks at. Frames past it are read as the
+ *  last one scanned; a loop that long is rare and the scan stays cheap. */
+export const MAX_COVERAGE_FRAMES = 1000;
+
+/** The frame count of the first running WP Context Loop in `chain`, or
+ *  null when none drives it. */
+function chainLoopCount(chain: LiteNodeLike[]): number | null {
+  for (const n of chain) {
+    if (n.type !== "WP_ContextLoop" || isSkippedMode(n)) continue;
+    const raw = widgetNumber(n, "count");
+    return Number.isFinite(raw) && raw >= 1 ? Math.min(Math.floor(raw), MAX_COVERAGE_FRAMES) : 1;
+  }
+  return null;
+}
+
+/** 0-based frames below `count` on which some Context module in `chain`
+ *  differs from its base (an on/off switch or an instance patch). Every
+ *  other frame resolves like the base. */
+function overrideFrames(chain: LiteNodeLike[], count: number): number[] {
+  const out = new Set<number>();
+  const add = (k: number) => {
+    if (Number.isInteger(k) && k >= 0 && k < count) out.add(k);
+  };
+  for (const n of chain) {
+    if (n.type !== "WP_Context" || isSkippedMode(n)) continue;
+    const v = parseCached<ContextWidgetValue>(widgetValue(n, "wp_modules"), { version: 1, modules: [] });
+    for (const m of v.modules) {
+      for (const k of Object.keys(m.frame_enabled ?? {})) add(Number(k));
+      for (const k of m.disabled_frames ?? []) add(k);
+      for (const k of Object.keys(m.iteration_overrides ?? {})) add(Number(k));
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/** What a WP Context Loop upstream does to `node`'s variables. */
+export interface LoopFrames {
+  /** Frames the Loop runs. */
+  count: number;
+  /** Names set on SOME frames but not all: name → the 0-based frames that
+   *  set it (ascending). A name set on every frame, or on none, is absent. */
+  partial: Record<string, number[]>;
+  /** Every name set on at least one frame. */
+  anyFrame: string[];
+}
+
+/**
+ * Per-frame variable coverage when a WP Context Loop drives `node`, or null
+ * when none does. A module switched on (or off) for some frames only, or a
+ * frame patch that changes what a module writes, makes its names exist on
+ * those frames alone; the Assembler shows them as "on some frames" instead
+ * of missing, and the Run check warns only about names no frame sets.
+ *
+ * Resolves the chain once at its base state and once per frame that carries
+ * an override, so a long loop costs as much as its overridden frames.
+ */
+export function collectLoopFrames(rootGraph: LiteGraphLike, node: LiteNodeLike): LoopFrames | null {
+  const chain = upstreamChain(rootGraph, node);
+  const count = chainLoopCount(chain);
+  if (count == null) return null;
+  const keysAt = (frame: number): Set<string> =>
+    new Set(Object.keys(resolveChainMemo(chain, { frame, count })).filter((k) => !k.startsWith("__")));
+  const base = keysAt(-1);
+  const frames = overrideFrames(chain, count);
+  const perFrame = new Map(frames.map((k) => [k, keysAt(k)] as const));
+  const names = new Set(base);
+  for (const keys of perFrame.values()) for (const k of keys) names.add(k);
+  const partial: Record<string, number[]> = {};
+  for (const name of names) {
+    const on: number[] = [];
+    for (let k = 0; k < count; k++) {
+      const keys = perFrame.get(k) ?? base;
+      if (keys.has(name)) on.push(k);
+    }
+    if (on.length > 0 && on.length < count) partial[name] = on;
+  }
+  return { count, partial, anyFrame: [...names] };
+}
+
+/**
+ * Like {@link collectUpstreamResolved}, read at one loop frame (0-based):
+ * that frame's module switches and instance patches, its `$iteration` and
+ * `$iteration_total`. Same as the plain walk when no Loop drives `node`.
+ */
+export function collectUpstreamResolvedAtFrame(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+  frame: number,
+): Record<string, ResolvedValue> {
+  const chain = upstreamChain(rootGraph, node);
+  const count = chainLoopCount(chain);
+  if (count == null) return resolveChainMemo(chain);
+  return resolveChainMemo(chain, { frame: Math.min(Math.max(0, frame), count - 1), count });
+}
+
+/**
+ * Upstream names set on at least one frame: {@link collectUpstreamVariables}
+ * for a plain chain, and every frame's names when a Loop drives `node`. What
+ * the Run check and the subgraph badge test a template against, so a name a
+ * frame switches on is not reported as missing.
+ */
+export function collectUpstreamVariablesAnyFrame(rootGraph: LiteGraphLike, node: LiteNodeLike): string[] {
+  const loop = collectLoopFrames(rootGraph, node);
+  const base = collectUpstreamVariables(rootGraph, node);
+  if (!loop) return base;
+  return [...new Set([...base, ...loop.anyFrame])];
 }
 
 function writeBindings(

@@ -725,7 +725,9 @@ if (typeof origQueuePrompt === "function") {
         const missing = assemblerVarsMod.missingAssemblerVars(
           tmpl,
           negTmpl,
-          graphMod.collectUpstreamVariables(graph, node),
+          // A name a Loop sets on some frames only is intended, not missing:
+          // the Assembler shows it as "on some frames", so stay quiet here.
+          graphMod.collectUpstreamVariablesAnyFrame(graph, node),
         );
         if (missing.length === 0) continue;
         const list = missing.map((v) => `$${v}`).join(", ");

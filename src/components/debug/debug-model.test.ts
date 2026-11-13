@@ -77,6 +77,19 @@ describe("buildModel", () => {
     expect(m.steps[0].bindings).toEqual(["a"]);
   });
 
+  it("says where a base-off module runs when a loop switches it on", () => {
+    const m = buildModel({
+      __wp_trace__: [
+        { id: "a", type: "wildcard", status: "skipped_disabled", binding: "a", on_frames: [3] },
+        { id: "b", type: "wildcard", status: "skipped_disabled", binding: "b", on_frames: [0, 3] },
+        { id: "c", type: "wildcard", status: "skipped_disabled", binding: "c", on_frames: [0, 1, 3] },
+      ],
+    });
+    expect(m.steps.map((s) => [s.status, s.statusLabel])).toEqual([
+      ["frame", "off · on #4"], ["frame", "off · on #1 #4"], ["frame", "off · on 3 frames"],
+    ]);
+  });
+
   it("marks a constraint that never applied, from the warning or its hit count", () => {
     const con = (id: string) => ({
       id, _uid: id, type: "constraint", status: "ok",
