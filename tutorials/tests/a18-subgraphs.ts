@@ -1,7 +1,9 @@
 // Advanced 18: subgraphs. Time of day in one Context → a Context with Role + Lighting from time →
 // Assembler → Preview as Text. The second Context and the Assembler become a subgraph; variables still
 // cross its edge (run). Delete the first Context and the subgraph's badge says what broke inside
-// (missing $time, on its header); Undo. Enter the subgraph to see the nodes inside.
+// (missing $time, on its header); Undo. Enter the subgraph to see the nodes inside. Show the inner
+// Context's panel on the subgraph node (#398), Choose what shows (#402) unticks Role, and the ×.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -9,7 +11,7 @@ tutorial(
   {
     title: "Subgraphs",
     description: "Fold Contexts and Assemblers into a subgraph: variables still flow in and out, and a badge tells you what's wrong inside without opening it.",
-    learn: "Convert to subgraph, variables across its edge, the subgraph badge, entering a subgraph.",
+    learn: "Convert to subgraph, variables across its edge, the subgraph badge, entering a subgraph, showing a panel on the subgraph node and choosing what shows.",
   },
   async (t) => {
     const page = t.page;
@@ -98,6 +100,53 @@ tutorial(
         await t.click(t.node(sub).getByText("Enter subgraph"));
         await t.beat(2000);
         await t.waitVoice();
+      });
+
+      await t.h.step("A panel on the subgraph node", async () => {
+        await t.say("Folded away, the Context's modules are out of reach from outside. Right-click the Context in here, and Show on subgraph node.");
+        const inner = await page.evaluate(() => {
+          const g = (window.app?.canvas as { graph?: { nodes?: { id: number | string; type?: string }[] } } | undefined)?.graph;
+          return String(g?.nodes?.find((n) => n.type === "WP_Context")?.id ?? "");
+        });
+        if (!inner) throw new StepError("No WP Context inside the subgraph.");
+        await t.click(await titleBar(inner), { right: true });
+        await t.beat(700);
+        const show = page.getByText("Show on subgraph node", { exact: true }).last();
+        await show.waitFor({ state: "visible", timeout: 5000 }).catch(() => {
+          throw new StepError("The node menu has no Show on subgraph node.");
+        });
+        await t.click(show);
+        await t.beat(900);
+        await t.waitVoice();
+        await t.say("Back out to the main graph.");
+        const crumb = page.locator('[class*="breadcrumb"]').getByText(/^\s*(Graph|Unsaved Workflow.*)\s*$/).first();
+        if (await crumb.isVisible().catch(() => false)) await t.click(crumb);
+        else await page.evaluate(() => (window.app?.canvas as { setGraph?: (g: unknown) => void } | undefined)?.setGraph?.(window.app?.graph));
+        await t.beat(1500);
+        await t.waitVoice();
+        await t.callout("copy", t.node(sub), "The Context's panel, outside", 5);
+        await t.say("The subgraph node now carries a copy of the panel. Change a module here or inside: both sides follow, and the node inside is still what runs. Every subgraph node made from this subgraph shows it, and it's saved with the workflow.");
+        await t.waitVoice();
+        await t.uncallout("copy");
+        const choose = t.node(sub).locator('[aria-label="Choose what shows"]').first();
+        await t.callout("choose", choose, "Choose what shows", 4);
+        await t.say("The sliders on its header choose what shows on this copy. Untick Role, and only the lighting rule stays out here; the node inside keeps everything.");
+        await t.click(choose);
+        await t.beat(700);
+        await t.uncallout("choose");
+        const role = page.locator('[role="menuitemcheckbox"], [role="menuitem"]').filter({ hasText: /^\s*Role\s*$/ }).first();
+        if (await role.isVisible().catch(() => false)) {
+          await t.click(role);
+          await t.beat(700);
+        }
+        await t.press("Escape");
+        await t.beat(700);
+        await t.waitVoice();
+        const hide = t.node(sub).locator('[aria-label="Hide from subgraph node"]').first();
+        await t.callout("hide", hide, "Take the copy off", 4);
+        await t.say("The cross takes the copy off again, as does Hide from subgraph node on the node inside. A panel with a socket, like a seed or a template, uses ComfyUI's own parameter list instead.");
+        await t.waitVoice();
+        await t.uncallout("hide");
       });
     });
 
