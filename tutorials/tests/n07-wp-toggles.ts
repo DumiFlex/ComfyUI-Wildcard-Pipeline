@@ -113,7 +113,8 @@ tutorial(
       await t.uncallout("prev");
       await t.say("And Chip is a small pill that lights up while it's on. Keep the buttons.");
       await t.waitVoice();
-      const looks = [win().locator('[data-test="tg-window-icon"]'), win().locator('[data-test="tg-text-color"]')];
+      // The Looks row itself (icon picker and the three swatches); the header icon made the box cover half the window.
+      const looks = win().locator(".wp-tgr__look").first().locator("..");
       await t.callout("looks", looks, "Icon and colours", 4);
       await t.say("Looks gives it an icon, and colours for the icon, the name and the control, so Day can be yellow and Night blue.");
       await t.waitVoice();
@@ -150,7 +151,9 @@ tutorial(
       await t.say("Now two toggles that belong together: Rain, and Puddles, which only makes sense in the rain.");
       await openEdit(n.tg);
       await addToggle(n.tg, "Rain", "rain", "in the rain");
+      await t.say("Rain writes the words in the rain.");
       await winDone();
+      await t.say("Then Puddles, with puddles on the ground.");
       await addToggle(n.tg, "Puddles", "puddles", "with puddles on the ground");
       await t.waitVoice();
       const needs = win().locator('[data-test="tg-needs"]');
@@ -237,7 +240,7 @@ tutorial(
 
     await t.h.step("Pick one", async () => {
       await t.say("So far every toggle was on or off by itself: Any on. Pick one turns a node into radio buttons. Add a second Toggles between the first and the Context.");
-      await t.speedUp(4);
+      await t.speedUp(8);
       const tg2 = await t.addNode("WP Toggles", { x: 300, y: 640 });
       await t.wire(n.tg, "context", tg2, "upstream");
       await t.wire(tg2, "context", n.ctx, "upstream");
