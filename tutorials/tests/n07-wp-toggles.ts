@@ -119,7 +119,8 @@ tutorial(
       await t.fill(winField("tg-off-value"), "with empty hands", { cps: 16 });
       await t.press("Tab");
       await t.waitVoice();
-      await t.callout("neg", [winField("tg-negative"), winField("tg-off-negative")], "Negatives for each side", 4);
+      // An empty negative is folded to a "+ negative" button, so call out the field's wrapper, not its input.
+      await t.callout("neg", [win().locator('[data-test="tg-negative"]').first(), win().locator('[data-test="tg-off-negative"]').first()], "Negatives for each side", 4);
       await t.say("Each side also has a negative, sent only when the Assembler prints this variable.");
       await t.waitVoice();
       await t.uncallout("neg");

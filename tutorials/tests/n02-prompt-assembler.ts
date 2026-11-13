@@ -182,14 +182,19 @@ tutorial(
 
     await t.h.step("With a Context Loop", async () => {
       await t.say("With a Context Loop before the Context, the preview shows one frame at a time. Add one and wire it into the Context's upstream.");
-      const loop = await t.addNode("WP Context Loop", { x: 140, y: 640 });
+      // A wide node: a screen point well clear of the sidebar.
+      const loop = await t.addNode("WP Context Loop", { x: 300, y: 640 });
       await t.wire(loop, "context", n.ctx, "upstream");
       await t.beat(600);
       await t.waitVoice();
-      await t.say("Set its count to four.");
+      await t.say("Set its count to four, switch on Override Context seed so every frame rolls its own picks, and click the frame number's globe so dollar iteration can print.");
       await t.fill(t.node(loop).locator('[data-widget-name="count"] input').first(), "4", { cps: 10 });
       await t.press("Tab");
-      await t.beat(800);
+      await t.beat(600);
+      await t.click(t.node(loop).locator('[data-test="loop-override-toggle"]'));
+      await t.beat(500);
+      await t.click(t.node(loop).locator('[data-test="loop-iteration-internal"]'));
+      await t.beat(600);
       await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("ControlOrMeta+End");
       await t.type(", frame $iteration", { cps: 16 });
@@ -206,7 +211,7 @@ tutorial(
       }
       await t.waitVoice();
       await t.uncallout("step");
-      await t.say("When the loop switches a module on for some frames only, its variable gets a frame tag, like number four, instead of a missing mark, and the preview says when it's empty on the frame shown. The Context Loop video shows it.");
+      await t.say("And when a loop switches a module on for only some frames, its variable gets a frame tag instead of a missing mark. The Context Loop video shows that one.");
       await t.waitVoice();
     });
 
