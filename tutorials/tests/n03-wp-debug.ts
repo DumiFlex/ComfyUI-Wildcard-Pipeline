@@ -193,10 +193,10 @@ tutorial(
       await t.setView({ scale: 0.7, offset: [0, 0] });
       await t.say("Recipe one: a Debug after each stage of a chain. Add a second Context after the first, with its own Role, and a second Debug after it.");
       await t.speedUp();
-      const c2 = await t.addNode("WP Context", { x: 300, y: 980 });
+      const c2 = await t.addNode("WP Context", { x: 560, y: 780 });
       await t.wire(n.ctx, "context", c2, "upstream");
       await t.pickModules(c2, ["Role"]);
-      const d2 = await t.addNode("WP Debug", { x: 1050, y: 1020 });
+      const d2 = await t.addNode("WP Debug", { x: 1150, y: 780 });
       await resize(d2, 700, 420);
       await t.wire(c2, "context", d2, "context");
       await t.normalSpeed();
