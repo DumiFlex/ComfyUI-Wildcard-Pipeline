@@ -182,7 +182,7 @@ tutorial(
 
     await t.h.step("With a Context Loop", async () => {
       await t.say("With a Context Loop before the Context, the preview shows one frame at a time. Add one and wire it into the Context's upstream.");
-      const loop = await t.addNode("WP Context Loop", { x: 60, y: 560 });
+      const loop = await t.addNode("WP Context Loop", { x: 140, y: 640 });
       await t.wire(loop, "context", n.ctx, "upstream");
       await t.beat(600);
       await t.waitVoice();

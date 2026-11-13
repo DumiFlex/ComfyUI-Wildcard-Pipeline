@@ -123,7 +123,7 @@ tutorial(
 
     await t.h.step("With a Context Loop", async () => {
       await t.say("Its real partner is the Context Loop, where every frame has its own prompt. Add one, and wire its loop_config into the Seed List.", "Its real partner is the Context Loop, where every frame has its own prompt. Add one, and wire its loop config into the Seed List.");
-      const loop = await t.addNode("WP Context Loop", { x: 60, y: 560 });
+      const loop = await t.addNode("WP Context Loop", { x: 150, y: 560 });
       await t.wire(loop, "loop_config", n.s, "loop_config");
       await t.beat(800);
       await t.waitVoice();

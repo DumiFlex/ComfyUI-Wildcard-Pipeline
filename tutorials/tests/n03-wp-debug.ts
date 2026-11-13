@@ -213,7 +213,7 @@ tutorial(
     await t.h.step("Recipe: a loop's frames", async () => {
       await t.say("Recipe two: with a Context Loop before the chain, every frame has its own picks. Add one, and wire it into the first Context's upstream.");
       await t.speedUp();
-      const loop = await t.addNode("WP Context Loop", { x: 40, y: 560 });
+      const loop = await t.addNode("WP Context Loop", { x: 140, y: 560 });
       await t.wire(loop, "context", n.ctx, "upstream");
       await t.normalSpeed();
       await t.run();

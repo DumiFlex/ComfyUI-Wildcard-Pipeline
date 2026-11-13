@@ -20,8 +20,8 @@ export async function buildSwitchScene(t: Tutor): Promise<SwitchScene> {
   await t.go("/");
   await t.setView({ scale: 0.8, offset: [0, 0] });
   await t.speedUp();
-  const ks1 = await t.addNode("KSampler", { x: 90, y: 110 });
-  const ks2 = await t.addNode("KSampler", { x: 90, y: 560 });
+  const ks1 = await t.addNode("KSampler", { x: 150, y: 110 });
+  const ks2 = await t.addNode("KSampler", { x: 150, y: 560 });
   const dec = await t.addNode("VAE Decode", { x: 1000, y: 150 });
   const up = await t.addNode("Upscale Image By", { x: 1000, y: 330 });
   const save = await t.addNode("Save Image", { x: 1400, y: 150 });

@@ -13,9 +13,10 @@ export interface VarScene {
 export async function buildVarScene(t: Tutor): Promise<VarScene> {
   const page = t.page;
   await t.go("/");
-  await t.setView({ scale: 0.8, offset: [150, 0] });
+  await t.setView({ scale: 0.8, offset: [0, 0] });
   await t.speedUp();
-  const tg = await t.addNode("WP Toggles", { x: 70, y: 230 });
+  // addNode takes a SCREEN point (it double-clicks there): keep it clear of the sidebar and top bar.
+  const tg = await t.addNode("WP Toggles", { x: 140, y: 230 });
   const tb = await t.node(tg).boundingBox();
   if (tb) await t.click({ x: tb.x + tb.width / 2, y: tb.y + 14 });
   await t.beat(400);
