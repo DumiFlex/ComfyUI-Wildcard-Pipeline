@@ -109,7 +109,7 @@ tutorial(
       await t.speedUp();
       const img = await t.addNode("EmptyImage", { x: 230, y: 190 });
       await setWidgets(img, { width: 512, height: 512, batch_size: 4, color: 0x5b7fa6 });
-      const text = await t.addNode("String (Multiline)", { x: 230, y: 560 });
+      const text = await t.addNode("Text (Multiline)", { x: 230, y: 560 });
       const lg = await t.addNode("WP Label & Grid", { x: 760, y: 150 });
       await t.normalSpeed();
       await t.say("Now a bare one, on plain stand-in images so every change runs in a second. Empty Image makes a batch of four.");
@@ -331,12 +331,12 @@ tutorial(
 
     await t.h.step("Text from other nodes", async () => {
       await t.speedUp();
-      const str = await t.addNode("String", { x: 230, y: 900 });
+      const str = await t.addNode("Text (Multiline)", { x: 230, y: 900 });
       await t.click(t.node(str).locator("input, textarea").first());
       await t.type("Wired title", { cps: 30 });
       await t.press("Escape");
       await t.normalSpeed();
-      await t.say("Every text field can come from another node instead. Wire a String into title.");
+      await t.say("Every text field can come from another node instead. Wire a text box into title.");
       await wireText(str, "STRING", n.lg, "title");
       await t.beat(600);
       await t.waitVoice();

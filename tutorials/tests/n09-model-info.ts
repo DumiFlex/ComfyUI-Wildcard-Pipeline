@@ -136,9 +136,9 @@ tutorial(
     });
 
     await t.h.step("Wired family, variant and name", async () => {
-      await t.say("family, variant and name can also come from another node, like a switch that names the model you're testing. Wire a String into variant.", "Family, variant and name can also come from another node, like a switch that names the model you're testing. Wire a String into variant.");
+      await t.say("family, variant and name can also come from another node, like a switch that names the model you're testing. Wire a text box into variant.", "Family, variant and name can also come from another node, like a switch that names the model you're testing. Wire a text box into variant.");
       await t.speedUp();
-      const s = await t.addNode("String", { x: 160, y: 640 });
+      const s = await t.addNode("Text (Multiline)", { x: 160, y: 640 });
       await t.click(t.node(s).locator("input, textarea").first());
       await t.type("sdxl", { cps: 30 });
       await t.press("Escape");
@@ -146,7 +146,7 @@ tutorial(
       try {
         await t.wire(s, "STRING", id, "variant");
       } catch {
-        throw new StepError("The String didn't wire into Model Info's variant.");
+        throw new StepError("The text box didn't wire into Model Info's variant.");
       }
       await t.beat(600);
       await t.waitVoice();
