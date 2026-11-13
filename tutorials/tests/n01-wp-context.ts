@@ -191,12 +191,15 @@ tutorial(
       await t.waitVoice();
       await t.click(page.locator('[data-test="ptl-cancel"]').last());
       await t.beat(600);
-      await t.say("To drop the change instead, Edit, Reset overrides, Save.");
+      await t.say("To drop the change instead, Edit, Reset overrides, confirm, and Save.");
       const m3 = await menuOn(n.ctx, "Eyes");
       await t.click(m3.getByRole("menuitem", { name: "Edit", exact: true }));
       await t.beat(900);
-      const dlg2 = page.getByRole("dialog").last();
+      const dlg2 = page.getByRole("dialog").filter({ has: page.locator('[data-test="wcm-save"]') }).last();
       await t.click(dlg2.locator('[data-test="wcm-clear-all"]'));
+      await t.beat(500);
+      // Reset overrides asks first ("Reset overrides?"): confirm it, or it stays open over the canvas.
+      await t.click(page.getByRole("dialog").filter({ hasText: "Reset overrides?" }).last().getByRole("button", { name: "Reset", exact: true }));
       await t.beat(500);
       await t.click(dlg2.locator('[data-test="wcm-save"]'));
       await t.beat(800);
