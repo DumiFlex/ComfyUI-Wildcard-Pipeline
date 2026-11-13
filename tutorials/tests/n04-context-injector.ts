@@ -207,6 +207,15 @@ tutorial(
       await t.uncallout("rv");
     });
 
+    await t.h.step("Recipes and gotchas", async () => {
+      await t.say("Recipes. A LoRA loader's name wired in, with a rule that adds its trigger words: the LoRA trigger words video builds it. A caption from an image-to-text node, so the prompt describes a picture you load. A number from a primitive, read back out by a Var node for a sampler setting.");
+      await t.waitVoice();
+      await t.say("Up to ten wired inputs, a new free one appearing as you wire. An Injector after a Loop gets the same value on every frame; put a per-frame value into the Loop's values input instead.");
+      await t.waitVoice();
+      await t.say("Gotchas. A curly-brace pick in a row's template needs a seed, so it prints as written; use a wildcard in a Context for that. A name taken by a Context's variable is replaced by whichever runs later. And an image or latent wired in gives no useful text.");
+      await t.waitVoice();
+    });
+
     await t.h.step("Outro", async () => {
       await t.say("Reach for the Injector whenever a value comes from another node. Name it, wrap it, give it a negative, and put the Injector before what reads it. The Context Injector page in the docs has every field.");
     });
