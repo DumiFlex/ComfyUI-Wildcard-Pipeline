@@ -124,7 +124,11 @@ tutorial(
 
     await t.h.step("With a Context Loop", async () => {
       await t.say("Its real partner is the Context Loop, where every frame has its own prompt. Add one, and wire its loop_config into the Seed List.", "Its real partner is the Context Loop, where every frame has its own prompt. Add one, and wire its loop config into the Seed List.");
-      const loop = await t.addNode("WP Context Loop", { x: 150, y: 560 });
+      // Centred on the point: x 280 keeps the Loop clear of the sidebar (150 cut its left edge).
+      const loop = await t.addNode("WP Context Loop", { x: 280, y: 560 });
+      // A new Loop has count 1, so it has no frame 2 to Ctrl-click below: give it four frames, like the list.
+      await t.fill(t.node(loop).locator('[data-widget-name="count"] input').first(), "4", { cps: 10 });
+      await t.press("Tab");
       await t.wire(loop, "loop_config", n.s, "loop_config");
       await t.beat(800);
       await t.waitVoice();
