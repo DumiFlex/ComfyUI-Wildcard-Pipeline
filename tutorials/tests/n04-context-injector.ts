@@ -3,8 +3,9 @@
 // template (wearing $input_0, $$), its negative and the live preview. The globe hides $steps from the
 // prompt. A template row reads the other rows by name. Before a Context, the Context's own items read
 // the injected variables (Lighting from time follows $time). Negatives follow usage: the Assembler's
-// negative has the cloak's only while its template prints $cloak. Last, the Assembler's preview
-// before a run against the real prompt after one. Prompt-only: no model.
+// negative has the cloak's only while its template prints $cloak; the night light's stays, since
+// $lighting is still printed. Last, the Assembler's preview before a run against the real prompt
+// after one. Prompt-only: no model.
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
@@ -179,8 +180,8 @@ tutorial(
     });
 
     await t.h.step("Negatives follow usage", async () => {
-      await t.callout("n", t.node(m.neg), "torn fabric, from $cloak", 6);
-      await t.say("The negative output has torn fabric, because the template prints outfit, which reads cloak.");
+      await t.callout("n", t.node(m.neg), "torn fabric from $cloak, sunlight from $lighting", 6);
+      await t.say("The negative output has torn fabric, because the template prints outfit, which reads cloak. Harsh sunlight comes from Lighting from time: at night it adds its own negative.");
       await t.waitVoice();
       await t.uncallout("n");
       await t.say("Take outfit out of the template, and Run again.");
@@ -190,8 +191,8 @@ tutorial(
       await t.type("A painting of $role, $setting $time, $lighting", { cps: 18 });
       await t.run();
       await t.beat(900);
-      await t.callout("n2", t.node(m.neg), "No cloak, no torn fabric", 6);
-      await t.say("No cloak in the prompt, so no torn fabric in the negative. Negatives follow what the prompt uses.");
+      await t.callout("n2", t.node(m.neg), "Torn fabric gone, the light's negative stays", 6);
+      await t.say("No cloak in the prompt, so no torn fabric in the negative. The light is still printed, so its negative stays. Negatives follow what the prompt uses.");
       await t.waitVoice();
       await t.uncallout("n2");
     });
