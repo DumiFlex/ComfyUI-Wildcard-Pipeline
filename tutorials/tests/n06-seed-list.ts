@@ -85,8 +85,9 @@ tutorial(
       await t.click(modal().locator('[data-test="seedrow-lock"]').nth(1));
       await t.beat(600);
       await t.waitVoice();
-      await t.say("You can also type a seed into a row, or roll a random one with the dice.");
-      await t.callout("row", [modal().locator('[data-test="seedrow-input"]').nth(2), modal().locator('[data-test="seedrow-roll"]').nth(2)], "Type or roll", 4);
+      await t.say("A locked row also takes a seed you type, or a random one from the dice.");
+      // Only a locked row has the seed box and the dice (an unlocked one shows its derived seed): frame two's.
+      await t.callout("row", [modal().locator('[data-test="seedrow-input"]').first(), modal().locator('[data-test="seedrow-roll"]').first()], "Type or roll", 4);
       await t.waitVoice();
       await t.uncallout("row");
       await t.say("Lock all and Unlock all work on the whole list.");
