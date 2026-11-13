@@ -1,4 +1,4 @@
-import { createApp, effectScope, type App, type Component, type EffectScope } from "vue";
+import { createApp, defineAsyncComponent, defineComponent, effectScope, h, type App, type Component, type EffectScope } from "vue";
 
 import { nodeCollapseAnimating, nodeWidgetHosts } from "../extension/_stashes";
 import { isVueNodes } from "../extension/renderer";
@@ -216,19 +216,128 @@ interface ResizableNode {
   setDirtyCanvas?: (foreground: boolean, background: boolean) => void;
 }
 
+/* ── Mirrors: one node's panel shown on another node ─────────────────────
+ *
+ * "Show on subgraph node" (extension/show-on-subgraph.ts) draws a panel of a
+ * node inside a subgraph on the subgraph node too. It calls the panel's own
+ * `create(node, inputName)` inside {@link buildMirror}: every
+ * `createDomWidgetHost` for that node then mounts on the subgraph node
+ * (`hostNode`) under its own widget name, framed with the inner node's title
+ * and a Hide button, while the panel's own code keeps reading and changing
+ * the inner node. The two hosts of one widget share its value: a change in
+ * either reaches the other through its `onValueRestored`, the same path a
+ * workflow load takes. Only the inner widget is saved and run.
+ */
+export interface MirrorMount {
+  /** The node whose panel is shown (inside the subgraph). */
+  dataNode: object;
+  /** The node it is shown on (the subgraph node). */
+  hostNode: MountTargetNode;
+  /** The widget name on the host node; unique per shown panel. */
+  widgetName: string;
+  /** Header text: the inner node's title, read on every render. */
+  title: () => string;
+  /** The Hide button. */
+  onHide: () => void;
+  /** The node's own panel went away (node deleted, graph cleared): drop the
+   *  copy without forgetting that it was shown. */
+  onOrphan: () => void;
+}
+
+let mirrorMount: MirrorMount | null = null;
+
+/** Build `create`'s widget(s) for `mount.dataNode` on `mount.hostNode`. */
+export function buildMirror<T>(mount: MirrorMount, build: () => T): T {
+  const previous = mirrorMount;
+  mirrorMount = mount;
+  try {
+    return build();
+  } finally {
+    mirrorMount = previous;
+  }
+}
+
+/** True while a panel for `node` is being built as a mirror. Panels skip
+ *  what belongs to the node itself (its dots, its toolbar pencil). */
+export function isMirrorBuild(node: unknown): boolean {
+  return mirrorMount !== null && mirrorMount.dataNode === node;
+}
+
+interface Peer {
+  primary: boolean;
+  /** Take a value another host of the same widget set. */
+  receive: (v: string) => void;
+  /** The current value. */
+  value: () => string;
+  /** A mirror whose primary went away. */
+  orphan?: () => void;
+}
+
+/** Hosts of one widget (the node's own, plus mirrors), by node and name. */
+const peers = new WeakMap<object, Map<string, Set<Peer>>>();
+
+function peersOf(node: object, name: string): Set<Peer> {
+  let byName = peers.get(node);
+  if (!byName) peers.set(node, (byName = new Map()));
+  let set = byName.get(name);
+  if (!set) byName.set(name, (set = new Set()));
+  return set;
+}
+
+/** The node's own host of a widget, if it has one. */
+export function primaryValue(node: object, name: string): string | undefined {
+  for (const p of peers.get(node)?.get(name) ?? []) if (p.primary) return p.value();
+  return undefined;
+}
+
+// The frame is the kit's Disclosure (folds the panel away) with a kit ×
+// button in its heading; both load only once a panel is shown.
+const MirrorDisclosure = defineAsyncComponent(() => import("@/kit/Disclosure.vue"));
+const MirrorButton = defineAsyncComponent(() => import("@/kit/Button.vue"));
+
 export function createDomWidgetHost<P extends Record<string, unknown>>(
   node: MountTargetNode,
   widgetName: string,
   component: Component<P>,
   options: CreateDomWidgetHostOptions<P> = {},
 ): DomWidgetHost {
+  // Built as a mirror: the widget goes on the mirror's host node under its
+  // own name; `node` stays the node the panel reads and changes.
+  const mirror = isMirrorBuild(node) ? mirrorMount : null;
+  const mount: MountTargetNode = mirror ? mirror.hostNode : node;
+  const mountName = mirror ? mirror.widgetName : widgetName;
+  // A copy shares the subgraph node with other widgets, so a panel that
+  // fills its own node (Debug) sizes to its content there instead.
+  if (mirror && options.fillHost) options = { ...options, fillHost: false, minHeight: Math.max(options.minHeight ?? 0, 240) };
+  if (mirror) {
+    const inner = component;
+    const frame = mirror;
+    component = defineComponent({
+      setup: () => () =>
+        h(
+          "div",
+          { class: "wp-mirror", "data-wp-mirror": "" },
+          h(MirrorDisclosure, { label: frame.title(), defaultOpen: true, flush: true, size: "sm" }, {
+            actions: () =>
+              h(MirrorButton, {
+                variant: "ghost",
+                icon: "times",
+                size: "sm",
+                "aria-label": "Hide from subgraph node",
+                onClick: frame.onHide,
+              }),
+            default: () => h(inner as Component, (options.componentProps ?? {}) as Record<string, unknown>),
+          }),
+        ),
+    }) as unknown as Component<P>;
+  }
   const host = document.createElement("div");
   host.classList.add("wp-widget");
-  host.dataset.wpWidget = widgetName;
+  host.dataset.wpWidget = mountName;
   liveHosts.add(host);
   {
-    let hosts = nodeWidgetHosts.get(node);
-    if (!hosts) nodeWidgetHosts.set(node, (hosts = new Set()));
+    let hosts = nodeWidgetHosts.get(mount);
+    if (!hosts) nodeWidgetHosts.set(mount, (hosts = new Set()));
     hosts.add(host);
   }
   host.style.width = "100%";
@@ -286,6 +395,37 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   const removeWheelShield = installWheelShield(host);
 
   let state = options.initialValue ?? "";
+
+  // Shared value between this host and the widget's other hosts.
+  const siblings = peersOf(node, widgetName);
+  /** A mirror passes its changes on only once it holds the real value, so
+   *  defaults a panel writes while it starts never reach the node. */
+  let seeded = !mirror;
+  const self: Peer = {
+    primary: !mirror,
+    receive: (v) => {
+      if (v === state && seeded) return;
+      state = v;
+      seeded = true;
+      options.onValueRestored?.(v);
+    },
+    value: () => state,
+    ...(mirror ? { orphan: () => mirror.onOrphan() } : {}),
+  };
+  function broadcast(v: string): void {
+    if (!seeded) return;
+    for (const p of siblings) if (p !== self) p.receive(v);
+  }
+  siblings.add(self);
+  if (mirror) {
+    // After the glue's own start-up code (which may still be using its
+    // `host` binding), take the node's value.
+    queueMicrotask(() => {
+      const current = primaryValue(node, widgetName);
+      if (current !== undefined) self.receive(current);
+      else seeded = true;
+    });
+  }
   // baseMin pre-snapped so the initial `getMinHeight` answer + every
   // subsequent floor enforcement land on the LiteGraph grid. Without
   // this, the first paint reports a raw min, ComfyUI sizes the node
@@ -300,6 +440,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     setValue: (v: string) => {
       state = v;
       options.onValueRestored?.(v);
+      broadcast(v);
     },
     // Cached number so ComfyUI skips per-frame getComputedStyle (perf hint
     // from LoRA Manager's DOM widget guide).
@@ -308,10 +449,12 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     ...(options.fitContent ? { getMaxHeight: () => minHeight } : {}),
   };
 
-  const widget = node.addDOMWidget(widgetName, "wp-dom", host, widgetOpts);
+  // A mirror's value lives in the node it shows; never save it twice.
+  if (mirror) widgetOpts.serialize = false;
+  const widget = mount.addDOMWidget(mountName, "wp-dom", host, widgetOpts);
   // Legacy renderer: hide the parts of this widget that a node drawn above
   // it covers (ComfyUI's own clipping only cuts out the selected node).
-  const removeOverlapClip = registerOverlapClip(node as unknown as Parameters<typeof registerOverlapClip>[0], host);
+  const removeOverlapClip = registerOverlapClip(mount as unknown as Parameters<typeof registerOverlapClip>[0], host);
   // Force a minimum node width if requested. LoRA Manager docs §4.3 —
   // only way to widen the node from a DOM widget is overriding
   // computeLayoutSize. `minWidth` accepts either a static number or
@@ -346,7 +489,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // here — the public API on createDomWidgetHost is still strict in P.
   const app = createApp(component, (options.componentProps ?? {}) as unknown as P);
   app.mount(inner);
-  adoptStaleSlot(node, widgetName, host);
+  adoptStaleSlot(mount, mountName, host);
 
   const scope = options.scope ?? effectScope(true);
   const cleanups: Array<() => void> = [];
@@ -359,7 +502,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // *minimum* layout size; calling setSize(computeSize()) on every observer
   // fire would (a) override the user's manual drag-larger, and (b) override
   // the saved-workflow size when ComfyUI restores it on page load.
-  const resizable = node as unknown as ResizableNode;
+  const resizable = mount as unknown as ResizableNode;
   let scheduled = false;
   function pushSize(measured: number) {
     if (scheduled) return;
@@ -375,7 +518,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       // animation clears the flag in its final rAF) is safe because
       // snapToSize at the tween's end already lands the node at the
       // correct target.
-      if (nodeCollapseAnimating.has(node as object)) return;
+      if (nodeCollapseAnimating.has(mount as object)) return;
       // Snap before storing: minHeight feeds both ComfyUI's
       // getMinHeight callback AND our own min[1] read below. Keeping
       // it grid-aligned at the source means setSize never has to
@@ -454,7 +597,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
    */
   let fillDispose: (() => void) | null = null;
   if (options.fillHost) {
-    const sized = node as unknown as { id?: string | number; size?: [number, number] | number[] };
+    const sized = mount as unknown as { id?: string | number; size?: [number, number] | number[] };
     const syncFill = (): void => {
       if (!isVueNodes()) {
         // Legacy sizes us itself. The out-of-flow layout set at construction
@@ -576,7 +719,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     try {
       // See pushSize comment — same reason: skip while the collapse
       // tween owns node.size[1].
-      if (nodeCollapseAnimating.has(node as object)) return;
+      if (nodeCollapseAnimating.has(mount as object)) return;
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
@@ -627,7 +770,10 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     if (unmounted) return;
     unmounted = true;
     liveHosts.delete(host);
-    nodeWidgetHosts.get(node)?.delete(host);
+    nodeWidgetHosts.get(mount)?.delete(host);
+    siblings.delete(self);
+    // A mirror cannot outlive the panel it shows.
+    if (!mirror) for (const p of [...siblings]) p.orphan?.();
     // Each step guarded so one failing teardown can't strand the rest.
     const steps: Array<() => void> = [
       () => scope.stop(),
@@ -648,7 +794,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // widget down. Wrap-and-call-original with `this` preserved, so ComfyUI's
   // own removal (and any other extension's) runs first and unchanged. We
   // never touch `widget.onRemove` — ComfyUI relies on its `this` binding.
-  const removable = node as unknown as { onRemoved?: (...a: unknown[]) => unknown };
+  const removable = mount as unknown as { onRemoved?: (...a: unknown[]) => unknown };
   const hadOwnOnRemoved = Object.prototype.hasOwnProperty.call(removable, "onRemoved");
   const origOnRemoved = removable.onRemoved;
   const onRemovedWrapper = function (this: unknown, ...args: unknown[]): unknown {
@@ -680,6 +826,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     getValue: () => state,
     setValue: (v) => {
       state = v;
+      broadcast(v);
     },
     requestRelayout,
   };

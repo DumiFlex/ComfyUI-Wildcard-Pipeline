@@ -1,5 +1,5 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
-import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { createDomWidgetHost, isMirrorBuild, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
@@ -53,6 +53,8 @@ export function loadFonts(): Promise<string[]> {
  * mark the grid preset that fits it.
  */
 export function create(node: LabelGridHostNode, inputName: string) {
+  /** Shown on a subgraph node: the dots stay on the node itself. */
+  const mirrored = isMirrorBuild(node);
   const config = ref<LabelGridConfig>(defaultLabelGridConfig());
   const lastRun = ref<LabelGridRun | null>(lastRuns.get(node) ?? null);
   const fonts = ref<string[]>(["default"]);
@@ -107,7 +109,7 @@ export function create(node: LabelGridHostNode, inputName: string) {
     lastRun.value = run;
   }
   listenApi(host, "executed", onExecuted);
-  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, WIRABLE));
+  if (!mirrored) host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, WIRABLE));
 
   return host;
 }
