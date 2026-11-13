@@ -110,6 +110,19 @@ tutorial(
       await t.uncallout("prev");
       await t.say("And Chip is a small pill that lights up while it's on. Keep the buttons.");
       await t.waitVoice();
+      const looks = [win().locator('[data-test="tg-window-icon"]'), win().locator('[data-test="tg-text-color"]')];
+      await t.callout("looks", looks, "Icon and colours", 4);
+      await t.say("Looks gives it an icon, and colours for the icon, the name and the control, so Day can be yellow and Night blue.");
+      await t.waitVoice();
+      await t.uncallout("looks");
+      await t.say("Value is what the variable gets while it's on. Off value is what it gets while it's off: write with empty hands.");
+      await t.fill(winField("tg-off-value"), "with empty hands", { cps: 16 });
+      await t.press("Tab");
+      await t.waitVoice();
+      await t.callout("neg", [winField("tg-negative"), winField("tg-off-negative")], "Negatives for each side", 4);
+      await t.say("Each side also has a negative, sent only when the Assembler prints this variable.");
+      await t.waitVoice();
+      await t.uncallout("neg");
       await winDone();
       const globe = row(n.tg, "Lantern").locator('[data-test^="tg-internal-"]').first();
       await t.say("Turn off its globe so the prompt can print it, and press Done.");
@@ -121,11 +134,12 @@ tutorial(
       await t.click(row(n.tg, "Lantern").getByText("With", { exact: true }).first());
       await previewSays(n.asm, /holding a lantern/, true);
       await t.callout("prev", preview(n.asm), "Lantern's words", 5);
-      await t.say("Its words are in the prompt. Click Without, and they're gone.");
+      await t.say("Its words are in the prompt. Click Without, and the off value takes their place.");
       await t.waitVoice();
       await t.uncallout("prev");
       await t.click(row(n.tg, "Lantern").getByText("Without", { exact: true }).first());
       await previewSays(n.asm, /holding a lantern/, false);
+      await previewSays(n.asm, /with empty hands/, true);
     });
 
     await t.h.step("One toggle needs another", async () => {
@@ -197,6 +211,77 @@ tutorial(
       await t.beat(500);
     });
 
+    await t.h.step("The edit view", async () => {
+      await openEdit(n.tg);
+      const btns = [row(n.tg, "Rain").locator('[data-test^="tg-edit-"]').first(), row(n.tg, "Rain").locator('[data-test^="tg-internal-"]').first(), row(n.tg, "Rain").locator('[data-test^="tg-remove-"]').first()];
+      await t.callout("btns", btns, "Pencil, globe, bin", 4);
+      await t.say("In the edit view each row has a pencil for its window, a globe, and a bin. The globe on keeps the variable for rules only; off, the Assembler can print it.");
+      await t.waitVoice();
+      await t.uncallout("btns");
+      await t.callout("lay", t.node(n.tg).locator('[aria-label="Layout"]'), "Rows or a grid", 4);
+      await t.say("Layout draws the toggles as rows, or as a grid of tiles that wraps to the node's width.");
+      await t.click(t.node(n.tg).locator('[data-test="tg-layout-grid"]'));
+      await t.beat(600);
+      await t.waitVoice();
+      await t.uncallout("lay");
+      await t.click(t.node(n.tg).locator('[data-test="tg-layout-rows"]'));
+      await t.beat(400);
+      await editDone(n.tg);
+    });
+
+    await t.h.step("Pick one", async () => {
+      await t.say("So far every toggle was on or off by itself: Any on. Pick one turns a node into radio buttons. Add a second Toggles between the first and the Context.");
+      await t.speedUp(4);
+      const tg2 = await t.addNode("WP Toggles", { x: 300, y: 640 });
+      await t.wire(n.tg, "context", tg2, "upstream");
+      await t.wire(tg2, "context", n.ctx, "upstream");
+      await openEdit(tg2);
+      await t.click(t.node(tg2).locator('[data-test="tg-mode-one"]'));
+      await t.beat(400);
+      const times: [string, string][] = [["Dawn", "at dawn"], ["Dusk", "at dusk"], ["Night", "at night"]];
+      for (const [i, [name, value]] of times.entries()) {
+        if (i === 0) await t.click(t.node(tg2).locator('[data-test^="tg-edit-"]').first());
+        else await t.click(t.node(tg2).locator('[data-test="tg-add"]'));
+        await t.beat(500);
+        await t.fill(winField("tg-name"), name, { cps: 20 });
+        await t.press("Tab");
+        await t.fill(winField("tg-value"), value, { cps: 20 });
+        await t.press("Tab");
+        await winDone();
+      }
+      await t.normalSpeed();
+      await t.say("Three toggles: Dawn, Dusk and Night, each with its words. writes names one variable that gets the picked toggle's value. Write time.", "Three toggles: Dawn, Dusk and Night, each with its words. Writes names one variable that gets the picked toggle's value. Write time.");
+      await t.fill(t.node(tg2).locator('[data-test="tg-group-var"] input, input[data-test="tg-group-var"]').first(), "time", { cps: 14 });
+      await t.press("Tab");
+      await t.waitVoice();
+      await t.say("Show in Assembler lets it print.");
+      await t.click(t.node(tg2).locator('[data-test="tg-group-visible"]'));
+      await t.beat(400);
+      await t.waitVoice();
+      await t.callout("ps", t.node(tg2).locator('[aria-label="Pick one style"]'), "Every row's look", 4);
+      await t.say("In Pick one, one style sets every row: radio dots, chips, switches or checks. Chips.");
+      await t.click(t.node(tg2).locator('[data-test="tg-pick-style-chip"]'));
+      await t.beat(500);
+      await t.waitVoice();
+      await t.uncallout("ps");
+      await t.callout("gu", t.node(tg2).locator('[data-test="tg-group-upstream"]'), "A preset can pick", 4);
+      await t.say("Upstream can pick lets a Context before it name the toggle to pick, through the same variable.");
+      await t.waitVoice();
+      await t.uncallout("gu");
+      await editDone(tg2);
+      await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
+      await t.press("ControlOrMeta+End");
+      await t.type(" $time", { cps: 16 });
+      await t.press("Escape");
+      await t.say("Add dollar time to the prompt, and pick Night.");
+      await t.click(t.node(tg2).locator('[data-test^="tg-row-"]').filter({ hasText: "Night" }).locator('[data-test^="tg-ctl-"]').first());
+      await previewSays(n.asm, /at night/, true);
+      await t.callout("p", preview(n.asm), "The picked words", 4);
+      await t.say("Picking one switches the others off, and dollar time prints its words.");
+      await t.waitVoice();
+      await t.uncallout("p");
+    });
+
     await t.h.step("The rest of a toggle's window", async () => {
       await openEdit(n.tg);
       await openRow(n.tg, "Lantern");
@@ -216,6 +301,10 @@ tutorial(
       await t.say("Invert turns it around: bypass while on, for a branch you only want when the switch is off.");
       await t.waitVoice();
       await t.uncallout("inv");
+      await t.callout("grps", win().locator('[data-test="tg-groups"]'), "Canvas groups, by title", 4);
+      await t.say("Canvas groups covers whole groups on the canvas by their title, with no wires at all. Group moves the toggle under another label.");
+      await t.waitVoice();
+      await t.uncallout("grps");
       await t.click(win().locator('[data-test="tg-control-"]'));
       await t.beat(400);
       const pin = win().locator('[data-test="tg-pin"]');
@@ -231,6 +320,17 @@ tutorial(
       await t.say("The node now has a Lantern output, true or false.");
       await t.waitVoice();
       await t.uncallout("out");
+    });
+
+    await t.h.step("How it works, recipes and gotchas", async () => {
+      await t.say("upstream takes a Context to extend, and context (out) carries every toggle variable on. Each toggle writes true or false, or its Value and Off value, and dollar name dot bool is always true or false.", "Upstream takes a Context to extend, and the context output carries every toggle variable on. Each toggle writes true or false, or its Value and Off value, and dollar name dot bool is always true or false.");
+      await t.waitVoice();
+      await t.say("Muting and bypassing happen on the canvas as you flip a switch, before the run. The words happen during the run.");
+      await t.waitVoice();
+      await t.say("Recipes: a rule that branches on a toggle, a Node Group of samplers behind a When off, and a Toggles node at the top of a shared workflow as its control panel.");
+      await t.waitVoice();
+      await t.say("Gotchas: a toggle with its globe on never prints, so turn it off for words. And only nodes after the Toggles see its variables.");
+      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {
