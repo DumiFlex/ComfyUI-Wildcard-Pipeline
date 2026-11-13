@@ -83,6 +83,7 @@ def apply_fuzzy(text: str, mode: str, config: dict) -> RuleResult:
     for tag in tags:
         key = tag.casefold()
         is_dup = False
+        near, score = "", 0.0
         # Versioned file references are near-identical strings by design --
         # `embedding:badhandv4` vs `...v5` scores well above the 0.9 threshold
         # while naming two different files. Exact dedupe still collapses a

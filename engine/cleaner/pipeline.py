@@ -153,7 +153,7 @@ class PromptCleaner:
         overrides: dict[str, bool] = dict(cfg.get("negative_rules_override") or {})
         active = _effective_rules(intensity, overrides, INTENSITY_TO_NEG_RULES)
         out, rule_report, steps = _run_rules(text, mode, cfg, active)
-        report: dict[str, Any] = dict(rule_report)
+        report: dict[str, Any] = {**rule_report}
 
         from engine.negatives import split_tags, tag_key  # noqa: PLC0415
 
