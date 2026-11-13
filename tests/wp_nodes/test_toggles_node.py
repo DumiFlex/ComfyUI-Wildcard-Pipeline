@@ -329,3 +329,22 @@ def test_a_value_carries_the_negatives_of_what_it_reads():
     ]}
     neg = _run(config=one, upstream=up).values[0].internals[negatives.NEG_KEY]
     assert [e["text"] for e in neg["time"]] == ["bright", "noon"]
+
+
+def test_values_print_escapes_and_read_resolved_toggles():
+    """`$$` / `@@` print one `$` / `@` in every value, and a value that reads
+    another toggle sees that toggle's resolved text, whatever the order."""
+    def row(tid, var, value):
+        return {"id": tid, "kind": "toggle", "name": var, "var": var, "on": True,
+                "pin": False, "out": 0, "style": "switch", "value": value}
+    cfg = {"version": 1, "mode": "any", "group_var": "", "rows": [
+        row("00000001", "rain", "rain on a $$5 coat"),
+        row("00000002", "mail", "$zed at mail@@home"),
+        row("00000003", "plain", "mail@@home"),
+        row("00000004", "zed", "$rain, $$1"),
+    ]}
+    ctx = _run(cfg).values[0].context
+    assert ctx["rain"] == "rain on a $5 coat"
+    assert ctx["zed"] == "rain on a $5 coat, $1"
+    assert ctx["mail"] == "rain on a $5 coat, $1 at mail@home"
+    assert ctx["plain"] == "mail@home"

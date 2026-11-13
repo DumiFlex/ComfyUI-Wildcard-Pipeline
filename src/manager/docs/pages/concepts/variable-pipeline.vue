@@ -86,8 +86,10 @@ import DocRef from "../../../components/docs/DocRef.vue";
               part twice.</td>
           </tr>
           <tr>
-            <td><VarToken kind="inline">$$</VarToken> · <VarToken kind="inline">@@</VarToken> · <VarToken kind="inline">&#123;&#123;</VarToken></td>
-            <td>Print a plain <code>$</code>, <code>@</code> or <code>&#123;</code>.</td>
+            <td><VarToken kind="inline">$$</VarToken> · <VarToken kind="inline">@@</VarToken></td>
+            <td>Print a plain <code>$</code> or <code>@</code>. Braces need no escape: only a closed
+              <code>&#123;…&#125;</code> with a <code>|</code> (or a <code>&#123;2$$…&#125;</code> count) is a
+              pick, so <code>&#123;word&#125;</code> and <code>&#123;&#123;word&#125;&#125;</code> print as written.</td>
           </tr>
         </tbody>
       </table>

@@ -4,6 +4,7 @@ import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import { modelSyntaxHtml } from "../../widgets/richTokenize";
 import { buildNegativePreview, type NegativesTable } from "../../extension/negatives";
+import { templatePieces, templateVarReads } from "../../extension/template-pieces";
 import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
 import {
@@ -115,27 +116,11 @@ const emit = defineEmits<{
 /** Upstream variable names. */
 const upstreamNames = computed(() => props.upstreamVars ?? []);
 
-// Sentinel survives both regex passes — the Unicode replacement character;
-// doubled, it can't appear in real prompts.
-const ESCAPE_PLACEHOLDER = "��";
-const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
-// SP2a: capture an optional `.K` list accessor (group 2) so `$mood.0` consumes
-// the whole token — `m[0].length` then advances past `.K` (no stranded ".0"
-// literal) and group 2 drives applyVarAccessor in the substitution below.
-// Groups: 1=name · 2=index · 3=axis. The accessor has to be part of the match
-// or the preview prints the resolved value and strands ".SHOES" after it.
-// Both accessor orders the engine accepts (`$o.0.SHOES`, `$o.SHOES.0`); the
-// match is re-split by `varAccessorParts`, the one canonical grammar.
-const TEMPLATE_VAR_RE =
-  /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+(?:\.[A-Za-z_][A-Za-z0-9_]*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?))?/g;
-
 /** Variable names referenced in the template. */
 const templateVarsInternal = computed(() => {
   if (props.templateVars) return props.templateVars;
-  const sanitized = props.template.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
-  const matches = sanitized.match(VAR_RE);
-  if (!matches) return [];
-  return [...new Set(matches.map((m) => m.slice(1)).filter((v) => !v.startsWith("__")))];
+  const names = templateVarReads(props.template).map((r) => r.name);
+  return [...new Set(names.filter((v) => !v.startsWith("__")))];
 });
 
 /** Upstream variables neither the prompt nor the negative box reads — what
@@ -144,7 +129,7 @@ const templateVarsInternal = computed(() => {
 const unusedHere = computed(() => {
   const used = new Set<string>();
   for (const text of [props.template, props.negativeTemplate ?? ""]) {
-    for (const m of text.replace(/\$\$/g, ESCAPE_PLACEHOLDER).matchAll(VAR_RE)) used.add(m[1]);
+    for (const r of templateVarReads(text)) used.add(r.name);
   }
   return upstreamNames.value.filter((v) => !used.has(v));
 });
@@ -255,17 +240,18 @@ const previewTokens = computed<PreviewToken[]>(() => {
   // Primary path: per-var resolved map. Walk template + look up each $var
   // directly. No boundary-disambiguation needed.
   if (props.resolvedMap !== undefined) {
+    // `$$` / `@@` print one `$` / `@`, as the engine prints them.
     const tokens: PreviewToken[] = [];
-    let last = 0;
-    for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
-      const idx = m.index ?? 0;
-      if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
-      const raw = m[0];
+    for (const piece of templatePieces(props.template)) {
+      if (piece.kind !== "var") {
+        tokens.push({ kind: "literal", text: piece.kind === "text" ? piece.text : piece.raw });
+        continue;
+      }
+      const raw = piece.raw;
       const { base: name, index, axis } = varAccessorParts(raw);
       const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
       if (!has && partialFrames(name)) {
         tokens.push({ kind: "off", text: raw, varName: name });
-        last = idx + m[0].length;
         continue;
       }
       tokens.push({
@@ -275,10 +261,6 @@ const previewTokens = computed<PreviewToken[]>(() => {
           : (has ? applyVarAccessor(props.resolvedMap[name], index) : raw),
         varName: name,
       });
-      last = idx + m[0].length;
-    }
-    if (last < props.template.length) {
-      tokens.push({ kind: "literal", text: props.template.slice(last) });
     }
     return tokens;
   }
@@ -286,16 +268,10 @@ const previewTokens = computed<PreviewToken[]>(() => {
   if (props.resolved !== undefined) {
     if (!props.resolved) {
       // No resolved string yet — render template with var highlights.
-      const tokens: PreviewToken[] = [];
-      let last = 0;
-      for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
-        const idx = m.index ?? 0;
-        if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
-        tokens.push({ kind: "var", text: m[0], varName: m[1] });
-        last = idx + m[0].length;
-      }
-      if (last < props.template.length) tokens.push({ kind: "literal", text: props.template.slice(last) });
-      return tokens;
+      return templatePieces(props.template).map((p): PreviewToken =>
+        p.kind === "var"
+          ? { kind: "var", text: p.raw, varName: p.name }
+          : { kind: "literal", text: p.kind === "text" ? p.text : p.raw });
     }
 
     // Legacy fallback — walk template + resolved in parallel. Suffers from
@@ -303,15 +279,11 @@ const previewTokens = computed<PreviewToken[]>(() => {
     // contains the literal that bounds the next var. Prefer `resolvedMap`.
     const tpl = props.template;
     const res = props.resolved;
-    const segments: Array<{ kind: "literal" | "var"; text: string; varName?: string }> = [];
-    let last = 0;
-    for (const m of tpl.matchAll(TEMPLATE_VAR_RE)) {
-      const idx = m.index ?? 0;
-      if (idx > last) segments.push({ kind: "literal", text: tpl.slice(last, idx) });
-      segments.push({ kind: "var", text: m[0], varName: m[1] });
-      last = idx + m[0].length;
-    }
-    if (last < tpl.length) segments.push({ kind: "literal", text: tpl.slice(last) });
+    const segments: Array<{ kind: "literal" | "var"; text: string; varName?: string }> =
+      templatePieces(tpl).map((p) =>
+        p.kind === "var"
+          ? { kind: "var" as const, text: p.raw, varName: p.name }
+          : { kind: "literal" as const, text: p.kind === "text" ? p.text : p.raw });
 
     const tokens: PreviewToken[] = [];
     let cursor = 0;
@@ -346,14 +318,16 @@ const previewTokens = computed<PreviewToken[]>(() => {
  *  axis); a variable with no value renders nothing, as in the engine. */
 function renderVarsRaw(text: string): string {
   const map = props.resolvedMap ?? {};
-  return text.replace(TEMPLATE_VAR_RE, (raw) => {
-    const { base, index, axis } = varAccessorParts(raw);
+  return templatePieces(text).map((p) => {
+    if (p.kind === "text") return p.text;
+    if (p.kind !== "var") return p.raw;
+    const { base, index, axis } = varAccessorParts(p.raw);
     if (axis) {
-      const out = axisText(base, axis, index, raw);
-      return out === raw ? "" : out;
+      const out = axisText(base, axis, index, p.raw);
+      return out === p.raw ? "" : out;
     }
     return Object.prototype.hasOwnProperty.call(map, base) ? applyVarAccessor(map[base], index) : "";
-  });
+  }).join("");
 }
 
 /** What the node's `negative` output will be, built locally from the

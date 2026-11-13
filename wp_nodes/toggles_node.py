@@ -11,6 +11,7 @@ Resolution (``needs`` links, Pick one) lives in ``engine/toggles.py``.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
@@ -18,6 +19,29 @@ from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 from engine import negatives, template, toggles
 from wp_nodes.types import PipelineContext, TogglesWidgetInput
 
+
+def _has_syntax(text: str) -> bool:
+    """Whether the text needs resolving: a `$var` / `$$`, an `@{ref}` /
+    `@@` or a `{…}`. Plain text is left exactly as written."""
+    return "$" in text or "{" in text or "@" in text
+
+
+# A `$name` read (an escaped `$$name` is not one).
+_READ = re.compile(r"(?<!\$)(?:\$\$)*\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _read_order(values: dict[str, str], names: set[str]) -> list[str]:
+    """``names`` sorted, then moved so a value that reads another toggle's
+    value comes after it (that read then sees the resolved text, `$$`
+    already a `$`). A loop keeps the sorted order for what is left."""
+    pending = sorted(names)
+    reads = {n: {m for m in _READ.findall(values[n]) if m in names and m != n} for n in pending}
+    out: list[str] = []
+    while pending:
+        ready = next((n for n in pending if not reads[n] - set(out)), pending[0])
+        out.append(ready)
+        pending.remove(ready)
+    return out
 
 class WPToggles(io.ComfyNode):
     """Chain source of on/off variables, plus a BOOLEAN per pinned toggle."""
@@ -78,11 +102,14 @@ class WPToggles(io.ComfyNode):
         # then the pick, which may hold a toggle's value.
         value_warnings: list = []
         read_ctx = {**upstream_ctx, toggles.BOOLS_KEY: on_off}
-        value_order = [*sorted(valued - {group}), *([group] if group in values else [])]
+        value_order = [
+            *_read_order(values, valued - {group}),
+            *([group] if group in values else []),
+        ]
         value_reads: dict[str, list] = {}
         for name in value_order:
             text = values[name]
-            if "$" in text or "{" in text:
+            if _has_syntax(text):
                 value_reads[name] = []
                 values[name] = template.resolve_variables(
                     text, {**read_ctx, **values, "__wp_warnings__": value_warnings},
@@ -90,7 +117,7 @@ class WPToggles(io.ComfyNode):
                 )
 
         def resolve_neg(text: str) -> str:
-            if "$" in text or "{" in text:
+            if _has_syntax(text):
                 text = template.resolve_variables(text, {**read_ctx, **values})
             return text.strip()
 

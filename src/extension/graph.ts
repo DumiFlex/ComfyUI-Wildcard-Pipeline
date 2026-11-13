@@ -4,7 +4,8 @@ import {
   parseWidgetJson,
   type ContextWidgetValue,
 } from "../widgets/_shared";
-import { applyVarAccessor, type ResolvedValue } from "../widgets/richTokenize";
+import { applyVarAccessor, varAccessorParts, type ResolvedValue } from "../widgets/richTokenize";
+import { templatePieces, templateVarReads, unescapeTemplate } from "./template-pieces";
 import { bindFilterForRun } from "@/manager/parsing/subcatFilter";
 // probability.ts is a pure (no-Vue) module despite its path — reused here so
 // the static multi-pick representative mirrors the engine pool exactly.
@@ -19,7 +20,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { TOGGLES_NODE, staticToggleInternals, staticToggleNegatives, staticToggleValues, togglesPreviewModules } from "./toggles";
+import { TOGGLES_NODE, nodeTogglesConfig, resolveToggles, staticToggleInternals, staticToggleNegatives, staticToggleValues, togglesPreviewModules, type TogglesConfig } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
@@ -1426,11 +1427,6 @@ export function collectUpstreamProducers(
  * matching the runtime walker's `max_ref_depth`.
  * -------------------------------------------------------------------- */
 
-// SP2a: optional `.K` list accessor (group 2) so `$mood.0` is consumed whole
-// (no stranded ".0" literal) and the index drives applyVarAccessor below.
-const VAR_REF_RE =
-  /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?(?:\.(\d+))?/g;
-const WC_REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 const MAX_REF_DEPTH = 8;
 
 interface MinimalWildcard {
@@ -1670,7 +1666,8 @@ function resolveChainStatic(
     }
     if (n.type === TOGGLES_NODE) {
       const hidden = staticToggleInternals(n);
-      for (const [k, v] of Object.entries(staticToggleValues(n))) {
+      const cfg = nodeTogglesConfig(n);
+      for (const [k, v] of Object.entries(resolveToggleTexts(cfg, ctx, catalog))) {
         ctx[k] = v;
         if (hidden.has(k)) internalKeys.add(k);
         else internalKeys.delete(k);
@@ -1892,6 +1889,7 @@ function writeBindings(
     // `instance.enabled_options` filters which row ids emit bindings
     // (engine `fixed_values_handler.py:64`). Apply the same filter
     // here so disabled rows don't appear in upstream-vars / preview.
+    // A value prints `$$` / `@@` as one `$` / `@`, as the engine does.
     const inst = (m.instance ?? {}) as {
       values_overrides?: Array<{ id?: string; name?: string; value?: string }>;
       enabled_options?: string[] | null;
@@ -1907,7 +1905,7 @@ function writeBindings(
       for (const val of overrides) {
         if (!passesFilter(val.id)) continue;
         const name = (val.name ?? "").replace(/^\$/, "").trim();
-        if (name) ctx[name] = String(val.value ?? "");
+        if (name) ctx[name] = unescapeTemplate(String(val.value ?? ""));
       }
       return;
     }
@@ -1935,12 +1933,12 @@ function writeBindings(
       if (!name) continue;
       const libId = libNameToId.get(e.variable_name);
       if (!passesFilter(libId)) continue;
-      ctx[name] = String(e.value ?? "");
+      ctx[name] = unescapeTemplate(String(e.value ?? ""));
     }
     for (const val of libValues) {
       if (!passesFilter(val.id)) continue;
       const name = (val.name ?? "").replace(/^\$/, "").trim();
-      if (name) ctx[name] = String(val.value ?? "");
+      if (name) ctx[name] = unescapeTemplate(String(val.value ?? ""));
     }
     return;
   }
@@ -2151,76 +2149,134 @@ function expandValue(
 ): string {
   if (!raw) return raw;
   if (depth > MAX_REF_DEPTH) return raw;
-  // 1. Substitute `$var` (+ optional `.K` accessor) with ctx values; leave
-  //    unknowns (incl. their accessor) intact. ctx values are strings in this
-  //    static resolver, so applyVarAccessor treats `$s.0` as `$s` and `$s.K>0`
-  //    as "" — never leaking the literal ".K" into the preview.
-  let out = raw.replace(
-    VAR_REF_RE,
-    (full, name, idxA, axis, idxB) => {
-      if (!Object.prototype.hasOwnProperty.call(ctx, name)) return full;
-      const idx = idxA ?? idxB;
-      const base = applyVarAccessor(
-        ctx[name],
-        idx != null ? parseInt(idx, 10) : undefined,
-      );
-      // An axis read resolves to a TAG, not to the variable's text. Without
-      // this the preview substituted `$outfit` and left `.SHOES` stranded, so
-      // both the preview and the resolved line read
-      // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
-      // in exactly the editor meant to teach it.
-      if (axis == null) return base;
-      // `$name.neg` reads the variable's negatives, which the static preview
-      // doesn't track: render nothing rather than a stray accessor.
-      if (axis === "neg") return "";
-      // `$name.bool` reads a toggle's on/off: a toggle with a value holds the
-      // value while on and nothing while off.
-      if (axis === "bool") {
-        const v = base.trim().toLowerCase();
-        return v === "true" || v === "false" ? v : v ? "true" : "false";
+  // One pass over the text as the engine reads it (`templatePieces`): `$$`
+  // and `@@` print one `$` / `@`, `$var` and `@{uuid}` are substituted, and
+  // a `{…}` pick stays as written (no rng here). One pass, so an escape is
+  // undone exactly once and a value is never re-read as syntax.
+  return templatePieces(raw).map((piece) => {
+    if (piece.kind === "text") return piece.text;
+    if (piece.kind === "pick") return piece.raw;
+    if (piece.kind === "var") return expandVar(piece.raw, ctx, catalog);
+    return expandRef(piece.raw, piece.uuid, ctx, catalog, depth);
+  }).join("");
+}
+
+/** Whether a toggle value needs resolving (mirror of the node's
+ *  `_has_syntax`): plain text is left exactly as written. */
+function hasTemplateSyntax(text: string): boolean {
+  return text.includes("$") || text.includes("{") || text.includes("@");
+}
+
+/**
+ * A WP Toggles node's variables with their values resolved as the node
+ * resolves them (`wp_nodes/toggles_node.py`): a value reads upstream
+ * variables and the toggles' own, `$$` / `@@` print one `$` / `@`, and a
+ * value read by another is resolved first; the Pick one value goes last.
+ */
+function resolveToggleTexts(
+  cfg: TogglesConfig,
+  ctx: Record<string, ResolvedValue>,
+  catalog: Map<string, MinimalWildcard>,
+): Record<string, string> {
+  const values = resolveToggles(cfg);
+  const group = cfg.mode === "one" ? cfg.group_var : "";
+  const out: Record<string, string> = { ...values };
+  const done = new Set<string>();
+  const busy = new Set<string>();
+  const resolve = (name: string): void => {
+    if (done.has(name) || busy.has(name)) return;
+    const raw = values[name] ?? "";
+    if (hasTemplateSyntax(raw)) {
+      busy.add(name);
+      for (const r of templateVarReads(raw)) {
+        if (r.name !== group && Object.prototype.hasOwnProperty.call(values, r.name)) resolve(r.name);
       }
-      const tag = previewAxisTag(catalog, name, axis);
-      return tag ?? full;
-    },
-  );
-  // 2. Substitute `@{8hex}` with the referenced wildcard's first option,
-  //    recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")
-  //    flatten. Resolution ladder:
-  //      a. chain catalog (sibling/cousin wildcards in any chain Context)
-  //      b. lazy preview-resolver cache (background-fetched from DB)
-  //      c. preview-resolver name fallback → render `[name]` so users
-  //         see something meaningful even before the fetch resolves
-  //         a `firstOption`, or for non-wildcard kinds that have no
-  //         option to expand
-  //      d. raw `@{uuid}` placeholder (last resort — will resolve to
-  //         the real value at runtime via the live DB walker)
-  //
-  // Deep-nesting note: when (b) recurses into a cached firstOption that
-  // ITSELF contains `@{}` refs not yet cached, the inner replace lands
-  // back here on the next pass. Cache-miss + fire `ensure()` for that
-  // nested uuid so the next 400ms poll has it ready. Chain length N
-  // therefore takes ~N polling ticks to fully expand; each tick
-  // surfaces one more level instead of stalling at the first miss.
-  out = out.replace(WC_REF_RE, (full, uuid) => {
-    const target = catalog.get(uuid);
-    const opts = target?.options ?? [];
-    if (opts.length) {
-      return expandValue(String(opts[0].value ?? ""), ctx, catalog, depth + 1);
+      busy.delete(name);
+      out[name] = expandValue(raw, { ...ctx, ...out }, catalog, 0);
     }
-    const lk = previewLookup(uuid);
-    if (lk?.firstOption !== undefined) {
-      return expandValue(lk.firstOption, ctx, catalog, depth + 1);
-    }
-    if (lk === undefined) {
-      // First time we see this uuid in any expansion path — queue it.
-      // `ensure` is idempotent + fire-and-forget; subsequent ticks read
-      // from cache via the branch above.
-      ensurePreviewLookup([uuid]);
-    }
-    if (lk?.name) return `[${lk.name}]`;
-    return full;
-  });
+    done.add(name);
+  };
+  for (const name of Object.keys(values)) if (name !== group) resolve(name);
+  if (group && Object.prototype.hasOwnProperty.call(values, group)) resolve(group);
   return out;
+}
+
+/** A `$var` read (+ optional `.K` / `.AXIS` accessor) with its ctx value;
+ *  an unknown name (accessor included) stays as written. ctx values are
+ *  strings in this static resolver, so applyVarAccessor treats `$s.0` as
+ *  `$s` and `$s.K>0` as "" — never leaking the literal ".K" into the
+ *  preview. */
+function expandVar(
+  full: string,
+  ctx: Record<string, ResolvedValue>,
+  catalog: Map<string, MinimalWildcard>,
+): string {
+  const { base: name, index, axis } = varAccessorParts(full);
+  if (!Object.prototype.hasOwnProperty.call(ctx, name)) return full;
+  const base = applyVarAccessor(ctx[name], index);
+  // An axis read resolves to a TAG, not to the variable's text. Without
+  // this the preview substituted `$outfit` and left `.SHOES` stranded, so
+  // both the preview and the resolved line read
+  // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
+  // in exactly the editor meant to teach it.
+  if (axis == null) return base;
+  // `$name.neg` reads the variable's negatives, which the static preview
+  // doesn't track: render nothing rather than a stray accessor.
+  if (axis === "neg") return "";
+  // `$name.bool` reads a toggle's on/off: a toggle with a value holds the
+  // value while on and nothing while off.
+  if (axis === "bool") {
+    const v = base.trim().toLowerCase();
+    return v === "true" || v === "false" ? v : v ? "true" : "false";
+  }
+  const tag = previewAxisTag(catalog, name, axis);
+  return tag ?? full;
+}
+
+/**
+ * Substitute `@{8hex}` with the referenced wildcard's first option,
+ * recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")
+ * flatten. Resolution ladder:
+ *   a. chain catalog (sibling/cousin wildcards in any chain Context)
+ *   b. lazy preview-resolver cache (background-fetched from DB)
+ *   c. preview-resolver name fallback → render `[name]` so users
+ *      see something meaningful even before the fetch resolves
+ *      a `firstOption`, or for non-wildcard kinds that have no
+ *      option to expand
+ *   d. raw `@{uuid}` placeholder (last resort — will resolve to
+ *      the real value at runtime via the live DB walker)
+ *
+ * Deep-nesting note: when (b) recurses into a cached firstOption that
+ * ITSELF contains `@{}` refs not yet cached, the inner expansion lands
+ * back here on the next pass. Cache-miss + fire `ensure()` for that
+ * nested uuid so the next 400ms poll has it ready. Chain length N
+ * therefore takes ~N polling ticks to fully expand; each tick
+ * surfaces one more level instead of stalling at the first miss.
+ */
+function expandRef(
+  full: string,
+  uuid: string,
+  ctx: Record<string, ResolvedValue>,
+  catalog: Map<string, MinimalWildcard>,
+  depth: number,
+): string {
+  const target = catalog.get(uuid);
+  const opts = target?.options ?? [];
+  if (opts.length) {
+    return expandValue(String(opts[0].value ?? ""), ctx, catalog, depth + 1);
+  }
+  const lk = previewLookup(uuid);
+  if (lk?.firstOption !== undefined) {
+    return expandValue(lk.firstOption, ctx, catalog, depth + 1);
+  }
+  if (lk === undefined) {
+    // First time we see this uuid in any expansion path — queue it.
+    // `ensure` is idempotent + fire-and-forget; subsequent ticks read
+    // from cache via the branch above.
+    ensurePreviewLookup([uuid]);
+  }
+  if (lk?.name) return `[${lk.name}]`;
+  return full;
 }
 
 /**

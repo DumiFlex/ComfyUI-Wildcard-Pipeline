@@ -996,6 +996,35 @@ describe("collectUpstreamResolved axis reads", () => {
   });
 });
 
+describe("collectUpstreamResolved toggle values", () => {
+  it("reads variables and prints $$ as $ in a toggle's value, as the node does", () => {
+    const rows = [
+      { id: "a", kind: "toggle", name: "Rain", var: "rain", on: true, pin: false, out: 0, style: "switch", value: "rain on a $$5 coat" },
+      { id: "b", kind: "toggle", name: "Mail", var: "mail", on: true, pin: false, out: 0, style: "switch", value: "$zed at mail@@home" },
+      { id: "c", kind: "toggle", name: "Plain", var: "plain", on: true, pin: false, out: 0, style: "switch", value: "mail@@home" },
+      { id: "d", kind: "toggle", name: "Zed", var: "zed", on: true, pin: false, out: 0, style: "switch", value: "$rain, $$1" },
+    ];
+    const tg: LiteNodeLike = {
+      id: 1,
+      type: "WP_Toggles",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_toggles", value: JSON.stringify({ version: 1, mode: "any", group_var: "", rows }) }],
+    };
+    const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }] };
+    const g = {
+      _nodes: [tg, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: tg, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+    const out = collectUpstreamResolved(g, asm);
+    expect(out.rain).toBe("rain on a $5 coat");
+    // A value read by another is resolved first, whatever the row order.
+    expect(out.zed).toBe("rain on a $5 coat, $1");
+    expect(out.mail).toBe("rain on a $5 coat, $1 at mail@home");
+    expect(out.plain).toBe("mail@home");
+  });
+});
+
 describe("collectUpstreamResolved derivation condition groups", () => {
   beforeEach(() => _resetForTests());
 
@@ -1348,6 +1377,30 @@ describe("collectLocalResolvedForModule", () => {
     expect(result.style).toBe("moody");
     // editing module excluded — its own binding doesn't surface
     expect(result.result).toBeUndefined();
+  });
+
+  it("prints $$ / @@ in module values as one $ / @, as the engine does", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "fv000009", type: "fixed_values", enabled: true, meta: { name: "" }, entries: [],
+        payload: { values: [{ id: "v1", name: "price", value: "$$5" }] },
+      },
+      {
+        id: "wc000009", type: "wildcard", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { var_binding: "$tag", options: [{ id: "o1", value: "mail@@home, $$tag" }] },
+      },
+      {
+        id: "cb000009", type: "combine", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { template: "$$$price coin, $$tag, {2$$, $$a|b}", output_var: "line" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    expect(result.price).toBe("$5");
+    expect(result.tag).toBe("mail@home, $tag");
+    // `$$` then a read of `$price` (already "$5"); a pick stays as written.
+    expect(result.line).toBe("$$5 coin, $tag, {2$$, $$a|b}");
   });
 
   it("match_variable only matches options the node's toggles keep", () => {
