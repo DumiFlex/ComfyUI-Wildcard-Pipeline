@@ -52,6 +52,7 @@ tutorial(
 
     const n = await t.h.step("What runs again", async () => {
       await t.go("/");
+      await t.say("A Context Loop runs everything after it once per frame, each frame with its own picks. Here's a small workflow to try it on.");
       await t.speedUp();
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
@@ -169,7 +170,7 @@ tutorial(
       const tag = t.node(n.asm).locator('[data-test="asm-frames-companion"]');
       if (await tag.isVisible().catch(() => false)) {
         await t.callout("tag", [tag, t.node(n.asm).locator('[data-test="asm-some-frames"]')], "Set on frame 4 only", 5);
-        await t.say("The Assembler knows: companion carries a frame tag, number four, and the header says one variable is on some frames. It isn't missing; it's set on frame four.");
+        await t.say("The Assembler knows: companion carries a frame tag, number four, and the header counts two variables on some frames: the companion, and the lighting frame three switches off. Neither is missing.");
         await t.waitVoice();
         await t.uncallout("tag");
         const step = t.node(n.asm).locator('[data-test="asm-frame-step"]');
