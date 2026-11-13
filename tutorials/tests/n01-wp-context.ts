@@ -142,9 +142,9 @@ tutorial(
       await t.pickModules(c2, ["Role"]);
       await t.beat(900);
       await t.waitVoice();
-      const dot = t.moduleRow(c2, "Role").locator(".wp-conflict-dot, .wp-conflict-badge").first();
+      const dot = t.moduleRow(c2, "Role").locator(".wp-conflict-badge").first();
       await t.callout("dot", dot, "Replaces the one upstream", 4);
-      await t.say("The blue dot is information: this Role writes over the one from upstream. Amber means have a look. Neither ever stops a run. Hover a dot to read it.");
+      await t.say("The blue badge is information: this Role writes over the one from upstream. Amber means have a look. Neither ever stops a run. Hover a badge to read it.");
       await t.waitVoice();
       await t.uncallout("dot");
       await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
@@ -210,7 +210,7 @@ tutorial(
     });
 
     await t.h.step("Outro", async () => {
-      await t.say("Order your rows like a recipe, chain Contexts for stages, and use the dots to spot what writes over what. The Context page in the docs lists every marker.");
+      await t.say("Order your rows like a recipe, chain Contexts for stages, and use the badges to spot what writes over what. The Context page in the docs lists every marker.");
       await t.waitVoice();
     });
   },
