@@ -89,8 +89,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </DocDetails>
       <Banner tone="info" note>
         Setting a variable here clears the negatives it had from earlier nodes; the row's own
-        negative takes their place. A hidden row, or one that only feeds a derivation, never adds
-        to a negative.
+        negative takes their place. A template row also carries the negatives of the variables it
+        reads, before its own: <VarToken>$outfit</VarToken> = "$cloak with a silver clasp" brings
+        <VarToken>$cloak</VarToken>'s "torn fabric". A hidden row, or one that only feeds a
+        derivation, never adds to a negative.
       </Banner>
     </DocSection>
 
