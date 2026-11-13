@@ -80,7 +80,14 @@ tutorial(
       await t.say("Variables lists every variable at this point, its value, and the item that set it.");
       await t.waitVoice();
       await t.uncallout("vars");
-      const src = view(dbg).locator('[data-test="dbg-var-src"]').first();
+      const card = view(dbg).locator('[data-test="dbg-var-section-head"]').first();
+      if (await card.isVisible().catch(() => false)) {
+        await t.callout("card", card, "One card per Context node", 4);
+        await t.say("Each Context node gets its own card, headed by its name and codename, so you can tell which node set what.");
+        await t.waitVoice();
+        await t.uncallout("card");
+      }
+      const src =view(dbg).locator('[data-test="dbg-var-src"]').first();
       if (await src.isVisible().catch(() => false)) {
         await t.callout("src", src, "The item that set it", 4);
         await t.say("The icon and colour on the left say what kind of item set it: a wildcard, a rule, Toggles, Model Info, a Loop or an Injector.");
