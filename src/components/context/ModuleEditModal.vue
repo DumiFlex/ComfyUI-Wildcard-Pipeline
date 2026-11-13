@@ -549,8 +549,12 @@ function cancel() {
 
   <!-- Themed confirm dialog — replaces window.confirm() for any
        prompt the modal raises (reset overrides, reset to library,
-       save to library). Single-instance: only one prompt at a time. -->
+       save to library). Single-instance: only one prompt at a time.
+       Mounted only while open: every kit modal sits at the same z-index, so
+       the later one in <body> is on top, and an always-mounted confirm
+       teleported BEFORE the editor window (shown later) opened under it. -->
   <ConfirmModal
+    v-if="confirmDialog !== null"
     :open="confirmDialog !== null"
     :title="confirmDialog?.title ?? ''"
     :body="confirmDialog?.body ?? ''"
@@ -565,6 +569,7 @@ function cancel() {
        confirm flows that lived in onXxxSaveToLibraryClick — see the
        handlers above for the migration commentary. -->
   <PushToLibraryModal
+    v-if="pushToLibraryOpen"
     :open="pushToLibraryOpen"
     :draft="draft"
     @close="onPushToLibraryClose"
