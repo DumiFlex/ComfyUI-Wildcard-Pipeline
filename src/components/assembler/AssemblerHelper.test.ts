@@ -155,6 +155,20 @@ describe("AssemblerHelper resolvedMap (#12 — boundary-disambiguation fix)", ()
     expect(varSpans[1].classes()).toContain(varColorClass("mood"));
   });
 
+  it("prints $$ as one $, like the engine (a literal dollar)", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["role"],
+        templateVars: ["role"],
+        template: "A $role on a $$5 coin, $$role",
+        resolvedMap: { role: "ranger" },
+      },
+    });
+    const preview = wrapper.find('[data-test="asm-preview"]');
+    expect(preview.text()).toBe("A ranger on a $5 coin, $role");
+    expect(preview.findAll("span.res").length).toBe(1);
+  });
+
   it("renders unresolved vars as `$name` when not in the map", () => {
     const wrapper = mount(AssemblerHelper, {
       props: {
