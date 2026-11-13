@@ -46,6 +46,9 @@ def apply(text: str, mode: str, config: dict) -> RuleResult:
 def _apply_list(text: str, mode: str, entries: list[str]) -> RuleResult:
     norm_entries = [e for e in entries if isinstance(e, str) and e]
     dropped: list[str] = []
+    # Tags mode: `matched[i]` is the entry that dropped `dropped[i]`. Text
+    # mode drops the entries themselves, so `dropped` already names them.
+    matched: list[str] = []
     if mode == "tags":
         tags = [t.strip() for t in text.split(",") if t.strip()]
         kept: list[str] = []
@@ -56,8 +59,13 @@ def _apply_list(text: str, mode: str, entries: list[str]) -> RuleResult:
             except re.error:
                 continue
         for tag in tags:
-            if any(p.search(tag) or tag.casefold() == src.casefold() for src, p in compiled):
+            hit = next(
+                (src for src, p in compiled if p.search(tag) or tag.casefold() == src.casefold()),
+                None,
+            )
+            if hit is not None:
                 dropped.append(tag)
+                matched.append(hit)
             else:
                 kept.append(tag)
         out = ", ".join(kept)
@@ -73,12 +81,16 @@ def _apply_list(text: str, mode: str, entries: list[str]) -> RuleResult:
             out = new
         if any_changed:
             out = _cleanup_text(out)
-    return {"text": out, "stats": {"dropped": dropped, "errors": []}}
+    stats: dict = {"dropped": dropped, "errors": []}
+    if matched:
+        stats["matched"] = matched
+    return {"text": out, "stats": stats}
 
 
 def _apply_regex(text: str, mode: str, entries: list[str]) -> RuleResult:
     out = text
     dropped: list[str] = []
+    matched: list[str] = []
     errors: list[str] = []
     compiled: list[tuple[str, re.Pattern[str]]] = []
     for entry in entries:
@@ -92,9 +104,10 @@ def _apply_regex(text: str, mode: str, entries: list[str]) -> RuleResult:
         tags = [t.strip() for t in out.split(",") if t.strip()]
         kept: list[str] = []
         for tag in tags:
-            matched = any(p.search(tag) for _, p in compiled)
-            if matched:
+            hit = next((src for src, p in compiled if p.search(tag)), None)
+            if hit is not None:
                 dropped.append(tag)
+                matched.append(hit)
             else:
                 kept.append(tag)
         out = ", ".join(kept)
@@ -108,4 +121,7 @@ def _apply_regex(text: str, mode: str, entries: list[str]) -> RuleResult:
             out = new
         if any_changed:
             out = _cleanup_text(out)
-    return {"text": out, "stats": {"dropped": dropped, "errors": errors}}
+    stats: dict = {"dropped": dropped, "errors": errors}
+    if matched:
+        stats["matched"] = matched
+    return {"text": out, "stats": stats}

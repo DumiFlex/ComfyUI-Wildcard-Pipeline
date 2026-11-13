@@ -26,6 +26,7 @@ import {
 } from "./intensity";
 import type {
   CleanerNodeConfig,
+  CleanerTrace,
   Intensity,
   Mode,
   NegativeRunReport,
@@ -49,7 +50,9 @@ const props = withDefaults(defineProps<{
   negativeWordCount?: number | null;
   /** The node's `blocklist` text input is wired: its entries join the list. */
   blocklistWired?: boolean;
-}>(), { nodeMode: 0, negativeReport: null, negativeWordCount: null, blocklistWired: false });
+  /** The last run's trace: how many rules changed the prompt. */
+  lastRunTrace?: CleanerTrace | null;
+}>(), { nodeMode: 0, negativeReport: null, negativeWordCount: null, blocklistWired: false, lastRunTrace: null });
 
 /** The blocklist turns itself on when it has entries; a wired input counts. */
 const blocklistFilled = computed(() =>
@@ -60,6 +63,7 @@ const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const emit = defineEmits<{
   "update:modelValue": [next: CleanerNodeConfig];
   "open-blocklist": [];
+  "open-last-run": [];
 }>();
 
 const ALL_RULES: {
@@ -278,12 +282,17 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-/** "last run" lines, shown once a run cleaned a negative. */
+/** "last run" lines, shown after every run; the strip opens the Last run
+ *  window. */
 const promptRunLine = computed(() => {
   const parts = [plural(droppedCount(props.lastRunReport, ["dedupe_exact", "fuzzy_dedupe"]), "duplicate")];
   const blocked = droppedCount(props.lastRunReport, ["blocklist"]);
   if (blocked > 0) parts.push(`${blocked} blocklisted`);
-  return `prompt: ${parts.join(", ")}`;
+  const steps = props.lastRunTrace?.steps;
+  const head = steps
+    ? `${plural(steps.filter((s) => s.text !== undefined).length, "rule")} changed it · `
+    : "";
+  return `prompt: ${head}${parts.join(", ")}`;
 });
 const negativeRunLine = computed(() => {
   const r = props.negativeReport;
@@ -440,10 +449,22 @@ function isOverridden(rid: RuleId): boolean {
       </div>
     </section>
 
-    <div data-wp-part="last-run" data-wp-part-label="Last run" v-if="negativeReport" class="wp-cleaner__lastrun" data-test="cleaner-last-run">
-      <span class="wp-cleaner__section-label">LAST RUN</span>
-      <span class="wp-cleaner__lastrun-line">{{ promptRunLine }}</span>
-      <span class="wp-cleaner__lastrun-line wp-cleaner__lastrun-line--neg" data-test="cleaner-last-run-neg">{{ negativeRunLine }}</span>
+    <div v-if="lastRunReport" data-wp-part="last-run" data-wp-part-label="Last run" class="wp-cleaner__lastrun-wrap">
+      <Button
+        size="sm"
+        block
+        class="wp-cleaner__lastrun"
+        data-test="cleaner-last-run"
+        hint="Open the last run: before and after, what each rule changed and why"
+        @click="emit('open-last-run')"
+      >
+        <span class="wp-cleaner__lastrun-body">
+          <span class="wp-cleaner__section-label">LAST RUN</span>
+          <span class="wp-cleaner__lastrun-line">{{ promptRunLine }}</span>
+          <span v-if="negativeReport" class="wp-cleaner__lastrun-line wp-cleaner__lastrun-line--neg" data-test="cleaner-last-run-neg">{{ negativeRunLine }}</span>
+        </span>
+        <i class="pi pi-chevron-right wp-cleaner__blocklist-chev" aria-hidden="true" />
+      </Button>
     </div>
 
     <div data-wp-part="blocklist" data-wp-part-label="Blocklist button" class="wp-cleaner__blocklist" data-wp-socket="blocklist">
@@ -564,16 +585,31 @@ function isOverridden(rid: RuleId): boolean {
   color: var(--wp-text-dim, var(--wp-text3));
 }
 .wp-cleaner__counter-neg { color: var(--wp-danger); }
-.wp-cleaner__lastrun {
+.wp-cleaner__lastrun-wrap { display: flex; }
+/* The strip is a kit Button that grows to its lines. */
+.wp-btn.wp-cleaner__lastrun {
+  height: auto;
+  min-height: var(--wp-control-h-sm, 24px);
+  padding: 6px 8px;
+  justify-content: space-between;
+  text-align: left;
+}
+.wp-btn.wp-cleaner__lastrun :deep(.wp-btn__label) {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.wp-cleaner__lastrun-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 8px;
-  background: var(--wp-bg-deep, var(--wp-bg));
-  border: 1px solid var(--wp-border);
-  border-radius: min(3px, var(--wp-radius-cap, 999px));
+  min-width: 0;
   font: 10px/1.5 var(--wp-font-mono, monospace);
   color: var(--wp-text-muted, var(--wp-text2));
+  white-space: normal;
 }
 .wp-cleaner__lastrun-line { word-break: break-word; }
 .wp-cleaner__lastrun-line--neg { color: var(--wp-danger); }

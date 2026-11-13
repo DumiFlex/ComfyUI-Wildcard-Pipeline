@@ -56,7 +56,7 @@ const syntaxRules = [
       <DocAnnotated
         src="images/docs/wp-prompt-cleaner.png"
         ratio="1720 / 860"
-        caption="A messy tag list and negative go into WP Prompt Cleaner and come out without the doubled tags, empty brackets and stray commas. Each rule counts its fixes, and Last run sums them up."
+        caption="A messy tag list and negative go into WP Prompt Cleaner and come out without the doubled tags, empty brackets and stray commas. Each rule counts its fixes, and Last run sums them up; click it for the before and after."
       />
     </DocSection>
 
@@ -100,6 +100,35 @@ const syntaxRules = [
         <b>Drop negative tags also in prompt</b> (off by default) removes a tag from the negative
         when the prompt asks for it too, since the model can't both draw it and avoid it. Either
         way, the run stats name the tags the two share.
+      </p>
+    </DocSection>
+
+    <DocSection title="Last run">
+      <p>
+        After a run, the <b>Last run</b> strip at the bottom of the node says how many rules changed
+        the prompt and what they dropped. Click it to open the last run in a window:
+      </p>
+      <ul>
+        <li>
+          <b>Before and After</b> side by side, with removed tags struck through in red and added
+          ones in green. In tags mode whole tags are compared, so <code>((silver hair))</code> →
+          <code>(silver hair:1.21)</code> reads as one tag out and one in.
+        </li>
+        <li>
+          <b>One line per rule that changed something</b>, in the order they ran. Open a line to see
+          that rule's own before and after, and why it fired: a dropped duplicate beside the tag it
+          repeats, a near-duplicate beside the tag it is close to (and how close), a blocked tag
+          beside the blocklist entry it matched. The cause is marked in blue in the text.
+        </li>
+        <li>
+          <b>Prompt / Negative</b> switches sides when the run cleaned a negative too; the negative
+          side also lists tags the prompt has as well. <b>Copy cleaned text</b> copies the side you
+          are on.
+        </li>
+      </ul>
+      <p>
+        It's the quickest way to check a pack: if a rule keeps removing the same thing, fix the
+        option that wrote it.
       </p>
     </DocSection>
 

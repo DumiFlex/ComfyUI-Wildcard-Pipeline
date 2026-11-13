@@ -229,7 +229,7 @@ export const NODE_FIELDS = {
   WP_PromptCleaner: {
     ports: [
       { term: "prompt (in)", sockets: ["in:prompt"], desc: "The text to clean, usually from a WP Prompt Assembler. Any text works." },
-      { term: "cleaner widget", pin: "css:[aria-label='Cleaning mode']", desc: "Pick a mode and a preset, switch single rules on or off, and edit the blocklist. After a run it shows how many fixes each rule made." },
+      { term: "cleaner widget", pin: "css:[aria-label='Cleaning mode']", desc: "Pick a mode and a preset, switch single rules on or off, and edit the blocklist. After a run it shows how many fixes each rule made, and the Last run strip opens the run's before and after with what each rule changed and why." },
       { term: "negative (in)", sockets: ["in:negative"], desc: "Optional. A negative to clean too: type it or wire in the Assembler's negative. Left empty, the negative output is empty." },
       { term: "prompt (out)", sockets: ["out:prompt"], desc: "The cleaned prompt, for CLIP Text Encode." },
       { term: "blocklist (in)", sockets: ["in:blocklist"], desc: "Optional text from another node, such as one shared word list feeding several cleaners. Its entries join the panel's blocklist (comma- or newline-separated in list mode, one per line in regex mode) and turn the blocklist on; the Blocklist button reads + input. Its dot sits beside that button and shows when you hover it or wire it." },
