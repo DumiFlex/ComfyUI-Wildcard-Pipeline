@@ -221,10 +221,26 @@ function isBlocked(t: ToggleRow): boolean {
 function setOn(t: ToggleRow, on: boolean): void {
   if (isBlocked(t)) return;
   if (isOne.value) {
+    // Always one on: the picked toggle only goes off by picking another.
+    if (!on && cfg.value.pick_required) return;
     setRows(cfg.value.rows.map((r) => (r.kind === "toggle" ? { ...r, on: r.id === t.id ? on : false } : r)));
   } else {
     patchToggle(t.id, { on });
   }
+}
+/** Always one on: turning it on with nothing on switches the first toggle on,
+ *  so what the node shows and what it saves agree. */
+function setPickRequired(v: boolean): void {
+  if (!v) {
+    commit({ pick_required: undefined });
+    return;
+  }
+  const toggles = toggleRows(cfg.value);
+  const first = toggles[0];
+  const rows = first && !toggles.some((x) => x.on)
+    ? cfg.value.rows.map((r) => (r.kind === "toggle" && r.id === first.id ? { ...r, on: true } : r))
+    : cfg.value.rows;
+  commit({ rows, pick_required: true });
 }
 /** What the control shows: Pick one shows the pick, Any on the own choice. */
 function shownOn(t: ToggleRow): boolean {
@@ -508,6 +524,16 @@ function foldedOuts(g: ToggleGroup): string | undefined {
           @update:model-value="(v: boolean) => commit({ group_upstream: v ? true : undefined })"
         />
         <span aria-hidden="true">Upstream can pick</span>
+      </span>
+      <span v-tooltip="'Like radio buttons: one toggle is always on. Clicking the picked one does nothing; pick another to switch. With none on, the first toggle is picked'" v-toggle-row class="wp-tg__check">
+        <Checkbox
+          :model-value="!!cfg.pick_required"
+          size="sm"
+          aria-label="Always one on"
+          data-test="tg-pick-required"
+          @update:model-value="setPickRequired"
+        />
+        <span aria-hidden="true">Always one on</span>
       </span>
       <span class="wp-tg__pickstyle">
         <span class="wp-tg__mode-cap">Style</span>
