@@ -308,7 +308,8 @@ tutorial(
       await t.say("Invert turns it around: bypass while on, for a branch you only want when the switch is off.");
       await t.waitVoice();
       await t.uncallout("inv");
-      await t.callout("grps", win().locator('[data-test="tg-groups"]'), "Canvas groups, by title", 4);
+      // A kit Combobox: its data-test sits on the popover root, so find the field by role (as N14 does).
+      await t.callout("grps", win().getByRole("combobox", { name: "Canvas groups" }), "Canvas groups, by title", 4);
       await t.say("Canvas groups covers whole groups on the canvas by their title, with no wires at all. Group moves the toggle under another label.");
       await t.waitVoice();
       await t.uncallout("grps");
