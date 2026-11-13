@@ -20,7 +20,7 @@ import {
   wantedCtlInputs,
   type CtlNode,
 } from "../extension/toggle-control";
-import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { createDomWidgetHost, isMirrorBuild, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { nodeEditors } from "../extension/_stashes";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import {
@@ -130,6 +130,9 @@ function relabel(node: TogglesHostNode, cfg: TogglesConfig): void {
  * at the right edge of its row (`extension/row-outputs.ts`).
  */
 export function create(node: TogglesHostNode, inputName: string) {
+  /** Shown on a subgraph node: the node's own copy keeps its outputs, dots
+   *  and pencil; this one only edits the config (which reaches both). */
+  const mirrored = isMirrorBuild(node);
   const config = ref<TogglesConfig>(defaultTogglesConfig());
   /** `ctl_*` input names, shared with `attachFieldSockets`. */
   const ctlNames: string[] = [];
@@ -137,9 +140,11 @@ export function create(node: TogglesHostNode, inputName: string) {
   /** Bumped by the pencil in ComfyUI's selection toolbar
    *  (extension/node-toolbar.ts); the widget opens its edit window. */
   const editRequest = ref(0);
-  nodeEditors.set(node, () => {
-    editRequest.value += 1;
-  });
+  if (!mirrored) {
+    nodeEditors.set(node, () => {
+      editRequest.value += 1;
+    });
+  }
 
   function store(next: TogglesConfig): void {
     config.value = next;
@@ -200,7 +205,7 @@ export function create(node: TogglesHostNode, inputName: string) {
         () => wiring(node, config.value),
         sameWiring,
       );
-      watch(drives, (now, was) => {
+      if (!mirrored) watch(drives, (now, was) => {
         for (const t of toggleRows(config.value)) {
           if (!t.control) continue;
           const old = new Set(was.get(t.id) ?? []);
@@ -271,12 +276,13 @@ export function create(node: TogglesHostNode, inputName: string) {
       const parsed = normalizeOuts(parseTogglesConfig(raw));
       if (JSON.stringify(parsed) === JSON.stringify(config.value)) return;
       config.value = parsed;
-      reconcile();
+      if (!mirrored) reconcile();
     },
   });
 
   // The constructor adds outputs after widgets, so trim them once it is done
   // (a load or paste configures the node in the same task, before this runs).
+  if (mirrored) return host;
   queueMicrotask(reconcile);
 
   host.onCleanup(attachRowOutputs(node, host.element, inputName, isToggleOutput));

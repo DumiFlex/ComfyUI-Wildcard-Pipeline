@@ -31,6 +31,11 @@ const library = [
   { term: "The manager stays on its loading screen", desc: "This happens when ComfyUI restarted or updated while the manager tab was open. The page now notices, waits for the server and reloads by itself. If it says the manager couldn't load, wait until ComfyUI has finished starting and press Reload." },
   { term: "Undo a change to the library", desc: "Settings › Library & data › Backups lists every backup; Restore puts one back right away, no restart, after backing up the current library as a Before restore backup; the toast's Undo puts it back. A backup from a newer version of Wildcard Pipeline, or a damaged one, is refused and nothing changes. Backups to keep keeps the newest ones, the ones you make yourself too. Pin a backup (the bookmark button) to keep it for good: pinned ones are never deleted for you and don't count toward the limit. A row marked Removed at next backup goes the next time a backup is made. Type a short note next to Back up now to tell your own backups apart." },
 ];
+
+const subgraphs = [
+  { term: "A WP node's panel isn't on the subgraph node", desc: "Panels with no socket (Context, Toggles, Label Grid, Debug …) stay inside. Right-click the node inside the subgraph → Show on subgraph node puts a copy of its panel on every subgraph node made from that subgraph. Changes on either side reach the other, the node inside is still what runs, and the subgraph node remembers it when you save. The × on the copy's header (or Hide from subgraph node) takes it off again." },
+  { term: "The Assembler's prompt box is empty on the subgraph node", desc: "Drag its template or negative_template dot to the subgraph's input. The subgraph node then shows the same editor, with the $ list of the variables upstream of the Assembler inside." },
+];
 </script>
 
 <template>
@@ -56,6 +61,10 @@ const library = [
 
     <DocSection title="Library and packs">
       <DocKeyList :items="library" />
+    </DocSection>
+
+    <DocSection title="In a subgraph">
+      <DocKeyList :items="subgraphs" />
     </DocSection>
 
     <DocSection title="Still stuck?">

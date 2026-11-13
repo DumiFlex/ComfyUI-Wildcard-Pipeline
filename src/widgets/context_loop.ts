@@ -11,7 +11,7 @@
 import { defineAsyncComponent, h, ref, watch, type Component, type EffectScope } from "vue";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import { app } from "#comfyui/app";
-import { buildInScope, createDomWidgetHost, type DomWidgetHost, type MountTargetNode } from "./_shared";
+import { buildInScope, createDomWidgetHost, isMirrorBuild, type DomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachLoopSeedsCapture } from "./_seed-capture";
 import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
@@ -50,6 +50,9 @@ export function create(node: ContextLoopHostNode, inputName: string): DomWidgetH
 }
 
 function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope): DomWidgetHost {
+  /** Shown on a subgraph node: the node's own copy keeps the count hook,
+   *  the editor others call, the run capture and the dots. */
+  const mirrored = isMirrorBuild(node);
   /**
    * Frame-grid collapse, persisted so it survives a workflow save.
    *
@@ -168,7 +171,7 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
   // so raising it again starts those frames fresh. Only the user's edit
   // (the widget callback) does this, never a workflow load.
   const countWidget = (node.widgets ?? []).find((x) => x.name === "count");
-  if (countWidget) {
+  if (countWidget && !mirrored) {
     onCountEdited(countWidget, (n) => {
       const next = keepFramesWithin(config.value, n);
       if (next === config.value) return;
@@ -204,7 +207,7 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
     },
   };
 
-  loopEditors.set(node, (edit) => {
+  if (!mirrored) loopEditors.set(node, (edit) => {
     const next = edit(config.value);
     config.value = next;
     host?.setValue(serializeContextLoopConfig(next));
@@ -228,13 +231,14 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
 
   // Capture the Loop's executed `loop_seeds` series for the modal's "lock
   // previous" button (see _seed-capture).
-  attachLoopSeedsCapture(node, host);
+  if (!mirrored) attachLoopSeedsCapture(node, host);
   listenApi(host, "executed", (ev: Event) => {
     const detail = (ev as CustomEvent<{ node: string | number; output?: unknown }>).detail;
     if (!detail || String(detail.node) !== String(node.id)) return;
     const out = detail.output as { loop_values?: unknown } | undefined;
     valuesRun.value = parseLoopValues(out?.loop_values);
   });
+  if (mirrored) return host;
   host.onCleanup(() => loopEditors.delete(node));
 
   host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["values"]));

@@ -134,9 +134,16 @@ export function create(node: DebugNode, inputName: string) {
     minWidth: () => dynamicMinWidth,
   });
   host.onCleanup(attachThemeDetector(host.widget.element, app));
+  // A copy shown on a subgraph node chains the node's hook too, and stops
+  // listening once it is hidden.
+  let live = true;
+  host.onCleanup(() => {
+    live = false;
+  });
   const orig = node.onExecuted;
   node.onExecuted = function (output) {
     orig?.call(this, output);
+    if (!live) return;
     const snap = output?.wp_debug_snapshot;
     if (!Array.isArray(snap)) return;
     const next = snap.filter((s): s is string => typeof s === "string");

@@ -2,6 +2,7 @@ import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { app } from "#comfyui/app";
 import {
   createDomWidgetHost,
+  isMirrorBuild,
   emptyInjectorRowsValue,
   parseWidgetJson,
   serializeWidgetJson,
@@ -211,6 +212,8 @@ export function reorderInjectorRows(
 }
 
 export function create(node: InjectorNode, inputName: string) {
+  /** Shown on a subgraph node: the node's own copy keeps its sockets. */
+  const mirrored = isMirrorBuild(node);
   const initial = serializeWidgetJson(
     parseWidgetJson<InjectorRowsValue>("", emptyInjectorRowsValue()),
   );
@@ -513,6 +516,7 @@ export function create(node: InjectorNode, inputName: string) {
     },
   });
   host.onCleanup(attachThemeDetector(host.widget.element, app));
+  if (mirrored) return host;
 
   // Visual collapse of the dynamic input wires onto input_0's pin.
   // Predicate matches ONLY `input_N` slots so any fixed input (e.g.

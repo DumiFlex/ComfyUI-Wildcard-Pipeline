@@ -1,6 +1,6 @@
 import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
-import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { createDomWidgetHost, isMirrorBuild, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { listenApi } from "./_listen";
 import { reactiveFromGraph } from "../extension/reactive";
 import {
@@ -38,6 +38,8 @@ const WIRABLE = ["family", "variant", "name"] as const;
  * which is also recorded for the graph walkers' preview.
  */
 export function create(node: ModelInfoHostNode, inputName: string) {
+  /** Shown on a subgraph node: the dots stay on the node itself. */
+  const mirrored = isMirrorBuild(node);
   const config = ref<ModelInfoConfig>(defaultModelInfoConfig());
   const lastRun = ref<ModelInfoRun | null>(lastModelInfoRun(node));
 
@@ -111,6 +113,6 @@ export function create(node: ModelInfoHostNode, inputName: string) {
   }
   listenApi(host, "executed", onExecuted);
 
-  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, WIRABLE));
+  if (!mirrored) host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, WIRABLE));
   return host;
 }

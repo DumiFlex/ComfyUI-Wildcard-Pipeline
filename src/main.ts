@@ -45,6 +45,7 @@ const {
   loadSubgraphBadge,
   badgeSlotMod,
   promoteMod,
+  showMod,
   loadImageFilterPicker,
   loadBookmarkDock,
   loadNodeHelp,
@@ -228,6 +229,29 @@ const BOOKMARK_COMMANDS = [
   { id: "wildcardPipeline.bookmark.dock", label: "WP Bookmarks: show or hide the dock", function: toggleBookmarkDock },
 ];
 
+/** "Merge into WP Toggles" on a right-clicked Boolean-like node. */
+function mergeMenuItems(node: unknown): Array<{ content: string; callback: () => void } | null> {
+  type MergeNode = Parameters<typeof togglesMergeMod.isMergeable>[0];
+  type MergeGraph = Parameters<typeof togglesMergeMod.mergeIntoToggles>[0];
+  const canvas = (app as unknown as { canvas?: { selected_nodes?: Record<string, MergeNode>; graph?: MergeGraph } }).canvas;
+  if (!togglesMergeMod.isMergeable(node as MergeNode)) return [];
+  const picked = Object.values(canvas?.selected_nodes ?? {});
+  const selected = picked.includes(node as MergeNode) ? picked : [node as MergeNode];
+  const count = Math.min(selected.filter(togglesMergeMod.isMergeable).length, 16);
+  return [null, {
+    content: `Merge into WP Toggles (${count})`,
+    callback: () => {
+      const graph = canvas?.graph;
+      if (!graph) return;
+      const lg = (globalThis as { LiteGraph?: { createNode(type: string): MergeNode | null } }).LiteGraph;
+      const res = togglesMergeMod.mergeIntoToggles(graph, selected, () => lg?.createNode("WP_Toggles") ?? null);
+      if (res.skipped.length) {
+        toastStoreMod.pushToast(`Not merged: ${res.skipped.join(", ")}. Only nodes with one on/off value, one BOOLEAN output and no wired inputs can merge (16 at most).`, { severity: "warning" });
+      }
+    },
+  }];
+}
+
 app.registerExtension({
   name: "wildcard-pipeline",
 
@@ -235,27 +259,10 @@ app.registerExtension({
   // the repo, issue tracker, and docs. Uses PrimeIcons shipped by ComfyUI.
   aboutPageBadges: aboutMod.ABOUT_BADGES,
 
-  // "Merge into WP Toggles" on a right-clicked Boolean-like node.
+  // "Show on / Hide from subgraph node" on a WP panel node inside a
+  // subgraph, and "Merge into WP Toggles" on a Boolean-like node.
   getNodeMenuItems(node: unknown) {
-    type MergeNode = Parameters<typeof togglesMergeMod.isMergeable>[0];
-    type MergeGraph = Parameters<typeof togglesMergeMod.mergeIntoToggles>[0];
-    const canvas = (app as unknown as { canvas?: { selected_nodes?: Record<string, MergeNode>; graph?: MergeGraph } }).canvas;
-    if (!togglesMergeMod.isMergeable(node as MergeNode)) return [];
-    const picked = Object.values(canvas?.selected_nodes ?? {});
-    const selected = picked.includes(node as MergeNode) ? picked : [node as MergeNode];
-    const count = Math.min(selected.filter(togglesMergeMod.isMergeable).length, 16);
-    return [null, {
-      content: `Merge into WP Toggles (${count})`,
-      callback: () => {
-        const graph = canvas?.graph;
-        if (!graph) return;
-        const lg = (globalThis as { LiteGraph?: { createNode(type: string): MergeNode | null } }).LiteGraph;
-        const res = togglesMergeMod.mergeIntoToggles(graph, selected, () => lg?.createNode("WP_Toggles") ?? null);
-        if (res.skipped.length) {
-          toastStoreMod.pushToast(`Not merged: ${res.skipped.join(", ")}. Only nodes with one on/off value, one BOOLEAN output and no wired inputs can merge (16 at most).`, { severity: "warning" });
-        }
-      },
-    }];
+    return [...showMod.menuItems(node), ...mergeMenuItems(node)];
   },
 
   // Topbar dropdown entry — opens the SPA at /wp/dashboard. The direct
@@ -356,18 +363,20 @@ app.registerExtension({
     );
   },
 
+  // Each panel is offered to Show on subgraph node (offerPanel builds it
+  // and remembers how, for the copy on the subgraph node).
   getCustomWidgets() {
     return {
       WP_CONTEXT_MODULES: (node: ContextCreateNode, inputName: string) =>
-        ctxMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => ctxMod.create(node, inputName)),
       WP_DEBUG_VIEWER: (node: DebugCreateNode, inputName: string) =>
-        dbgMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => dbgMod.create(node, inputName)),
       WP_INJECTOR_ROWS: (node: InjectorCreateNode, inputName: string) =>
-        injMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => injMod.create(node, inputName)),
       WP_CLEANER: (node: CleanerCreateNode, inputName: string) =>
-        cleanerMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => cleanerMod.create(node, inputName)),
       WP_VAR_PICKER: (node: VarPickerCreateNode, inputName: string) =>
-        varPickerMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => varPickerMod.create(node, inputName)),
       // Loop's DOM widget uses `WP_CONTEXT_LOOP_WIDGET` — a widget-only
       // TYPE (see `wp_nodes/types.py::ContextLoopWidgetInput`) distinct
       // from the wire-payload TYPE `WP_CONTEXT_LOOP_CONFIG` carried on
@@ -377,17 +386,17 @@ app.registerExtension({
       // (gated factories returning `{widget: undefined}` ended up
       // hiding the socket entirely, see the type's docstring).
       WP_CONTEXT_LOOP_WIDGET: (node: CtxLoopCreateNode, inputName: string) =>
-        ctxLoopMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => ctxLoopMod.create(node, inputName)),
       WP_SEED_LIST_CONFIG: (node: SeedListCreateNode, inputName: string) =>
-        seedListMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => seedListMod.create(node, inputName)),
       WP_MODEL_INFO: (node: ModelInfoCreateNode, inputName: string) =>
-        modelInfoMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => modelInfoMod.create(node, inputName)),
       WP_TOGGLES: (node: TogglesCreateNode, inputName: string) =>
-        togglesMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => togglesMod.create(node, inputName)),
       WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>
-        imageFilterWidgetMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => imageFilterWidgetMod.create(node, inputName)),
       WP_LABEL_GRID: (node: LabelGridCreateNode, inputName: string) =>
-        labelGridMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => labelGridMod.create(node, inputName)),
       // The assembler's `template`. Unlike every other entry here, this key
       // is NOT the input's socket type — the socket stays STRING so links
       // still work, and the node ships `widgetType` in the input spec's
@@ -453,6 +462,8 @@ app.registerExtension({
     }
     // Our widgets wired out to a subgraph's inputs show on its node.
     promoteMod.refreshAllPromotedHosts(root);
+    // Panels a subgraph node was set to show (Show on subgraph node).
+    showMod.restoreAllShown(root ? (graphMod.findRootGraph(root) as Parameters<typeof showMod.restoreAllShown>[0]) : null);
   },
 
   // Fires for every node when it's instantiated — including SubgraphNodes,
@@ -463,6 +474,7 @@ app.registerExtension({
   nodeCreated(node: unknown) {
     if (!isSubgraphNode(node)) return;
     promoteMod.installPromotedHosts(node);
+    showMod.restoreShownSoon(node);
     prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
@@ -473,6 +485,7 @@ app.registerExtension({
   loadedGraphNode(node: unknown) {
     if (!isSubgraphNode(node)) return;
     promoteMod.installPromotedHosts(node);
+    showMod.restoreShownSoon(node);
     prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
