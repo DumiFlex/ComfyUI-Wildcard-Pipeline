@@ -98,7 +98,8 @@ tutorial(
     await t.h.step("Driven by a toggle", async () => {
       await t.say("Its nodes (out) goes into a WP Toggles control dot. Make a toggle called Samplers, with When off set to Mute: its row gets a dot in front.", "Its nodes output goes into a WP Toggles control dot. Make a toggle called Samplers, with When off set to Mute: its row gets a dot in front.");
       await t.speedUp(3);
-      const { tg, ctl } = await muteToggle(t, "Samplers", { x: 90, y: 1000 });
+      // A screen point right of the Save branch group (x 90 is under the sidebar).
+      const { tg, ctl } = await muteToggle(t, "Samplers", { x: 1700, y: 600 });
       await t.normalSpeed();
       await t.wire(grp, "nodes", tg, ctl);
       await t.beat(700);

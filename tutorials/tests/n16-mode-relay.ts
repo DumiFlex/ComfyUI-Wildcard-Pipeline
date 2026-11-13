@@ -92,7 +92,8 @@ tutorial(
     await t.h.step("A switch at the head", async () => {
       await t.say("Put a Toggles switch at the head of the chain. A toggle called Samplers with When off set to Mute, and the samplers' group in its dot.");
       await t.speedUp(3);
-      const { tg, ctl } = await muteToggle(t, "Samplers", { x: 90, y: 1000 });
+      // A screen point right of the Save branch group (x 90 is under the sidebar).
+      const { tg, ctl } = await muteToggle(t, "Samplers", { x: 1700, y: 600 });
       await t.wire(n.grpA, "nodes", tg, ctl);
       await t.normalSpeed();
       await t.waitVoice();
