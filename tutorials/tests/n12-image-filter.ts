@@ -164,11 +164,20 @@ tutorial(
         await t.press("g");
         await t.beat(600);
         await t.say("Pick two drafts, then open the first in Detail.");
-        await t.click(page.locator('[data-test="image-filter-tile-0-0"]'));
+        // Frame 1 last: Detail opens on the tile clicked last, and the refined Save Image shows the
+        // first pick first, so the hero shot (label, prompt, mask) must be frame 1. The last take
+        // opened frame 3, so the scarf was painted on a pick the ending never showed.
         await t.click(page.locator('[data-test="image-filter-tile-2-0"]'));
+        await t.click(page.locator('[data-test="image-filter-tile-0-0"]'));
         await t.beat(500);
         await t.press("d");
         await t.beat(1000);
+        const onFirst = () => picker.getByText("Frame #1 · image 1", { exact: true }).first().isVisible().catch(() => false);
+        for (let i = 0; i < 4 && !(await onFirst()); i++) {
+          await t.press("ArrowLeft");
+          await t.beat(400);
+        }
+        if (!(await onFirst())) throw new StepError("Detail isn't on frame 1, the hero shot.");
         await t.waitVoice();
         const label = page.locator('[data-test="image-filter-label"]');
         await t.callout("lab", label, "The labels output carries it", 2);
@@ -203,6 +212,9 @@ tutorial(
       });
 
       await t.h.step("Paint a mask", async () => {
+        if (!(await picker.getByText("Frame #1 · image 1", { exact: true }).first().isVisible().catch(() => false))) {
+          throw new StepError("About to paint the mask, but Detail isn't on frame 1, the hero shot.");
+        }
         await t.say("Mask paints the part the refine pass may change. Press M to paint.");
         await t.click(page.locator('[data-test="image-filter-tab-mask"]'));
         await t.beat(600);
