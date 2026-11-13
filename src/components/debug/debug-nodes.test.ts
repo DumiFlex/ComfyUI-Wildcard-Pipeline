@@ -127,6 +127,37 @@ describe("node rows in the view", () => {
     expect(secs[2].find('[data-test="dbg-var"]').exists()).toBe(true);
   });
 
+  it("gives a lone Context its own card, as it has beside other nodes", () => {
+    const m = buildModel({
+      mood: "calm",
+      __wp_trace__: [{ id: "aaaa1111", _uid: "u", node_id: "9", type: "wildcard", status: "ok", writes: [{ variable: "mood", value: "calm" }] }],
+    });
+    const w = mount(DebugVariables, {
+      props: {
+        rows: m.variables, pinned: new Set<string>(), flashed: new Set<string>(), uuidToName: new Map(), uuidToKind: new Map(),
+        ctxActiveKey: null, nodeInfo: () => ({ title: "", codename: "ALPHA" }),
+        stepsByKey: new Map(m.steps.map((s) => [s.key, s])),
+      },
+    });
+    expect(w.find('[data-test="dbg-vars"]').classes()).toContain("is-grouped");
+    const secs = w.findAll('[data-test="dbg-var-section"]');
+    expect(secs).toHaveLength(1);
+    expect(secs[0].find('[data-test="dbg-var-section-head"]').text()).toContain("WP Context");
+    expect(secs[0].find('[data-test="dbg-var-section-head"]').text()).toContain("ALPHA");
+  });
+
+  it("keeps a snapshot with no trace a plain list", () => {
+    const m = buildModel({ mood: "calm" });
+    const w = mount(DebugVariables, {
+      props: {
+        rows: m.variables, pinned: new Set<string>(), flashed: new Set<string>(), uuidToName: new Map(), uuidToKind: new Map(),
+        ctxActiveKey: null,
+      },
+    });
+    expect(w.find('[data-test="dbg-vars"]').classes()).not.toContain("is-grouped");
+    expect(w.find('[data-test="dbg-var-section-head"]').exists()).toBe(false);
+  });
+
   it("draws every pick of a Pick one node as its own switch", async () => {
     const m = buildModel({
       warm: "true", cold: "false", mood: "warm light",
