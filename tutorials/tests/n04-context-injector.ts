@@ -158,19 +158,22 @@ tutorial(
         const scale = c.ds.scale * 0.82;
         const x = node?.pos[0] ?? 0;
         const y = node?.pos[1] ?? 0;
-        return { scale, offset: [40 / scale - x, 150 / scale - y] as [number, number] };
+        // Screen x 120: clear of the sidebar (40 put the Injector's left edge under it).
+        return { scale, offset: [120 / scale - x, 150 / scale - y] as [number, number] };
       }, n.inj);
       await t.setView(view);
       await t.beat(500);
       await t.say("Wire the Injector into a Context's upstream. The Context starts with every injected variable, so its own items can read them.");
-      const ctx = await t.addNode("WP Context", { x: 560, y: 150 });
+      // A node is centred on its drop point: x 720 keeps the Context (about 445 px wide here) clear of
+      // the Injector's context output.
+      const ctx = await t.addNode("WP Context", { x: 720, y: 150 });
       await t.wire(n.inj, "context", ctx, "upstream");
       await t.waitVoice();
       await t.say("Pick Role, Setting and Lighting from time.");
       await t.fastForward(() => t.pickModules(ctx, ["Role", "Setting", "Lighting from time"]), 3);
       await t.waitVoice();
       await t.say("Then an Assembler. Its template prints the role, the outfit row, the setting, the time and the light.");
-      const asm = await t.addNode("WP Prompt Assembler", { x: 560, y: 600 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 720, y: 600 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $outfit, $setting $time, $lighting", { cps: 16 });
