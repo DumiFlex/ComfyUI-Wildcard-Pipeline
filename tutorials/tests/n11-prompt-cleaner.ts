@@ -151,7 +151,8 @@ tutorial(
     await t.h.step("A shared word list", async () => {
       await t.say("blocklist is also an input. Wire a text box into it, and several cleaners share one list.", "Blocklist is also an input. Wire a text box into it, and several cleaners share one list.");
       await t.speedUp();
-      const s = await t.addNode("Text (Multiline)", { x: 120, y: 700 });
+      // A screen point in the free space right of the Cleaner, below the previews (x 120 lands on the Cleaner).
+      const s = await t.addNode("Text (Multiline)", { x: 760, y: 780 });
       await t.click(t.node(s).locator("textarea").first());
       await t.type("lowres\nknights", { cps: 30 });
       await t.press("Escape");
