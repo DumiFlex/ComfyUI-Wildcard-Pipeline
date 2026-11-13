@@ -1,6 +1,8 @@
 // Nodes 12: WP Image Filter in depth, on the "Pick and refine" example. Before the run: the filter's
 // clip input (wired, so a prompt edit is re-encoded), its masks output into a Set Latent Noise Mask
-// in front of the refine pass, and its labels output into Label & Grid. In the picker: picking, a
+// in front of the refine pass (on the filter's own latent, not the upscaled one: the sampler keeps
+// every unpainted part as it gets it, and a nearest-exact upscaled latent decodes blocky), and its
+// labels output into Label & Grid. In the picker: picking, a
 // label renamed, a prompt edited (✎), a mask painted with the brush, erase, lasso and fill, the
 // sliders, Undo and the two mask views, Compare, Zoom, tucking the picker away and the waiting pill,
 // Send to Loop, then Keep picked. After the run: only the masked face changed and the grid prints the
@@ -112,13 +114,18 @@ tutorial(
         const grid = await find("WP_LabelGrid");
         if (!up || !refine || !grid) throw new StepError("The example's refine pass or grid wasn't found.");
         await t.say("Two more wires. A Set Latent Noise Mask in front of the refine pass, so it only changes what you paint.");
+        // The mask goes on the picked latent at its own size. Behind the Upscale Latent By, every
+        // part you don't paint would stay the upscaled latent as it is, and that decodes blocky.
+        const latentLine = "It takes the filter's latent before the upscale, so everything you don't paint stays the draft as it was.";
         // Both ends of every wire on screen at once, clear of the bookmark dock on the left and the
         // caption at the bottom: a wire dragged to a node off screen drops on empty canvas.
         await fit([filter, up, refine]);
         const box = await t.node(refine).boundingBox();
         const mask = await t.addNode("Set Latent Noise Mask", { x: (box?.x ?? 900) + 120, y: (box?.y ?? 300) + (box?.height ?? 300) + 90 });
         await fit([filter, up, refine, mask]);
-        await t.wire(up, "LATENT", mask, "samples");
+        await t.waitVoice();
+        await t.say(latentLine);
+        await t.wire(filter, "latent", mask, "samples");
         await t.wire(mask, "LATENT", refine, "latent_image");
         await t.wire(filter, "masks", mask, "mask");
         await t.waitVoice();
