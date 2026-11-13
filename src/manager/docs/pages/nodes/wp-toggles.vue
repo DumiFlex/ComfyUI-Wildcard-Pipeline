@@ -128,6 +128,12 @@ import VarToken from "../../../components/docs/VarToken.vue";
         the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, so a
         toggle's own Style and Needs are hidden.
       </p>
+      <p>
+        By default you can also switch the picked toggle off, so none is on. Tick
+        <b>Always one on</b> to make the group work like radio buttons: one toggle is always on,
+        clicking it again does nothing, and you switch by picking another. With none on (or when you
+        tick it), the first toggle is picked.
+      </p>
     </DocSection>
 
     <DocSection title="Rows or a grid">

@@ -26,7 +26,7 @@
  * offers the reserved `$negatives` slot, and keeps its socket like the prompt
  * template does.
  */
-import { computed, defineAsyncComponent, h, nextTick, ref, type Component } from "vue";
+import { computed, defineAsyncComponent, h, nextTick, ref, watch, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
@@ -43,6 +43,12 @@ import {
 } from "../extension/graph";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import { NEGATIVES_VAR } from "../extension/assembler-vars";
+import {
+  registerPromotedHost,
+  type PromotedHostContext,
+  type PromotedHostWidget,
+  type PromotedValue,
+} from "../extension/subgraph-promote";
 
 type EditorNode = LiteNodeLike & MountTargetNode;
 
@@ -108,13 +114,58 @@ function reservedProducer(node: EditorNode): VarProducer {
 }
 
 export function create(node: EditorNode, inputName: string) {
+  const editorHost = buildEditor(node, node, inputName, null);
+  // Wired to a subgraph input, the same editor shows on the subgraph node
+  // (see extension/subgraph-promote.ts).
+  registerPromotedHost(editorHost.widget, (ctx) => createPromoted(node, inputName, ctx));
+  return editorHost;
+}
+
+/** The editor on a subgraph node whose input feeds this Assembler's
+ *  `inputName`. It edits the subgraph node's value (what the inner node runs
+ *  with) and offers the inner Assembler's upstream `$vars`. */
+export function createPromoted(
+  inner: EditorNode,
+  inputName: string,
+  ctx: PromotedHostContext,
+): PromotedHostWidget {
+  const host = buildEditor(ctx.subgraphNode as unknown as EditorNode, inner, ctx.inputName, ctx.value, inputName);
+  const widget = host.widget as typeof host.widget & PromotedHostWidget;
+  // ComfyUI calls `onRemove` when the input stops being promoted (or is
+  // re-bound); the node itself stays, so tear the editor down with it.
+  const original = widget.onRemove;
+  widget.onRemove = function (this: unknown, ...args: unknown[]): unknown {
+    try {
+      return original?.apply(this, args);
+    } finally {
+      host.unmount();
+    }
+  };
+  return widget;
+}
+
+/**
+ * Build the editor.
+ *
+ * `node` carries the widget; `inner` is the Assembler it edits for, whose
+ * upstream the `$` suggestions come from. They are the same node except on a
+ * subgraph node, where `promoted` is the value ComfyUI keeps for it and
+ * `variantOf` the inner input's name (the outer one may be renamed).
+ */
+function buildEditor(
+  node: EditorNode,
+  inner: EditorNode,
+  inputName: string,
+  promoted: PromotedValue | null,
+  variantOf: string = inputName,
+) {
   // Mirrors ComfyUI's stored value into something Vue tracks. `host.setValue`
   // alone is not enough: it writes the plain `state` string the widget
   // serializes from, and nothing would re-render.
   const model = ref("");
 
   const editorRef = ref<{ insertTextAtCaret?: (t: string) => void } | null>(null);
-  const variant = editorVariant(inputName);
+  const variant = editorVariant(variantOf);
   const nodeProps = (): Record<string, unknown> => {
     const n = node as { properties?: Record<string, unknown> };
     if (!n.properties) n.properties = {};
@@ -129,7 +180,7 @@ export function create(node: EditorNode, inputName: string) {
       // from the node's own graph — same rationale as `widgets/context.ts`.
       const rootGraph = (): LiteGraphLike | null => {
         const start =
-          (node as unknown as { graph?: LiteGraphLike }).graph
+          (inner as unknown as { graph?: LiteGraphLike }).graph
           ?? (app.graph as unknown as LiteGraphLike);
         return findRootGraph(start);
       };
@@ -146,7 +197,7 @@ export function create(node: EditorNode, inputName: string) {
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
         () => {
           const g = rootGraph();
-          return g ? collectUpstreamRenderableVariables(g, node) : [];
+          return g ? collectUpstreamRenderableVariables(g, inner) : [];
         },
         stringArrayEqual,
       );
@@ -175,9 +226,9 @@ export function create(node: EditorNode, inputName: string) {
         void varNames.value;
         const g = rootGraph();
         const map = g
-          ? new Map(Object.entries(collectUpstreamProducers(g, node)))
+          ? new Map(Object.entries(collectUpstreamProducers(g, inner)))
           : new Map<string, VarProducer>();
-        for (const name of variant.reservedVars) map.set(name, reservedProducer(node));
+        for (const name of variant.reservedVars) map.set(name, reservedProducer(inner));
         return map;
       });
       // Reserved names lead the list and are never "unknown".
@@ -198,6 +249,7 @@ export function create(node: EditorNode, inputName: string) {
             "onUpdate:modelValue": (v: string) => {
               model.value = v;
               editorHost.setValue(v);
+              promoted?.set(v);
             },
             onToggle: () => toggleCollapsed(),
           });
@@ -235,6 +287,7 @@ export function create(node: EditorNode, inputName: string) {
           "onUpdate:modelValue": (v: string) => {
             model.value = v;
             editorHost.setValue(v);
+            promoted?.set(v);
           },
         });
     },
@@ -266,6 +319,13 @@ export function create(node: EditorNode, inputName: string) {
     });
   }
 
+  /** ComfyUI set the widget's value (load, undo). On a subgraph node the
+   *  value lives in ComfyUI's store, so pass it on there too. */
+  function restored(v: string): void {
+    model.value = v;
+    if (promoted && promoted.get() !== v) promoted.set(v);
+  }
+
   const editorHost = variant.negative
     ? createDomWidgetHost(node, inputName, wrapper, {
         // Keeps its socket like the prompt template: a STRING link can drive
@@ -276,7 +336,8 @@ export function create(node: EditorNode, inputName: string) {
         // Content-sized (the box's height is fixed per state) and capped at
         // that size, so spare node height flows to the prompt editor.
         fitContent: true,
-        onValueRestored: (v: string) => { model.value = v; },
+        initialValue: promoted?.get(),
+        onValueRestored: (v: string) => restored(v),
       })
     : createDomWidgetHost(node, inputName, wrapper, {
     // The one widget on the node that keeps its socket — see the file
@@ -304,8 +365,9 @@ export function create(node: EditorNode, inputName: string) {
      * content measures zero, so without a declared minimum the node collapses.
      */
     fillHost: true,
+    initialValue: promoted?.get(),
     // Fired by ComfyUI's own value setter, i.e. workflow load and undo.
-    onValueRestored: (v: string) => { model.value = v; },
+    onValueRestored: (v: string) => restored(v),
   });
 
   // A link into this input must not hide the editor (see linked-editor.ts).
@@ -317,6 +379,23 @@ export function create(node: EditorNode, inputName: string) {
     model.value,
   );
   editorHost.onCleanup(attachThemeDetector(editorHost.widget.element, app));
+  if (promoted) {
+    // ComfyUI changes a promoted value in its store without going through
+    // the widget (undo, a reload that keeps the node): follow it.
+    editorHost.scope.run(() => {
+      const live = reactiveFromGraph<string>(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => promoted.get(),
+        Object.is,
+      );
+      watch(live, (v) => {
+        if (v === model.value) return;
+        model.value = v;
+        editorHost.setValue(v);
+      });
+    });
+    return editorHost;
+  }
   // The input's dot sits level with the editor, the same as every other WP
   // input that feeds a field. The negative box marks its own parts: the box
   // when open, the folded line when not.

@@ -108,6 +108,10 @@ export interface TogglesConfig {
   group_visible?: true;
   /** Pick one: an upstream `group_var` naming a toggle picks it. */
   group_upstream?: true;
+  /** Pick one: always one on, like radio buttons. The picked toggle can't
+   *  be switched off (only another one picked), and when none is on the
+   *  first toggle counts as picked. Absent: none on is allowed. */
+  pick_required?: true;
   /** Pick one: how every row looks (absent: radio). Row `style` is Any on's. */
   pick_style?: Exclude<PickStyle, "radio">;
   /** Clean view layout, both modes: `grid` puts each toggle in a tile and
@@ -306,6 +310,7 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
   };
   if (d.group_visible === true) cfg.group_visible = true;
   if (d.group_upstream === true) cfg.group_upstream = true;
+  if (d.pick_required === true) cfg.pick_required = true;
   if (PICK_STYLES.includes(d.pick_style as PickStyle) && d.pick_style !== "radio") {
     cfg.pick_style = d.pick_style as Exclude<PickStyle, "radio">;
   }
@@ -315,13 +320,14 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
 }
 
 /** Pick one: the toggle that is on. First match wins: the one the upstream
- *  picked variable names, the first one upstream set on, the first one on. */
+ *  picked variable names, the first one upstream set on, the first one on,
+ *  and with `pick_required` the first toggle (mirror of `picked_id`). */
 export function pickedId(cfg: TogglesConfig): string | undefined {
   const toggles = toggleRows(cfg);
   const ids = new Set(toggles.map((t) => t.id));
   if (cfg.forced && ids.has(cfg.forced)) return cfg.forced;
   const up = (cfg.upstream_on ?? []).find((id) => ids.has(id));
-  return up ?? toggles.find((t) => t.on)?.id;
+  return up ?? toggles.find((t) => t.on)?.id ?? (cfg.pick_required ? toggles[0]?.id : undefined);
 }
 
 /** Toggle id → on after `needs` (Any on) or the Pick one rules. */
