@@ -193,28 +193,36 @@ tutorial(
       await t.setView({ scale: 0.7, offset: [0, 0] });
       await t.say("Recipe one: a Debug after each stage of a chain. Add a second Context after the first, with its own Role, and a second Debug after it.");
       await t.speedUp();
-      const c2 = await t.addNode("WP Context", { x: 560, y: 780 });
+      const c2 = await t.addNode("WP Context", { x: 560, y: 720 });
       await t.wire(n.ctx, "context", c2, "upstream");
       await t.pickModules(c2, ["Role"]);
-      const d2 = await t.addNode("WP Debug", { x: 1150, y: 780 });
-      await resize(d2, 700, 420);
+      // Kept short and high, so its role row stays above the caption.
+      const d2 = await t.addNode("WP Debug", { x: 1150, y: 700 });
+      await resize(d2, 700, 320);
       await t.wire(c2, "context", d2, "context");
       await t.normalSpeed();
       await t.run();
       await t.beat(1200);
       await t.waitVoice();
       const roles = [view(dbg).locator('[data-test="dbg-var"]', { hasText: "role" }).first(), view(d2).locator('[data-test="dbg-var"]', { hasText: "role" }).first()];
-      await t.callout("two", roles, "Before and after", 6);
-      await t.say("The first Debug shows the role as the first Context left it; the second shows the one that replaced it. Put Debugs between stages to see where a value appeared, or changed.");
+      await t.callout("before", roles[0], "Before", 4);
+      await t.say("The first Debug shows the role as the first Context left it.");
       await t.waitVoice();
-      await t.uncallout("two");
+      await t.uncallout("before");
+      await t.callout("after", roles[1], "After", 4);
+      await t.say("The second shows the one that replaced it. Put Debugs between stages to see where a value appeared, or changed.");
+      await t.waitVoice();
+      await t.uncallout("after");
     });
 
     await t.h.step("Recipe: a loop's frames", async () => {
-      await t.say("Recipe two: with a Context Loop before the chain, every frame has its own picks. Add one, and wire it into the first Context's upstream.");
+      await t.say("Recipe two: with a Context Loop before the chain, every frame has its own picks. Add one with three frames, and wire it into the first Context's upstream.");
       await t.speedUp();
-      const loop = await t.addNode("WP Context Loop", { x: 140, y: 560 });
+      // addNode centres the node on the point: x 260 keeps the Loop clear of the sidebar.
+      const loop = await t.addNode("WP Context Loop", { x: 260, y: 560 });
       await t.wire(loop, "context", n.ctx, "upstream");
+      await t.fill(t.node(loop).locator('[data-widget-name="count"] input').first(), "3", { cps: 10 });
+      await t.press("Tab");
       await t.normalSpeed();
       await t.run();
       await t.beat(1500);
