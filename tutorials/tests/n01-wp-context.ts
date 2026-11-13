@@ -199,7 +199,9 @@ tutorial(
       await t.click(dlg2.locator('[data-test="wcm-clear-all"]'));
       await t.beat(500);
       // Reset overrides asks first ("Reset overrides?"): confirm it, or it stays open over the canvas.
-      await t.click(page.getByRole("dialog").filter({ hasText: "Reset overrides?" }).last().getByRole("button", { name: "Reset", exact: true }));
+      // The confirm sits inside the editor's dialog, so a role filter matched the editor and clicked a
+      // field's own Reset: use the confirm's own button.
+      await t.click(page.locator('[data-test="confirm-confirm"]').last());
       await t.beat(500);
       await t.click(dlg2.locator('[data-test="wcm-save"]'));
       await t.beat(800);
