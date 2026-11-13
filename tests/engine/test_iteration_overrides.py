@@ -278,3 +278,25 @@ def test_frame_disable_overrides_base_on_via_frame_enabled():
     assert "z" not in _run([m], loop_index=1), "expected 'z' absent on the frame-disabled frame 1"
     for k in (0, 2, 3):
         assert "z" in _run([m], loop_index=k), f"expected 'z' bound at frame {k}"
+
+
+def test_base_off_trace_row_names_the_frames_it_runs_on():
+    """A base-off module switched on for frame 3 says so on its "off" rows,
+    so the Debug viewer can read "off · on #4"."""
+    m = _wildcard_df("c", ["fox", "cat"])
+    m["enabled"] = False
+    m["frame_enabled"] = {"3": True, "1": False, "x": True}
+
+    row = _run([m], loop_index=0)["__wp_trace__"][0]
+    assert row["status"] == "skipped_disabled"
+    assert row["on_frames"] == [3]
+
+    # On the frame it runs, it runs.
+    assert "c" in _run([m], loop_index=3)
+
+
+def test_plain_disabled_trace_row_has_no_on_frames():
+    m = _wildcard_df("c", ["fox"])
+    m["enabled"] = False
+    row = _run([m], loop_index=0)["__wp_trace__"][0]
+    assert "on_frames" not in row

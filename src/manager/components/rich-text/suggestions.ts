@@ -172,6 +172,8 @@ export function varSpanAttrsFor(
   graphAware: boolean,
   varSuggestions: readonly string[],
   varProducers: AxisProducerMap | undefined,
+  /** Names a loop sets on some frames only (see RichTextInput `frameNotes`). */
+  frameNotes?: Readonly<Record<string, string>>,
 ): string {
   // `name` arrives with any accessor attached (`outfit.SHOES`). Scope is a
   // property of the BASE variable, so checking the whole string flagged every
@@ -194,6 +196,13 @@ export function varSpanAttrsFor(
         + "text-decoration:underline wavy color-mix(in srgb,var(--wp-warn,#f59e0b) 70%,transparent);"
         + 'text-underline-offset:3px;text-decoration-thickness:1px"';
     }
+  }
+  if (graphAware && !varSuggestions.includes(base) && frameNotes?.[base]) {
+    // Set on some loop frames, not the one shown: not a typo, so the calm
+    // info colour with a dotted rule instead of the danger wave.
+    return ' style="color:var(--wp-info,#60a5fa);'
+      + "text-decoration:underline dotted color-mix(in srgb,var(--wp-info,#60a5fa) 70%,transparent);"
+      + 'text-underline-offset:3px;text-decoration-thickness:1px"';
   }
   if (graphAware && !varSuggestions.includes(base)) {
     return ' style="color:var(--wp-danger,#ef4444);'

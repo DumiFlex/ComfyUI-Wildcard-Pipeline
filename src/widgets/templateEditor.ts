@@ -36,6 +36,7 @@ import { templateInsertAtCaret } from "../extension/_stashes";
 import {
   collectUpstreamProducers,
   collectUpstreamRenderableVariables,
+  collectLoopFrames,
   findRootGraph,
   type LiteGraphLike,
   type LiteNodeLike,
@@ -49,6 +50,7 @@ import {
   type PromotedHostWidget,
   type PromotedValue,
 } from "../extension/subgraph-promote";
+import { frameSentence } from "../components/assembler/loop-frames";
 
 type EditorNode = LiteNodeLike & MountTargetNode;
 
@@ -202,6 +204,23 @@ function buildEditor(
         stringArrayEqual,
       );
 
+      // Names a WP Context Loop upstream sets on some frames only: not
+      // missing, so they get a calm underline and say which frames.
+      const frameNotes = reactiveFromGraph<Record<string, string>>(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const g = rootGraph();
+          const loop = g ? collectLoopFrames(g, inner) : null;
+          const out: Record<string, string> = {};
+          if (!loop) return out;
+          for (const [name, frames] of Object.entries(loop.partial)) {
+            out[name] = frameSentence(name, frames, loop.count);
+          }
+          return out;
+        },
+        (a, b) => JSON.stringify(a) === JSON.stringify(b),
+      );
+
       // A link into the `template` input overrides whatever is typed here at
       // runtime, so the editor gives way to a "from the input" note (the
       // negative box shows the same in its own body).
@@ -246,6 +265,7 @@ function buildEditor(
             linked: linkDriven.value,
             varSuggestions: suggestions.value,
             varProducers: varProducers.value,
+            frameNotes: frameNotes.value,
             "onUpdate:modelValue": (v: string) => {
               model.value = v;
               editorHost.setValue(v);
@@ -279,6 +299,7 @@ function buildEditor(
           placeholder: PLACEHOLDER,
           varSuggestions: varNames.value,
           varProducers: varProducers.value,
+          frameNotes: frameNotes.value,
           // We walked a graph, so an unattributed `$var` means "nothing
           // upstream writes this" — actionable — rather than "this host
           // cannot know", which is the SPA's situation.

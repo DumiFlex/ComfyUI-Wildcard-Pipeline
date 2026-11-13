@@ -129,3 +129,15 @@ describe("varSpanAttrsFor", () => {
     expect(attrs("ghost", false)).toMatch(/--wp-var-/);
   });
 });
+
+describe("varSpanAttrsFor with loop frame notes", () => {
+  it("draws a name a loop sets on some frames calm and dotted, not as an error", () => {
+    const notes = { companion: "$companion is set on frame 4 only. Frames 1–3 render it empty." };
+    const attrs = varSpanAttrsFor("companion", true, ["role"], undefined, notes);
+    expect(attrs).toContain("--wp-info");
+    expect(attrs).toContain("dotted");
+    expect(attrs).not.toContain("--wp-danger");
+    // A name no frame sets is still the error.
+    expect(varSpanAttrsFor("nope", true, ["role"], undefined, notes)).toContain("--wp-danger");
+  });
+});

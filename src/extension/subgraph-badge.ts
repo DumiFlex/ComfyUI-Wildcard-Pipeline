@@ -1,4 +1,4 @@
-import { walkAllNodes, collectUpstreamVariables, findRootGraph, type LiteGraphLike, type LiteNodeLike } from "./graph";
+import { walkAllNodes, collectUpstreamVariables, collectUpstreamVariablesAnyFrame, findRootGraph, type LiteGraphLike, type LiteNodeLike } from "./graph";
 import { startAdaptivePoll } from "./reactive";
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { filterByValidation } from "./settings";
@@ -204,7 +204,8 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
       const tmpl = widgetValue(node, "template");
       const negTmpl = widgetValue(node, "negative_template");
       if (!tmpl && !negTmpl) continue;
-      const upstream = collectUpstreamVariables(rootGraph, node);
+      // Names a Loop sets on some frames count as set (not "missing").
+      const upstream = collectUpstreamVariablesAnyFrame(rootGraph, node);
       out.push(...scanTemplateConflicts(tmpl, upstream, negTmpl));
     }
   }

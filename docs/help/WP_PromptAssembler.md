@@ -16,6 +16,7 @@ Write a prompt with `$variables` in it and get the finished prompt, plus a match
 - **Load / Save (toolbar)**: Load a template from your library into both boxes, or save this one (prompt and negative) to it.
 - **Mark unused internal (toolbar)**: The eye button. Marks every upstream variable that neither box reads as internal, so it stops showing here; combines and rules still read it. Variables another Assembler on the same context reads are kept, and so is a module that also writes a variable in use. Undo in the message puts it back.
 - **Clear (toolbar)**: Empties the template and the negative template, after asking.
+- **Frame arrows (preview)**: Only with a WP Context Loop upstream: ‹ 1/4 › steps the preview through the loop's frames and moves the Loop's Edit frame pick with it. A variable only some frames set shows as a blue chip with its frames (#4), never as missing.
 <!-- fields:end -->
 
 ## How to use
