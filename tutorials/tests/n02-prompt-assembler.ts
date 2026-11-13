@@ -180,6 +180,35 @@ tutorial(
       if (!(await t.node(asm2).isVisible())) throw new StepError("The second Assembler left the screen.");
     });
 
+    await t.h.step("With a Context Loop", async () => {
+      await t.say("With a Context Loop before the Context, the preview shows one frame at a time. Add one and wire it into the Context's upstream.");
+      const loop = await t.addNode("WP Context Loop", { x: 60, y: 560 });
+      await t.wire(loop, "context", n.ctx, "upstream");
+      await t.beat(600);
+      await t.say("Set its count to four.");
+      await t.fill(t.node(loop).locator('[data-widget-name="count"] input').first(), "4", { cps: 10 });
+      await t.press("Tab");
+      await t.beat(800);
+      await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
+      await t.press("ControlOrMeta+End");
+      await t.type(", frame $iteration", { cps: 16 });
+      await t.press("Escape");
+      await t.beat(800);
+      await t.waitVoice();
+      const step = t.node(n.asm).locator('[data-test="asm-frame-step"]');
+      if (!(await step.isVisible().catch(() => false))) throw new StepError("The Assembler shows no frame arrows with a Loop upstream.");
+      await t.callout("step", step, "Which frame the preview shows", 5);
+      await t.say("Arrows above the preview step through the frames, and the preview shows each frame's own picks.");
+      for (let i = 0; i < 2; i++) {
+        await t.click(t.node(n.asm).locator('[data-test="asm-frame-next"]'));
+        await t.beat(800);
+      }
+      await t.waitVoice();
+      await t.uncallout("step");
+      await t.say("When the loop switches a module on for some frames only, its variable gets a frame tag, like number four, instead of a missing mark, and the preview says when it's empty on the frame shown. The Context Loop video shows it.");
+      await t.waitVoice();
+    });
+
     await t.h.step("How it works, recipes and gotchas", async () => {
       await t.say("At run time the Assembler swaps every variable for its value in the context it got, then collects the negatives of what it printed. It rolls nothing itself: change the picks on the Context, not here.");
       await t.waitVoice();

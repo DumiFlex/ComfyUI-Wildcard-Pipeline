@@ -166,6 +166,22 @@ tutorial(
       await t.waitVoice();
       await t.click(chip(n.loop, "base"));
       await t.beat(500);
+      const tag = t.node(n.asm).locator('[data-test="asm-frames-companion"]');
+      if (await tag.isVisible().catch(() => false)) {
+        await t.callout("tag", [tag, t.node(n.asm).locator('[data-test="asm-some-frames"]')], "Set on frame 4 only", 5);
+        await t.say("The Assembler knows: companion carries a frame tag, number four, and the header says one variable is on some frames. It isn't missing; it's set on frame four.");
+        await t.waitVoice();
+        await t.uncallout("tag");
+        const step = t.node(n.asm).locator('[data-test="asm-frame-step"]');
+        await t.callout("step", step, "Preview one frame", 5);
+        await t.say("The arrows above the preview step through the frames. On frame one the companion is empty; step to frame four, and it's there.");
+        for (let i = 0; i < 3; i++) {
+          await t.click(t.node(n.asm).locator('[data-test="asm-frame-next"]'));
+          await t.beat(700);
+        }
+        await t.waitVoice();
+        await t.uncallout("step");
+      }
       await t.say("Run.");
       await t.run();
       await filled(n.text, /frame 4/);
