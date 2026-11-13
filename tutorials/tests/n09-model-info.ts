@@ -34,7 +34,7 @@ tutorial(
       await t.go("/");
       await t.say("One pack rarely suits every model: Pony wants score tags, Illustrious its own quality words, Flux plain sentences. WP Model Info tells every rule which model is loaded.");
       const unet = String(t.params.unet ?? "");
-      const load = unet ? await t.addNode("Load Diffusion Model", { x: 160, y: 200 }) : await t.addNode("Load Checkpoint", { x: 160, y: 200 });
+      const load = unet ? await t.addNode("Load Diffusion Model", { x: 300, y: 200 }) : await t.addNode("Load Checkpoint", { x: 300, y: 200 });
       const [widget, file] = unet
         ? ["unet_name", await modelFile(t, "UNETLoader", "unet_name", unet, "diffusion_models")]
         : ["ckpt_name", await modelFile(t, "CheckpointLoaderSimple", "ckpt_name", String(t.params.checkpoint ?? ""), "checkpoints")];
@@ -54,7 +54,7 @@ tutorial(
 
     const id = await t.h.step("Inputs and output", async () => {
       await t.say("Add it, and wire the loader's MODEL into model.");
-      const m = await t.addNode("WP Model Info", { x: 620, y: 170 });
+      const m = await t.addNode("WP Model Info", { x: 700, y: 170 });
       await t.wire(n.load, "MODEL", m, "model");
       await t.beat(800);
       await t.waitVoice();
@@ -71,7 +71,7 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("vals");
       await t.say("The family needs the model loaded, so it shows after the first run. Add a Context and a Debug after it, and run.");
-      const c = await t.addNode("WP Context", { x: 1180, y: 170 });
+      const c = await t.addNode("WP Context", { x: 1240, y: 170 });
       await t.wire(id, "context", c, "upstream");
       await addDebugUnder(t, c);
       await t.fastForward(() => t.run(), 10);
@@ -122,6 +122,10 @@ tutorial(
       await t.say("The row lights up, and the variant reads illustrious.");
       await t.waitVoice();
       await t.uncallout("hit");
+      await t.say("Run, and the Debug below agrees.");
+      await t.fastForward(() => t.run(), 10);
+      await t.beat(800);
+      await t.waitVoice();
       await t.say("A broken row is outlined in red and skipped, and Reset brings back the built-in rules.");
       await t.callout("reset", mi(id).locator('[data-test="mi-reset-rules"]'), "Built-in rules back", 4);
       await t.waitVoice();
@@ -138,7 +142,7 @@ tutorial(
     await t.h.step("Wired family, variant and name", async () => {
       await t.say("family, variant and name can also come from another node, like a switch that names the model you're testing. Wire a text box into variant.", "Family, variant and name can also come from another node, like a switch that names the model you're testing. Wire a text box into variant.");
       await t.speedUp();
-      const s = await t.addNode("Text (Multiline)", { x: 160, y: 640 });
+      const s = await t.addNode("Text (Multiline)", { x: 300, y: 640 });
       await t.click(t.node(s).locator("input, textarea").first());
       await t.type("sdxl", { cps: 30 });
       await t.press("Escape");
@@ -150,7 +154,13 @@ tutorial(
       }
       await t.beat(600);
       await t.waitVoice();
-      await t.say("A wired value beats the pin and the detection; an empty one is ignored. The row says wired, and shows the value after a run. A wired name still goes through your rules.");
+      await t.say("A wired value beats the pin and the detection; an empty one is ignored. The row says wired, and shows the value after a run. Run.");
+      await t.fastForward(() => t.run(), 10);
+      await t.beat(800);
+      await t.callout("wired", mi(id).locator('[data-test="mi-value-variant"]'), "From the wire", 4);
+      await t.waitVoice();
+      await t.uncallout("wired");
+      await t.say("A wired name still goes through your rules.");
       await t.waitVoice();
     });
 
