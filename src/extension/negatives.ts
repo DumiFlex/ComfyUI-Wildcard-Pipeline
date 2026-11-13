@@ -20,6 +20,7 @@
  */
 import { applyVarAccessor, varAccessorParts, type ResolvedValue } from "../widgets/richTokenize";
 import { NEGATIVES_VAR } from "./assembler-vars";
+import { templateVarReads } from "./template-pieces";
 
 export interface NegativeEntry {
   text: string;
@@ -138,8 +139,8 @@ const TEMPLATE_VAR_RE =
 export function templateReads(template: string, resolved: Record<string, ResolvedValue>): VarRead[] {
   const out: VarRead[] = [];
   if (!template) return out;
-  for (const m of template.matchAll(TEMPLATE_VAR_RE)) {
-    const { base, index, axis } = varAccessorParts(m[0]);
+  for (const r of templateVarReads(template)) {
+    const { base, index, axis } = varAccessorParts(r.raw);
     if (!Object.prototype.hasOwnProperty.call(resolved, base)) continue;
     if (!axis && index != null && !applyVarAccessor(resolved[base], index)) continue;
     out.push({ name: base, index: index ?? null });
