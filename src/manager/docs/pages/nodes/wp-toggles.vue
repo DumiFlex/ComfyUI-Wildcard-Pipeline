@@ -25,7 +25,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <b>WP Toggles</b> replaces a stack of Boolean nodes. Each toggle writes
         <VarToken>$its_variable</VarToken> as <code>true</code> or <code>false</code>, so a derivation
         can branch on it without a Context Injector, and can show a BOOLEAN output at the right of its
-        row for a switch node.
+        row for a switch node (off for a new toggle: turn on <b>BOOLEAN output</b> in its window).
       </p>
       <DocAnnotated
         src="images/docs/wp-toggles.png"
@@ -65,6 +65,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <p>
         Give a toggle an icon and its own colours under <b>Looks</b> in its window: one for the
         icon, one for the name and one for the control itself, so Day can glow yellow and Night blue.
+        On Buttons the colour lights up the On side while it's picked, and clicking the lit side
+        flips the toggle too.
         A label's icon and colour buttons do the same for the group, and its toggles wear that
         colour on their left edge. The row at the top of the toggle's window shows each change
         before you press Done.

@@ -63,7 +63,7 @@ describe("parseTogglesConfig", () => {
     for (const raw of ["", "{", "[]", null, 5]) {
       const c = parseTogglesConfig(raw);
       expect(toggleRows(c)).toHaveLength(1);
-      expect(toggleRows(c)[0]).toMatchObject({ pin: true, out: 1, style: "switch" });
+      expect(toggleRows(c)[0]).toMatchObject({ pin: false, out: 0, style: "switch" });
     }
   });
   it("keeps labels, labels and styles; drops junk; re-ids repeats", () => {
@@ -100,7 +100,7 @@ describe("names", () => {
     expect(uniqueVar("rain", c)).toBe("rain_3");
     expect(uniqueVar("rain", c, "1")).toBe("rain");
     expect(newToggle(c).var).toBe("toggle_3");
-    expect(defaultTogglesConfig().rows[0]).toMatchObject({ name: "Toggle 1", var: "toggle_1", out: 1 });
+    expect(defaultTogglesConfig().rows[0]).toMatchObject({ name: "Toggle 1", var: "toggle_1", pin: false, out: 0 });
   });
 });
 

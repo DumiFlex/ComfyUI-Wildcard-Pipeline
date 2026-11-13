@@ -209,7 +209,9 @@ export function newToggle(cfg: TogglesConfig, name?: string): ToggleRow {
     name: label,
     var: uniqueVar(varFromName(label) || `toggle_${n}`, cfg),
     on: false,
-    pin: true,
+    // No BOOLEAN output until the user turns it on: most toggles only feed
+    // their $variable, and a dot per toggle crowds the node.
+    pin: false,
     out: 0,
     style: "switch",
   };
@@ -217,9 +219,7 @@ export function newToggle(cfg: TogglesConfig, name?: string): ToggleRow {
 
 export function defaultTogglesConfig(): TogglesConfig {
   const cfg: TogglesConfig = { version: 1, mode: "any", group_var: "", rows: [] };
-  const first = newToggle(cfg);
-  first.out = 1;
-  cfg.rows.push(first);
+  cfg.rows.push(newToggle(cfg));
   return cfg;
 }
 
