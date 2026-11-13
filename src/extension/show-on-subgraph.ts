@@ -20,6 +20,8 @@ export const SHOW_KEY = "wp_show_panels";
 export interface ShownPanel {
   node: string;
   widget: string;
+  /** Parts the copy leaves out ("Choose what shows"); absent when none. */
+  hide?: string[];
 }
 
 interface GraphLike {
@@ -67,9 +69,12 @@ function key(p: ShownPanel): string {
 function readShown(host: SubgraphHost): ShownPanel[] {
   const raw = host.properties?.[SHOW_KEY];
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (p): p is ShownPanel => !!p && typeof (p as ShownPanel).node === "string" && typeof (p as ShownPanel).widget === "string",
-  );
+  return raw
+    .filter((p): p is ShownPanel => !!p && typeof (p as ShownPanel).node === "string" && typeof (p as ShownPanel).widget === "string")
+    .map((p) => {
+      const hide = Array.isArray(p.hide) ? p.hide.filter((h): h is string => typeof h === "string") : [];
+      return hide.length ? { node: p.node, widget: p.widget, hide } : { node: p.node, widget: p.widget };
+    });
 }
 
 function writeShown(host: SubgraphHost, list: ShownPanel[]): void {
@@ -131,6 +136,17 @@ function mount(host: SubgraphHost, inner: PanelNode, widget: string): void {
         // node, so Hide takes it off all of them.
         onHide: () => hidePanel(inner, widget),
         onOrphan: drop,
+        hidden: () => readShown(host).find((p) => key(p) === k)?.hide ?? [],
+        onHiddenChange: (ids) => {
+          writeShown(
+            host,
+            readShown(host).map((p) => {
+              if (key(p) !== k) return p;
+              return ids.length ? { node: p.node, widget: p.widget, hide: [...ids] } : { node: p.node, widget: p.widget };
+            }),
+          );
+          host.setDirtyCanvas?.(true, true);
+        },
       },
       build,
     ) as DomWidgetHost | null;

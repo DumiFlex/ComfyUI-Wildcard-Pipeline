@@ -83,7 +83,7 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
       @update:model-value="onPick"
     />
 
-    <div
+    <div data-wp-part="last-run" data-wp-part-label="Last run"
       class="wp-var-picker__preview"
       :class="{
         'wp-var-picker__preview--default': hasExecuted && usedDefault,
@@ -98,16 +98,16 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
         <template v-else>→ {{ previewParsed }}</template>
       </span>
     </div>
-    <div v-if="hasExecuted && choiceNote" class="wp-var-picker__preview-src" data-test="var-picker-choice-note">
+    <div data-wp-part="last-run" data-wp-part-label="Last run" v-if="hasExecuted && choiceNote" class="wp-var-picker__preview-src" data-test="var-picker-choice-note">
       {{ choiceNote }}
     </div>
-    <div v-else-if="hasExecuted && previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
+    <div data-wp-part="last-run" data-wp-part-label="Last run" v-else-if="hasExecuted && previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
       parsed from "{{ previewSource }}"
     </div>
-    <div v-else-if="hasExecuted && picked" class="wp-var-picker__preview-src" data-test="var-picker-unset">
+    <div data-wp-part="last-run" data-wp-part-label="Last run" v-else-if="hasExecuted && picked" class="wp-var-picker__preview-src" data-test="var-picker-unset">
       {{ picked }} was not set
     </div>
-    <div v-if="wiredTo" class="wp-var-picker__wired" data-test="var-picker-wired">
+    <div data-wp-part="wired-to" data-wp-part-label="What it feeds" v-if="wiredTo" class="wp-var-picker__wired" data-test="var-picker-wired">
       <span class="wp-var-picker__preview-label">into</span>
       <span class="wp-var-picker__wired-value">{{ wiredTo }}</span>
     </div>

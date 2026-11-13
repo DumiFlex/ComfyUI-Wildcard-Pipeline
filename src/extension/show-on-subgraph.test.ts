@@ -102,6 +102,15 @@ describe("show on subgraph node", () => {
     expect(a.widgets.map((w) => w.name)).toEqual(["wp_show:3:wp_toggles"]);
   });
 
+  it("keeps the parts a copy leaves out, and drops junk", () => {
+    const { a } = scene();
+    a.properties[SHOW_KEY] = [{ node: "3", widget: "wp_toggles", hide: ["font", 4, "rows"] }];
+    restoreShown(a);
+    expect(a.widgets).toHaveLength(1);
+    hidePanel({ id: 3, graph: a.subgraph as never }, "other");
+    expect(a.properties[SHOW_KEY]).toEqual([{ node: "3", widget: "wp_toggles", hide: ["font", "rows"] }]);
+  });
+
   it("has nothing to offer outside a subgraph", () => {
     const root = graph([]);
     root.rootGraph = root;

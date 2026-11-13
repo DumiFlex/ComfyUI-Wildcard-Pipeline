@@ -694,7 +694,7 @@ defineExpose({ addRow, addGeneralRow, removeRow });
 
 <template>
   <div class="wp-inj-widget" data-wp-reveal :class="{ 'wp-inj-widget--skipped': isSkipped }" @wp-reveal="onReveal">
-    <div class="wp-inj-header">
+    <div class="wp-inj-header" data-wp-part="header" data-wp-part-label="Header">
       <WpIconButton
         variant="bare"
         class="wp-inj-caret"
@@ -731,6 +731,9 @@ defineExpose({ addRow, addGeneralRow, removeRow });
       <InjectorRowComp
         v-for="(row, idx) in value.rows"
         :key="row._uid"
+        :data-wp-part="`row:${row._uid}`"
+        :data-wp-part-label="row.binding ? `$${row.binding}` : (row.kind === 'general' ? 'Template row' : row.slot_name)"
+        data-wp-part-section="Rows"
         :class="drag.classes(row._uid)"
         :style="drag.lineStyle(row._uid)"
         :row="row"
@@ -755,6 +758,8 @@ defineExpose({ addRow, addGeneralRow, removeRow });
         ↓ Wire an upstream node's output into this node's input pin — a variable row appears here.
       </div>
       <Button
+        data-wp-part="add-row"
+        data-wp-part-label="Add template row"
         size="sm"
         variant="add"
         icon="pi-plus"

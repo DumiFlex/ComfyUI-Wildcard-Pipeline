@@ -242,6 +242,10 @@ export interface MirrorMount {
   /** The node's own panel went away (node deleted, graph cleared): drop the
    *  copy without forgetting that it was shown. */
   onOrphan: () => void;
+  /** Parts of the panel this copy leaves out (`data-wp-part` ids). */
+  hidden?: () => string[];
+  /** The "Choose what shows" menu changed them. */
+  onHiddenChange?: (ids: string[]) => void;
 }
 
 let mirrorMount: MirrorMount | null = null;
@@ -290,10 +294,8 @@ export function primaryValue(node: object, name: string): string | undefined {
   return undefined;
 }
 
-// The frame is the kit's Disclosure (folds the panel away) with a kit ×
-// button in its heading; both load only once a panel is shown.
-const MirrorDisclosure = defineAsyncComponent(() => import("@/kit/Disclosure.vue"));
-const MirrorButton = defineAsyncComponent(() => import("@/kit/Button.vue"));
+// The frame (title, Choose what shows, Hide) loads only once a panel is shown.
+const MirrorFrame = defineAsyncComponent(() => import("./mirror-frame"));
 
 export function createDomWidgetHost<P extends Record<string, unknown>>(
   node: MountTargetNode,
@@ -314,21 +316,15 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     const frame = mirror;
     component = defineComponent({
       setup: () => () =>
-        h(
-          "div",
-          { class: "wp-mirror", "data-wp-mirror": "" },
-          h(MirrorDisclosure, { label: frame.title(), defaultOpen: true, flush: true, size: "sm" }, {
-            actions: () =>
-              h(MirrorButton, {
-                variant: "ghost",
-                icon: "times",
-                size: "sm",
-                "aria-label": "Hide from subgraph node",
-                onClick: frame.onHide,
-              }),
-            default: () => h(inner as Component, (options.componentProps ?? {}) as Record<string, unknown>),
-          }),
-        ),
+        h(MirrorFrame, {
+          scope: frame.widgetName,
+          title: frame.title,
+          hidden: frame.hidden?.() ?? [],
+          inner,
+          innerProps: (options.componentProps ?? {}) as Record<string, unknown>,
+          onHide: frame.onHide,
+          "onUpdate:hidden": (ids: string[]) => frame.onHiddenChange?.(ids),
+        }),
     }) as unknown as Component<P>;
   }
   const host = document.createElement("div");

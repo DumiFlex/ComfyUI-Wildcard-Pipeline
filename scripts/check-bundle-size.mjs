@@ -391,7 +391,11 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 685 -> 700 KB on 2026-11-12 for kit 0.19.0: the shared row drag
 // (useRowDrag + row-drag.css, now in the Toggles and Injector chunks) and the
 // audit's eight kit pieces put the total at ~687.9 KB.
-const TOTAL_LIMIT = 700 * 1024;     // 700 KB
+// RAISED 700 -> 715 KB on 2026-11-13 for the subgraph work: the promoted
+// template editor (#394), Show on subgraph node (#398) and its Choose what
+// shows frame (lazy mirror-frame chunk + part marks in every panel) put the
+// total at ~701.5 KB.
+const TOTAL_LIMIT = 715 * 1024;     // 715 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
