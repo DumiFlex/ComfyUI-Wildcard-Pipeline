@@ -4,7 +4,7 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 
 ## Using it
 
-- **Add** it from the node search (`WP Note`). A new note opens in its editor and starts pinned.
+- **Add** it from the node search (`WP Note`). A new note opens in its editor, unpinned.
 - **Edit** by double-clicking the note or with the indigo pencil in the selection toolbar while it is selected. **Done** goes back to reading.
 - **Move** it by dragging like any node (unpin it first).
 - **Resize** a Card or Sticky note from its corner: the width is yours, the height follows the text. A Label sizes itself to its title.
@@ -18,7 +18,7 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Tone**: Step (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge).
 - **Colour**: Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker.
 - **Look**: Card, Sticky or Label (above).
-- **Pinned**: ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned.
+- **Pinned**: ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start unpinned; a saved workflow keeps each note's pin.
 - **Title**: Shown in bold at the top, or on the pill of a Label.
 - **Text**: Its first line and length on the node; Edit text opens the text window, with the editor beside a live preview. Done (Ctrl+Enter) puts it on the note, Cancel or Escape leaves the note as it was. Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks.
 
