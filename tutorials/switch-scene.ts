@@ -84,7 +84,8 @@ export async function muteToggle(t: Tutor, name: string, at: { x: number; y: num
   await t.beat(400);
   await t.click(page.locator(".wp-tb-icon--edit").first().locator("xpath=ancestor::button[1]"));
   await t.beat(700);
-  await t.click(t.node(tg).locator('[data-test="tg-add"]'));
+  // Rename the new node's own first row (Toggle 1) rather than add a second one beside it.
+  await t.click(t.node(tg).locator('[data-test^="tg-edit-"]:not([data-test="tg-edit-done"])').first());
   await t.beat(700);
   const win = page.getByRole("dialog").filter({ has: page.locator('[data-test="tg-window-done"]') }).last();
   await t.fill(win.locator('[data-test="tg-name"] input, input[data-test="tg-name"]').first(), name, { cps: 30 });

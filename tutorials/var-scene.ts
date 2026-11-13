@@ -25,7 +25,8 @@ export async function buildVarScene(t: Tutor): Promise<VarScene> {
   await t.beat(400);
   await t.click(page.locator(".wp-tb-icon--edit").first().locator("xpath=ancestor::button[1]"));
   await t.beat(700);
-  await t.click(t.node(tg).locator('[data-test="tg-add"]'));
+  // Rename the new node's own first row (Toggle 1) rather than add a second one beside it.
+  await t.click(t.node(tg).locator('[data-test^="tg-edit-"]:not([data-test="tg-edit-done"])').first());
   await t.beat(700);
   const win = page.getByRole("dialog").filter({ has: page.locator('[data-test="tg-window-done"]') }).last();
   const field = (test: string) => win.locator(`[data-test="${test}"] input, input[data-test="${test}"]`).first();
