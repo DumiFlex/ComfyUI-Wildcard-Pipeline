@@ -1,5 +1,5 @@
 // Nodes 19: WP Var → Bool in depth (the depth standard). The shared Var scene; Var → Bool reads
-// $hires, the toggle's variable, into a core Switch node and a Preview as Text: context, var_name,
+// $hires, the toggle's variable, into ComfyUI's If/Else Switch and a Preview as Text: context, var_name,
 // the yes/no words, index (only yes/no words count), default, value (out), $name.bool for a toggle
 // with a Value, how it works, recipes (a hires branch, a LoRA on/off, a Switch between two latents),
 // gotchas.
@@ -72,8 +72,9 @@ tutorial(
     });
 
     await t.h.step("Into a switch", async () => {
-      await t.say("value (out) goes into any BOOLEAN input. Add ComfyUI's Switch node and wire it into switch: it passes on one input or the other.", "Its value goes into any BOOLEAN input. Add ComfyUI's Switch node and wire it into switch: it passes on one input or the other.");
-      const sw = await t.addNode("Switch", { x: 1330, y: 640 });
+      await t.say("value (out) goes into any BOOLEAN input. Add ComfyUI's If/Else Switch and wire it into switch: it passes on one input or the other.", "Its value goes into any BOOLEAN input. Add ComfyUI's If Else Switch and wire it into switch: it passes on one input or the other.");
+      // "Switch" alone finds another node first; ComfyUI's own is "If/Else Switch" (ComfySwitchNode).
+      const sw = await t.addNode("If/Else Switch", { x: 1330, y: 640 });
       await t.wire(v, "value", sw, "switch");
       await t.waitVoice();
       await t.say("Wire a quick latent into one side and a full-size one into the other, and the toggle picks between them, as the Batches and grids example does.");
