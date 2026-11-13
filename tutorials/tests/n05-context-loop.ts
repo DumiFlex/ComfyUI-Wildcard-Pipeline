@@ -53,7 +53,8 @@ tutorial(
     const n = await t.h.step("What runs again", async () => {
       await t.go("/");
       await t.say("A Context Loop runs everything after it once per frame, each frame with its own picks. Here's a small workflow to try it on.");
-      await t.speedUp();
+      // The build was 14 s of silence at the usual 6×: go faster.
+      await t.speedUp(12);
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
