@@ -10,13 +10,16 @@ export interface VarScene {
   ctx: string;
 }
 
-export async function buildVarScene(t: Tutor): Promise<VarScene> {
+/** `intro` is said over the empty canvas first, so the sped-up build doesn't open the video in silence. */
+export async function buildVarScene(t: Tutor, intro?: string): Promise<VarScene> {
   const page = t.page;
   await t.go("/");
   // 0.65 so Toggles, Model Info and the Context fit left of the Var nodes the tests drop at x 900.
   await t.setView({ scale: 0.65, offset: [0, 0] });
   // The build was 11 s of silence at the usual 6×: go faster.
-  await t.speedUp(12);
+  if (intro) await t.say(intro);
+  // A build the earlier videos taught: fast, so it doesn't sit silent on screen.
+  await t.speedUp(24);
   // addNode takes a SCREEN point (it double-clicks there) and centres the node on it. At 0.65 Toggles
   // spans about 74-366, Model Info and the Context about 400-760, and the Var nodes at 900 start near 780.
   const tg = await t.addNode("WP Toggles", { x: 220, y: 230 });

@@ -271,6 +271,7 @@ tutorial(
     await t.h.step("A list of values", async () => {
       await t.say("The values input takes a list. Wire in a text with one line per frame.");
       const vals = await t.addNode("Text (Multiline)", { x: 270, y: 760 });
+      await t.say("Three lines: a lighthouse, a windmill, a stone bridge.");
       await t.click(t.node(vals).locator("textarea").first());
       await t.type("a lighthouse\na windmill\na stone bridge", { cps: 18 });
       await t.beat(400);
@@ -284,8 +285,11 @@ tutorial(
       await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
       await page.keyboard.press("End");
       await t.type(" In the background: $iteration_value.", { cps: 18 });
-      await t.run();
-      await filled(n.text, /stone bridge/);
+      await t.say("Run.");
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(n.text, /stone bridge/);
+      });
       await t.callout("out", t.node(n.text), "Three lines, three frames", 5);
       await t.waitVoice();
       await t.uncallout("out");
@@ -295,11 +299,14 @@ tutorial(
       await t.say("A frame edit lives on this canvas only. For a pattern you can share, write a rule on iteration. Add Shot per frame: frame one gets a wide establishing shot, the others a close-up.");
       await t.pickModules(n.ctx, ["Shot per frame"]);
       await t.waitVoice();
+      await t.say("Put dollar shot at the start of the template, and run.");
       await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
       await page.keyboard.press("Control+Home");
       await t.type("$shot, ", { cps: 16 });
-      await t.run();
-      await filled(n.text, /establishing/);
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(n.text, /establishing/);
+      });
       await t.callout("out", t.node(n.text), "Frame 1 wide, the rest close", 5);
       await t.say("A rule is saved in bundles and works in any loop. A frame edit is quicker for one canvas.");
       await t.waitVoice();
@@ -344,8 +351,11 @@ tutorial(
       await t.say("And Bypass loop runs a single frame without unwiring anything, handy while you build.");
       await t.click(t.node(n.loop).locator('[data-test="loop-bypass-toggle"]'));
       await t.beat(600);
-      await t.run();
-      await t.beat(800);
+      await t.fastForward(async () => {
+        await t.run();
+        await t.beat(800);
+      });
+      await t.say("Switch it back off when you want every frame again.");
       await t.waitVoice();
       await t.click(t.node(n.loop).locator('[data-test="loop-bypass-toggle"]'));
       await t.beat(500);

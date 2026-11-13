@@ -15,11 +15,14 @@ export interface SwitchScene {
   grpB: string;
 }
 
-export async function buildSwitchScene(t: Tutor): Promise<SwitchScene> {
+/** `intro` is said over the empty canvas first, so the sped-up build doesn't open the video in silence. */
+export async function buildSwitchScene(t: Tutor, intro?: string): Promise<SwitchScene> {
   const page = t.page;
   await t.go("/");
   await t.setView({ scale: 0.8, offset: [0, 0] });
-  await t.speedUp(12);
+  if (intro) await t.say(intro);
+  // A build the earlier videos taught: fast, so it doesn't sit silent on screen.
+  await t.speedUp(24);
   const ks1 = await t.addNode("KSampler", { x: 230, y: 110 });
   const ks2 = await t.addNode("KSampler", { x: 230, y: 560 });
   const dec = await t.addNode("VAE Decode", { x: 1000, y: 150 });

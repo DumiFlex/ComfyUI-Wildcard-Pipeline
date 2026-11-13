@@ -200,9 +200,11 @@ tutorial(
       const d2 = await t.addNode("WP Debug", { x: 1150, y: 700 });
       await resize(d2, 700, 320);
       await t.wire(c2, "context", d2, "context");
-      await t.normalSpeed();
-      await t.run();
-      await t.beat(1200);
+      await t.say("Run.");
+      await t.fastForward(async () => {
+        await t.run();
+        await t.beat(1200);
+      });
       await t.waitVoice();
       const roles = [view(dbg).locator('[data-test="dbg-var"]', { hasText: "role" }).first(), view(d2).locator('[data-test="dbg-var"]', { hasText: "role" }).first()];
       await t.callout("before", roles[0], "Before", 4);

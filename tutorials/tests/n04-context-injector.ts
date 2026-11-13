@@ -137,6 +137,7 @@ tutorial(
       await t.press("Tab");
       await t.beat(400);
       await editRow(n.inj, 3);
+      await t.say("Its template: dollar cloak, with a silver clasp.");
       await t.click(template());
       await t.type("$cloak with a silver clasp", { cps: 16 });
       await t.beat(600);
@@ -175,6 +176,7 @@ tutorial(
       await t.say("Then an Assembler. Its template prints the role, the outfit row, the setting, the time and the light.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 720, y: 600 });
       await t.wire(ctx, "context", asm, "context");
+      await t.say("A painting of dollar role, dollar outfit, then setting, time and lighting.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $outfit, $setting $time, $lighting", { cps: 16 });
       await t.beat(500);
@@ -182,6 +184,7 @@ tutorial(
       await t.say("And two Preview as Text nodes: one for the prompt, one for the negative.");
       const out = await t.addNode("Preview as Text", { x: 1180, y: 150 });
       await t.wire(asm, "prompt", out, "source");
+      await t.say("The second takes the negative output, so you can see which variable each negative came from.");
       const neg = await t.addNode("Preview as Text", { x: 1180, y: 560 });
       await t.wire(asm, "negative", neg, "source");
       await t.waitVoice();

@@ -15,7 +15,7 @@ tutorial(
   },
   async (t) => {
     const n = await t.h.step("What it's for", async () => {
-      const s = await buildVarScene(t);
+      const s = await buildVarScene(t, "WP Var to Choice feeds a variable into any dropdown. First, the small workflow every Var video shares.");
       await t.say("Settings per model also picks a sampler for each family: dpmpp 2m for SDXL. A KSampler's sampler name is a dropdown, and a dropdown only takes one of its own entries.");
       await t.waitVoice();
       await t.say("WP Var → Choice turns a variable into one of a dropdown's entries: a sampler, a scheduler, a checkpoint, a VAE, a LoRA.", "WP Var to Choice turns a variable into one of a dropdown's entries: a sampler, a scheduler, a checkpoint, a VAE, a LoRA.");
@@ -32,6 +32,7 @@ tutorial(
       await t.say("Wire choice (out) into a KSampler's sampler_name, and into Preview as Text so it runs without a model.", "Wire its choice output into a KSampler's sampler name, and into Preview as Text so it runs without a model.");
       const ks = await t.addNode("KSampler", { x: 1700, y: 250 });
       await t.wire(id, "choice", ks, "sampler_name");
+      await t.say("The KSampler gets the entry itself. The preview shows the text, so you can read what was picked.");
       const p = await t.addNode("Preview as Text", { x: 1330, y: 300 });
       await t.wire(id, "choice", p, "source");
       await t.waitVoice();

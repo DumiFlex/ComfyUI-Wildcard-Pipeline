@@ -150,7 +150,8 @@ tutorial(
       await t.h.step("Pick, and name a pick", async () => {
         await t.say("Run.");
         await t.click(page.getByRole("button", { name: "Run", exact: true }).first());
-        await t.fastForward(() => picker.waitFor({ state: "visible", timeout: 10 * 60_000 }), 8);
+        await t.fastForward(() => picker.waitFor({ state: "visible", timeout: 10 * 60_000 }), 20);
+        await t.say("The run pauses at the filter, and the picker opens with every draft.");
         await t.beat(1200);
         await t.press("g");
         await t.beat(600);
@@ -221,6 +222,7 @@ tutorial(
         await t.click(page.locator('[data-test="image-filter-tool-lasso"]'));
         const loopPts = [[0.32, 0.3], [0.68, 0.3], [0.7, 0.56], [0.3, 0.56], [0.32, 0.3]] as const;
         await stroke(await Promise.all(loopPts.map(([x, y]) => onImage(x, y))));
+        await t.say("Let go, and everything inside the loop is masked.");
         await t.click(page.locator('[data-test="image-filter-tool-brush"]'));
         await t.waitVoice();
         await t.callout("br", page.locator('[data-test="image-filter-brush"]'), "Size, hardness, strength", 4);
@@ -287,7 +289,8 @@ tutorial(
         await t.uncallout("send");
         await t.say("Keep picked sends the two on.");
         await t.click(page.locator('[data-test="image-filter-keep-picked"]'));
-        await t.fastForward(queueEmpty, 8);
+        await t.fastForward(queueEmpty, 20);
+        await t.say("The run goes on with just those two. Bookmark five jumps to where they're saved.");
         await jumpTo(t, 5);
         // Bookmark 5 is the refined picks' Save Image: show the change before the grid.
         const saved = await find("SaveImage");

@@ -152,6 +152,7 @@ tutorial(
       await t.say("One Context can feed several Assemblers. Add a second, for a short tag prompt.");
       const a2 = await t.addNode("WP Prompt Assembler", { x: 1150, y: 640 });
       await t.wire(n.ctx, "context", a2, "context");
+      await t.say("Its template is just two tags: dollar role, comma, dollar setting.");
       await t.click(box(a2));
       await t.type("$role, $setting", { cps: 16 });
       await t.press("Escape");
@@ -195,6 +196,7 @@ tutorial(
       await t.beat(500);
       await t.click(t.node(loop).locator('[data-test="loop-iteration-internal"]'));
       await t.beat(600);
+      await t.say("Then end the Assembler's template with comma, frame, dollar iteration.");
       await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("ControlOrMeta+End");
       await t.type(", frame $iteration", { cps: 16 });

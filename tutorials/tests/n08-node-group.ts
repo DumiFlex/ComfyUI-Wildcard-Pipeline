@@ -16,7 +16,7 @@ tutorial(
   },
   async (t) => {
     const n = await t.h.step("What it's for", async () => {
-      const s = await buildSwitchScene(t);
+      const s = await buildSwitchScene(t, "WP Node Group switches a whole set of nodes at once. First, a small workflow to try it on.");
       await t.say("Two samplers, and a save branch that decodes, upscales and saves. Sometimes a whole part should be off: one sampler for a quick test, or no upscale.");
       await t.waitVoice();
       await t.say("Muting nodes one by one is slow and easy to forget. WP Node Group gathers nodes so you, a toggle or a relay can switch them all at once.");

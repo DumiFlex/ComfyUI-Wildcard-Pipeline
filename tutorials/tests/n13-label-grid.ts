@@ -92,7 +92,8 @@ tutorial(
       await t.setView(back);
       if (showcasing(t)) {
         await t.say("Run it.");
-        await t.fastForward(() => t.run(), 20);
+        await t.fastForward(() => t.run(), 40);
+        await t.say("Bookmark five jumps to the grid.");
         await t.click(page.locator('[data-test="bm-dock-row-5"]'));
         await t.beat(1500);
         await t.say("Shots down, lights across, each row and column headed, and a title on top. One picture that compares the whole run. That's the job.");
@@ -172,9 +173,12 @@ tutorial(
     const field = (test: string) =>
       node().locator(`input[data-test="${test}"], [data-test="${test}"] input, textarea[data-test="${test}"], [data-test="${test}"] textarea`).first();
     const select = (test: string) => node().locator(`select[data-test="${test}"], [data-test="${test}"] select`).first();
+    // Runs fast-forwarded, so a wait for the images doesn't sit silent on screen.
     const runAgain = async () => {
-      await t.run();
-      await t.beat(900);
+      await t.fastForward(async () => {
+        await t.run();
+        await t.beat(900);
+      });
     };
     const pickColour = async (test: string, hex: string) => {
       await t.click(node().locator(`[data-test="${test}"]`).first());
@@ -302,6 +306,7 @@ tutorial(
       await t.say("Typed takes one header per line instead, for labels that don't say it. Columns: typed, Warm and Cold.");
       await t.choose(select("lg-columns-from"), "typed");
       await t.beat(400);
+      await t.say("One header per line: Warm, then Cold. Then run again.");
       await t.fill(field("lg-column-headers"), "Warm\nCold", { cps: 12 });
       await t.press("Tab");
       await runAgain();
@@ -327,6 +332,7 @@ tutorial(
       await t.waitVoice();
       await t.say("Colours: the grid's background, and the colour of the headers and the title. A dark background, white headers.");
       await pickColour("lg-background", "#1e1e2e");
+      await t.say("Then the header colour: white, so it reads on the dark.");
       await pickColour("lg-header-color", "#ffffff");
       await runAgain();
       await t.waitVoice();

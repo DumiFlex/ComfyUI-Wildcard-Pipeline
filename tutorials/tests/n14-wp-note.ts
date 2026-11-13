@@ -160,6 +160,7 @@ tutorial(
       await openText(note);
       await t.fill(textArea(), "Change the seed on the Context to roll something new.", { cps: 20 });
       await t.beat(400);
+      await t.say("Done closes the text window, and Done on the node leaves the edit view.");
       await textDone();
       await t.click(t.node(note).locator('[data-test="note-done"]'));
       await t.beat(900);

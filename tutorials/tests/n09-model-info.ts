@@ -73,6 +73,7 @@ tutorial(
       await t.say("The family needs the model loaded, so it shows after the first run. Add a Context and a Debug after it, and run.");
       const c = await t.addNode("WP Context", { x: 1240, y: 170 });
       await t.wire(id, "context", c, "upstream");
+      await t.say("The Debug under it lists every variable that reaches the Context.");
       await addDebugUnder(t, c);
       await t.fastForward(() => t.run(), 10);
       await t.beat(800);
@@ -115,6 +116,7 @@ tutorial(
       const row = rules.last();
       await t.fill(row.locator('input[aria-label="variant"]'), "illustrious", { cps: 14 });
       await t.press("Tab");
+      await t.say("The pattern is matched against the file name. The bar means or, so nova or noob.");
       await t.fill(row.locator('input[aria-label="pattern"]'), "nova|noob", { cps: 14 });
       await t.press("Tab");
       await t.beat(700);
