@@ -1,10 +1,12 @@
 // Nodes 12: WP Image Filter in depth, on the "Pick and refine" example. Before the run: the filter's
 // clip input (wired, so a prompt edit is re-encoded), its masks output into a Set Latent Noise Mask
-// in front of the refine pass, and its labels output into Label & Grid. In the picker: picking, a
+// in front of the refine pass (on the filter's own latent, not the upscaled one: the sampler keeps
+// every unpainted part as it gets it, and a nearest-exact upscaled latent decodes blocky), and its
+// labels output into Label & Grid. In the picker: picking, a
 // label renamed, a prompt edited (✎), a mask painted with the brush, erase, lasso and fill, the
 // sliders, Undo and the two mask views, Compare, Zoom, tucking the picker away and the waiting pill,
-// Send to Loop, then Keep picked. After the run: only the masked face changed and the grid prints the
-// new name. Last, the node's own settings (mode, Send picks as, timeout, extra slots, the sweep table).
+// Send to Loop, then Keep picked. After the run: the scarf shows where the mask was painted (refine
+// denoise raised to 0.75 so it can) and the grid prints the new name. Last, the node's own settings (mode, Send picks as, timeout, extra slots, the sweep table).
 // The run needs a model, so without showcase the video only walks the node.
 import { StepError } from "watchwright";
 import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
@@ -112,16 +114,32 @@ tutorial(
         const grid = await find("WP_LabelGrid");
         if (!up || !refine || !grid) throw new StepError("The example's refine pass or grid wasn't found.");
         await t.say("Two more wires. A Set Latent Noise Mask in front of the refine pass, so it only changes what you paint.");
+        // The mask goes on the picked latent at its own size. Behind the Upscale Latent By, every
+        // part you don't paint would stay the upscaled latent as it is, and that decodes blocky.
         // Both ends of every wire on screen at once, clear of the bookmark dock on the left and the
         // caption at the bottom: a wire dragged to a node off screen drops on empty canvas.
         await fit([filter, up, refine]);
         const box = await t.node(refine).boundingBox();
         const mask = await t.addNode("Set Latent Noise Mask", { x: (box?.x ?? 900) + 120, y: (box?.y ?? 300) + (box?.height ?? 300) + 90 });
         await fit([filter, up, refine, mask]);
-        await t.wire(up, "LATENT", mask, "samples");
+        await t.waitVoice();
+        await t.say("It takes the filter's latent before the upscale, so everything you don't paint stays the draft as it was.");
+        await t.wire(filter, "latent", mask, "samples");
         await t.wire(mask, "LATENT", refine, "latent_image");
         await t.wire(filter, "masks", mask, "mask");
         await t.waitVoice();
+        // At the example's half denoise a masked part barely moves, so the scarf never showed.
+        await t.callout("dn", t.node(refine), "Denoise 0.75", 4);
+        await t.say("And raise the refine's denoise to 0.75, so what you paint can really change.");
+        await page.evaluate((id) => {
+          const node = window.app?.graph?.getNodeById(Number(id)) as { widgets?: { name: string; value: unknown }[] } | null | undefined;
+          const w = node?.widgets?.find((x) => x.name === "denoise");
+          if (w) w.value = 0.75;
+          window.app?.canvas?.setDirty(true, true);
+        }, refine);
+        await t.beat(600);
+        await t.waitVoice();
+        await t.uncallout("dn");
         await t.say("And the filter's labels output into Label and Grid, so the grid prints the names you give the picks.");
         await fit([filter, grid]);
         await t.wire(filter, "labels", grid, "labels");
@@ -132,7 +150,8 @@ tutorial(
       await t.h.step("Pick, and name a pick", async () => {
         await t.say("Run.");
         await t.click(page.getByRole("button", { name: "Run", exact: true }).first());
-        await t.fastForward(() => picker.waitFor({ state: "visible", timeout: 10 * 60_000 }), 8);
+        await t.fastForward(() => picker.waitFor({ state: "visible", timeout: 10 * 60_000 }), 20);
+        await t.say("The run pauses at the filter, and the picker opens with every draft.");
         await t.beat(1200);
         await t.press("g");
         await t.beat(600);
@@ -184,24 +203,26 @@ tutorial(
         await t.waitVoice();
         // Brush first, so the line and the first stroke start together.
         await t.click(page.locator('[data-test="image-filter-tool-brush"]'));
-        await t.say("The brush paints. Go over the face.");
-        const face = [[0.44, 0.22], [0.56, 0.22], [0.58, 0.32], [0.5, 0.38], [0.42, 0.32], [0.46, 0.27], [0.54, 0.28]] as const;
-        await stroke(await Promise.all(face.map(([x, y]) => onImage(x, y))));
+        // The scarf goes round the neck and over the collar: the mask has to cover that, or the
+        // refine pass can't draw it (a face-only mask left the refined pick looking unchanged).
+        await t.say("The brush paints. Go over the neck and collar, where the scarf goes.");
+        const neck = [[0.4, 0.32], [0.6, 0.32], [0.62, 0.38], [0.38, 0.38], [0.38, 0.44], [0.62, 0.44]] as const;
+        await stroke(await Promise.all(neck.map(([x, y]) => onImage(x, y))));
         await t.waitVoice();
-        await t.say("X swaps to Erase, to take some away.");
+        await t.say("X swaps to Erase, to take some away. Undo with Ctrl Z.");
         await t.press("x");
         await t.beat(400);
-        await stroke([await onImage(0.57, 0.33), await onImage(0.6, 0.36)]);
+        await stroke([await onImage(0.45, 0.38), await onImage(0.55, 0.38)]);
         await t.press("x");
-        await t.waitVoice();
-        await t.say("Lasso fills what you draw around. Fill fills the area under the pointer, up to the lines you painted.");
-        await t.click(page.locator('[data-test="image-filter-tool-lasso"]'));
-        const loopPts = [[0.4, 0.45], [0.6, 0.45], [0.62, 0.55], [0.4, 0.56], [0.4, 0.45]] as const;
-        await stroke(await Promise.all(loopPts.map(([x, y]) => onImage(x, y))));
-        await t.waitVoice();
-        await t.say("Undo with Ctrl Z.");
+        await t.beat(500);
         await page.keyboard.press("Control+z");
         await t.beat(700);
+        await t.waitVoice();
+        await t.say("Lasso fills what you draw around: the shoulders too. Fill fills the area under the pointer, up to the lines you painted.");
+        await t.click(page.locator('[data-test="image-filter-tool-lasso"]'));
+        const loopPts = [[0.32, 0.3], [0.68, 0.3], [0.7, 0.56], [0.3, 0.56], [0.32, 0.3]] as const;
+        await stroke(await Promise.all(loopPts.map(([x, y]) => onImage(x, y))));
+        await t.say("Let go, and everything inside the loop is masked.");
         await t.click(page.locator('[data-test="image-filter-tool-brush"]'));
         await t.waitVoice();
         await t.callout("br", page.locator('[data-test="image-filter-brush"]'), "Size, hardness, strength", 4);
@@ -268,12 +289,24 @@ tutorial(
         await t.uncallout("send");
         await t.say("Keep picked sends the two on.");
         await t.click(page.locator('[data-test="image-filter-keep-picked"]'));
-        await t.fastForward(queueEmpty, 8);
+        await t.fastForward(queueEmpty, 20);
+        await t.say("The run goes on with just those two. Bookmark five jumps to where they're saved.");
         await jumpTo(t, 5);
-        // The bookmark lands on the grid's top: fit the whole grid above the caption.
+        // Bookmark 5 is the refined picks' Save Image: show the change before the grid.
+        const saved = await find("SaveImage");
+        // Close in on it, above the caption, so the scarf can be seen (the last take showed it small).
+        if (saved) {
+          await t.zoomOn(saved, { scale: 1.5, top: 110 });
+          await t.beat(600);
+          await t.callout("saved", t.node(saved), "The picks, refined", 4);
+        }
+        await t.say("The hero shot now wears the green scarf, changed only where you painted. The other pick had no mask, so it comes out as it was.");
+        await t.waitVoice();
+        if (saved) await t.uncallout("saved");
+        // The grid shows the drafts: fit the whole grid above the caption.
         const shown = await find("WP_LabelGrid");
-        if (shown) await fit([shown]);
-        await t.say("Only the painted face changed in the refine pass, with the green scarf, and the grid prints hero shot.");
+        if (shown) await t.zoomOn(shown, { scale: 1.4, top: 110 });
+        await t.say("And the grid prints hero shot.");
         // No label: with the caption at the top it sat half behind it, and the grid's own text says it.
         if (shown) await t.callout("grid", t.node(shown), undefined, 4);
         await t.waitVoice();
@@ -307,6 +340,13 @@ tutorial(
       await t.say("And when the loop sweeps two wildcards, the picker opens as a table, rows and columns by value, so you can pick a whole row at once.");
       await t.waitVoice();
       await t.setView(back);
+    });
+
+    await t.h.step("Recipes and gotchas", async () => {
+      await t.say("Recipes. Context Loop, sampler, Image Filter, then a refine pass on only the picks, as here. The labels output into Label and Grid for a contact sheet of the keepers. Send to Loop, so the next run repeats only the frames you liked.");
+      await t.waitVoice();
+      await t.say("Gotchas. A paused run holds the queue until you answer, so set a timeout for long batches. An edited prompt only reaches the sampler when clip is wired. And a mask only changes what the refine pass is allowed to redraw: give it enough denoise to show.");
+      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {

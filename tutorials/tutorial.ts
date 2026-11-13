@@ -1006,6 +1006,8 @@ export class Tutor {
 // ---- showcase: real images from the prompt -------------------------------------------------------
 
 export interface ShowcaseOptions {
+  /** How fast the wait for each run plays (default 8); a batch of several images wants more. */
+  speed?: number | undefined;
   /** The node whose `prompt` (and `negative`) outputs feed the sampler. */
   from?: string;
   /** A fixed prompt instead of `from`'s, for a take with no Assembler. */
@@ -1273,7 +1275,7 @@ export async function showcase(t: Tutor, o: ShowcaseOptions): Promise<string> {
   const runs = o.runs ?? 3;
   for (let i = 0; i < runs; i++) {
     if (i > 0 && o.between) await o.between(i);
-    await t.fastForward(() => t.run(), 8);
+    await t.fastForward(() => t.run(), o.speed ?? 8);
     await fitDebug(t);
     await t.beat(1800);
   }

@@ -48,18 +48,27 @@ tutorial(
       await t.say("Two text boxes and an Int number, as stand-ins for anything another node gives you: a caption, a setting, a model name.");
       await t.waitVoice();
       await t.say("Wire each into the Injector. Every wire gets a row, and the row's name is the variable it writes.");
+      const away = async () => {
+        // Off the rows, so the globe's tooltip doesn't stay up beside them.
+        await t.moveTo({ x: 560, y: 640 });
+        await t.beat(300);
+      };
       await t.wire(cloak, "STRING", inj, "input_0");
       await t.fill(binding(inj, 0), "cloak", { cps: 14 });
       await t.press("Tab");
+      await away();
+      await t.waitVoice();
+      await t.say("The second text becomes time. A new free input appears as each one is wired, up to ten.");
       await t.wire(time, "STRING", inj, "input_1");
       await t.fill(binding(inj, 1), "time", { cps: 14 });
       await t.press("Tab");
+      await away();
+      await t.waitVoice();
+      await t.say("And the Int becomes steps. Its row says INT, so rules and Var nodes can read it as a number, not as text.");
       await t.wire(steps, "INT", inj, "input_2");
       await t.fill(binding(inj, 2), "steps", { cps: 14 });
       await t.press("Tab");
-      // Off the rows, so the globe's tooltip doesn't stay up beside them.
-      await t.moveTo({ x: 560, y: 640 });
-      await t.beat(500);
+      await away();
       await t.waitVoice();
       await t.callout("names", t.node(inj).locator('[data-test="inj-row-binding"]').first(), "Letters, digits, underscores", 4);
       await t.say("A name starts with a letter, then letters, digits or underscores. The row also shows the socket and the type it was given.");
@@ -128,6 +137,7 @@ tutorial(
       await t.press("Tab");
       await t.beat(400);
       await editRow(n.inj, 3);
+      await t.say("Its template: dollar cloak, with a silver clasp.");
       await t.click(template());
       await t.type("$cloak with a silver clasp", { cps: 16 });
       await t.beat(600);
@@ -140,31 +150,43 @@ tutorial(
     });
 
     const m = await t.h.step("Before a Context", async () => {
-      // Slide the canvas left, so the Context, the Assembler and the previews fit beside the Injector.
-      await page.evaluate(() => {
-        const c = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] }; setDirty(a: boolean, b: boolean): void } }).canvas;
-        c.ds.offset[0] -= 560 / c.ds.scale;
-        c.setDirty(true, true);
-      });
+      // Zoom out a little and put the Injector at the left edge, so the Context, the Assembler and
+      // both previews fit beside it, with the Injector whole (the last take cut it at the left).
+      const view = await page.evaluate((id) => {
+        const g = window.app?.graph;
+        const node = (g?.getNodeById(id) ?? g?.getNodeById(Number(id))) as { pos: [number, number] } | null | undefined;
+        const c = (window.app as unknown as { canvas: { ds: { scale: number; offset: [number, number] } } }).canvas;
+        const scale = c.ds.scale * 0.82;
+        const x = node?.pos[0] ?? 0;
+        const y = node?.pos[1] ?? 0;
+        // Screen x 120: clear of the sidebar (40 put the Injector's left edge under it).
+        return { scale, offset: [120 / scale - x, 150 / scale - y] as [number, number] };
+      }, n.inj);
+      await t.setView(view);
       await t.beat(500);
       await t.say("Wire the Injector into a Context's upstream. The Context starts with every injected variable, so its own items can read them.");
-      const ctx = await t.addNode("WP Context", { x: 900, y: 190 });
+      // A node is centred on its drop point: x 720 keeps the Context (about 445 px wide here) clear of
+      // the Injector's context output.
+      const ctx = await t.addNode("WP Context", { x: 720, y: 150 });
       await t.wire(n.inj, "context", ctx, "upstream");
       await t.waitVoice();
       await t.say("Pick Role, Setting and Lighting from time.");
-      await t.pickModules(ctx, ["Role", "Setting", "Lighting from time"]);
+      await t.fastForward(() => t.pickModules(ctx, ["Role", "Setting", "Lighting from time"]), 3);
       await t.waitVoice();
       await t.say("Then an Assembler. Its template prints the role, the outfit row, the setting, the time and the light.");
-      const asm = await t.addNode("WP Prompt Assembler", { x: 900, y: 620 });
+      const asm = await t.addNode("WP Prompt Assembler", { x: 720, y: 600 });
       await t.wire(ctx, "context", asm, "context");
+      await t.say("A painting of dollar role, dollar outfit, then setting, time and lighting.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
       await t.type("A painting of $role $outfit, $setting $time, $lighting", { cps: 16 });
       await t.beat(500);
       await t.waitVoice();
       await t.say("And two Preview as Text nodes: one for the prompt, one for the negative.");
-      const out = await t.addNode("Preview as Text", { x: 1450, y: 190 });
+      await t.speedUp(4);
+      const out = await t.addNode("Preview as Text", { x: 1180, y: 150 });
       await t.wire(asm, "prompt", out, "source");
-      const neg = await t.addNode("Preview as Text", { x: 1450, y: 560 });
+      await t.say("The second takes the negative output, so you can see which variable each negative came from.");
+      const neg = await t.addNode("Preview as Text", { x: 1180, y: 560 });
       await t.wire(asm, "negative", neg, "source");
       await t.waitVoice();
       await t.say("Lighting from time follows the time variable. Here time comes from the text box, not from a wildcard. Run.");
@@ -205,6 +227,37 @@ tutorial(
       await t.say("The real prompt is what the run gives. Read it in Preview as Text or WP Debug.");
       await t.waitVoice();
       await t.uncallout("rv");
+    });
+
+    await t.h.step("Recipes", async () => {
+      await t.callout("txt", rows(n.inj).nth(0), "A LoRA name, a caption", 5);
+      await t.say("Recipe one: in place of the cloak text, a LoRA loader's name, with a rule that adds its trigger words; the LoRA trigger words video builds it. Or a caption from an image-to-text node, so the prompt describes a picture you load.");
+      await t.waitVoice();
+      await t.uncallout("txt");
+      await t.callout("num", rows(n.inj).nth(2), "A number for a sampler", 5);
+      await t.say("Recipe two: a number like steps, hidden with the globe, then read back out by a Var to Int node for a sampler setting.");
+      await t.waitVoice();
+      await t.uncallout("num");
+    });
+
+    await t.h.step("Gotchas", async () => {
+      await t.say("Gotcha one: a curly-brace pick in a row's template needs a seed, so it prints as written. Edit the outfit row and try one.");
+      await editRow(n.inj, 3);
+      await t.click(template());
+      await t.press("ControlOrMeta+End");
+      await t.type(" in {red|blue}", { cps: 16 });
+      await t.beat(700);
+      const warn = page.locator('[data-test="ibm-inline-picks"]');
+      const shown = (await warn.isVisible().catch(() => false)) ? warn : page.locator('[data-test="ibm-preview"]');
+      await t.callout("w", shown, "Printed as written", 5);
+      await t.waitVoice();
+      await t.say("The editor warns about it. Use a wildcard in a Context for a pick. Cancel.");
+      await t.waitVoice();
+      await t.uncallout("w");
+      await t.click(page.locator('[data-test="ibm-cancel"]'));
+      await t.beat(600);
+      await t.say("Gotcha two: an Injector after a Loop gives every frame the same value; a per-frame value goes into the Loop's values input. And a name a Context also writes is replaced by whichever runs later.");
+      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {

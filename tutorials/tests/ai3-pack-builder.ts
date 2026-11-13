@@ -103,7 +103,7 @@ tutorial(
       if (await install.isEnabled().catch(() => false)) {
         // Install sits low on the page: bring it up out of the caption's band first.
         await t.scrollTo(install, { at: 0.45 });
-        // One literal per line: voice/speak.py only voices t.say("…") written out, never a ternary.
+        // One written-out line per branch: voice/speak.py never voices a ternary inside say().
         if (clean) await t.say("Install puts it in your library as one bundle, ready for a Context.");
         else await t.say("A warning or two can stay: Install puts it in your library as one bundle, and you fix the rest in its editors.");
         await t.click(install);

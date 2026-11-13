@@ -52,7 +52,9 @@ tutorial(
 
     const n = await t.h.step("What runs again", async () => {
       await t.go("/");
-      await t.speedUp();
+      await t.say("A Context Loop runs everything after it once per frame, each frame with its own picks. Here's a small workflow to try it on.");
+      // The build was 14 s of silence at the usual 6×: go faster.
+      await t.speedUp(12);
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
@@ -166,6 +168,22 @@ tutorial(
       await t.waitVoice();
       await t.click(chip(n.loop, "base"));
       await t.beat(500);
+      const tag = t.node(n.asm).locator('[data-test="asm-frames-companion"]');
+      if (await tag.isVisible().catch(() => false)) {
+        await t.callout("tag", [tag, t.node(n.asm).locator('[data-test="asm-some-frames"]')], "Set on frame 4 only", 5);
+        await t.say("The Assembler knows: companion carries a frame tag, number four, and the header counts two variables on some frames: the companion, and the lighting frame three switches off. Neither is missing.");
+        await t.waitVoice();
+        await t.uncallout("tag");
+        const step = t.node(n.asm).locator('[data-test="asm-frame-step"]');
+        await t.callout("step", step, "Preview one frame", 5);
+        await t.say("The arrows above the preview step through the frames. On frame one the companion is empty; step to frame four, and it's there.");
+        for (let i = 0; i < 3; i++) {
+          await t.click(t.node(n.asm).locator('[data-test="asm-frame-next"]'));
+          await t.beat(700);
+        }
+        await t.waitVoice();
+        await t.uncallout("step");
+      }
       await t.say("Run.");
       await t.run();
       await filled(n.text, /frame 4/);
@@ -253,6 +271,7 @@ tutorial(
     await t.h.step("A list of values", async () => {
       await t.say("The values input takes a list. Wire in a text with one line per frame.");
       const vals = await t.addNode("Text (Multiline)", { x: 270, y: 760 });
+      await t.say("Three lines: a lighthouse, a windmill, a stone bridge.");
       await t.click(t.node(vals).locator("textarea").first());
       await t.type("a lighthouse\na windmill\na stone bridge", { cps: 18 });
       await t.beat(400);
@@ -266,8 +285,11 @@ tutorial(
       await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
       await page.keyboard.press("End");
       await t.type(" In the background: $iteration_value.", { cps: 18 });
-      await t.run();
-      await filled(n.text, /stone bridge/);
+      await t.say("Run.");
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(n.text, /stone bridge/);
+      });
       await t.callout("out", t.node(n.text), "Three lines, three frames", 5);
       await t.waitVoice();
       await t.uncallout("out");
@@ -277,15 +299,30 @@ tutorial(
       await t.say("A frame edit lives on this canvas only. For a pattern you can share, write a rule on iteration. Add Shot per frame: frame one gets a wide establishing shot, the others a close-up.");
       await t.pickModules(n.ctx, ["Shot per frame"]);
       await t.waitVoice();
+      await t.say("Put dollar shot at the start of the template, and run.");
       await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
       await page.keyboard.press("Control+Home");
       await t.type("$shot, ", { cps: 16 });
-      await t.run();
-      await filled(n.text, /establishing/);
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(n.text, /establishing/);
+      });
       await t.callout("out", t.node(n.text), "Frame 1 wide, the rest close", 5);
       await t.say("A rule is saved in bundles and works in any loop. A frame edit is quicker for one canvas.");
       await t.waitVoice();
       await t.uncallout("out");
+    });
+
+    await t.h.step("Sweeps and the frame variable", async () => {
+      await t.callout("sw", t.node(n.loop).locator('[data-test="loop-sweep-btn"]'), "Every combination", 4);
+      await t.say("Sweep combinations runs every combination of the options you pick, instead of random rolls: three shots by three lights is nine frames. The Batches and grids example video builds one.");
+      await t.waitVoice();
+      await t.uncallout("sw");
+      const it = [t.node(n.loop).locator('[data-test="loop-iteration-var"]'), t.node(n.loop).locator('[data-test="loop-iteration-internal"]'), t.node(n.loop).locator('[data-test="loop-total-internal"]')];
+      await t.callout("it", it, "The frame number", 4);
+      await t.say("Iteration var names the frame-number variable, dollar iteration. The globe lets it print, and sigma does the same for dollar iteration total, the frame count.");
+      await t.waitVoice();
+      await t.uncallout("it");
     });
 
     await t.h.step("With the other nodes", async () => {
@@ -314,8 +351,11 @@ tutorial(
       await t.say("And Bypass loop runs a single frame without unwiring anything, handy while you build.");
       await t.click(t.node(n.loop).locator('[data-test="loop-bypass-toggle"]'));
       await t.beat(600);
-      await t.run();
-      await t.beat(800);
+      await t.fastForward(async () => {
+        await t.run();
+        await t.beat(800);
+      });
+      await t.say("Switch it back off when you want every frame again.");
       await t.waitVoice();
       await t.click(t.node(n.loop).locator('[data-test="loop-bypass-toggle"]'));
       await t.beat(500);
@@ -325,6 +365,11 @@ tutorial(
       await t.say("To see each frame's picks, and which frame had an item off, wire a WP Debug after the Context. The Debug video goes through it.");
       await t.waitVoice();
       await t.uncallout("dbg");
+    });
+
+    await t.h.step("Gotchas", async () => {
+      await t.say("Gotchas. The loop goes before the first Context, or that Context rolls once for every frame. A frame edit stays on this node and isn't saved in a bundle; a rule on dollar iteration is. And count one switches looping off without unwiring.");
+      await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {
