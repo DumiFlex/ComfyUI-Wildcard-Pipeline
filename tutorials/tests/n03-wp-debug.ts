@@ -196,9 +196,9 @@ tutorial(
       const c2 = await t.addNode("WP Context", { x: 560, y: 720 });
       await t.wire(n.ctx, "context", c2, "upstream");
       await t.pickModules(c2, ["Role"]);
-      // Kept short and high, so its role row stays above the caption.
+      // Tall enough for both Context sections; the "After" step zooms in on it so the replaced role shows.
       const d2 = await t.addNode("WP Debug", { x: 1150, y: 700 });
-      await resize(d2, 700, 320);
+      await resize(d2, 700, 620);
       await t.wire(c2, "context", d2, "context");
       await t.say("Run.");
       await t.fastForward(async () => {
@@ -211,10 +211,16 @@ tutorial(
       await t.say("The first Debug shows the role as the first Context left it.");
       await t.waitVoice();
       await t.uncallout("before");
+      // At 70% the second Debug's role row (under the second Context's section) was too small to read,
+      // and sat under the caption: zoom in on it, then glide back for the loop recipe.
+      const back = await t.zoomOn(d2, { scale: 1.0, top: 110 });
+      await t.beat(600);
+      await roles[1].scrollIntoViewIfNeeded().catch(() => undefined);
       await t.callout("after", roles[1], "After", 4);
       await t.say("The second shows the one that replaced it. Put Debugs between stages to see where a value appeared, or changed.");
       await t.waitVoice();
       await t.uncallout("after");
+      await t.setView(back);
     });
 
     await t.h.step("Recipe: a loop's frames", async () => {
