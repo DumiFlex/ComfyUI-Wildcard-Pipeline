@@ -233,11 +233,28 @@ tutorial(
       // toggle goes first in that group; on a grouped toggle's lower half, it goes after it.
       const gripOf = (name: string) => t.node(n.tg).locator(".wp-sortable__row", { has: t.page.locator('[data-test^="tg-row-"]', { hasText: name }) }).first().locator(".wp-sortable__grip").first();
       const labelRow = t.node(n.tg).locator(".wp-sortable__row", { has: t.page.locator(".wp-tg__label") }).last();
+      // While dragging, the list opens a gap beside the row under the pointer, so rows move under it:
+      // aim from below the list first (the gap opens at the end, nothing above it moves), then
+      // re-measure the target and settle on its lower half, which drops "after" it.
       const dragInto = async (name: string, over: typeof labelRow) => {
         const g = await gripOf(name).boundingBox({ timeout: 5000 }).catch(() => null);
         const o = await over.boundingBox({ timeout: 5000 }).catch(() => null);
         if (!g || !o) throw new StepError(`${name}'s grip or the row to drop it on isn't on screen.`);
-        await t.drag({ x: g.x + g.width / 2, y: g.y + g.height / 2 }, { x: g.x + g.width / 2, y: o.y + o.height * 0.75 });
+        const x = g.x + g.width / 2;
+        await t.moveTo({ x, y: g.y + g.height / 2 });
+        await t.beat(160);
+        await page.mouse.down();
+        await t.beat(120);
+        const list = await t.node(n.tg).locator(".wp-sortable__list").first().boundingBox().catch(() => null);
+        await t.moveTo({ x, y: (list ? list.y + list.height : o.y + o.height) + 24 }, { speed: 0.8 });
+        await t.beat(300);
+        for (let i = 0; i < 3; i++) {
+          const now = await over.boundingBox().catch(() => null);
+          if (!now) break;
+          await t.moveTo({ x, y: now.y + now.height * 0.75 }, { speed: 0.8 });
+          await t.beat(250);
+        }
+        await page.mouse.up();
         await t.beat(700);
       };
       await dragInto("Rain", labelRow);
