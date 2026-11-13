@@ -185,6 +185,8 @@ export interface RawTraceEntry {
   negative?: string;
   error?: string | { type?: string; message?: string } | null;
   detail?: RawDetail;
+  /** A base-off module's loop frames it is switched ON for (0-based). */
+  on_frames?: number[];
 }
 
 export interface RawRef {
@@ -508,10 +510,26 @@ function kindOf(entry: RawTraceEntry): Kind {
   }
 }
 
-function statusOf(raw: string | undefined, hasError: boolean): { status: StepStatus; label: string } {
+/** "on #4", "on #1 #4", "on 3 frames": where a base-off module does run. */
+export function onFramesLabel(frames: readonly number[] | undefined): string {
+  const list = (frames ?? []).filter((k) => Number.isInteger(k) && k >= 0);
+  if (list.length === 0) return "";
+  if (list.length <= 2) return `on ${list.map((k) => `#${k + 1}`).join(" ")}`;
+  return `on ${list.length} frames`;
+}
+
+function statusOf(
+  raw: string | undefined,
+  hasError: boolean,
+  onFrames?: readonly number[],
+): { status: StepStatus; label: string } {
   if (hasError || raw === "failed" || raw === "error") return { status: "error", label: "failed" };
   if (!raw || raw === "ok") return { status: "ok", label: "ran" };
-  if (raw === "skipped_disabled") return { status: "off", label: "off" };
+  if (raw === "skipped_disabled") {
+    // Off at base but switched on for some loop frames: say where it runs.
+    const on = onFramesLabel(onFrames);
+    return on ? { status: "frame", label: `off · ${on}` } : { status: "off", label: "off" };
+  }
   if (raw === "skipped_frame") return { status: "frame", label: "off this frame" };
   if (raw === "skipped_unknown_type") return { status: "unknown", label: "unknown type" };
   return { status: "unknown", label: raw.replace(/_/g, " ") };
@@ -709,7 +727,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
   const steps: TraceStep[] = trace.map((t, i) => {
     const kind = kindOf(t);
     const hasError = !!t.error;
-    const { status, label } = statusOf(t.status, hasError);
+    const { status, label } = statusOf(t.status, hasError, asList<number>(t.on_frames));
     const writes: StepWrite[] = asList<RawWrite>(t.writes).map((w) => ({
       variable: str(w.variable),
       value: formatValue(w.value),

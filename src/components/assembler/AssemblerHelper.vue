@@ -14,6 +14,8 @@ import {
   type RolledAxes,
 } from "../../widgets/richTokenize";
 import Button from "@/kit/Button.vue";
+import { vTooltip } from "@/kit/tooltip";
+import { frameSentence, frameTag } from "./loop-frames";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -86,6 +88,12 @@ const props = defineProps<{
    *  the dim overlay so muted/bypassed state matches litegraph's
    *  native node-frame dim. */
   nodeMode?: number;
+  /** A WP Context Loop upstream: the frame the chips and preview show
+   *  (0-based), the Loop's frame count, and the names only some frames set
+   *  (name → 0-based frames). Absent without a Loop. */
+  loopFrames?: { frame: number; count: number; partial: Record<string, number[]> };
+  /** Move the shared frame cursor (the Loop's EDIT FRAME) to a 0-based frame. */
+  onPickFrame?: (frame: number) => void;
 }>();
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -146,7 +154,52 @@ const unusedHere = computed(() => {
  */
 const missing = computed(() => {
   const upstream = props.upstreamVars ?? [];
-  return templateVarsInternal.value.filter((v) => !upstream.includes(v));
+  const partial = props.loopFrames?.partial ?? {};
+  return templateVarsInternal.value.filter((v) => !upstream.includes(v) && !(v in partial));
+});
+
+/** Frames that set `v` when a Loop sets it on some frames only. */
+function partialFrames(v: string): number[] | undefined {
+  return props.loopFrames?.partial[v];
+}
+
+/** Template names a Loop sets on some frames but not on the frame shown:
+ *  not missing (another frame sets them), empty in this preview. */
+const offFrame = computed(() => {
+  const upstream = props.upstreamVars ?? [];
+  const partial = props.loopFrames?.partial ?? {};
+  return templateVarsInternal.value.filter((v) => !upstream.includes(v) && v in partial);
+});
+
+/** Template names set on some frames only, shown or not. */
+const someFrames = computed(() => {
+  const partial = props.loopFrames?.partial ?? {};
+  return templateVarsInternal.value.filter((v) => v in partial);
+});
+
+function chipFrameTag(v: string): string {
+  const f = partialFrames(v);
+  return f && props.loopFrames ? frameTag(f, props.loopFrames.count) : "";
+}
+
+function chipFrameHint(v: string): string {
+  const f = partialFrames(v);
+  return f && props.loopFrames ? frameSentence(v, f, props.loopFrames.count) : "";
+}
+
+/** Hover text for the preview note: each off-frame name's frames. */
+const offFrameHint = computed(() => offFrame.value.map((v) => chipFrameHint(v)).join(" "));
+
+/** Hover text for the header's "on some frames" count. */
+const someFramesHint = computed(() =>
+  `Set on some loop frames only: ${someFrames.value.map((v) => "$" + v).join(", ")}`,
+);
+
+/** The preview's frame stepper: only with a Loop of two or more frames. */
+const stepper = computed(() => {
+  const lf = props.loopFrames;
+  if (!lf || lf.count < 2) return null;
+  return { frame: lf.frame, count: lf.count };
 });
 
 // ── Formula-driven minWidth ────────────────────────────────────────
@@ -177,7 +230,8 @@ watch(
 // Preview tokenisation
 // ---------------------------------------------------------------------------
 
-interface PreviewToken { kind: "literal" | "var"; text: string; varName?: string }
+/** `off`: a name a loop sets on other frames, empty on the frame shown. */
+interface PreviewToken { kind: "literal" | "var" | "off"; text: string; varName?: string }
 
 /** An axis read resolves to a TAG. Falling through to the value is what
  *  rendered "a white t-shirt and denim skirt.SHOES". An axis the chain does not
@@ -209,6 +263,11 @@ const previewTokens = computed<PreviewToken[]>(() => {
       const raw = m[0];
       const { base: name, index, axis } = varAccessorParts(raw);
       const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
+      if (!has && partialFrames(name)) {
+        tokens.push({ kind: "off", text: raw, varName: name });
+        last = idx + m[0].length;
+        continue;
+      }
       tokens.push({
         kind: "var",
         text: axis
@@ -322,10 +381,11 @@ const isResolved = computed(() => {
 /** The preview header's note. A template with no `$names` is plain text: it
  *  passes through as typed (the node then works as a multiline text box with
  *  its own negative), so it is neither "empty" nor "unresolved". */
-const previewStatus = computed<{ text: string; tone: "ok" | "warn" | "" }>(() => {
+const previewStatus = computed<{ text: string; tone: "ok" | "warn" | "info" | "" }>(() => {
   if (!props.template.trim()) return { text: "(template empty)", tone: "" };
   if (templateVarsInternal.value.length === 0) return { text: "plain text", tone: "ok" };
   if (missing.value.length > 0) return { text: `${missing.value.length} unresolved`, tone: "warn" };
+  if (offFrame.value.length > 0) return { text: `${offFrame.value.length} empty`, tone: "info" };
   if (isResolved.value) return { text: "resolved", tone: "ok" };
   return { text: "(not resolved yet)", tone: "" };
 });
@@ -538,6 +598,13 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         </div>
         <span class="wp-asm-section-stat">
           {{ upstreamNames.length }} upstream
+          <template v-if="someFrames.length">
+            · <span
+              v-tooltip="someFramesHint"
+              class="wp-asm-section-stat--info"
+              data-test="asm-some-frames"
+            >{{ someFrames.length }} on some frames</span>
+          </template>
           <template v-if="missing.length">
             · <span class="wp-asm-section-stat--warn">{{ missing.length }} missing</span>
           </template>
@@ -563,6 +630,33 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             aria-hidden="true"
           />
           <span class="var-tok">{{ v }}</span>
+          <span
+            v-if="chipFrameTag(v)"
+            v-tooltip="chipFrameHint(v)"
+            class="wp-asm-var__frames"
+            :data-test="`asm-frames-${v}`"
+          >{{ chipFrameTag(v) }}</span>
+        </span>
+        <span
+          v-for="v in offFrame"
+          :key="`off-${v}`"
+          v-tooltip="chipFrameHint(v)"
+          :data-test="`asm-chip-${v}`"
+          :class="['wp-asm-var', 'wp-asm-var--off-frame', {
+            'wp-asm__chip--ripple': ripples.has(v),
+            'wp-asm-var--ctx-active': ctxActiveVar === v,
+          }]"
+          :style="rippleStyle(v)"
+          @click="(ev) => onChipClick(ev, v)"
+          @contextmenu="(ev) => openChipMenu(ev, v, false)"
+        >
+          <i
+            v-if="chipKindIcon(v)"
+            :class="['wp-asm-var__kind-icon', chipKindIcon(v)]"
+            aria-hidden="true"
+          />
+          <span class="var-tok">{{ v }}</span>
+          <span class="wp-asm-var__frames" :data-test="`asm-frames-${v}`">{{ chipFrameTag(v) }}</span>
         </span>
         <span
           v-for="v in missing"
@@ -577,7 +671,7 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           @contextmenu="(ev) => openChipMenu(ev, v, true)"
         ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
         <span
-          v-if="upstreamNames.length === 0 && missing.length === 0"
+          v-if="upstreamNames.length === 0 && missing.length === 0 && offFrame.length === 0"
           class="wp-asm-vars__none"
           data-test="asm-vars-none"
         >No variables here: wire a Context or Injector to use $names. Plain text passes through as typed.</span>
@@ -586,8 +680,37 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
       <!-- preview section -->
       <div class="wp-asm-section">
         <span>preview</span>
+        <span v-if="stepper" class="wp-asm-frame-step" data-test="asm-frame-step">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="pi-chevron-left"
+            :disabled="stepper.frame <= 0"
+            hint="Previous loop frame"
+            aria-label="Previous loop frame"
+            data-test="asm-frame-prev"
+            @click="onPickFrame?.(stepper.frame - 1)"
+          />
+          <span class="wp-asm-frame-step__label" data-test="asm-frame-label" :aria-label="`Loop frame ${stepper.frame + 1} of ${stepper.count}`">{{ stepper.frame + 1 }}/{{ stepper.count }}</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="pi-chevron-right"
+            :disabled="stepper.frame >= stepper.count - 1"
+            hint="Next loop frame"
+            aria-label="Next loop frame"
+            data-test="asm-frame-next"
+            @click="onPickFrame?.(stepper.frame + 1)"
+          />
+        </span>
         <span
-          :class="['wp-asm-section-stat', { 'is-ok': previewStatus.tone === 'ok', 'wp-asm-section-stat--warn': previewStatus.tone === 'warn' }]"
+          v-tooltip="offFrameHint"
+          :class="['wp-asm-section-stat', {
+            'is-ok': previewStatus.tone === 'ok',
+            'wp-asm-section-stat--warn': previewStatus.tone === 'warn',
+            'wp-asm-section-stat--info': previewStatus.tone === 'info',
+            'wp-asm-section-stat--after-step': !!stepper,
+          }]"
           data-test="asm-preview-status"
         >{{ previewStatus.text }}</span>
       </div>
@@ -617,6 +740,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
                 class="literal"
                 v-html="modelSyntaxHtml(tok.text)"
               ></span>
+              <span
+                v-else-if="tok.kind === 'off'"
+                v-tooltip="chipFrameHint(tok.varName ?? '')"
+                class="wp-asm-preview__off"
+                data-test="asm-preview-off"
+              >{{ tok.text }}</span>
               <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
             </template>
           </div>
@@ -679,6 +808,8 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-helper--skipped { opacity: 0.45; }
 .wp-asm-section {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 4px;
   align-items: center;
   margin: 6px 0 4px;
   font: 500 11px/1 var(--wp-font-sans);
@@ -687,10 +818,53 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-section-stat {
   margin-left: auto;
+  white-space: nowrap;
   font: 11px/1 var(--wp-font-mono);
   color: var(--wp-text-dim);
 }
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
+.wp-asm-section-stat--info { color: var(--wp-info); }
+/* The frame stepper takes the `margin-left: auto`; the status sits after it. */
+.wp-asm-section-stat--after-step { margin-left: 6px; }
+.wp-asm-frame-step {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  text-transform: none;
+}
+.wp-asm-frame-step__label {
+  font: 11px/1 var(--wp-font-mono);
+  color: var(--wp-text-muted);
+  padding: 0 2px;
+  white-space: nowrap;
+}
+/* A loop sets this name on some frames only: a small frame tag inside the
+   chip (hover names the frames). */
+.wp-asm-var__frames {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  font-size: 9px;
+  line-height: 14px;
+  color: var(--wp-info);
+  background: color-mix(in oklab, var(--wp-info) 18%, transparent);
+}
+/* In the preview: renders empty on this frame. Kept in place, struck and
+   faint, so the sentence still shows where it goes. */
+.wp-asm-preview__off {
+  color: var(--wp-text-dim);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--wp-info) 60%, transparent);
+}
+/* Set on other loop frames, not the one shown: not missing, so the calm
+   info colour with a dashed edge instead of the warning. */
+.wp-asm-var.wp-asm-var--off-frame {
+  color: var(--wp-info);
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--wp-info) 55%, transparent);
+  background: color-mix(in oklab, var(--wp-info) 10%, transparent);
+}
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
 .wp-asm-vars__none {
   color: var(--wp-text-dim);

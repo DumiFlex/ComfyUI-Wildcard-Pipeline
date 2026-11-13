@@ -94,7 +94,19 @@ const overridable = [
       </ul>
       <p>
         A frame with a module off still makes an image; the module just adds nothing. WP Debug
-        shows whether a module was off for that frame or off everywhere.
+        shows whether a module was off for that frame or off everywhere, and a module that is off
+        in the base but on for some frames says where it runs (<code>off · on #4</code>).
+      </p>
+      <p>
+        The <b>WP Prompt Assembler</b> knows about this. A variable that only some frames set is
+        not missing: its chip is blue with a dashed edge and a frame tag (<code>#4</code>), the
+        variables header counts it as <b>on some frames</b>, its underline in the template is a
+        blue dotted line, and pointing at it says which frames set it and which render it empty.
+        The preview shows one frame at a time: the one picked under <b>Edit frame</b> (frame 1
+        while <code>base</code> is picked), or step through them with the
+        <b>‹ 1/4 ›</b> arrows above it, which move the Edit frame pick too. On a frame that
+        doesn't set the variable, the preview strikes it through and says it is empty there. Run
+        only warns about a variable that no frame sets.
       </p>
     </DocSection>
 
