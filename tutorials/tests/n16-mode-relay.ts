@@ -45,7 +45,7 @@ tutorial(
     });
 
     await t.h.step("The three rows", async () => {
-      await t.callout("rows", t.node(relay).locator(".wp-mr__row"), "What to send, and when", 6);
+      await t.callout("rows", await t.node(relay).locator(".wp-mr__row").all(), "What to send, and when", 6);
       await t.say("Three rows say what to send. All muted: every watched node is muted. All bypassed: every one is bypassed. Any runs: at least one still runs.");
       await t.waitVoice();
       await t.uncallout("rows");

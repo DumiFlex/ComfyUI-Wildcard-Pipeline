@@ -34,7 +34,7 @@ tutorial(
       await t.beat(600);
       await t.waitVoice();
       const rows = t.node(g).locator('[data-test^="ng-row-"]');
-      await t.callout("rows", rows, "Title, id and mode", 5);
+      await t.callout("rows", await rows.all(), "Title, id and mode", 5);
       await t.say("Each row shows its node's title, its id, and a chip with its mode.");
       await t.waitVoice();
       await t.uncallout("rows");
