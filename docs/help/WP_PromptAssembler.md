@@ -6,8 +6,8 @@ Write a prompt with `$variables` in it and get the finished prompt, plus a match
 ## Inputs and outputs
 
 - **context (in)** `context`: The variables from a WP Context (or anything that ends in one).
-- **template** `STRING`: Your prompt with $variables in it.
-- **negative_template** `STRING`: Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative).
+- **template** `STRING`: Your prompt with $variables in it. Wire another node's text into it to use that text as the template instead: the box then says "From the template input", and the $variables in the wired text still fill in.
+- **negative_template** `STRING`: Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative). It takes a wired text the same way the template does.
 - **prompt (out)** `STRING`: The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner.
 - **negative (out)** `STRING`: The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode.
 

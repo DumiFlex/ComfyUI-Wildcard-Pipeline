@@ -31,6 +31,7 @@ import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import { attachThemeDetector } from "../extension/theme-detector";
+import { keepEditorWhenLinked } from "./linked-editor";
 import { templateInsertAtCaret } from "../extension/_stashes";
 import {
   collectUpstreamProducers,
@@ -47,6 +48,7 @@ type EditorNode = LiteNodeLike & MountTargetNode;
 
 const RichTextInput = defineAsyncComponent(() => import("../manager/components/RichTextInput.vue"));
 const NegativeTemplateBox = defineAsyncComponent(() => import("../components/assembler/NegativeTemplateBox.vue"));
+const EmptyState = defineAsyncComponent(() => import("@/kit/EmptyState.vue"));
 
 const PLACEHOLDER = "A $style portrait of $subject";
 
@@ -150,12 +152,11 @@ export function create(node: EditorNode, inputName: string) {
       );
 
       // A link into the `template` input overrides whatever is typed here at
-      // runtime, so the editor must stop accepting edits — the stock
-      // multiline widget goes read-only in the same situation.
+      // runtime, so the editor gives way to a "from the input" note (the
+      // negative box shows the same in its own body).
       //
       // Derived from the link itself rather than from the widget's
-      // `computedDisabled`: that flag is recomputed lazily during a draw, so
-      // it still read `true` a full second after the link was removed.
+      // `computedDisabled`, which is pinned (see linked-editor.ts).
       const linkDriven = reactiveFromGraph<boolean>(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
         () => {
@@ -202,8 +203,17 @@ export function create(node: EditorNode, inputName: string) {
           });
       }
 
-      return () =>
-        h(RichTextInput, {
+      // Linked: the wired text wins at run time, so show where it comes from
+      // instead of a greyed copy of text that no longer counts.
+      return () => linkDriven.value
+        ? h(EmptyState, {
+          icon: "link",
+          headline: `From the ${inputName} input`,
+          body: "The wired text is the template; its $variables still fill in. Disconnect it to type here.",
+          size: "inline",
+          "data-test": "template-linked",
+        })
+        : h(RichTextInput, {
           ref: editorRef,
           modelValue: model.value,
           // The engine resolves `$var` reads here and nothing else: no
@@ -214,10 +224,7 @@ export function create(node: EditorNode, inputName: string) {
           multiline: true,
           rows: 5,
           fill: true,
-          placeholder: linkDriven.value
-            ? "Driven by the connected input — disconnect it to edit here."
-            : PLACEHOLDER,
-          disabled: linkDriven.value,
+          placeholder: PLACEHOLDER,
           varSuggestions: varNames.value,
           varProducers: varProducers.value,
           // We walked a graph, so an unattributed `$var` means "nothing
@@ -300,6 +307,9 @@ export function create(node: EditorNode, inputName: string) {
     // Fired by ComfyUI's own value setter, i.e. workflow load and undo.
     onValueRestored: (v: string) => { model.value = v; },
   });
+
+  // A link into this input must not hide the editor (see linked-editor.ts).
+  keepEditorWhenLinked(editorHost.widget);
 
   model.value = editorHost.getValue();
   collapsed.value = initialNegativeCollapsed(
