@@ -78,11 +78,15 @@ class WPToggles(io.ComfyNode):
         # then the pick, which may hold a toggle's value.
         value_warnings: list = []
         read_ctx = {**upstream_ctx, toggles.BOOLS_KEY: on_off}
-        for name in [*sorted(valued - {group}), *([group] if group in values else [])]:
+        value_order = [*sorted(valued - {group}), *([group] if group in values else [])]
+        value_reads: dict[str, list] = {}
+        for name in value_order:
             text = values[name]
             if "$" in text or "{" in text:
+                value_reads[name] = []
                 values[name] = template.resolve_variables(
                     text, {**read_ctx, **values, "__wp_warnings__": value_warnings},
+                    reads=value_reads[name],
                 )
 
         def resolve_neg(text: str) -> str:
@@ -115,14 +119,23 @@ class WPToggles(io.ComfyNode):
         filed = {k: v for k, v in own_negs.items() if v}
         if neg_text:
             filed[group] = neg_text
-        if filed:
-            out_internals[negatives.NEG_KEY] = {
-                **(out_internals.get(negatives.NEG_KEY) or {}),
-                **{
-                    k: [{"text": v, "pick": None, "source": "WP_Toggles"}]
-                    for k, v in filed.items()
-                },
-            }
+        # A value that reads `$vars` carries their negatives (negatives
+        # follow usage), then the toggle's own. In resolve order, so the pick
+        # reading a toggle's value gets that toggle's negatives too.
+        table = dict(out_internals.get(negatives.NEG_KEY) or {})
+        for k, v in filed.items():
+            if k not in value_reads:
+                table[k] = [{"text": v, "pick": None, "source": "WP_Toggles"}]
+        for k in value_order:
+            entries = negatives.entries_for_reads(
+                {negatives.NEG_KEY: table}, value_reads.get(k, []),
+            )
+            if filed.get(k):
+                entries.append({"text": filed[k], "pick": None, "source": "WP_Toggles"})
+            if entries:
+                table[k] = entries
+        if table or negatives.NEG_KEY in out_internals:
+            out_internals[negatives.NEG_KEY] = table
         # `$name.bool` reads these, across nodes, whatever the variable holds.
         if on_off:
             out_internals[toggles.BOOLS_KEY] = {

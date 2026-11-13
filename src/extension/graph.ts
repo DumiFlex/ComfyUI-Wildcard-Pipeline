@@ -760,24 +760,53 @@ export function collectUpstreamInjectorNegatives(
       continue;
     }
     if (n.type === TOGGLES_NODE && !isSkippedMode(n)) {
-      // A write replaces the variable's negatives with the toggle's own.
-      for (const [v, neg] of Object.entries(staticToggleNegatives(n))) out[v] = neg || null;
+      // A write replaces the variable's negatives with the toggle's own, after
+      // those of the `$vars` its value reads (as the node files them).
+      const values = staticToggleValues(n);
+      const negs = staticToggleNegatives(n);
+      const before = { ...out };
+      for (const v of Object.keys(negs)) out[v] = inheritNegatives(before, values[v] ?? "", negs[v] ?? "");
       continue;
     }
     if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
     const inj = parseCached<{
       version: 1;
-      rows?: Array<{ binding?: string; enabled?: boolean; negative?: string }>;
+      rows?: Array<{ binding?: string; enabled?: boolean; negative?: string; kind?: string; template?: string }>;
     }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
-    for (const row of inj.rows ?? []) {
+    // Socket rows first, then template rows in order, as the node runs them.
+    const rows = inj.rows ?? [];
+    const ordered = [...rows.filter((r) => r.kind !== "general"), ...rows.filter((r) => r.kind === "general")];
+    for (const row of ordered) {
       if (row.enabled !== true) continue;
       const binding = (row.binding ?? "").trim();
       if (!binding) continue;
       const neg = typeof row.negative === "string" ? row.negative.trim() : "";
-      out[binding] = neg || null;
+      // A template row carries the negatives of the variables it reads.
+      out[binding] = row.kind === "general"
+        ? inheritNegatives(out, row.template ?? "", neg)
+        : neg || null;
     }
   }
   return out;
+}
+
+const READ_RE = /\$\$|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const SOCKET_RE = /^input_\d+$/;
+
+/** `own` after the negatives (in `known`) of each `$var` `text` reads, or
+ *  `null` when there are none. Raw sockets (`$input_N`) carry nothing. */
+function inheritNegatives(known: Record<string, string | null>, text: string, own: string): string | null {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const m of text.matchAll(READ_RE)) {
+    const name = m[1];
+    if (!name || SOCKET_RE.test(name) || seen.has(name)) continue;
+    seen.add(name);
+    const got = known[name];
+    if (got) parts.push(got);
+  }
+  if (own) parts.push(own);
+  return parts.length ? parts.join(", ") : null;
 }
 
 /**

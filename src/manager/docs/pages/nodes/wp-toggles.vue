@@ -85,7 +85,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <VarToken>$rain</VarToken> print "heavy rain" or nothing. The switch itself is still there as
         <VarToken>$rain.bool</VarToken>, <code>true</code> or <code>false</code>, for rules and
         conditions. Its <b>Negative</b> goes with the variable while it is on, so an Assembler that
-        prints <VarToken>$rain</VarToken> also sends "sunny, dry" to its negative output.
+        prints <VarToken>$rain</VarToken> also sends "sunny, dry" to its negative output. A Value
+        that reads a <VarToken>$variable</VarToken> brings that variable's negatives along too.
       </p>
       <p>
         In Any on a toggle can also say what to write while it is <b>off</b>: its <b>Off value</b>

@@ -277,6 +277,32 @@ describe("collectUpstreamProducers", () => {
     });
   });
 
+  it("collectUpstreamInjectorNegatives: a template row carries the negatives of what it reads", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({
+          version: 1,
+          rows: [
+            { kind: "general", binding: "outfit", enabled: true, template: "$cloak, $input_0 $$x", negative: "dull" },
+            { binding: "cloak", enabled: true, slot_name: "input_0", negative: "torn fabric" },
+            { kind: "general", binding: "raw", enabled: true, template: "$input_0" },
+          ],
+        }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } });
+    expect(collectUpstreamInjectorNegatives(g, pov)).toEqual({
+      cloak: "torn fabric",
+      outfit: "torn fabric, dull",
+      raw: null,
+    });
+  });
+
   it("collectUpstreamInjectorNegatives: a toggle's own negative, or null when it has none", () => {
     const rows = [
       { id: "a", kind: "toggle", name: "Rain", var: "rain", on: true, pin: false, out: 0, style: "switch", value: "in the rain", negative: "sunny sky" },
