@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { hideRule, partEntries, readParts } from "./mirror-frame";
+import { hideRule, moveEntries, partEntries, readParts } from "./mirror-frame";
 
 function dom(html: string): HTMLElement {
   const el = document.createElement("div");
@@ -67,5 +67,18 @@ describe("subgraph copy parts", () => {
     const entries = partEntries([], [], () => undefined);
     expect(entries).toHaveLength(1);
     expect("label" in entries[0] && entries[0].disabled).toBe(true);
+  });
+});
+
+describe("moveEntries", () => {
+  it("offers Move up / Move down only when the copy can move", () => {
+    const move = vi.fn();
+    expect(moveEntries(() => false, move)).toEqual([]);
+    const items = moveEntries((d) => d === 1, move);
+    const labels = items.map((e) => ("label" in e ? `${e.label}${e.disabled ? " (off)" : ""}` : `[${e.section}]`));
+    expect(labels).toEqual(["[Position]", "Move up (off)", "Move down"]);
+    const down = items[2];
+    if (down && "onSelect" in down) down.onSelect();
+    expect(move).toHaveBeenCalledWith(1);
   });
 });

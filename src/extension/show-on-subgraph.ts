@@ -147,6 +147,12 @@ function mount(host: SubgraphHost, inner: PanelNode, widget: string): void {
           );
           host.setDirtyCanvas?.(true, true);
         },
+        canMove: (dir) => {
+          const list = readShown(host);
+          const i = list.findIndex((p) => key(p) === k);
+          return i >= 0 && i + dir >= 0 && i + dir < list.length;
+        },
+        onMove: (dir) => movePanel(host, k, dir),
       },
       build,
     ) as DomWidgetHost | null;
@@ -189,6 +195,29 @@ export function hidePanel(node: PanelNode, widget: string): void {
     }
     host.setDirtyCanvas?.(true, true);
   }
+}
+
+/** Move the copy `k` (`innerId:widget`) up (-1) or down (1) among the
+ *  copies on `host`. The copies are built again in the new order, since the
+ *  subgraph node draws its extra widgets in the order they were added. */
+export function movePanel(host: SubgraphHost, k: string, dir: -1 | 1): void {
+  const list = readShown(host);
+  const i = list.findIndex((p) => key(p) === k);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  const next = [...list];
+  [next[i], next[j]] = [next[j] as ShownPanel, next[i] as ShownPanel];
+  writeShown(host, next);
+  const copies = shown.get(host);
+  if (copies) {
+    for (const copy of copies.values()) {
+      host.removeWidget?.(copy.widget);
+      copy.unmount();
+    }
+    copies.clear();
+  }
+  restoreShown(host);
+  host.setDirtyCanvas?.(true, true);
 }
 
 /** Build the copies a subgraph node saved (on load, paste, or a graph change). */

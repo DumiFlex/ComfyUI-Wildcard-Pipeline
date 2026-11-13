@@ -47,6 +47,18 @@ export function hideRule(scope: string, hidden: readonly string[]): string {
   return `${sel.join(",\n")} { display: none !important; }`;
 }
 
+/** Move up / Move down, under "Position"; nothing when the copy is alone. */
+export function moveEntries(canMove: (dir: -1 | 1) => boolean, move: (dir: -1 | 1) => void): ContextMenuEntry[] {
+  const up = canMove(-1);
+  const down = canMove(1);
+  if (!up && !down) return [];
+  return [
+    { section: "Position" },
+    { label: "Move up", icon: "pi-arrow-up", disabled: !up, onSelect: () => move(-1) },
+    { label: "Move down", icon: "pi-arrow-down", disabled: !down, onSelect: () => move(1) },
+  ];
+}
+
 /** Menu entries: Show all, then one tick per part under its section. */
 export function partEntries(parts: readonly PanelPart[], hidden: readonly string[], set: (next: string[]) => void): ContextMenuEntry[] {
   const off = new Set(hidden);
@@ -86,8 +98,9 @@ export default defineComponent({
     hidden: { type: Array as PropType<string[]>, default: () => [] },
     inner: { type: [Object, Function] as PropType<Component>, required: true },
     innerProps: { type: Object as PropType<Record<string, unknown>>, default: () => ({}) },
+    canMove: { type: Function as PropType<(dir: -1 | 1) => boolean>, default: () => false },
   },
-  emits: ["hide", "update:hidden"],
+  emits: ["hide", "update:hidden", "move"],
   setup(props, { emit }) {
     const root = ref<HTMLElement | null>(null);
     const hidden = ref<string[]>([...props.hidden]);
@@ -109,7 +122,7 @@ export default defineComponent({
         hidden.value.length ? h("style", hideRule(props.scope, hidden.value)) : null,
         h(Disclosure, { label: props.title(), defaultOpen: true, flush: true, size: "sm" }, {
           actions: () => [
-            h(DropdownMenu, { items: partEntries(parts.value, hidden.value, set), label: "Choose what shows", placement: "bottom-end" }, {
+            h(DropdownMenu, { items: [...partEntries(parts.value, hidden.value, set), ...moveEntries(props.canMove, (dir) => emit("move", dir))], label: "Choose what shows", placement: "bottom-end" }, {
               trigger: ({ props: trigger }: { props: Record<string, unknown> & { onClick: () => void } }) =>
                 h(Button, {
                   ...trigger,
