@@ -185,6 +185,7 @@ tutorial(
       const loop = await t.addNode("WP Context Loop", { x: 60, y: 560 });
       await t.wire(loop, "context", n.ctx, "upstream");
       await t.beat(600);
+      await t.waitVoice();
       await t.say("Set its count to four.");
       await t.fill(t.node(loop).locator('[data-widget-name="count"] input').first(), "4", { cps: 10 });
       await t.press("Tab");
