@@ -179,9 +179,23 @@ describe("CleanerWidget — neg column (send-to-negative)", () => {
     });
     expect(w.find('[data-test="cleaner-neg-count"]').text()).toBe("negative 11");
     expect(w.find('[data-test="cleaner-last-run"]').text()).toContain("prompt: 2 duplicates, 1 blocklisted");
-    expect(w.find('[data-test="cleaner-last-run-neg"]').text()).toBe(
-      'negative: 3 duplicates · 1 tag also in prompt: "red"',
-    );
+    expect(w.find('[data-test="cleaner-last-run-neg"]').text()).toBe("negative: 3 duplicates");
+    // Tags in both prompt and negative get their own amber line.
+    const overlap = w.find('[data-test="cleaner-last-run-overlap"]');
+    expect(overlap.text()).toBe('⚠ 1 tag also in prompt: "red"');
+    expect(overlap.classes()).toContain("wp-cleaner__lastrun-line--overlap");
+  });
+
+  it("an overlap the toggle dropped is a plain line, not a warning", () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({}, {
+        lastRunReport: { dedupe_exact: { dropped: [] } },
+        negativeReport: { dedupe_exact: { dropped: [] }, prompt_overlap: { tags: ["red"], dropped: true } },
+      }),
+    });
+    const overlap = w.find('[data-test="cleaner-last-run-overlap"]');
+    expect(overlap.text()).toBe('1 tag also in prompt (dropped): "red"');
+    expect(overlap.classes()).toContain("wp-cleaner__lastrun-line--dropped");
   });
 
   it("no run yet = no last-run strip and no negative count", () => {

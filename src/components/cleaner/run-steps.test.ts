@@ -31,6 +31,18 @@ describe("ruleSteps", () => {
     expect(steps[2].marks).toEqual([{ start: 0, end: 1, label: 'kept: "a" repeats it' }]);
   });
 
+  it("says a plural fuzzy drop is another form of the kept tag", () => {
+    const trace: CleanerTrace = {
+      input: "knight, knights",
+      output: "knight",
+      steps: [{ rule: "fuzzy_dedupe", text: "knight" }],
+    };
+    const [fz] = ruleSteps(trace, {
+      fuzzy_dedupe: { dropped: ["knights"], matched: ["knight"], scores: [0.86], kinds: ["form"] },
+    });
+    expect(fz.reasons).toEqual([{ item: "knights", verb: "is another form of", cause: "knight" }]);
+  });
+
   it("explains fuzzy drops with their closeness and blocklist drops with the entry", () => {
     const before = "pixie cut, pixie cuts, signature watermark";
     const trace: CleanerTrace = {

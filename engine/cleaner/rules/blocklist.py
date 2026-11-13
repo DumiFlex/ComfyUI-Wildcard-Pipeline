@@ -21,7 +21,9 @@ from engine.cleaner.types import RuleResult
 # doesn't see "cfg, . avoid" where "cfg, steps. avoid" used to be.
 _TEXT_ORPHAN_PUNCT = re.compile(r"\s+[.,:;!?]+(?=\s|$)")
 _TEXT_DOUBLE_SPACE = re.compile(r"\s{2,}")
-_TEXT_STRAY_EDGES = re.compile(r"^[\s.,:;!?]+|[\s.,:;!?]+$")
+# The end keeps `.` `!` `?`: removing a word must not take the full stop
+# off the last sentence.
+_TEXT_STRAY_EDGES = re.compile(r"^[\s.,:;!?]+|[\s,:;]+$")
 
 
 def _cleanup_text(s: str) -> str:
