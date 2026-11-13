@@ -291,13 +291,18 @@ tutorial(
         await jumpTo(t, 5);
         // Bookmark 5 is the refined picks' Save Image: show the change before the grid.
         const saved = await find("SaveImage");
-        if (saved) await t.callout("saved", t.node(saved), "The picks, refined", 4);
+        // Close in on it, above the caption, so the scarf can be seen (the last take showed it small).
+        if (saved) {
+          await t.zoomOn(saved, { scale: 1.5, top: 110 });
+          await t.beat(600);
+          await t.callout("saved", t.node(saved), "The picks, refined", 4);
+        }
         await t.say("The hero shot now wears the green scarf, changed only where you painted. The other pick had no mask, so it comes out as it was.");
         await t.waitVoice();
         if (saved) await t.uncallout("saved");
         // The grid shows the drafts: fit the whole grid above the caption.
         const shown = await find("WP_LabelGrid");
-        if (shown) await fit([shown]);
+        if (shown) await t.zoomOn(shown, { scale: 1.4, top: 110 });
         await t.say("And the grid prints hero shot.");
         // No label: with the caption at the top it sat half behind it, and the grid's own text says it.
         if (shown) await t.callout("grid", t.node(shown), undefined, 4);
