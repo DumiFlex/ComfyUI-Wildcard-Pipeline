@@ -15,7 +15,7 @@ tutorial(
   },
   async (t) => {
     const n = await t.h.step("What it's for", async () => {
-      const s = await buildVarScene(t, "WP Var to Int turns a variable into a whole number. First, the small workflow every Var video shares.");
+      const s = await buildVarScene(t, () => t.say("WP Var to Int turns a variable into a whole number. First, the small workflow every Var video shares."));
       await t.say("Rules can pick more than words. Settings per model sets a size for the model family: here, eight thirty two by twelve sixteen.");
       await t.waitVoice();
       await t.say("But an Empty Latent wants a number for its width, not a variable. WP Var → Int takes a whole number out of a variable, for any setting that wants one.", "But an Empty Latent wants a number for its width, not a variable. WP Var to Int takes a whole number out of a variable, for any setting that wants one.");

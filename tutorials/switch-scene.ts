@@ -15,12 +15,15 @@ export interface SwitchScene {
   grpB: string;
 }
 
-/** `intro` is said over the empty canvas first, so the sped-up build doesn't open the video in silence. */
-export async function buildSwitchScene(t: Tutor, intro?: string): Promise<SwitchScene> {
+/**
+ * `intro` is said over the empty canvas first, so the sped-up build doesn't open the video in silence.
+ * Pass `() => t.say("…")` from the test: voice/speak.py only voices t.say("…") written out in tests/*.ts.
+ */
+export async function buildSwitchScene(t: Tutor, intro?: () => Promise<void>): Promise<SwitchScene> {
   const page = t.page;
   await t.go("/");
   await t.setView({ scale: 0.8, offset: [0, 0] });
-  if (intro) await t.say(intro);
+  if (intro) await intro();
   // A build the earlier videos taught: fast, so it doesn't sit silent on screen.
   await t.speedUp(24);
   const ks1 = await t.addNode("KSampler", { x: 230, y: 110 });

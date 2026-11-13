@@ -15,7 +15,7 @@ tutorial(
   },
   async (t) => {
     const n = await t.h.step("What it's for", async () => {
-      const s = await buildSwitchScene(t, "WP Mode Relay makes one part of a workflow follow another. First, a small workflow to try it on.");
+      const s = await buildSwitchScene(t, () => t.say("WP Mode Relay makes one part of a workflow follow another. First, a small workflow to try it on."));
       await t.speedUp(12);
       const grpA = await t.addNode("WP Node Group", { x: 560, y: 260 });
       await wireIn(t, s.ks1, "LATENT", grpA);

@@ -15,7 +15,7 @@ tutorial(
   },
   async (t) => {
     const n = await t.h.step("What it's for", async () => {
-      const s = await buildVarScene(t, "WP Var to Bool turns a variable into on or off. First, the small workflow every Var video shares.");
+      const s = await buildVarScene(t, () => t.say("WP Var to Bool turns a variable into on or off. First, the small workflow every Var video shares."));
       await t.say("A Toggles node here has a Hires switch, and rules can write yes or no words too. A switch node in ComfyUI wants true or false.");
       await t.waitVoice();
       await t.say("WP Var → Bool turns a variable into true or false, for any switch: a hires pass on or off, one latent or another.", "WP Var to Bool turns a variable into true or false, for any switch: a hires pass on or off, one latent or another.");

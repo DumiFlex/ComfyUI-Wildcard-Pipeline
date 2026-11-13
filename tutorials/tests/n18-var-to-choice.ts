@@ -15,7 +15,7 @@ tutorial(
   },
   async (t) => {
     const n = await t.h.step("What it's for", async () => {
-      const s = await buildVarScene(t, "WP Var to Choice feeds a variable into any dropdown. First, the small workflow every Var video shares.");
+      const s = await buildVarScene(t, () => t.say("WP Var to Choice feeds a variable into any dropdown. First, the small workflow every Var video shares."));
       await t.say("Settings per model also picks a sampler for each family: dpmpp 2m for SDXL. A KSampler's sampler name is a dropdown, and a dropdown only takes one of its own entries.");
       await t.waitVoice();
       await t.say("WP Var → Choice turns a variable into one of a dropdown's entries: a sampler, a scheduler, a checkpoint, a VAE, a LoRA.", "WP Var to Choice turns a variable into one of a dropdown's entries: a sampler, a scheduler, a checkpoint, a VAE, a LoRA.");
