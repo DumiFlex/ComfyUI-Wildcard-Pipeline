@@ -23,7 +23,7 @@ tutorial(
       await t.normalSpeed();
       await t.say("Two samplers in a Node Group, and a save branch with its own Node Group, standing for the canvas group around it.");
       await t.waitVoice();
-      await t.say("When both samplers are off, the save branch has nothing to save, and ComfyUI stops with an error. WP Mode Relay watches nodes and passes their state on, so the branch follows by itself.");
+      await t.say("When both samplers are off, the save branch has nothing to save, and ComfyUI complains about it. WP Mode Relay watches nodes and passes their state on, so the branch follows by itself.");
       await t.waitVoice();
       return { ...s, grpA };
     });
