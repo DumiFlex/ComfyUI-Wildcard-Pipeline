@@ -72,7 +72,8 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <p>
         Besides the modules in your Context nodes, WP Debug shows what the other context nodes
         wrote. The Variables tab groups the variables by the node that set them, under the node's title
-        (and a Context's codename), and each node's rows show what matters for that node. The Trace tab
+        (and a Context's codename), each in its own card even when it is the only node, and each node's
+        rows show what matters for that node. The Trace tab
         stays the run itself: every row is a numbered step in the order it ran, and these nodes differ only
         by their icon, colour and a short note on where the value came from:
       </p>

@@ -42,7 +42,7 @@ const props = defineProps<{
 /** The variables grouped by the node that wrote them last: each Loop,
  *  Model Info, Toggles or Injector node gets a card drawn its own way, each
  *  Context a block of module rows, and values from outside the trace go
- *  last. One plain list when there is only one source. */
+ *  last. A plain list only when no node wrote anything (no trace). */
 interface Section {
   id: string;
   kind: Kind | "context" | "upstream";
@@ -87,7 +87,10 @@ const sections = computed((): Section[] => {
     return Number(a.firstKey) - Number(b.firstKey);
   });
 });
-const grouped = computed(() => sections.value.length > 1 || sections.value.some((s) => s.kind !== "context" && s.kind !== "upstream"));
+// Every node gets its card, even when it is the only one, so a lone Context
+// looks the same as it does beside others; only a snapshot with no trace
+// (every value "From upstream") stays a plain list.
+const grouped = computed(() => sections.value.some((s) => s.kind !== "upstream"));
 
 // ── Rows from other nodes ────────────────────────────────────────────────
 // Every row keeps the same metrics and everything a Context row shows
