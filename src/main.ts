@@ -44,6 +44,7 @@ const {
   loadPlayground,
   loadSubgraphBadge,
   badgeSlotMod,
+  promoteMod,
   loadImageFilterPicker,
   loadBookmarkDock,
   loadNodeHelp,
@@ -450,6 +451,8 @@ app.registerExtension({
     if (root?._nodes?.some(isSubgraphNode)) {
       withBadges((badgeMod) => badgeMod.attachAllSubgraphBadges(root));
     }
+    // Our widgets wired out to a subgraph's inputs show on its node.
+    promoteMod.refreshAllPromotedHosts(root);
   },
 
   // Fires for every node when it's instantiated — including SubgraphNodes,
@@ -459,6 +462,7 @@ app.registerExtension({
   // without opening it.
   nodeCreated(node: unknown) {
     if (!isSubgraphNode(node)) return;
+    promoteMod.installPromotedHosts(node);
     prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
@@ -468,6 +472,7 @@ app.registerExtension({
   // workflow. ComfyUI splits the lifecycle so we cover both paths.
   loadedGraphNode(node: unknown) {
     if (!isSubgraphNode(node)) return;
+    promoteMod.installPromotedHosts(node);
     prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
