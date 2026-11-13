@@ -53,6 +53,7 @@ export * as graphEventsMod from "./extension/graph-events";
 export * as badgeSlotMod from "./extension/badge-slot";
 export * as promoteMod from "./extension/subgraph-promote";
 export * as showMod from "./extension/show-on-subgraph";
+export * as eyeMod from "./extension/subgraph-eye";
 export * as graphMod from "./extension/graph";
 export * as assemblerVarsMod from "./extension/assembler-vars";
 export * as toastStoreMod from "./components/shared/toast-store";

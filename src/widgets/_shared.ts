@@ -246,6 +246,10 @@ export interface MirrorMount {
   hidden?: () => string[];
   /** The "Choose what shows" menu changed them. */
   onHiddenChange?: (ids: string[]) => void;
+  /** Whether the copy can move up (-1) / down (1) among the node's copies. */
+  canMove?: (dir: -1 | 1) => boolean;
+  /** Move the copy up (-1) or down (1). */
+  onMove?: (dir: -1 | 1) => void;
 }
 
 let mirrorMount: MirrorMount | null = null;
@@ -324,6 +328,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
           innerProps: (options.componentProps ?? {}) as Record<string, unknown>,
           onHide: frame.onHide,
           "onUpdate:hidden": (ids: string[]) => frame.onHiddenChange?.(ids),
+          canMove: (dir: -1 | 1) => frame.canMove?.(dir) ?? false,
+          onMove: (dir: -1 | 1) => frame.onMove?.(dir),
         }),
     }) as unknown as Component<P>;
   }

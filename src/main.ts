@@ -46,6 +46,7 @@ const {
   badgeSlotMod,
   promoteMod,
   showMod,
+  eyeMod,
   loadImageFilterPicker,
   loadBookmarkDock,
   loadNodeHelp,
@@ -326,6 +327,8 @@ app.registerExtension({
     topbarMod.startIconReplaceLoop();
     bookmarkMod.installBookmarkKeys();
     bookmarkMod.installHiddenFilter();
+    // The eye in ComfyUI's subgraph Parameters panel shows WP panels too.
+    eyeMod.installSubgraphEye(app as unknown as Parameters<typeof eyeMod.installSubgraphEye>[0]);
     // A bookmark joining the graph (added, pasted or loaded) brings the
     // dock up unless the user closed it.
     bookmarkMod.onBookmarkAdded(maybeShowBookmarkDock);
