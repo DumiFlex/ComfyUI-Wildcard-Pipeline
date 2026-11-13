@@ -1,12 +1,11 @@
 // Nodes 1: WP Context in depth. Rows run top to bottom, so a combine above what it reads comes out
-// empty (Move to bottom fixes it; a row's handle drags it, onto another Context too). The tick box
-// switches a row off without removing it. The three row buttons. A second Context downstream starts
-// with everything upstream; its own Role replaces the first one's (the blue info dot), and what was
-// built upstream from the old value stays built. The right-click menu: Hold across run, Push vs
-// Save to library, Wrap into bundle, Move. Prompt-only: no model. T09 already shows the seed modes,
-// a lock, Edit for one node and the mod badge; 08 shows bundles. Depth pass (13/11): inputs and
-// outputs with the seed and its mode, Add module, row markers, a bundle on a node, how it works,
-// recipes and gotchas.
+// empty (Move to bottom fixes it). Inputs and outputs, the seed and its mode. The tick box. The row
+// buttons shown working: a lock keeps Hair through a seed change, the globe hides $hair from the
+// prompt while Subject still reads it. Edit for this node (a weight, the seed lock) → the mod mark,
+// Push to library (cancelled), Reset overrides. Duplicate → the duplicate badge. A second Context
+// downstream; its own Role replaces the first one's. Hair dragged onto the second Context and back.
+// A bundle on a node. The right-click menu. Drift: the library's Eyes changed through the API →
+// drift mark → Refresh from library (the library is put back at the end); missing. Prompt-only.
 import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
@@ -14,8 +13,8 @@ tutorial(
   "N01",
   {
     title: "WP Context in depth",
-    description: "How a Context runs its rows: order, switching a row off, the row buttons and markers, what comes from upstream, and the right-click menu.",
-    learn: "Run order, the tick box, lock / globe / bin, info and warning dots, upstream Contexts, Hold across run, Push vs Save to library, Wrap into bundle, Move.",
+    description: "Everything about the rows on a Context: order, lock, globe, editing a row for one node, duplicates, dragging rows between nodes, upstream Contexts, bundles, and keeping rows in sync with the library.",
+    learn: "Run order, seed, the tick box, lock / globe / bin, Edit with weights and a seed lock, the mod / drift / missing marks, Push and Refresh from library, Duplicate, drag across Contexts, upstream Contexts, bundles, Hold across run.",
   },
   async (t) => {
     const page = t.page;
@@ -110,21 +109,114 @@ tutorial(
     });
 
     await t.h.step("The row buttons", async () => {
-      const row = t.moduleRow(n.ctx, "Role");
+      const row = t.moduleRow(n.ctx, "Hair");
       const buttons = [row.locator('[data-test="row-action-lock"]'), row.locator('[data-test="row-action-internal"]'), row.locator('[data-test="row-action-remove"]')];
       await t.callout("btns", buttons, "Lock, globe, bin", 4);
-      await t.say("Every row has three buttons. The lock keeps the pick it rolled. The globe keeps its variable out of the prompt, for rules only. The bin removes the row.");
+      await t.say("Every row has three buttons: a lock, a globe and a bin. Try each one.");
       await t.waitVoice();
       await t.uncallout("btns");
-      await t.say("If they crowd the node, the Display playground in Settings can show them only on hover.");
+      await t.say("Lock Hair, then change the seed to 7.");
+      await t.click(row.locator('[data-test="row-action-lock"]'));
+      await t.beat(600);
+      const seed = t.node(n.ctx).locator('[data-widget-name="seed"] input').first();
+      await t.fill(seed, "7", { cps: 10 });
+      await t.press("Tab");
+      await t.beat(1000);
+      await t.waitVoice();
+      await t.callout("prev", preview(n.asm), "Same hair, new everything else", 6);
+      await t.say("The role and the eyes rolled again; the hair kept its pick. A lock holds one row while you reroll the rest. Click it again to let it roll.");
+      await t.waitVoice();
+      await t.uncallout("prev");
+      await t.click(row.locator('[data-test="row-action-lock"]'));
+      await t.beat(600);
+      await t.say("Now the globe. Print the hair on its own as well: add comma, dollar hair to the template.");
+      await t.click(t.node(n.asm).locator("textarea, [contenteditable='true']").first());
+      await t.press("ControlOrMeta+End");
+      await t.type(", $hair");
+      await t.press("Escape");
+      await t.beat(900);
+      await t.waitVoice();
+      await t.say("Click the globe on Hair.");
+      await t.click(row.locator('[data-test="row-action-internal"]'));
+      await t.beat(900);
+      await t.callout("prev", preview(n.asm), "Hair still in the subject", 6);
+      await t.say("Dollar hair now prints nothing, but Subject still has the hair. A hidden variable is for rules and combines to read, never printed on its own. Click it again to show it.");
+      await t.waitVoice();
+      await t.uncallout("prev");
+      await t.click(row.locator('[data-test="row-action-internal"]'));
+      await t.beat(600);
+      await t.say("The bin removes the row. If the buttons crowd the node, the Display playground in Settings can show them only on hover.");
       await t.waitVoice();
     });
 
-    await t.h.step("Markers on a row", async () => {
-      await t.say("A row can carry a small mark. mod: you changed the row on this node, so it differs from the library. drift: the library item changed after you added it; right-click, Refresh from library, to take the change.", "A row can carry a small mark. Mod: you changed the row on this node, so it differs from the library. Drift: the library item changed after you added it; right-click, Refresh from library, to take the change.");
+    await t.h.step("Edit a row for this node", async () => {
+      await t.say("Right-click Eyes, and Edit. The changes you make here are for this node only; the library keeps its own.");
+      const menu = await menuOn(n.ctx, "Eyes");
+      await t.click(menu.getByRole("menuitem", { name: "Edit", exact: true }));
+      await t.beat(1000);
+      const dlg = page.getByRole("dialog").last();
+      await dlg.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {
+        throw new StepError("The Eyes editor didn't open.");
+      });
       await t.waitVoice();
-      await t.say("missing: the item isn't in your library, often in a workflow from someone else. The row still works from its own copy; right-click, Save to library, to keep it. held: Hold across run is on.", "Missing: the item isn't in your library, often in a workflow from someone else. The row still works from its own copy; right-click, Save to library, to keep it. Held: Hold across run is on.");
+      const weight = dlg.locator('[data-test="opt-weight"] input, input[data-test="opt-weight"]').first();
+      await t.callout("w", weight, "Weight on this node", 4);
+      await t.say("Give the first colour weight 5, so it comes up five times as often here.");
+      await t.fill(weight, "5", { cps: 10 });
+      await t.press("Tab");
+      await t.beat(600);
       await t.waitVoice();
+      await t.uncallout("w");
+      const lock = dlg.locator('[data-test="runtime-lock"]');
+      await t.say("Seed lock gives this row its own fixed seed, so it ignores the node's seed and rolls the same every time, with dice for a new one.");
+      await t.click(lock);
+      await t.beat(700);
+      await t.callout("seed", [lock, dlg.locator('[data-test="runtime-seed"]')], "Its own seed", 4);
+      await t.waitVoice();
+      await t.uncallout("seed");
+      await t.click(lock);
+      await t.beat(500);
+      await t.say("Save.");
+      await t.click(dlg.locator('[data-test="wcm-save"]'));
+      await t.beat(900);
+      if (!(await t.moduleRow(n.ctx, "Eyes").locator(".wp-mod-badge--mod").count())) throw new StepError("Eyes didn't get the mod mark.");
+      await t.callout("mod", t.moduleRow(n.ctx, "Eyes"), "Changed on this node", 4);
+      await t.say("The row says mod: it differs from the library item now. The library and other workflows are untouched.");
+      await t.waitVoice();
+      await t.uncallout("mod");
+      await t.say("To send the change back, right-click, Push to library. It shows what changes, and which saved bundles get it too. Cancel for now.");
+      const m2 = await menuOn(n.ctx, "Eyes");
+      await t.click(m2.getByRole("menuitem", { name: /^Push to library/ }));
+      await t.beat(1000);
+      await t.waitVoice();
+      await t.click(page.locator('[data-test="ptl-cancel"]').last());
+      await t.beat(600);
+      await t.say("To drop the change instead, Edit, Reset overrides, Save.");
+      const m3 = await menuOn(n.ctx, "Eyes");
+      await t.click(m3.getByRole("menuitem", { name: "Edit", exact: true }));
+      await t.beat(900);
+      const dlg2 = page.getByRole("dialog").last();
+      await t.click(dlg2.locator('[data-test="wcm-clear-all"]'));
+      await t.beat(500);
+      await t.click(dlg2.locator('[data-test="wcm-save"]'));
+      await t.beat(800);
+      await t.waitVoice();
+    });
+
+    await t.h.step("Duplicates", async () => {
+      await t.say("Right-click Hair, and Duplicate.");
+      const menu = await menuOn(n.ctx, "Hair");
+      await t.click(menu.getByRole("menuitem", { name: "Duplicate", exact: true }));
+      await t.beat(1000);
+      await t.waitVoice();
+      const rows = t.node(n.ctx).locator(".wp-module").filter({ has: page.locator(".wp-module-name", { hasText: /^\s*Hair\s*$/ }) });
+      const badge = rows.last().locator(".wp-conflict-badge").first();
+      if (await badge.isVisible().catch(() => false)) await t.callout("dup", badge, "Two rows write $hair", 5);
+      await t.say("Two rows now write the same variable. The amber badge says so: the lower one wins, and the first pick is wasted. A copy is useful when you change it, for a second variable or other weights; otherwise remove it.");
+      await t.waitVoice();
+      await t.uncallout("dup");
+      await t.click(rows.last().locator('[data-test="row-action-remove"]'));
+      await t.beat(800);
     });
 
     const ctx2 = await t.h.step("What comes from upstream", async () => {
@@ -157,6 +249,29 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("prev");
       return c2;
+    });
+
+    await t.h.step("Drag a row to another Context", async () => {
+      await t.say("Rows also move between Contexts. Drag Hair by its handle onto the second one.");
+      const from = await t.centre(t.moduleRow(n.ctx, "Hair").locator(".wp-drag-handle").first());
+      const rb = await t.moduleRow(ctx2, "Role").boundingBox();
+      if (!rb) throw new StepError("The second Context's Role row isn't on screen.");
+      await t.drag(from, { x: rb.x + 40, y: rb.y + rb.height - 4 });
+      await t.beat(900);
+      if (!(await t.moduleRow(ctx2, "Hair").count())) throw new StepError("Hair didn't move to the second Context.");
+      await t.waitVoice();
+      await t.callout("prev", preview(n.asm), "Subject lost its hair", 6);
+      await t.say("Hair moved, settings and all. But it now rolls after Subject, which was made upstream, so Subject has no hair. Drag it back, above Subject.");
+      await t.waitVoice();
+      await t.uncallout("prev");
+      const back = await t.centre(t.moduleRow(ctx2, "Hair").locator(".wp-drag-handle").first());
+      const eb = await t.moduleRow(n.ctx, "Eyes").boundingBox();
+      if (!eb) throw new StepError("The first Context's Eyes row isn't on screen.");
+      await t.drag(back, { x: eb.x + 40, y: eb.y + 4 });
+      await t.beat(900);
+      if (!(await t.moduleRow(n.ctx, "Hair").count())) throw new StepError("Hair didn't come back to the first Context.");
+      await t.say("Back where it reads in time. On a focused row, Control Shift and the arrows move it, and Control D duplicates it.");
+      await t.waitVoice();
     });
 
     await t.h.step("A bundle on a Context", async () => {
@@ -200,6 +315,40 @@ tutorial(
       if (!(await t.node(ctx2).isVisible())) throw new StepError("The second Context left the screen.");
     });
 
+    let restore: (() => Promise<void>) | null = null;
+    try {
+    await t.h.step("Library sync: drift and missing", async () => {
+      const id = await t.h.idOf("wildcards", "Eyes");
+      const got = (await t.h.api(`/wp/api/modules/${id}`)).json as { payload?: { options?: unknown[] } } | null;
+      const original = got?.payload;
+      if (!original?.options) throw new StepError("Couldn't read Eyes from the library.");
+      restore = async () => {
+        await t.h.api(`/wp/api/modules/${id}`, { method: "PUT", body: { payload: original, propagate_to_bundles: false } });
+      };
+      await t.say("Every row remembers the library version it came from. Say the library's Eyes gets a new colour, from the manager or another workflow.");
+      const changed = { ...original, options: [...original.options, { id: "5e1f0a9c", value: "silver eyes", weight: 1, sub_categories: [] }] };
+      const r = await t.h.api(`/wp/api/modules/${id}`, { method: "PUT", body: { payload: changed, propagate_to_bundles: false } });
+      if (r.status >= 300) throw new StepError(`The library refused the changed Eyes (${r.status}).`);
+      const drift = t.moduleRow(n.ctx, "Eyes").locator(".wp-mod-badge--drift");
+      await drift.waitFor({ state: "attached", timeout: 20_000 }).catch(() => {
+        throw new StepError("Eyes never showed the drift mark.");
+      });
+      await t.waitVoice();
+      await t.callout("drift", t.moduleRow(n.ctx, "Eyes"), "The library moved on", 5);
+      await t.say("Within a few seconds the row says drift: the library item changed after it was added. The row keeps running its own copy until you decide.");
+      await t.waitVoice();
+      await t.uncallout("drift");
+      await t.say("Right-click, Refresh from library, to take the new version.");
+      const menu = await menuOn(n.ctx, "Eyes");
+      await t.click(menu.getByRole("menuitem", { name: /^Refresh from library/ }));
+      await t.beat(1000);
+      await t.waitVoice();
+      await t.say("The mark is gone, and silver eyes can come up now. With several drifted rows, the node offers to refresh them all at once.");
+      await t.waitVoice();
+      await t.say("Missing means the item isn't in your library at all, often in a workflow from someone else. The row still runs from its own copy; right-click, Save to library, to keep it.");
+      await t.waitVoice();
+    });
+
     await t.h.step("How it works, recipes and gotchas", async () => {
       await t.say("When a run reaches the Context, it takes what came from upstream, rolls each ticked row in order on its own seed, and writes the variables into the context it passes on. The canvas preview runs the same rolls, so the Assembler shows them before you run.");
       await t.waitVoice();
@@ -213,5 +362,8 @@ tutorial(
       await t.say("Order your rows like a recipe, chain Contexts for stages, and use the badges to spot what writes over what. The Context page in the docs lists every marker.");
       await t.waitVoice();
     });
+    } finally {
+      await restore?.();
+    }
   },
 );
