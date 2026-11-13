@@ -34,6 +34,9 @@ const props = defineProps<{
    *  this, never against `resolvedMap` — the axis names a tag menu, not the
    *  variable's text. */
   varAxes?: Record<string, Record<string, string>>;
+  /** Each upstream toggle variable's switch: what `$name.bool` reads, since a
+   *  toggle with a Value writes the Value to `$name`, not true / false. */
+  varBools?: Record<string, boolean>;
   /** What the preview run actually rolled, keyed by binding (the preview
    *  endpoint's `axes`). Preferred over `varAxes` for any axis the chain
    *  declares, because `varAxes` only knows the axis's first tag — it printed
@@ -234,6 +237,16 @@ function axisText(name: string, axis: string, index: number | undefined, raw: st
   return index != null && index > 0 ? "" : guess;
 }
 
+/** `$name.bool`, as the engine reads it (`converters._lookup_bool`): the
+ *  toggle's switch when a Toggles node set it, else the value when it already
+ *  is true / false, else nothing. */
+function boolText(name: string, value: ResolvedValue | undefined): string {
+  const on = props.varBools?.[name];
+  if (on !== undefined) return on ? "true" : "false";
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return v === "true" || v === "false" ? v : "";
+}
+
 const previewTokens = computed<PreviewToken[]>(() => {
   if (!props.template) return [];
 
@@ -256,7 +269,9 @@ const previewTokens = computed<PreviewToken[]>(() => {
       }
       tokens.push({
         kind: "var",
-        text: axis
+        text: axis === "bool"
+          ? boolText(name, has ? props.resolvedMap[name] : undefined)
+          : axis
           ? axisText(name, axis, index, raw)
           : (has ? applyVarAccessor(props.resolvedMap[name], index) : raw),
         varName: name,
