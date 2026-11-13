@@ -13,7 +13,7 @@ export interface VarScene {
 export async function buildVarScene(t: Tutor): Promise<VarScene> {
   const page = t.page;
   await t.go("/");
-  await t.setView({ scale: 0.8, offset: [0, 0] });
+  await t.setView({ scale: 0.8, offset: [150, 0] });
   await t.speedUp();
   const tg = await t.addNode("WP Toggles", { x: 70, y: 230 });
   const tb = await t.node(tg).boundingBox();
