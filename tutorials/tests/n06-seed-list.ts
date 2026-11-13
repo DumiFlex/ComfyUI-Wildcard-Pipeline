@@ -115,7 +115,7 @@ tutorial(
         await t.say("Give the KSampler a model, a prompt and a latent, folded down here, and run.");
         const lat = await t.addNode(t.params.unet ? "Empty Flux 2 Latent" : "Empty Latent Image", { x: 1000, y: 620 });
         await t.wire(lat, "LATENT", n.ks, "latent_image");
-        await showcase(t, { prompt: "A painting of a lighthouse on a cliff at dusk.", sampler: n.ks, preview: { x: 1380, y: 120, width: 520, height: 520 }, chain: { x: 1820, y: 960 }, runs: 1 });
+        await showcase(t, { prompt: "A painting of a lighthouse on a cliff at dusk.", sampler: n.ks, preview: { x: 1380, y: 120, width: 520, height: 520 }, chain: { x: 1820, y: 960 }, runs: 1, speed: 24 });
         await t.waitVoice();
         await t.say("One prompt, four seeds, four images. Run again with the same base and the same strategy, and you get the same four.");
         await t.waitVoice();
