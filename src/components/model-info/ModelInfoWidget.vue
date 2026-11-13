@@ -184,13 +184,13 @@ function resetRules(): void {
 
 <template>
   <div class="wp-mi" :class="{ 'wp-mi--skipped': isSkipped }">
-    <section class="wp-mi__section">
+    <section data-wp-part="detected" data-wp-part-label="All detected values" data-wp-part-section="Detected" class="wp-mi__section">
       <div class="wp-mi__head">
         <span class="wp-mi__label">DETECTED</span>
         <span class="wp-mi__head-note" title="What this node writes for the nodes after it">writes for later nodes</span>
       </div>
       <div class="wp-mi__vars">
-        <div
+        <div :data-wp-part="`var:${row.key}`" :data-wp-part-label="row.key" data-wp-part-section="Detected"
           v-for="row in rows"
           :key="row.key"
           class="wp-mi__var"
@@ -249,7 +249,7 @@ function resetRules(): void {
       </div>
     </section>
 
-    <section class="wp-mi__section">
+    <section data-wp-part="rules" data-wp-part-label="Variant rules" class="wp-mi__section">
       <div class="wp-mi__head">
         <span class="wp-mi__label">VARIANT RULES</span>
         <span class="wp-mi__head-note">first match in the file name wins</span>

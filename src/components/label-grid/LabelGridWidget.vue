@@ -208,13 +208,13 @@ function text(ev: Event): string {
 
 <template>
   <div class="wp-lg" :class="{ 'wp-lg--skipped': isSkipped }">
-    <div v-if="runLine" class="wp-lg__run" data-test="lg-run">
+    <div data-wp-part="run" data-wp-part-label="Last run" v-if="runLine" class="wp-lg__run" data-test="lg-run">
       <i class="pi pi-images" aria-hidden="true" />
       <span class="wp-lg__run-text">{{ runLine }}</span>
     </div>
 
     <!-- LABEL ───────────────────────────────────────────────────────── -->
-    <section class="wp-lg__section">
+    <section data-wp-part="label" data-wp-part-label="Whole label section" data-wp-part-section="Label" class="wp-lg__section">
       <div class="wp-lg__head">
         <span class="wp-lg__label">LABEL</span>
         <span class="wp-lg__head-note wp-lg__tokens">
@@ -229,10 +229,10 @@ function text(ev: Event): string {
           >{{ t.token }}</span>
         </span>
       </div>
-      <span v-if="textWired" class="wp-lg__wired" data-wp-socket="label_text" data-test="lg-template-wired">
+      <span data-wp-part="label-text" data-wp-part-label="Label text" data-wp-part-section="Label" v-if="textWired" class="wp-lg__wired" data-wp-socket="label_text" data-test="lg-template-wired">
         <i class="pi pi-link" aria-hidden="true" />from the label_text input (tokens still work)
       </span>
-      <Input
+      <Input data-wp-part="label-text" data-wp-part-label="Label text" data-wp-part-section="Label"
         v-else
         size="sm"
         mono
@@ -246,7 +246,7 @@ function text(ev: Event): string {
         @keydown.stop
         @change="set('label', text($event))"
       />
-      <div class="wp-lg__row">
+      <div data-wp-part="place" data-wp-part-label="Place" data-wp-part-section="Label" class="wp-lg__row">
         <span class="wp-lg__key">Place</span>
         <WpSegmented
           :model-value="side"
@@ -267,7 +267,7 @@ function text(ev: Event): string {
           @update:model-value="setOver"
         />
       </div>
-      <div v-if="side !== 'none'" class="wp-lg__row">
+      <div data-wp-part="font" data-wp-part-label="Font" data-wp-part-section="Label" v-if="side !== 'none'" class="wp-lg__row">
         <span class="wp-lg__key">Font</span>
         <div class="wp-lg__font" data-test="lg-font">
           <Combobox
@@ -300,7 +300,7 @@ function text(ev: Event): string {
           @update:model-value="(v) => set('align', v)"
         />
       </div>
-      <div v-if="side !== 'none'" class="wp-lg__row">
+      <div data-wp-part="label-colour" data-wp-part-label="Colour" data-wp-part-section="Label" v-if="side !== 'none'" class="wp-lg__row">
         <span class="wp-lg__key">Colour</span>
         <ColorField
           :model-value="cfg.text_color"
@@ -321,7 +321,7 @@ function text(ev: Event): string {
     </section>
 
     <!-- GRID ────────────────────────────────────────────────────────── -->
-    <section class="wp-lg__section">
+    <section data-wp-part="grid" data-wp-part-label="Whole grid section" data-wp-part-section="Grid" class="wp-lg__section">
       <div v-toggle-row class="wp-lg__head">
         <span class="wp-lg__label">GRID</span>
         <span class="wp-lg__head-note">{{ cfg.grid ? 'one image of every image' : 'off: only the labelled images' }}</span>
@@ -333,7 +333,7 @@ function text(ev: Event): string {
         />
       </div>
 
-      <div class="wp-lg__presets" role="group" aria-label="Grid presets">
+      <div data-wp-part="presets" data-wp-part-label="Presets" data-wp-part-section="Grid" class="wp-lg__presets" role="group" aria-label="Grid presets">
         <Button
           v-for="p in PRESETS"
           :key="p.id"
@@ -354,7 +354,7 @@ function text(ev: Event): string {
       </div>
 
       <template v-if="cfg.grid">
-        <div class="wp-lg__row">
+        <div data-wp-part="layout" data-wp-part-label="Layout" data-wp-part-section="Grid" class="wp-lg__row">
           <span class="wp-lg__key">Layout</span>
           <WpSelect
             class="wp-lg__select"
@@ -381,7 +381,7 @@ function text(ev: Event): string {
           <span v-else-if="headersLift" class="wp-lg__note">from the label parts</span>
           <span v-else-if="autoNote" class="wp-lg__note">{{ autoNote }}</span>
         </div>
-        <div class="wp-lg__row" data-wp-socket="row_headers">
+        <div data-wp-part="rows" data-wp-part-label="Rows" data-wp-part-section="Grid" class="wp-lg__row" data-wp-socket="row_headers">
           <span class="wp-lg__key">Rows</span>
           <span v-if="rowsWired" class="wp-lg__wired" data-test="lg-rows-wired">
             <i class="pi pi-link" aria-hidden="true" />from the row_headers input
@@ -396,7 +396,7 @@ function text(ev: Event): string {
             @update:model-value="(v) => set('rows_from', v)"
           />
         </div>
-        <Textarea
+        <Textarea data-wp-part="rows" data-wp-part-label="Rows" data-wp-part-section="Grid"
           v-if="cfg.rows_from === 'typed' && !rowsWired"
           mono
           class="wp-lg__area"
@@ -409,7 +409,7 @@ function text(ev: Event): string {
           @keydown.stop
           @change="set('row_headers', text($event))"
         />
-        <div class="wp-lg__row" data-wp-socket="column_headers">
+        <div data-wp-part="columns" data-wp-part-label="Columns" data-wp-part-section="Grid" class="wp-lg__row" data-wp-socket="column_headers">
           <span class="wp-lg__key">Columns</span>
           <span v-if="colsWired" class="wp-lg__wired" data-test="lg-columns-wired">
             <i class="pi pi-link" aria-hidden="true" />from the column_headers input
@@ -424,7 +424,7 @@ function text(ev: Event): string {
             @update:model-value="(v) => set('columns_from', v)"
           />
         </div>
-        <Textarea
+        <Textarea data-wp-part="columns" data-wp-part-label="Columns" data-wp-part-section="Grid"
           v-if="cfg.columns_from === 'typed' && !colsWired"
           mono
           class="wp-lg__area"
@@ -437,7 +437,7 @@ function text(ev: Event): string {
           @keydown.stop
           @change="set('column_headers', text($event))"
         />
-        <div class="wp-lg__row" data-wp-socket="title">
+        <div data-wp-part="title" data-wp-part-label="Title" data-wp-part-section="Grid" class="wp-lg__row" data-wp-socket="title">
           <span class="wp-lg__key">Title</span>
           <span v-if="titleWired" class="wp-lg__wired" data-test="lg-title-wired">
             <i class="pi pi-link" aria-hidden="true" />from the title input
@@ -456,7 +456,7 @@ function text(ev: Event): string {
             @change="set('title', text($event))"
           />
         </div>
-        <div class="wp-lg__row wp-lg__row--wrap">
+        <div data-wp-part="spacing" data-wp-part-label="Spacing" data-wp-part-section="Grid" class="wp-lg__row wp-lg__row--wrap">
           <span class="wp-lg__key">Spacing</span>
           <WpNumber
             class="wp-lg__num"
@@ -491,7 +491,7 @@ function text(ev: Event): string {
             @update:model-value="setCellWidth"
           />
         </div>
-        <div class="wp-lg__row">
+        <div data-wp-part="grid-colour" data-wp-part-label="Colour" data-wp-part-section="Grid" class="wp-lg__row">
           <span class="wp-lg__key">Colour</span>
           <ColorField
             :model-value="cfg.background"

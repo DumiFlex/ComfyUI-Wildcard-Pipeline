@@ -90,10 +90,10 @@ const summary = computed(() => {
 
 <template>
   <div class="wp-ifw" :class="{ 'wp-ifw--skipped': isSkipped }" data-test="image-filter-widget">
-    <section class="wp-ifw__section">
+    <section data-wp-part="when" data-wp-part-label="All of When it runs" data-wp-part-section="When it runs" class="wp-ifw__section">
       <div class="wp-ifw__head"><span class="wp-ifw__label">WHEN IT RUNS</span></div>
       <div class="wp-ifw__box">
-        <div class="wp-ifw__row">
+        <div data-wp-part="mode" data-wp-part-label="Mode" data-wp-part-section="When it runs" class="wp-ifw__row">
           <span class="wp-ifw__row-label">Mode</span>
           <WpSegmented
             :model-value="modelValue.mode"
@@ -104,7 +104,7 @@ const summary = computed(() => {
             @update:model-value="patch({ mode: $event })"
           />
         </div>
-        <div class="wp-ifw__row">
+        <div data-wp-part="send" data-wp-part-label="Send picks as" data-wp-part-section="When it runs" class="wp-ifw__row">
           <span class="wp-ifw__row-label" title="One per image: every picked image becomes its own item, with its own copy of its frame's prompt and conditioning">Send picks as</span>
           <WpSelect
             class="wp-ifw__select"
@@ -115,7 +115,7 @@ const summary = computed(() => {
             @update:model-value="setSendAs"
           />
         </div>
-        <div class="wp-ifw__row" :class="{ 'is-off': modelValue.mode === 'pass_all' }">
+        <div data-wp-part="timeout" data-wp-part-label="Timeout" data-wp-part-section="When it runs" class="wp-ifw__row" :class="{ 'is-off': modelValue.mode === 'pass_all' }">
           <span class="wp-ifw__row-label" title="Seconds to wait for your picks. 0 waits until you answer. The picker can't send an empty pick, so this is also what happens when nothing gets picked.">Timeout</span>
           <span class="wp-ifw__timeout">
             <WpNumber
@@ -144,7 +144,7 @@ const summary = computed(() => {
       </div>
     </section>
 
-    <section class="wp-ifw__section">
+    <section data-wp-part="last-run" data-wp-part-label="Last run" class="wp-ifw__section">
       <div class="wp-ifw__head">
         <span class="wp-ifw__label">LAST RUN</span>
         <span class="wp-ifw__head-note" data-test="if-summary">{{ summary || "picks show here after a run" }}</span>

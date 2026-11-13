@@ -323,7 +323,7 @@ function isOverridden(rid: RuleId): boolean {
 
 <template>
   <div :class="['wp-cleaner', { 'wp-cleaner--skipped': isSkipped }]">
-    <header class="wp-cleaner__head">
+    <header data-wp-part="mode" data-wp-part-label="Mode and counts" class="wp-cleaner__head">
       <WpSegmented
         :model-value="modelValue.mode"
         :options="MODE_OPTIONS"
@@ -342,7 +342,7 @@ function isOverridden(rid: RuleId): boolean {
       >negative {{ negativeWordCount }}</span></template></span>
     </header>
 
-    <section class="wp-cleaner__section">
+    <section data-wp-part="intensity" data-wp-part-label="Intensity" class="wp-cleaner__section">
       <div class="wp-cleaner__section-head">
         <span class="wp-cleaner__section-label">INTENSITY</span>
         <span
@@ -362,14 +362,14 @@ function isOverridden(rid: RuleId): boolean {
       />
     </section>
 
-    <section class="wp-cleaner__section">
+    <section data-wp-part="rules" data-wp-part-label="All rules" data-wp-part-section="Rules" class="wp-cleaner__section">
       <div class="wp-cleaner__rules-head">
         <span class="wp-cleaner__section-label">RULES</span>
         <span class="wp-cleaner__col-label">prompt</span>
         <span class="wp-cleaner__col-label wp-cleaner__col-label--neg">neg</span>
       </div>
       <div class="wp-cleaner__rules">
-        <div v-for="rule in ALL_RULES" :key="rule.id" class="wp-cleaner__rule-row">
+        <div :data-wp-part="`rule:${rule.id}`" :data-wp-part-label="rule.label" data-wp-part-section="Rules" v-for="rule in ALL_RULES" :key="rule.id" class="wp-cleaner__rule-row">
           <div
             :class="['wp-cleaner__rule', {
               'is-on': effective.has(rule.id) && !isRuleDisabled(rule.id),
@@ -440,13 +440,13 @@ function isOverridden(rid: RuleId): boolean {
       </div>
     </section>
 
-    <div v-if="negativeReport" class="wp-cleaner__lastrun" data-test="cleaner-last-run">
+    <div data-wp-part="last-run" data-wp-part-label="Last run" v-if="negativeReport" class="wp-cleaner__lastrun" data-test="cleaner-last-run">
       <span class="wp-cleaner__section-label">LAST RUN</span>
       <span class="wp-cleaner__lastrun-line">{{ promptRunLine }}</span>
       <span class="wp-cleaner__lastrun-line wp-cleaner__lastrun-line--neg" data-test="cleaner-last-run-neg">{{ negativeRunLine }}</span>
     </div>
 
-    <div class="wp-cleaner__blocklist" data-wp-socket="blocklist">
+    <div data-wp-part="blocklist" data-wp-part-label="Blocklist button" class="wp-cleaner__blocklist" data-wp-socket="blocklist">
       <Button
         size="sm"
         block

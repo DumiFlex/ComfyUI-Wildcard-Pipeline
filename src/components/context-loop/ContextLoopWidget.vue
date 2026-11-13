@@ -219,7 +219,7 @@ function toggleTotalInternal(): void {
       'wp-loop--bypass-on': modelValue.bypass,
     }"
   >
-    <div class="wp-loop__section">
+    <div data-wp-part="strategy" data-wp-part-label="Strategy" class="wp-loop__section">
       <div class="wp-loop__label">strategy</div>
       <WpSegmented
         :model-value="modelValue.strategy"
@@ -232,7 +232,7 @@ function toggleTotalInternal(): void {
       />
     </div>
 
-    <Button
+    <Button data-wp-part="seeds-button" data-wp-part-label="Per-iteration seeds button"
       size="sm"
       block
       icon="pi-list"
@@ -247,7 +247,7 @@ function toggleTotalInternal(): void {
       <i class="pi pi-chevron-right wp-loop__seedbtn-chev" aria-hidden="true" />
     </Button>
 
-    <Button
+    <Button data-wp-part="sweep-button" data-wp-part-label="Sweep combinations button"
       size="sm"
       block
       icon="pi-th-large"
@@ -265,7 +265,7 @@ function toggleTotalInternal(): void {
 
     <!-- `base` is not a frame: it has no seed to lock and nothing to bypass,
          so it takes no modifiers. -->
-    <FrameChips
+    <FrameChips data-wp-part="frames" data-wp-part-label="Edit frame"
       v-model:collapsed="chipsCollapsed"
       label="edit frame"
       :count="Math.max(1, count ?? 1)"
@@ -281,7 +281,7 @@ function toggleTotalInternal(): void {
     />
 
 
-    <div
+    <div data-wp-part="override-seed" data-wp-part-label="Override Context seed"
       v-tooltip="OVERRIDE_SEED_TOOLTIP"
       v-toggle-row class="wp-loop__row"
     >
@@ -294,7 +294,7 @@ function toggleTotalInternal(): void {
       />
     </div>
 
-    <div
+    <div data-wp-part="iteration-var" data-wp-part-label="Iteration var"
       class="wp-loop__section"
       :data-wp-vars="`${modelValue.iteration_var_name} ${modelValue.iteration_var_name}_total`"
     >
@@ -336,7 +336,7 @@ function toggleTotalInternal(): void {
       </div>
     </div>
 
-    <div v-if="valuesWired" class="wp-loop__values" data-wp-socket="values" data-test="loop-values-note" :data-wp-vars="`${modelValue.iteration_var_name}_value`">
+    <div data-wp-part="iteration-var" data-wp-part-label="Iteration var" v-if="valuesWired" class="wp-loop__values" data-wp-socket="values" data-test="loop-values-note" :data-wp-vars="`${modelValue.iteration_var_name}_value`">
       <i class="pi pi-link" aria-hidden="true" />
       <span>
         One frame per line of the values input<template v-if="valuesCount != null"> ({{ valuesCount }} on the last run)</template>,
@@ -344,7 +344,7 @@ function toggleTotalInternal(): void {
       </span>
     </div>
 
-    <div v-toggle-row class="wp-loop__row">
+    <div data-wp-part="bypass" data-wp-part-label="Bypass loop" v-toggle-row class="wp-loop__row">
       <span class="wp-loop__row-label">Bypass loop</span>
       <WpSwitch
         data-test="loop-bypass-toggle"

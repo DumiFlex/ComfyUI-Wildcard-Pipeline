@@ -33,7 +33,7 @@ const library = [
 ];
 
 const subgraphs = [
-  { term: "A WP node's panel isn't on the subgraph node", desc: "Panels with no socket (Context, Toggles, Label Grid, Debug …) stay inside. Right-click the node inside the subgraph → Show on subgraph node puts a copy of its panel on every subgraph node made from that subgraph. Changes on either side reach the other, the node inside is still what runs, and the subgraph node remembers it when you save. The × on the copy's header (or Hide from subgraph node) takes it off again." },
+  { term: "A WP node's panel isn't on the subgraph node", desc: "Panels with no socket (Context, Toggles, Label Grid, Debug …) stay inside. Right-click the node inside the subgraph → Show on subgraph node puts a copy of its panel on every subgraph node made from that subgraph. Changes on either side reach the other, the node inside is still what runs, and the subgraph node remembers it when you save. The sliders button on the copy's header (Choose what shows) picks which parts show there, such as only Label Grid's Font and Title, a few toggles or some Context modules; the node inside keeps the whole panel. The × (or Hide from subgraph node) takes the copy off again." },
   { term: "The Assembler's prompt box is empty on the subgraph node", desc: "Drag its template or negative_template dot to the subgraph's input. The subgraph node then shows the same editor, with the $ list of the variables upstream of the Assembler inside." },
 ];
 </script>
