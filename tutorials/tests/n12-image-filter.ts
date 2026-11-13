@@ -233,15 +233,15 @@ tutorial(
         // The scarf goes round the neck and over the collar: the mask has to cover that, or the
         // refine pass can't draw it (a face-only mask left the refined pick looking unchanged).
         await t.say("The brush paints. Go over the neck and collar, where the scarf goes.");
-        // Frame 1's neck and open collar sit at about 45 to 62 % of the height (the face is above it);
-        // the old 32 to 44 % covered the face, so the scarf had nowhere to go.
-        const neck = [[0.4, 0.46], [0.6, 0.46], [0.63, 0.52], [0.37, 0.52], [0.36, 0.58], [0.64, 0.58]] as const;
+        // Measured on frame 1's draft: the face ends at ~31 % of the height, neck ~32-44 %, collar
+        // ~33-47 % across 32-70 %, the open V down to ~58 %. Cover neck, collar and the top of the V.
+        const neck = [[0.4, 0.34], [0.6, 0.34], [0.66, 0.42], [0.34, 0.42], [0.36, 0.5], [0.64, 0.5]] as const;
         await stroke(await Promise.all(neck.map(([x, y]) => onImage(x, y))));
         await t.waitVoice();
         await t.say("X swaps to Erase, to take some away. Undo with Ctrl Z.");
         await t.press("x");
         await t.beat(400);
-        await stroke([await onImage(0.45, 0.52), await onImage(0.55, 0.52)]);
+        await stroke([await onImage(0.45, 0.42), await onImage(0.55, 0.42)]);
         await t.press("x");
         await t.beat(500);
         await page.keyboard.press("Control+z");
@@ -249,7 +249,7 @@ tutorial(
         await t.waitVoice();
         await t.say("Lasso fills what you draw around: the shoulders too. Fill fills the area under the pointer, up to the lines you painted.");
         await t.click(page.locator('[data-test="image-filter-tool-lasso"]'));
-        const loopPts = [[0.32, 0.44], [0.68, 0.44], [0.74, 0.68], [0.26, 0.68], [0.32, 0.44]] as const;
+        const loopPts = [[0.32, 0.32], [0.68, 0.32], [0.7, 0.56], [0.3, 0.56], [0.32, 0.32]] as const;
         await stroke(await Promise.all(loopPts.map(([x, y]) => onImage(x, y))));
         await t.say("Let go, and everything inside the loop is masked.");
         await t.click(page.locator('[data-test="image-filter-tool-brush"]'));
