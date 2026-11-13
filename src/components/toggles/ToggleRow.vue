@@ -106,7 +106,10 @@ function flip(): void {
   emit("set-on", !props.shownOn);
 }
 /** Buttons: a click on the side that's already lit flips it too, so any
- *  click on the pair switches it (the other side goes through the v-model). */
+ *  click on the pair switches it (the other side goes through the v-model).
+ *  Runs in the capture phase, before the kit's own handler: once the unlit
+ *  side's pick had re-rendered the row, a bubbling handler saw that side lit
+ *  and flipped it straight back, so clicking With did nothing. */
 function flipFromLit(e: MouseEvent): void {
   if (props.blocked) return;
   const opt = e.target instanceof Element ? e.target.closest(".wp-segmented__opt") : null;
@@ -233,10 +236,10 @@ function flipFromLit(e: MouseEvent): void {
           @update:model-value="(v: boolean) => emit('set-on', v)"
         />
       </span>
-      <!-- Only catches clicks bubbling up from the kit's own option buttons
+      <!-- Only catches clicks on their way to the kit's own option buttons
            (Space / Enter on them fire a click too), so it needs no keys. -->
       <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
-      <span v-else-if="look === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl" :style="tintStyle" @click="flipFromLit">
+      <span v-else-if="look === 'buttons'" v-tooltip="blockedHint()" class="wp-tgr__ctl" :style="tintStyle" @click.capture="flipFromLit">
         <WpSegmented
           :model-value="t.on ? 'on' : 'off'"
           :options="[{ value: 'on', label: t.on_label || 'On' }, { value: 'off', label: t.off_label || 'Off' }]"
