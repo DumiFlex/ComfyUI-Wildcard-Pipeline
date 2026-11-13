@@ -27,6 +27,20 @@ describe("ToggleRow buttons", () => {
     w.unmount();
   });
 
+  it("switches once even when the row re-renders before the click bubbles up", async () => {
+    // On the canvas the row's new state is drawn while the click is still on its way
+    // up, so a handler that ran after the kit's saw the side it had just lit.
+    let w: ReturnType<typeof mount> | null = null;
+    const relight = (): void => {
+      w?.find('[data-test="tg-ctl-00000001-on"]').element.setAttribute("data-active", "true");
+      w?.find('[data-test="tg-ctl-00000001-off"]').element.setAttribute("data-active", "false");
+    };
+    w = mount(ToggleRowView, { props: { ...base, t: row(false), shownOn: false, effOn: false, "onSet-on": relight } });
+    await w.find('[data-test="tg-ctl-00000001-on"]').trigger("click");
+    expect(w.emitted("set-on")).toEqual([[true]]);
+    w.unmount();
+  });
+
   it("does nothing while blocked", async () => {
     const w = mount(ToggleRowView, { props: { ...base, t: row(true), shownOn: true, effOn: true, blocked: true } });
     await w.find('[data-test="tg-ctl-00000001-on"]').trigger("click");
