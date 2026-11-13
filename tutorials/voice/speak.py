@@ -69,7 +69,8 @@ def lines_in(files: list[Path]) -> dict[str, str]:
         # A say() whose text isn't written out ("t.say(ok ? 'a' : 'b')") is never voiced: shout.
         for m in re.finditer(r"\.say\(\s*(?![\s\"'`])", src):
             row = src.count("\n", 0, m.start()) + 1
-            print(f"NOT VOICED: {f.name}:{row} says something that isn't a written-out string", file=sys.stderr)
+            print(f"NOT VOICED: {f.name}:{row} says a line that isn't written out",
+                  file=sys.stderr)
         for m in SAY.finditer(src):
             text = unescape(m.group("text"))
             spoken = unescape(m.group("spoken")) if m.group("spoken") is not None else None
