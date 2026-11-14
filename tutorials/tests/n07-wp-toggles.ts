@@ -227,7 +227,7 @@ tutorial(
       await t.press("Enter");
       await t.beat(500);
       await t.waitVoice();
-      await t.say("A new label lands at the bottom, empty. A toggle belongs to a label only once it sits inside it, so drag Rain into Weather by its grip.");
+      await t.say("A new label lands at the bottom, empty. A toggle belongs to a label only once it sits inside it, so drag Puddles into Weather by its grip, onto the label.");
       // A label moves with its own toggles and lands only between groups, so dragging the label above
       // Rain would leave Rain outside it. Drag the toggles in instead: dropped on a label's lower half, a
       // toggle goes first in that group; on a grouped toggle's lower half, it goes after it.
@@ -257,10 +257,12 @@ tutorial(
         await page.mouse.up();
         await t.beat(700);
       };
-      await dragInto("Rain", labelRow);
+      // Both onto the label: a drop there goes first in the group (a drop after its last row was
+      // undone on the 13/11 take). Puddles first, then Rain, so Rain ends up above the toggle that needs it.
+      await dragInto("Puddles", labelRow);
       await t.waitVoice();
-      await t.say("It moves in under the label and takes its colour. Now Puddles, dropped just below Rain.");
-      await dragInto("Puddles", t.node(n.tg).locator(".wp-sortable__row", { has: t.page.locator('[data-test^="tg-row-"]', { hasText: "Rain" }) }).first());
+      await t.say("It moves in under the label and takes its colour. Now Rain, onto the label too, so it goes first, above Puddles.");
+      await dragInto("Rain", labelRow);
       await t.waitVoice();
       await editDone(n.tg);
       const weather = t.node(n.tg).locator(".wp-tg__group-box", { has: t.page.locator(".wp-tg__label-text", { hasText: "Weather" }) }).first();

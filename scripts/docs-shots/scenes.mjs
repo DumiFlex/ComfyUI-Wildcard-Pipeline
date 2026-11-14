@@ -59,11 +59,11 @@ export const SCENES = [
     from: "one",
     groups: ["ports", "markers"],
     build: async (S) => {
-      S.only([3, 5]);
-      S.w(3, 440);
-      S.w(5, 440);
-      await S.columns([[3], [5]]);
-      return 3;
+      S.only([7, 9]);
+      S.w(7, 440);
+      S.w(9, 440);
+      await S.columns([[7], [9]]);
+      return 7;
     },
   },
   {
@@ -73,12 +73,12 @@ export const SCENES = [
     run: true,
     groups: ["ports", "rowOptions"],
     build: async (S) => {
-      S.only([5, 13, 14, 15, 16, 10, 3]);
-      S.link(16, "context", 10, "context");
-      S.fold(3, 5);
-      S.w(13, 320); S.w(14, 320); S.w(15, 320); S.w(16, 460); S.w(10, 440);
-      await S.columns([[3, 5, 13, 14, 15], [{ gap: 60 }, 16], [{ gap: 60 }, 10]], { gapY: 20 });
-      return 16;
+      S.only([7, 9, 13, 14, 15, 12, 22]);
+      S.link(12, "context", 22, "context");
+      S.fold(7, 9);
+      S.w(13, 320); S.w(14, 320); S.w(15, 320); S.w(12, 460); S.w(22, 440);
+      await S.columns([[7, 9, 13, 14, 15], [{ gap: 60 }, 12], [{ gap: 60 }, 22]], { gapY: 20 });
+      return 12;
     },
   },
   {
@@ -120,12 +120,12 @@ export const SCENES = [
     height: 860,
     groups: ["ports", "tabs"],
     build: async (S) => {
-      S.only([3, 5, 10]);
-      S.link(5, "context", 10, "context");
-      S.fold(3);
-      S.w(5, 440); S.w(10, 560);
-      await S.columns([[3, 5], [{ gap: 56 }, 10]], { gapY: 20 });
-      return 10;
+      S.only([7, 9, 22]);
+      S.link(9, "context", 22, "context");
+      S.fold(7);
+      S.w(9, 440); S.w(22, 560);
+      await S.columns([[7, 9], [{ gap: 56 }, 22]], { gapY: 20 });
+      return 22;
     },
   },
   {
@@ -135,16 +135,16 @@ export const SCENES = [
     run: true,
     height: 860,
     build: async (S) => {
-      S.only([3, 5, 7]);
-      S.link(5, "context", 7, "context");
+      S.only([7, 9, 19]);
+      S.link(9, "context", 19, "context");
       const p1 = S.w(S.add("PreviewAny", { title: "Preview as Text · prompt" }), 360);
       const p2 = S.w(S.add("PreviewAny", { title: "Preview as Text · negative" }), 360);
-      S.link(7, "prompt", p1, "source");
-      S.link(7, "negative", p2, "source");
-      S.fold(3, 5);
-      S.w(7, 440);
-      await S.columns([[3, 5], [7], [p1, p2]], { gapY: 20 });
-      return 7;
+      S.link(19, "prompt", p1, "source");
+      S.link(19, "negative", p2, "source");
+      S.fold(7, 9);
+      S.w(19, 440);
+      await S.columns([[7, 9], [19], [p1, p2]], { gapY: 20 });
+      return 19;
     },
   },
   {
@@ -154,18 +154,18 @@ export const SCENES = [
     run: true,
     height: 860,
     build: async (S) => {
-      S.only([8]);
+      S.only([20]);
       const a = S.w(S.add("PrimitiveStringMultiline", { title: "Prompt", widgets: { value: "masterpiece, best quality, , 1girl, red hair, Red Hair, ((smile)), (, ), solo,, < lora : style : 0.8 >" } }), 340);
       const b = S.w(S.add("PrimitiveStringMultiline", { title: "Negative", widgets: { value: "lowres, bad hands, , lowres, red hair" } }), 340);
       const p1 = S.w(S.add("PreviewAny", { title: "Preview as Text · prompt" }), 340);
       const p2 = S.w(S.add("PreviewAny", { title: "Preview as Text · negative" }), 340);
-      S.link(a, "STRING", 8, "prompt");
-      S.link(b, "STRING", 8, "negative");
-      S.link(8, "prompt", p1, "source");
-      S.link(8, "negative", p2, "source");
-      S.w(8, 440);
-      await S.columns([[a, b], [8], [p1, p2]]);
-      return 8;
+      S.link(a, "STRING", 20, "prompt");
+      S.link(b, "STRING", 20, "negative");
+      S.link(20, "prompt", p1, "source");
+      S.link(20, "negative", p2, "source");
+      S.w(20, 440);
+      await S.columns([[a, b], [20], [p1, p2]]);
+      return 20;
     },
   },
 ];
@@ -173,9 +173,9 @@ export const SCENES = [
 /** Var → Int / Float / Choice: the example's Render Context, its model family
  *  given by a text into WP Model Info (no checkpoint needed), then the node. */
 for (const [image, node, id, into, port, height] of [
-  ["wp-var-to-int", "WP_VarToInt", 33, 25, "value", 644],
-  ["wp-var-to-float", "WP_VarToFloat", 35, 26, "value", 752],
-  ["wp-var-to-choice", "WP_VarToChoice", 36, 26, "choice", 752],
+  ["wp-var-to-int", "WP_VarToInt", 37, 27, "value", 644],
+  ["wp-var-to-float", "WP_VarToFloat", 39, 28, "value", 752],
+  ["wp-var-to-choice", "WP_VarToChoice", 40, 28, "choice", 752],
 ]) {
   SCENES.push({
     image,
@@ -185,14 +185,14 @@ for (const [image, node, id, into, port, height] of [
     height,
     arg: { id, into, port },
     build: async (S, a) => {
-      S.only([31, 32, a.id, a.into]);
+      S.only([33, 35, a.id, a.into]);
       const fam = S.w(S.add("PrimitiveString", { title: "Model family", widgets: { value: "sdxl" } }), 240);
-      S.link(fam, "STRING", 31, "family");
+      S.link(fam, "STRING", 33, "family");
       const p = S.w(S.add("PreviewAny", { title: "Preview as Text" }), 300);
       S.link(a.id, a.port, p, "source");
-      S.fold(fam, 31, 32);
+      S.fold(fam, 33, 35);
       S.w(a.id, 380); S.w(a.into, 300);
-      await S.columns([[fam, 31, 32], [a.id], [a.into, p]], { gapY: 18 });
+      await S.columns([[fam, 33, 35], [a.id], [a.into, p]], { gapY: 18 });
       return a.id;
     },
   });
@@ -221,17 +221,17 @@ SCENES.push(
     run: true,
     build: async (S) => {
       // No checkpoint in the shooting ComfyUI: the family comes in as text.
-      S.only([31, 32, 33]);
+      S.only([33, 35, 37]);
       const fam = S.w(S.add("PrimitiveString", { title: "Model family", widgets: { value: "sdxl" } }), 240);
-      S.link(fam, "STRING", 31, "family");
+      S.link(fam, "STRING", 33, "family");
       const file = S.w(S.add("PrimitiveString", { title: "Checkpoint file", widgets: { value: "ponyDiffusionV6XL.safetensors" } }), 300);
-      S.link(file, "STRING", 31, "name");
+      S.link(file, "STRING", 33, "name");
       const p = S.w(S.add("PreviewAny", { title: "Preview as Text" }), 240);
-      S.link(33, "value", p, "source");
-      S.w(31, 440);
-      S.fold(32, 33, p);
-      await S.columns([[{ gap: 40 }, fam, file], [31], [{ gap: 20 }, 32, 33, p]], { gapY: 18 });
-      return 31;
+      S.link(37, "value", p, "source");
+      S.w(33, 440);
+      S.fold(35, 37, p);
+      await S.columns([[{ gap: 40 }, fam, file], [33], [{ gap: 20 }, 35, 37, p]], { gapY: 18 });
+      return 33;
     },
   },
   {
@@ -267,12 +267,12 @@ SCENES.push(
     node: "WP_ModeRelay",
     from: "one",
     build: async (S) => {
-      S.only([22, 31, 32, 33, 34, 37, 38]);
-      S.mode(31, 2);
-      S.fold(22, 31, 32, 33, 34);
-      S.w(38, 380); S.w(37, 400);
-      await S.columns([[22, 31, { gap: 40 }, 32, 33, 34], [38], [37]], { gapY: 18 });
-      return 38;
+      S.only([3, 33, 35, 37, 38, 36, 34]);
+      S.mode(33, 2);
+      S.fold(3, 33, 35, 37, 38);
+      S.w(34, 380); S.w(36, 400);
+      await S.columns([[3, 33, { gap: 40 }, 35, 37, 38], [34], [36]], { gapY: 18 });
+      return 34;
     },
   },
   {
@@ -304,16 +304,16 @@ SCENES.push(
     groups: ["ports", "settings"],
     answer: { action: "picks", picks: [[0, 0], [1, 1], [3, 0]] },
     build: async (S) => {
-      S.only([3, 4, 5, 6, 7, 17]);
+      S.only([3, 4, 5, 7, 8, 19]);
       const img = S.w(S.add("DocsDemoLandscape", { title: "Your images (stand-in for the sampler)", widgets: { width: 384, height: 384, count: 2 } }), 300);
-      S.link(7, "prompt", img, "text");
-      S.link(img, "IMAGE", 17, "images");
+      S.link(8, "prompt", img, "text");
+      S.link(img, "IMAGE", 19, "images");
       const prev = S.w(S.add("PreviewImage"), 380);
-      S.link(17, "images", prev, "images");
-      S.fold(3, 4, 5, 6, 7);
-      S.w(17, 460);
-      await S.columns([[3, 4, 5, 6, 7, { gap: 20 }, img], [17], [prev]], { gapY: 16 });
-      return 17;
+      S.link(19, "images", prev, "images");
+      S.fold(3, 4, 5, 7, 8);
+      S.w(19, 460);
+      await S.columns([[3, 4, 5, 7, 8, { gap: 20 }, img], [19], [prev]], { gapY: 16 });
+      return 19;
     },
   },
   {
@@ -343,10 +343,10 @@ SCENES.push(
     edit: true,
     scale: 0.85,
     build: async (S) => {
-      S.only([26, 28]);
-      S.w(26, 320);
-      await S.columns([[26], [28]]);
-      return 28;
+      S.only([28, 30]);
+      S.w(28, 320);
+      await S.columns([[28], [30]]);
+      return 30;
     },
   },
 );

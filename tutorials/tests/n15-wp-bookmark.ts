@@ -117,7 +117,7 @@ tutorial(
     await t.h.step("The shortcut", async () => {
       const rec = t.node(bm).locator('[data-test="bm-record"]');
       await t.callout("key", rec, "Its shortcut", 4);
-      await t.say("A new bookmark gets the first free shortcut, shown here. Click it and press other keys to record one: Escape cancels, Backspace clears.");
+      await t.say("A new bookmark gets the first free Alt shortcut, shown here. Click it and press other keys to record one: Escape cancels, Backspace clears.");
       await t.waitVoice();
       await t.uncallout("key");
       await t.callout("bolt", t.node(bm).locator('[data-test="bm-suggest"]'), "A free one", 4);

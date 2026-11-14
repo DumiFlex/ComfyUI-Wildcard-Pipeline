@@ -16,6 +16,7 @@
  * whole next config (`src/widgets/label_grid.ts` serializes it).
  */
 import { computed } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Textarea from "@/kit/Textarea.vue";
 import Input from "@/kit/Input.vue";
@@ -32,6 +33,9 @@ import {
   type LabelAlign,
   type LabelGridConfig,
   type LabelGridRun,
+  type LabelOrientation,
+  type LabelPosition,
+  runMismatch,
 } from "../../extension/label-grid";
 import {
   PRESETS,
@@ -80,13 +84,14 @@ const SIDES: { value: Side; label: string; icon: string }[] = [
 ];
 const side = computed<Side>(() => {
   const p = cfg.value.position;
-  return p === "over_top" ? "top" : p === "over_bottom" ? "bottom" : p;
+  return p.startsWith("over_") ? p.slice(5) as Side : p as Side;
 });
 const over = computed(() => cfg.value.position.startsWith("over_"));
-const canOver = computed(() => side.value === "top" || side.value === "bottom");
+const canOver = computed(() => side.value !== "none");
+const sideways = computed(() => side.value === "left" || side.value === "right");
 
 function setSide(next: Side): void {
-  set("position", over.value && (next === "top" || next === "bottom") ? `over_${next}` : next);
+  set("position", over.value && next !== "none" ? `over_${next}` as LabelPosition : next);
 }
 /** A band over the image starts see-through when the strip was the plain
  *  default black, so the picture shows under it. */
@@ -94,12 +99,17 @@ const SEE_THROUGH_BAND = `${DEFAULT_LABEL_GRID_CONFIG.label_color}99`;
 
 function setOver(on: boolean): void {
   if (!canOver.value) return;
-  const s = side.value as "top" | "bottom";
-  const next = { ...cfg.value, position: on ? `over_${s}` as const : s };
+  const s = side.value as Exclude<Side, "none">;
+  const next = { ...cfg.value, position: on ? `over_${s}` as LabelPosition : s };
   if (on && cfg.value.label_color === DEFAULT_LABEL_GRID_CONFIG.label_color) next.label_color = SEE_THROUGH_BAND;
   if (!on && cfg.value.label_color === SEE_THROUGH_BAND) next.label_color = DEFAULT_LABEL_GRID_CONFIG.label_color;
   emit("update:modelValue", next);
 }
+
+const ORIENTATION_OPTIONS: { value: LabelOrientation; label: string; icon: string }[] = [
+  { value: "horizontal", label: "Horizontal text", icon: "pi-arrows-h" },
+  { value: "vertical", label: "Vertical text (turned along the edge)", icon: "pi-arrows-v" },
+];
 
 const ALIGN_OPTIONS: { value: LabelAlign; label: string; icon: string }[] = [
   { value: "left", label: "Align left", icon: "pi-align-left" },
@@ -186,6 +196,8 @@ const runLine = computed(() => {
   if (run.grid) bits.push(`grid ${run.grid[0]}×${run.grid[1]}`);
   return bits.join(" · ");
 });
+/** Counts that didn't match on the last run (label lines, headers). */
+const mismatch = computed(() => (props.lastRun ? runMismatch(props.lastRun) : []));
 const suggestedLabel = computed(() => PRESETS.find((p) => p.id === suggested.value)?.label ?? "");
 
 const isDefaultStyle = computed(() => {
@@ -212,6 +224,16 @@ function text(ev: Event): string {
       <i class="pi pi-images" aria-hidden="true" />
       <span class="wp-lg__run-text">{{ runLine }}</span>
     </div>
+    <Banner
+      v-if="mismatch.length"
+      data-wp-part="mismatch"
+      data-wp-part-label="Counts that don't match"
+      tone="warn"
+      size="sm"
+      data-test="lg-mismatch"
+    >
+      {{ mismatch.join(" · ") }}
+    </Banner>
 
     <!-- LABEL ───────────────────────────────────────────────────────── -->
     <section data-wp-part="label" data-wp-part-label="Whole label section" data-wp-part-section="Label" class="wp-lg__section">
@@ -265,6 +287,16 @@ function text(ev: Event): string {
           :disabled="!canOver"
           data-test="lg-over"
           @update:model-value="setOver"
+        />
+        <WpSegmented
+          v-if="sideways"
+          :model-value="cfg.orientation"
+          :options="ORIENTATION_OPTIONS"
+          size="sm"
+          icon-only
+          aria-label="Text direction"
+          test-prefix="lg-orientation"
+          @update:model-value="(v) => set('orientation', v)"
         />
       </div>
       <div data-wp-part="font" data-wp-part-label="Font" data-wp-part-section="Label" v-if="side !== 'none'" class="wp-lg__row">

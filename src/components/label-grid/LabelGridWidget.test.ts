@@ -5,6 +5,7 @@ import { defaultLabelGridConfig, type LabelGridConfig, type LabelGridRun } from 
 
 const SWEEP: LabelGridRun = {
   items: 9, batchSizes: Array(9).fill(1), count: 9, labelled: true, auto: "fill", grid: [1687, 2416],
+  missing: 0, extra: 0, rows: null, columns: null, noLabel: 0,
   parts: [
     { values: ["#1", "#2", "#3", "#4"], count: 9 },
     { values: ["dawn", "noon", "night"], count: 3 },
@@ -43,6 +44,29 @@ describe("LabelGridWidget", () => {
     const w = mk();
     await w.find('[data-test="lg-over"]').trigger("click");
     expect(lastEmit(w)).toMatchObject({ position: "over_top", label_color: "#00000099" });
+  });
+
+  it("keeps 'over image' on the left and right too", async () => {
+    const over = mk({ modelValue: { ...defaultLabelGridConfig(), position: "over_top" } });
+    await over.find('[data-test="lg-side-left"]').trigger("click");
+    expect(lastEmit(over).position).toBe("over_left");
+    const w = mk({ modelValue: { ...defaultLabelGridConfig(), position: "right" } });
+    await w.find('[data-test="lg-over"]').trigger("click");
+    expect(lastEmit(w).position).toBe("over_right");
+  });
+
+  it("offers horizontal or vertical text only beside the image", async () => {
+    expect(mk().find('[data-test="lg-orientation-vertical"]').exists()).toBe(false);
+    const w = mk({ modelValue: { ...defaultLabelGridConfig(), position: "over_left" } });
+    await w.find('[data-test="lg-orientation-vertical"]').trigger("click");
+    expect(lastEmit(w).orientation).toBe("vertical");
+  });
+
+  it("warns when the label lines or headers don't match the run", () => {
+    expect(mk({ lastRun: SWEEP }).find('[data-test="lg-mismatch"]').exists()).toBe(false);
+    const w = mk({ lastRun: { ...SWEEP, missing: 1, columns: [2, 3] } });
+    expect(w.find('[data-test="lg-mismatch"]').text()).toContain("1 image without a label line");
+    expect(w.find('[data-test="lg-mismatch"]').text()).toContain("2 column headers for 3 columns");
   });
 
   it("explains each label token", () => {

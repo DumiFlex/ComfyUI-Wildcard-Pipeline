@@ -6,7 +6,7 @@
 // label renamed, a prompt edited (✎), a mask painted with the brush, erase, lasso and fill, the
 // sliders, Undo and the two mask views, Compare, Zoom, tucking the picker away and the waiting pill,
 // Send to Loop, then Keep picked. After the run: the scarf shows where the mask was painted (refine
-// denoise raised to 0.75 so it can) and the grid prints the new name. Last, the node's own settings (mode, Send picks as, timeout, extra slots, the sweep table).
+// denoise raised to 0.9 so it can) and the grid prints the new name. Last, the node's own settings (mode, Send picks as, timeout, extra slots, the sweep table).
 // The run needs a model, so without showcase the video only walks the node.
 import { StepError } from "watchwright";
 import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
@@ -137,14 +137,20 @@ tutorial(
         await t.wire(filter, "masks", mask, "mask");
         await t.waitVoice();
         // At the example's half denoise a masked part barely moves, so the scarf never showed.
-        await t.callout("dn", t.node(refine), "Denoise 0.75", 4);
-        await t.say("And raise the refine's denoise to 0.75, so what you paint can really change.");
-        await page.evaluate((id) => {
-          const node = window.app?.graph?.getNodeById(Number(id)) as { widgets?: { name: string; value: unknown }[] } | null | undefined;
+        // 0.75 still left the hero shot without a scarf (13/11 take): a new object needs more.
+        await t.callout("dn", t.node(refine), "Denoise 0.9", 4);
+        await t.say("And raise the refine's denoise to 0.9, so what you paint can really change.");
+        const denoise = await page.evaluate((id) => {
+          const node = window.app?.graph?.getNodeById(Number(id)) as { widgets?: { name: string; value: unknown; callback?: (v: unknown) => void }[] } | null | undefined;
           const w = node?.widgets?.find((x) => x.name === "denoise");
-          if (w) w.value = 0.75;
+          if (w) {
+            w.value = 0.9;
+            w.callback?.(0.9);
+          }
           window.app?.canvas?.setDirty(true, true);
+          return w?.value;
         }, refine);
+        if (denoise !== 0.9) throw new StepError(`The refine's denoise didn't take 0.9 (it reads ${String(denoise)}).`);
         await t.beat(600);
         await t.waitVoice();
         await t.uncallout("dn");
@@ -204,7 +210,8 @@ tutorial(
         const box = page.locator('[data-test="image-filter-positive"]');
         await t.click(box);
         await page.keyboard.press("Control+End");
-        await t.type(", wearing a green scarf", { cps: 16 });
+        // Weighted, so the refine pass draws it rather than a hint of green.
+        await t.type(", wearing a (green knitted scarf:1.3)", { cps: 16 });
         await t.beat(600);
         await t.waitVoice();
         await t.say("With clip wired, the refine pass gets the new prompt encoded. Without it, a text only tag shows here: the text outputs change, the conditioning doesn't. The tile shows a pencil for an edited prompt.");
@@ -226,13 +233,15 @@ tutorial(
         // The scarf goes round the neck and over the collar: the mask has to cover that, or the
         // refine pass can't draw it (a face-only mask left the refined pick looking unchanged).
         await t.say("The brush paints. Go over the neck and collar, where the scarf goes.");
-        const neck = [[0.4, 0.32], [0.6, 0.32], [0.62, 0.38], [0.38, 0.38], [0.38, 0.44], [0.62, 0.44]] as const;
+        // Measured on frame 1's draft: the face ends at ~31 % of the height, neck ~32-44 %, collar
+        // ~33-47 % across 32-70 %, the open V down to ~58 %. Cover neck, collar and the top of the V.
+        const neck = [[0.4, 0.34], [0.6, 0.34], [0.66, 0.42], [0.34, 0.42], [0.36, 0.5], [0.64, 0.5]] as const;
         await stroke(await Promise.all(neck.map(([x, y]) => onImage(x, y))));
         await t.waitVoice();
         await t.say("X swaps to Erase, to take some away. Undo with Ctrl Z.");
         await t.press("x");
         await t.beat(400);
-        await stroke([await onImage(0.45, 0.38), await onImage(0.55, 0.38)]);
+        await stroke([await onImage(0.45, 0.42), await onImage(0.55, 0.42)]);
         await t.press("x");
         await t.beat(500);
         await page.keyboard.press("Control+z");
@@ -240,7 +249,7 @@ tutorial(
         await t.waitVoice();
         await t.say("Lasso fills what you draw around: the shoulders too. Fill fills the area under the pointer, up to the lines you painted.");
         await t.click(page.locator('[data-test="image-filter-tool-lasso"]'));
-        const loopPts = [[0.32, 0.3], [0.68, 0.3], [0.7, 0.56], [0.3, 0.56], [0.32, 0.3]] as const;
+        const loopPts = [[0.32, 0.32], [0.68, 0.32], [0.7, 0.56], [0.3, 0.56], [0.32, 0.32]] as const;
         await stroke(await Promise.all(loopPts.map(([x, y]) => onImage(x, y))));
         await t.say("Let go, and everything inside the loop is masked.");
         await t.click(page.locator('[data-test="image-filter-tool-brush"]'));
