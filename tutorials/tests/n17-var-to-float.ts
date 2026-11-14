@@ -14,8 +14,14 @@ tutorial(
   },
   async (t) => {
     const n = await t.h.step("What it's for", async () => {
-      const s = await buildVarScene(t, () => t.say("WP Var to Float turns a variable into a decimal number. First, the small workflow every Var video shares."));
-      await t.say("Settings per model also sets a CFG for each model family: six for SDXL, one for Flux. A KSampler's cfg wants a decimal number, not a variable.");
+      const s = await buildVarScene(t, () => t.say(
+        "WP Var to Float turns a variable into a decimal number. First, the small workflow every Var video shares.",
+        "W P Var to Float turns a variable into a decimal number. First, the small workflow that every Var video shares.",
+      ));
+      await t.say(
+        "Settings per model also sets a CFG for each model family: six for SDXL, one for Flux. A KSampler's cfg wants a decimal number, not a variable.",
+        "Settings per model also sets a C F G for each model family. Six for S D X L, and one for Flux. A K Sampler's C F G wants a decimal number, not a variable.",
+      );
       await t.waitVoice();
       await t.say("WP Var → Float takes a decimal out of a variable, for CFG, denoise, a LoRA strength, or any other decimal setting.", "WP Var to Float takes a decimal out of a variable, for CFG, denoise, a LoRA strength, or any other decimal setting.");
       await t.waitVoice();
