@@ -54,6 +54,9 @@ describe("BookmarkDock", () => {
     expect(w.findAll('[data-test^="bm-dock-row-"]')).toHaveLength(0);
     expect(tiles[0]?.text()).toContain("Prompts");
     expect(tiles[1]?.attributes("title")).toContain("hidden on the canvas");
+    // Shift is drawn as ⇧ so a long chord fits; the tooltip spells it out.
+    expect(tiles[0]?.text()).toContain("Alt");
+    expect(tiles[0]?.attributes("title")).toContain("Alt + 1");
     expect(JSON.parse(localStorage.getItem("wp.bookmarkDock") ?? "{}").layout).toBe("grid");
 
     await w.get('[data-test="bm-dock-edit"]').trigger("click");

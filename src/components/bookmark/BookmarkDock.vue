@@ -396,9 +396,9 @@ function close(): void {
   margin: 0;
   padding: 0;
   display: grid;
-  /* Three a line in the 300 px dock; tiles wrap, never widen it. */
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 5px;
+  /* Four a line in the 300 px dock; tiles wrap, never widen it. */
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 4px;
 }
 .wp-bmdock__grid > li { display: flex; min-width: 0; }
 .wp-bmdock__grid > li > * { flex: 1; }
