@@ -206,7 +206,7 @@ tutorial(
     await t.h.step("Grid or list", async () => {
       const layout = page.locator('[data-test="bm-dock-layout"]');
       await t.callout("layout", layout, "Grid or list", 4);
-      await t.say("The grid button shows the bookmarks as tiles instead, three to a line, each with its icon large in its colour, so you find one by its icon.");
+      await t.say("The grid button shows the bookmarks as small tiles instead, four to a line, each with its icon in its colour and its key, so you find one by its icon.");
       await t.click(layout);
       await t.beat(900);
       await t.waitVoice();
