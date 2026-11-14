@@ -853,6 +853,9 @@ export function addBookmarkHere(at?: readonly number[], spot?: DockSpot): void {
   node.pos = [Math.round(x), Math.round(y)];
   graph.add(node);
   const config: BookmarkConfig = { ...freshConfig(node, s), anchor: at ? "tl" : spot ?? readDockPrefs().newSpot, zoomMode: "fixed" };
+  // Set up here: the widget must not reset it to a fresh config or open
+  // its editor (a bigger node than the pill this placement sizes for).
+  if (!at) preset.add(node);
   writeConfig(node, config);
   if (!at) {
     settleAtLanding(c, node, config);
@@ -886,6 +889,9 @@ function settleAtLanding(c: CanvasLike, node: BookmarkNode, config: BookmarkConf
  *  open itself. ComfyUI's `nodeCreated` hook doesn't fire for node types
  *  registered straight with LiteGraph, so the node reports it. */
 let bookmarkAdded: (() => void) | null = null;
+/** Bookmarks `addBookmarkHere` already set up: their widget keeps the
+ *  config it was given and stays a pill. */
+const preset = new WeakSet<object>();
 /** Opens or closes a bookmark's form (double-click on the node). */
 const bookmarkEditors = new WeakMap<object, (on: boolean) => void>();
 export function onBookmarkAdded(fn: () => void): void {
@@ -1021,7 +1027,7 @@ export function mountBookmark(node: BookmarkNode & FramelessNode) {
 
   // Nothing restored by the next tick: the user just added this bookmark.
   setTimeout(() => {
-    if (!restored && node.graph) {
+    if (!restored && node.graph && !preset.has(node)) {
       apply(freshConfig(node));
       setEditing(true);
     }
