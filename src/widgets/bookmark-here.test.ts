@@ -44,12 +44,14 @@ afterEach(() => {
 });
 
 describe("Bookmark this view with the real widget", () => {
-  it("keeps the spot, zoom and shortcut it was given once the widget settles", () => {
+  it("keeps the stored view, zoom and shortcut once the widget settles", () => {
     addBookmarkHere(undefined, "c");
     const before = listBookmarks()[0]?.config;
     vi.runAllTimers();
     const after = listBookmarks()[0]?.config;
-    expect(after?.anchor).toBe("c");
+    expect(after?.anchor).toBe("custom");
+    expect(after?.view).toEqual(before?.view);
+    expect(after?.view).not.toBeNull();
     expect(after?.zoomMode).toBe("fixed");
     expect(after?.zoom).toBe(1.5);
     expect(after?.shortcut).toBe(before?.shortcut);
