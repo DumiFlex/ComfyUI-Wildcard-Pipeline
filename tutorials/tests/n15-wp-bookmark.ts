@@ -301,7 +301,7 @@ tutorial(
     });
 
     await t.h.step("Recipes and gotchas", async () => {
-      await t.say("Recipe one: a bookmark per stage, Alt 1 to Alt 5, left to right, then step through them to show the workflow. Recipe two: a WP Note can be a bookmark too, so a step's explanation is also a stop in the dock. Recipe three: hide a bookmark that clutters the canvas; the key still works.");
+      await t.say("Recipe one: a bookmark per stage, left to right, each with its own key, then step through them to show the workflow. Recipe two: a WP Note can be a bookmark too, so a step's explanation is also a stop in the dock. Recipe three: hide a bookmark that clutters the canvas; the key still works.");
       await t.waitVoice();
       await t.say("Gotchas: a muted or bypassed bookmark shows off in the dock and its key does nothing. A bookmark inside a subgraph opens the subgraph when you jump. And the commands, next, previous, back, bookmark this view and show the dock, have no keys until you bind them in Settings, Keybinding.");
       await t.waitVoice();
