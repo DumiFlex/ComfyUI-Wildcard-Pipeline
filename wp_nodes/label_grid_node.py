@@ -182,6 +182,7 @@ class WPLabelGrid(io.ComfyNode):
         style = g.Style(
             position=cfg["position"],
             align=cfg["align"],
+            orientation=cfg["orientation"],
             font=cfg["font"],
             font_size=cfg["font_size"],
             text_color=cfg["text_color"],
@@ -196,6 +197,7 @@ class WPLabelGrid(io.ComfyNode):
         pil = [_to_pil(b) for b in batches]
         sizes = [len(p) for p in pil]
         incoming = g.item_labels(labels, sizes)
+        missing, extra = g.label_fit(labels, sizes)
         count = sum(sizes)
 
         # A wired label text beats the panel's: one per item, the last repeats.
@@ -219,6 +221,7 @@ class WPLabelGrid(io.ComfyNode):
 
         grid_tensor = None
         grid_size: list[int] | None = None
+        fit: dict[str, Any] = {}
         preview = [img for batch in labelled for img in batch]
         if cfg["grid"] and count:
             rows_from = cfg["rows_from"]
@@ -239,6 +242,7 @@ class WPLabelGrid(io.ComfyNode):
                 for fi, batch in enumerate(pil)
                 for ii, img in enumerate(batch)
             ]
+            fit = g.grid_fit(cells, spec)
             grid = g.build_grid(cells, style, spec)
             grid_size = [grid.width, grid.height]
             grid_tensor = _to_tensor([grid])
@@ -257,6 +261,11 @@ class WPLabelGrid(io.ComfyNode):
             "parts": g.part_examples(flat),
             "auto": g.auto_arrange(sizes),
             "grid": grid_size,
+            # Label lines vs images, and typed headers vs the grid's lanes,
+            # so the panel can say when the numbers don't match.
+            "missing": missing,
+            "extra": extra,
+            **fit,
         }
         ui: dict[str, Any] = {"wp_label_grid": [run]}
         try:
