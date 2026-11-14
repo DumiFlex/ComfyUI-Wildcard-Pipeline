@@ -203,6 +203,24 @@ tutorial(
       await t.uncallout("nav");
     });
 
+    await t.h.step("Grid or list", async () => {
+      const layout = page.locator('[data-test="bm-dock-layout"]');
+      await t.callout("layout", layout, "Grid or list", 4);
+      await t.say("The grid button shows the bookmarks as tiles instead, three to a line, each with its icon large in its colour, so you find one by its icon.");
+      await t.click(layout);
+      await t.beat(900);
+      await t.waitVoice();
+      await t.uncallout("layout");
+      const tile = page.locator('[data-test="bm-dock-tile-0"]');
+      if (!(await tile.isVisible().catch(() => false))) throw new StepError("The dock shows no tiles after the grid button.");
+      await t.say("Click a tile to jump. The list button brings the rows back, and the dock remembers which you picked.");
+      await t.click(tile);
+      await t.beat(1400);
+      await t.waitVoice();
+      await t.click(layout);
+      await t.beat(700);
+    });
+
     await t.h.step("The top-bar button", async () => {
       const btn = page.locator('button[aria-label="Bookmarks (Wildcard Pipeline)"]').first();
       if (!(await btn.isVisible().catch(() => false))) throw new StepError("The Bookmarks button isn't in the top bar.");
@@ -250,12 +268,29 @@ tutorial(
       await t.say("Land clear of the dock, on by default, moves a jump out from under the dock, so the dock never covers what you jumped to. Off, bookmarks land exactly where they would without it, behind the see-through dock.");
       await t.waitVoice();
       await t.uncallout("clear");
-      await t.callout("add", page.locator('[data-test="bm-dock-add"]'), "A bookmark for this view", 4);
-      await t.say("And Bookmark this view adds one right here. Done goes back.");
+      const add = page.locator('[data-test="bm-dock-add"]');
+      const spots = page.locator('[aria-label="Where Bookmark this view puts the new bookmark on screen"]');
+      await t.callout("add", [add, spots], "A bookmark for this view", 6);
+      await t.say("Bookmark this view adds one for the view on screen. The three by three grid beside it picks where on screen the new bookmark sits. Pick the centre.");
+      await t.click(page.locator('[data-test="bm-dock-spot-c"]'));
+      await t.beat(500);
       await t.waitVoice();
       await t.uncallout("add");
+      const rowsBefore = await dock.locator('[data-test^="bm-dock-row-"]').count();
+      await t.say("Add it, and press Done.");
+      await t.click(add);
+      await t.beat(800);
       await t.click(page.locator('[data-test="bm-dock-done"]'));
       await t.beat(700);
+      await t.waitVoice();
+      const newRow = page.locator(`[data-test="bm-dock-row-${rowsBefore}"]`);
+      if (!(await newRow.isVisible().catch(() => false))) throw new StepError("Bookmark this view added no row to the dock.");
+      await t.say("Wander off, and jump to it: the view comes back exactly as it was.");
+      await pan(1500, 800);
+      await t.beat(600);
+      await t.click(newRow);
+      await t.beat(1500);
+      await t.waitVoice();
     });
 
     await t.h.step("How it works", async () => {
