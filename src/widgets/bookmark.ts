@@ -1066,13 +1066,18 @@ export interface DockPrefs {
   /** Jumps keep bookmarks out from under the open dock (on), or land where
    *  they would without it, behind the dock (off). */
   clearDock: boolean;
+  /** Bookmarks as rows (list) or as icon tiles (grid). Edit mode is always
+   *  the list: the grips and eyes need the row. */
+  layout: DockLayout;
 }
+
+export type DockLayout = "list" | "grid";
 
 const DOCK_KEY = "wp.bookmarkDock";
 
 /** Per-viewer convenience, so browser storage (and fine when it's gone). */
 export function readDockPrefs(): DockPrefs {
-  const base: DockPrefs = { open: null, collapsed: false, spot: "tl", clearDock: true };
+  const base: DockPrefs = { open: null, collapsed: false, spot: "tl", clearDock: true, layout: "list" };
   try {
     const raw = JSON.parse(localStorage.getItem(DOCK_KEY) ?? "null") as (Partial<DockPrefs> & { side?: unknown }) | null;
     if (!raw || typeof raw !== "object") return base;
@@ -1083,6 +1088,7 @@ export function readDockPrefs(): DockPrefs {
       collapsed: raw.collapsed === true,
       spot,
       clearDock: raw.clearDock !== false,
+      layout: raw.layout === "grid" ? "grid" : "list",
     };
   } catch {
     return base;

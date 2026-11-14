@@ -3,7 +3,9 @@
  * The Bookmarks dock: a small panel pinned to the canvas edge listing every
  * WP Bookmark in the workflow. A row click jumps there; the eye shows or
  * hides the bookmark on the canvas (the only way back for a hidden one);
- * the grip reorders, which is also the order Previous / Next walk.
+ * the grip reorders, which is also the order Previous / Next walk. The
+ * grid button shows them as icon tiles instead of rows (view mode only; edit
+ * mode is always the list).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import Button from "@/kit/Button.vue";
@@ -11,6 +13,7 @@ import SortableList from "@/kit/SortableList.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import DockRow from "./DockRow.vue";
+import DockTile from "./DockTile.vue";
 import {
   addBookmarkHere,
   canGoBack,
@@ -43,6 +46,8 @@ function savePrefs(part: Partial<DockPrefs>): void {
 /** View mode lists and jumps; edit mode adds the grips, the eyes, the side
  *  switch and Bookmark this view. */
 const editing = ref(false);
+/** Icon tiles instead of rows; edit mode is always the list. */
+const grid = computed(() => prefs.value.layout === "grid" && !editing.value);
 
 const entries = shallowRef<BookmarkEntry[]>([]);
 const current = shallowRef<unknown>(null);
@@ -132,7 +137,7 @@ const style = computed(() => ({
 }));
 // Collapsing or a longer list changes its height: a bottom spot keeps its
 // bottom edge.
-watch(() => [prefs.value.collapsed, entries.value.length, editing.value], () => { void nextTick(place); });
+watch(() => [prefs.value.collapsed, prefs.value.layout, entries.value.length, editing.value], () => { void nextTick(place); });
 
 // Drag by the header in edit mode (not from its buttons); a ghost shows the
 // spot it will snap to.
@@ -219,6 +224,12 @@ function close(): void {
         <WpIconButton icon="pi-undo" label="Back to where you were" :disabled="!back" data-test="bm-dock-back" @click="jumpBack" />
         <WpIconButton icon="pi-arrow-up" label="Previous bookmark" :disabled="!shown" data-test="bm-dock-prev" @click="jumpStep(-1)" />
         <WpIconButton icon="pi-arrow-down" label="Next bookmark" :disabled="!shown" data-test="bm-dock-next" @click="jumpStep(1)" />
+        <WpIconButton
+          :icon="grid ? 'pi-list' : 'pi-th-large'"
+          :label="grid ? 'Show as a list' : 'Show as a grid'"
+          data-test="bm-dock-layout"
+          @click="savePrefs({ layout: grid ? 'list' : 'grid', collapsed: false })"
+        />
         <WpIconButton icon="pi-pencil" label="Edit the bookmarks" data-test="bm-dock-edit" @click="editing = true; savePrefs({ collapsed: false })" />
       </template>
       <template v-else>
@@ -248,6 +259,11 @@ function close(): void {
           />
         </template>
       </SortableList>
+      <ul v-else-if="shown && grid" class="wp-bmdock__grid" aria-label="Bookmarks in this workflow" data-test="bm-dock-grid">
+        <li v-for="(b, i) in entries" :key="keyOf(b)">
+          <DockTile :entry="b" :index="i" :current="current === b.node" @jump="jumpTo(b.node)" />
+        </li>
+      </ul>
       <ul v-else-if="shown" class="wp-bmdock__list" aria-label="Bookmarks in this workflow">
         <li v-for="(b, i) in entries" :key="keyOf(b)">
           <DockRow :entry="b" :index="i" :current="current === b.node" :editing="false" @jump="jumpTo(b.node)" />
@@ -333,6 +349,17 @@ function close(): void {
   border-top: 1px solid var(--wp-border);
   padding-top: 6px;
 }
+.wp-bmdock__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Three a line in the 300 px dock; tiles wrap, never widen it. */
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 5px;
+}
+.wp-bmdock__grid > li { display: flex; min-width: 0; }
+.wp-bmdock__grid > li > * { flex: 1; }
 .wp-bmdock__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 /* The same air between rows in edit mode (the kit list's small size packs
    them at 2px). */

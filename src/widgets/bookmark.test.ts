@@ -199,7 +199,7 @@ describe("WP Bookmark shortcuts", () => {
 describe("Bookmarks dock prefs", () => {
   it("reads the old side setting as a spot", () => {
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ open: true, collapsed: false, side: "right", pos: { x: 5, y: 5 } }));
-    expect(readDockPrefs()).toEqual({ open: true, collapsed: false, spot: "tr", clearDock: true });
+    expect(readDockPrefs()).toEqual({ open: true, collapsed: false, spot: "tr", clearDock: true, layout: "list" });
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "bc" }));
     expect(readDockPrefs().spot).toBe("bc");
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "nowhere" }));
@@ -212,6 +212,16 @@ describe("Bookmarks dock prefs", () => {
     expect(readDockPrefs().clearDock).toBe(true);
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ clearDock: false }));
     expect(readDockPrefs().clearDock).toBe(false);
+    localStorage.removeItem("wp.bookmarkDock");
+  });
+
+  it("shows a list unless the grid was picked", () => {
+    localStorage.removeItem("wp.bookmarkDock");
+    expect(readDockPrefs().layout).toBe("list");
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ layout: "grid" }));
+    expect(readDockPrefs().layout).toBe("grid");
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ layout: "tiles" }));
+    expect(readDockPrefs().layout).toBe("list");
     localStorage.removeItem("wp.bookmarkDock");
   });
 });

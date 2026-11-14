@@ -274,6 +274,9 @@ function suggest(): void {
 .wp-bmf__anchor-name { font-weight: 600; }
 .wp-bmf__zoom { width: 84px; }
 .wp-bmf__record { min-width: 86px; }
+/* The keys sit in the label line on its baseline, about 2px low; centre them
+ * in the button instead. */
+.wp-bmf__record :deep(.wp-btn__label) { display: inline-flex; align-items: center; }
 .wp-bmf__hint { font-size: 10.5px; color: var(--wp-text-dim); }
 .wp-bmf__hint--block { margin: 0; padding: 0 6px; }
 .wp-bmf__conflict { display: block; }

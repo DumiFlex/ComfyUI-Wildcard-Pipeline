@@ -41,4 +41,31 @@ describe("BookmarkDock", () => {
     expect(w.find('[data-test^="bm-dock-eye-"]').exists()).toBe(false);
     w.unmount();
   });
+
+  it("shows the bookmarks as tiles in grid mode, remembers it, and edits as a list", async () => {
+    localStorage.removeItem("wp.bookmarkDock");
+    const w = mount(BookmarkDock);
+    await w.vm.$nextTick();
+    expect(w.find('[data-test="bm-dock-grid"]').exists()).toBe(false);
+
+    await w.get('[data-test="bm-dock-layout"]').trigger("click");
+    const tiles = w.findAll('[data-test^="bm-dock-tile-"]');
+    expect(tiles).toHaveLength(2);
+    expect(w.findAll('[data-test^="bm-dock-row-"]')).toHaveLength(0);
+    expect(tiles[0]?.text()).toContain("Prompts");
+    expect(tiles[1]?.attributes("title")).toContain("hidden on the canvas");
+    expect(JSON.parse(localStorage.getItem("wp.bookmarkDock") ?? "{}").layout).toBe("grid");
+
+    await w.get('[data-test="bm-dock-edit"]').trigger("click");
+    expect(w.find('[data-test="bm-dock-grid"]').exists()).toBe(false);
+    expect(w.findAll('[data-test^="bm-dock-eye-"]')).toHaveLength(2);
+    await w.get('[data-test="bm-dock-done"]').trigger("click");
+    expect(w.find('[data-test="bm-dock-grid"]').exists()).toBe(true);
+
+    await w.get('[data-test="bm-dock-tile-0"]').trigger("keydown", { key: "Enter" });
+    await w.get('[data-test="bm-dock-layout"]').trigger("click");
+    expect(w.find('[data-test="bm-dock-grid"]').exists()).toBe(false);
+    w.unmount();
+    localStorage.removeItem("wp.bookmarkDock");
+  });
 });
