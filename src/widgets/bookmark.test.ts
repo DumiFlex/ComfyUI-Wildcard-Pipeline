@@ -326,7 +326,13 @@ describe("Bookmark this view", () => {
     let n = 0;
     (globalThis as { LiteGraph?: unknown }).LiteGraph = {
       createNode: () => {
-        const node = { id: 100 + n++, title: "WP Bookmark", type: BOOKMARK_NODE_TYPE, graph: root, pos: [0, 0], size: [160, 30] };
+        // Like LiteGraph: `boundingRect` is cached at the last draw (a new
+        // node's is all zeros); `getBounding` works it out from pos and size.
+        const node = {
+          id: 100 + n++, title: "WP Bookmark", type: BOOKMARK_NODE_TYPE, graph: root, pos: [0, 0], size: [160, 30],
+          boundingRect: [0, 0, 0, 0],
+          getBounding(): number[] { return [this.pos[0] ?? 0, (this.pos[1] ?? 0) - 30, 160, 60]; },
+        };
         let config: BookmarkConfig = defaultBookmarkConfig();
         bookmarkCells.set(node, { get: () => config, set: (next) => { config = next as BookmarkConfig; } });
         return node;
@@ -352,7 +358,12 @@ describe("Bookmark this view", () => {
     const sy = ((b?.node.pos[1] ?? 0) + oy()) * 1.5;
     // On screen and not under the dock.
     expect(sx >= 300 || sy >= 400).toBe(true);
-    if (b) jumpTo(b.node);
+    // ComfyUI draws it before you can jump, which refreshes its cache.
+    const node = b?.node as (BookmarkNode & { getBounding(): number[] }) | undefined;
+    if (node) {
+      node.boundingRect = node.getBounding();
+      jumpTo(node);
+    }
     expect(ox()).toBeCloseTo(-500, 0);
     expect(oy()).toBeCloseTo(-200, 0);
     expect(canvas.ds.scale).toBe(1.5);
