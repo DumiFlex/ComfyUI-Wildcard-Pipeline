@@ -218,7 +218,7 @@ tutorial(
       const reasons = win.locator(".wp-cleaner-run__reasons").filter({ visible: true }).first();
       if (!(await reasons.isVisible().catch(() => false))) throw new StepError("The opened rule shows no reasons.");
       {
-        await t.callout("why", reasons, "What went, and why", 5);
+        await t.callout("why", (await reasons.locator("li").all()).slice(0, 4), "What went, and why", 5);
         await t.say("Each change says what was dropped, in red, what the rule did, and in blue, the reason: the tag it repeated, or the blocklist word it matched.");
         await t.waitVoice();
         await t.uncallout("why");
