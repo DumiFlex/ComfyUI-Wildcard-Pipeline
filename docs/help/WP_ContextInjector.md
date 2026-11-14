@@ -2,6 +2,10 @@
 
 Turns any ComfyUI output (text, a LoRA name, a number) into a `$variable` the rest of the pipeline can use.
 
+<!-- video:start -->
+▶ **Video:** [WP Context Injector in depth](https://youtu.be/5pnV2ExnfQk) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 

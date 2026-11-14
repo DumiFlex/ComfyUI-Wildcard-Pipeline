@@ -101,6 +101,7 @@ const SCREENS = [
   { id: "settings-advanced", path: "settings/advanced" },
   { id: "whats-new", path: "whats-new" },
   { id: "docs", path: "docs" },
+  { id: "docs-videos", path: "docs/videos" },
   { id: "kit", path: "kit" },
   { id: "health", path: "health" },
 ];

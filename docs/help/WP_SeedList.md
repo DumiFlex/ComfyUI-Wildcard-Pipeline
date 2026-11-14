@@ -2,6 +2,10 @@
 
 Emits a list of seeds, one per loop iteration, so a downstream KSampler gets its own seed on every pass. Use it for sampler seeds only: it never changes a prompt.
 
+<!-- video:start -->
+▶ **Video:** [WP Seed List in depth](https://youtu.be/Se5_0BDex9A) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 

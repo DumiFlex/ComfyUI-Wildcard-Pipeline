@@ -2,6 +2,10 @@
 
 Pauses the run so you can pick which images go on. Everything that belongs to an image (its latent, masks, conditioning, prompt text and Context) is filtered with it, so the node can sit between the first KSampler and the upscaler and the upscaler only gets the picked images with their own prompts.
 
+<!-- video:start -->
+▶ **Video:** [WP Image Filter in depth: pick, paint and refine](https://youtu.be/tcs5D7BiGTI) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 

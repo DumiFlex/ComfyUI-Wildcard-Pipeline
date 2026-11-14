@@ -17,6 +17,10 @@ After the take, `render.mjs` adds a text-to-speech voice and writes the finished
 | `voice/speak.py` | Speaks every `t.say("…")` line into `voice/cache/` and writes `voice/lines.json`: Qwen3-TTS on a GPU (the narrator) or Kokoro-82M on the CPU. |
 | `render.mjs` | Turns a take into `out/<id>-<title>.mp4`, `.srt` and `.chapters.txt`. |
 
+## Published videos
+
+The finished videos are on YouTube, one playlist per section (`src/manager/docs/videos.ts` holds every video and playlist id, and the docs show them). A retake is a new upload with a new id: update its `id` there from the upload script's `youtube-links.json`, then run `pnpm docs:help` so the node help links follow. `videos.test.ts` fails when a test here has no video. The playlist ids never change.
+
 ## Make a video
 
 1. **Voice.** The narrator is Qwen3-TTS 1.7B cloning Kokoro's `af_heart`. It needs a CUDA GPU (about 5 GB of VRAM): run `pip install qwen-tts kokoro-onnx soundfile` with a CUDA build of torch (optionally `faster-whisper` too, so each take is also checked by its words), then `python tutorials/voice/speak.py`. The first run downloads Kokoro (~350 MB, into `voice/models/`) and the Qwen3 model (~4.5 GB, from Hugging Face), and Kokoro speaks the reference into `voice/ref/`. Qwen3 now and then drifts on a line (runs on, mumbles, stops early), so each take is checked and spoken again with another seed; a line that fails every try gets Kokoro as a stand-in, is listed at the end, and is tried again on the next run. Voicing every line takes about an hour. Without a GPU, `--engine kokoro` speaks every line with Kokoro on the CPU in a few minutes. `--voice` picks the Kokoro voice (`af_heart` is the default; others are `af_bella`, `am_michael`, `bf_emma` and `bm_george`). It speaks only lines that are new or changed. Run it before recording, because each line's length decides how long the hands wait for the voice.

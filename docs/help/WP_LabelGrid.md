@@ -2,6 +2,10 @@
 
 Draws labels on images and lays them out in one labelled grid: compare runs, show a sweep as an XY plot, or just stamp each image with its seed. Takes one image, a batch, a list, or a list of batches (a Context Loop's frames). Labels are optional.
 
+<!-- video:start -->
+▶ **Video:** [WP Label & Grid in depth: XY plots and contact sheets](https://youtu.be/T_-Dbi0qqD0) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 

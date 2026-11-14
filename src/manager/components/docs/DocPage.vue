@@ -3,6 +3,7 @@ import { provide, ref, shallowRef } from "vue";
 import Lightbox, { type LightboxImage } from "@/kit/Lightbox.vue";
 import { toneVar, type DocTone } from "../../docs/registry";
 import { DOC_GALLERY, inPageOrder, type DocShot } from "../../docs/gallery";
+import DocVideos from "./DocVideos.vue";
 const props = defineProps<{ group: string; title: string; icon: string; tone: DocTone; blurb: string; nodeId?: string }>();
 
 // One viewer for the whole page: a screenshot opens it at itself, and the
@@ -38,6 +39,7 @@ provide(DOC_GALLERY, {
         <p class="wp-doc-page__blurb">{{ blurb }}</p>
       </div>
     </header>
+    <DocVideos />
     <div class="wp-doc-page__body"><slot /></div>
     <Lightbox v-model:open="open" v-model:index="at" :images="viewing" zoom />
   </article>

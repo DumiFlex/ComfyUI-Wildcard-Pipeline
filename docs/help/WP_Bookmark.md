@@ -2,6 +2,10 @@
 
 Marks a spot on the canvas so you can jump back to it with a shortcut or from the **Bookmarks** dock. Frontend only: it never runs and is left out of the prompt; its settings are saved with the workflow.
 
+<!-- video:start -->
+▶ **Video:** [WP Bookmark in depth](https://youtu.be/jxBY9jJYLYc) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 ## Adding one
 
 - From the node search (`WP Bookmark`), or right-click the empty canvas › **Add WP Bookmark here**.

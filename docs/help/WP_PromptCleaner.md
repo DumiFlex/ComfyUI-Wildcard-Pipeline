@@ -2,6 +2,10 @@
 
 Tidy a prompt before the sampler: drop duplicate tags and stray commas, remove empty brackets, merge stacked weights, tidy LoRA tags and block words you never want. It needs no Context.
 
+<!-- video:start -->
+▶ **Video:** [WP Prompt Cleaner in depth](https://youtu.be/pxq0d4rCO8c) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 

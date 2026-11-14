@@ -46,6 +46,9 @@ export const COMFY_REGISTRY_ID = "comfyui-wildcard-pipeline";
  */
 export const GITHUB_WIKI = `${GITHUB_REPO}/wiki`;
 
+/** The library every tutorial video starts from (`tutorials/library.json`). */
+export const TUTORIAL_LIBRARY = `${GITHUB_REPO}/blob/main/tutorials/library.json`;
+
 /**
  * New-issue page. Lands on the chooser rather than a prefilled template so
  * the user picks bug vs feature themselves — a wrong prefill is more friction

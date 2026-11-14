@@ -2,6 +2,10 @@
 
 Reads a `$variable` from the upstream Context and sends it into a dropdown input: the checkpoint, sampler, scheduler, VAE or a LoRA name. It matches the text against that dropdown's real list first.
 
+<!-- video:start -->
+▶ **Video:** [WP Var to Choice in depth](https://youtu.be/wOF72EMrCz8) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 

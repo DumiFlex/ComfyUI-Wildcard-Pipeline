@@ -2,6 +2,10 @@
 
 Runs the whole chain N times from one Generate. Put it in front of your WP Context: each pass (a **frame**) rolls your wildcards again, so one click gives N different prompts.
 
+<!-- video:start -->
+▶ **Video:** [WP Context Loop in depth](https://youtu.be/Oq86nN1CH1c) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 

@@ -66,6 +66,21 @@ pnpm build
 The [Quick Start wiki page](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start)
 walks through a fuller example.
 
+### Video tutorials
+
+Every feature is shown in a narrated video on YouTube, one playlist per
+section. Start with **Get started**; the built-in docs show each page's own
+videos under its title, and **Docs › Video tutorials** lists them all.
+
+| Playlist | Videos |
+| --- | --- |
+| [Get started](https://www.youtube.com/playlist?list=PLL3gpkYlX_Lk) | 13 |
+| [Advanced](https://www.youtube.com/playlist?list=PLDrl0ZXngWsY) | 20 |
+| [Library](https://www.youtube.com/playlist?list=PLGQhUveOpjMs) | 6 |
+| [Nodes](https://www.youtube.com/playlist?list=PLD9orcFSB7nI) | 19 |
+| [Examples](https://www.youtube.com/playlist?list=PLPLr4xEq-3TA) | 4 |
+| [AI assistant](https://www.youtube.com/playlist?list=PLTkbhMOBM8zs) | 4 |
+
 ### Example workflows
 
 Prefer to start from something that already runs? Open **Workflow › Browse

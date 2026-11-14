@@ -2,6 +2,10 @@
 
 Write a prompt with `$variables` in it and get the finished prompt, plus a matching negative.
 
+<!-- video:start -->
+▶ **Video:** [WP Prompt Assembler in depth](https://youtu.be/Zq7pY42f_qI) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 

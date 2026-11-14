@@ -2,6 +2,10 @@
 
 Reads a `$variable` from the upstream Context and emits a `FLOAT`.
 
+<!-- video:start -->
+▶ **Video:** [WP Var to Float in depth](https://youtu.be/VH7Ssu56szE) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 
