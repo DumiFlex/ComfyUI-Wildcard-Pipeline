@@ -217,9 +217,14 @@ function done(): void {
 </template>
 
 <style scoped>
-/* The kit picker's list, sized for a node: as wide as the panel, a short
- * scroll area, cells packed by width instead of a fixed 8 columns. */
-.wp-bm__icons :deep(.wp-iconpick__panel) { width: auto; max-height: 184px; }
+/* The kit picker's list, sized for a node: as wide as the card, a short
+ * scroll area, cells packed by width instead of a fixed 8 columns. The kit's
+ * own widths come with `[data-all]` (and the scrollbar room), so each one is
+ * matched, as on the WP Note. */
+.wp-bm__icons :deep(.wp-iconpick__panel) { max-height: 184px; }
+.wp-bm__icons.wp-iconpick :deep(.wp-iconpick__panel),
+.wp-bm__icons.wp-iconpick :deep(.wp-iconpick__panel[data-all]),
+.wp-bm__icons.wp-iconpick :deep(.wp-iconpick__panel[data-all][data-wp-bar~="y"]) { width: auto; }
 .wp-bm__icons :deep(.wp-iconpick__grid) { grid-template-columns: repeat(auto-fill, minmax(28px, 1fr)); }
 .wp-bm__icons :deep(.wp-iconpick__cell) { aspect-ratio: auto; height: 28px; }
 .wp-bm {
