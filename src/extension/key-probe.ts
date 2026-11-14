@@ -62,18 +62,36 @@ function send(type: "keydown" | "keyup", combo: string, target: EventTarget): bo
   const p = parseCombo(combo);
   if (!p) return false;
   const key = p.key === "Space" ? " " : p.key.length === 1 ? p.key.toLowerCase() : p.key;
-  const ev = new KeyboardEvent(type, {
+  return fire(type, {
     key: p.shift && key.length === 1 ? key.toUpperCase() : key,
     code: codeFor(p.key),
     ctrlKey: !!p.ctrl,
     altKey: !!p.alt,
     shiftKey: !!p.shift,
-    bubbles: true,
-    cancelable: true,
-    composed: true,
-  });
+  }, keyCodeFor(p.key), target);
+}
+
+/** The modifiers a real press lets go of after its key, with their legacy
+ *  codes (hotkeys-js keeps held modifiers until it sees these). */
+const MODIFIER_UPS = [
+  { flag: "ctrl", key: "Control", code: "ControlLeft", keyCode: 17 },
+  { flag: "alt", key: "Alt", code: "AltLeft", keyCode: 18 },
+  { flag: "shift", key: "Shift", code: "ShiftLeft", keyCode: 16 },
+] as const;
+
+/** Lets go of the combo's modifiers, so a library that tracks held keys is
+ *  back to nothing held before the next probe. */
+function release(combo: string, target: EventTarget): void {
+  const p = parseCombo(combo);
+  if (!p) return;
+  for (const m of MODIFIER_UPS) {
+    if (p[m.flag]) fire("keyup", { key: m.key, code: m.code }, m.keyCode, target);
+  }
+}
+
+function fire(type: "keydown" | "keyup", init: KeyboardEventInit, legacy: number, target: EventTarget): boolean {
+  const ev = new KeyboardEvent(type, { ...init, bubbles: true, cancelable: true, composed: true });
   // A constructed event can't set these; real presses always have them.
-  const legacy = keyCodeFor(p.key);
   for (const name of ["keyCode", "which"] as const) Object.defineProperty(ev, name, { value: legacy, configurable: true });
   probes.add(ev);
   let claimed = false;
@@ -108,5 +126,12 @@ function send(type: "keydown" | "keyup", combo: string, target: EventTarget): bo
 export function probeCombo(combo: string, target?: EventTarget | null): boolean {
   if (typeof window === "undefined" || typeof KeyboardEvent === "undefined") return false;
   const at = target ?? document.body ?? window;
-  return send("keydown", combo, at) || send("keyup", combo, at);
+  // Always the whole press, keyup and modifiers included, even once the
+  // keydown was claimed: a library that tracks held keys (hotkeys-js) would
+  // otherwise think the key is still down and miss the next probe, so after
+  // Alt+1 was found taken, Alt+2 read as free.
+  const down = send("keydown", combo, at);
+  const up = send("keyup", combo, at);
+  release(combo, at);
+  return down || up;
 }

@@ -2,14 +2,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { codeFor, isProbeEvent, keyCodeFor, probeCombo } from "./key-probe";
 
 describe("key probe", () => {
-  const added: Array<[EventTarget, (e: Event) => void, boolean]> = [];
-  function listen(target: EventTarget, fn: (e: KeyboardEvent) => void, capture = false): void {
+  const added: Array<[EventTarget, string, (e: Event) => void, boolean]> = [];
+  function listen(target: EventTarget, fn: (e: KeyboardEvent) => void, types: string[] = ["keydown"], capture = false): void {
     const wrapped = (e: Event): void => fn(e as KeyboardEvent);
-    target.addEventListener("keydown", wrapped, capture);
-    added.push([target, wrapped, capture]);
+    for (const type of types) {
+      target.addEventListener(type, wrapped, capture);
+      added.push([target, type, wrapped, capture]);
+    }
   }
   afterEach(() => {
-    for (const [t, fn, capture] of added.splice(0)) t.removeEventListener("keydown", fn, capture);
+    for (const [t, type, fn, capture] of added.splice(0)) t.removeEventListener(type, fn, capture);
   });
 
   it("finds a handler that claims the key, and stops it before it acts", () => {
@@ -54,6 +56,27 @@ describe("key probe", () => {
     expect(probeCombo("Alt+1")).toBe(true);
     expect(probeCombo("Alt+9")).toBe(true);
     expect(probeCombo("Alt+K")).toBe(false);
+  });
+
+  it("lets go of every key, so a library that tracks held keys sees the next probe", () => {
+    // Like hotkeys-js: keys are held from keydown to keyup (modifiers by
+    // their own keyup), and a binding only matches while its key is the one
+    // non-modifier held. Its preventDefault throws on the probe, after the
+    // key was marked held.
+    const held = new Set<number>();
+    const MODS = new Set([16, 17, 18]);
+    listen(document, (e) => {
+      const code = e.keyCode || e.which;
+      if (e.type === "keyup") { held.delete(code); return; }
+      held.add(code);
+      const keys = [...held].filter((k) => !MODS.has(k));
+      if (e.altKey && keys.length === 1 && code >= 49 && code <= 51) e.preventDefault();
+    }, ["keydown", "keyup"]);
+    expect(probeCombo("Alt+1")).toBe(true);
+    expect(probeCombo("Alt+2")).toBe(true);
+    expect(probeCombo("Alt+3")).toBe(true);
+    expect(probeCombo("Alt+4")).toBe(false);
+    expect(held.size).toBe(0);
   });
 
   it("gives the legacy key code a real press carries", () => {
