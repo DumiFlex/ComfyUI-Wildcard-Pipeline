@@ -297,7 +297,7 @@ export const NODE_FIELDS = {
       { term: "var_name", sockets: ["in:wp_var_name"], desc: "The $variable to read. The list shows every variable the wired Context has." },
       { term: "match", sockets: ["in:match"], desc: "How close the text must be to an option: exact, loose (the default) or closest. See below." },
       { term: "fallback", sockets: ["in:fallback"], desc: "A dropdown of the options of the input it's wired into, filled when you connect it. Used when nothing matches or the variable is empty. (first option) means the first option in the list." },
-      { term: "if_no_match", sockets: ["in:if_no_match"], desc: "use fallback carries on with the fallback and warns you. stop the run stops here and lists some of the options." },
+      { term: "if_no_match", sockets: ["in:if_no_match"], desc: "use fallback carries on with the fallback and warns you. stop the run stops here and lists some of the options: the reason shows in red on the node and in a message." },
       { term: "choice (out)", sockets: ["out:choice"], desc: "Wire it into a dropdown input: ckpt_name, sampler_name, scheduler, vae_name, lora_name and so on. The line under the picker names what it feeds and how many options that has." },
     ],
   },

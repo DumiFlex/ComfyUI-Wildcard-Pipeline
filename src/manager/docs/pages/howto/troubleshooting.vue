@@ -15,6 +15,10 @@ const printing = [
   { term: "Commas or words go missing around an empty variable", desc: "The Assembler tidies the commas and joining words around a variable that came out empty. Write the template so it still reads well when something is empty." },
 ];
 
+const runs = [
+  { term: "The run stops and only \"Job failed\" flashes", desc: "A WP node stopped it, for example WP Var → Choice set to stop the run when nothing matches. The reason now shows on that node in red (Var → Choice puts it on its last execute line, other WP nodes in a strip at the top) and in a WP message at the corner of the canvas. It goes away when the next run gets past the node, or press its ×." },
+];
+
 const rolling = [
   { term: "The same prompt every Generate", desc: "The Context's seed is set to fixed, or the rows are locked or hold their pick. Set the seed to randomize, or unlock the rows." },
   { term: "Every loop frame gives the same image", desc: "The sampler uses one seed for all frames. Add a WP Seed List between the loop and the sampler." },
@@ -53,6 +57,10 @@ const subgraphs = [
 
     <DocSection title="Something prints wrong">
       <DocKeyList :items="printing" />
+    </DocSection>
+
+    <DocSection title="The run stops">
+      <DocKeyList :items="runs" />
     </DocSection>
 
     <DocSection title="Picks don't change the way you expect">

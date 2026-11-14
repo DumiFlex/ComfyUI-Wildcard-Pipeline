@@ -148,4 +148,18 @@ describe("VarPicker", () => {
     expect(w.find('[data-test="var-picker-preview"]').text()).toContain("fallback (pony.safetensors)");
     expect(w.find('[data-test="var-picker-wired"]').exists()).toBe(false);
   });
+
+  it("a stopped run reads red and its reason replaces the old note", () => {
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "$sampler", upstreamVars: ["$sampler"], previewSource: "", previewParsed: "euler", previewDefault: "euler",
+        executed: true, choiceNote: "No match for “x”. Used euler.", runError: "The variable is empty in KSampler > sampler_name",
+      },
+    });
+    expect(w.get('[data-test="var-picker-preview"]').classes()).toContain("wp-var-picker__preview--failed");
+    expect(w.get('[data-test="var-picker-preview"]').text()).toContain("stopped the run");
+    expect(w.get('[data-test="var-picker-run-error"]').text()).toBe("The variable is empty in KSampler > sampler_name");
+    expect(w.find('[data-test="var-picker-choice-note"]').exists()).toBe(false);
+    w.unmount();
+  });
 });

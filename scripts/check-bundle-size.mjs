@@ -395,7 +395,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // template editor (#394), Show on subgraph node (#398) and its Choose what
 // shows frame (lazy mirror-frame chunk + part marks in every panel) put the
 // total at ~701.5 KB.
-const TOTAL_LIMIT = 715 * 1024;     // 715 KB
+// RAISED 715 -> 720 KB on 14/11/2026: run errors on WP nodes (the
+// execution_error listener, the strip every widget host can draw and the
+// Var → Choice red row) put the total at ~715.2 KB.
+const TOTAL_LIMIT = 720 * 1024;     // 720 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

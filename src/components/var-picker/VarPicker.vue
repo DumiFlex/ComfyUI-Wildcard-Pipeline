@@ -26,6 +26,9 @@
  *  - `choiceNote: string` — WP_VarToChoice only: how the last run found its
  *    value (`Matched “x” loosely.`, `No match for “x”. Used y.`). Replaces the
  *    `parsed from` line, and the amber state reads "fallback".
+ *  - `runError: string` — the last run stopped here (`if_no_match` "Stop the
+ *    run"): the row reads "stopped the run" in red and this message replaces
+ *    the previous run's note. Cleared when the next run reaches the node.
  *
  * Emits:
  *  - `update:modelValue(next: string)` — fires when user picks a new var.
@@ -46,8 +49,9 @@ const props = withDefaults(
     wiredTo?: string;
     choiceNote?: string;
     executed?: boolean;
+    runError?: string;
   }>(),
-  { previewSource: "", previewParsed: null, previewDefault: "", nodeMode: 0, wiredTo: "", choiceNote: "", executed: false },
+  { previewSource: "", previewParsed: null, previewDefault: "", nodeMode: 0, wiredTo: "", choiceNote: "", executed: false, runError: "" },
 );
 
 const emit = defineEmits<{ "update:modelValue": [next: string] }>();
@@ -61,7 +65,8 @@ function onPick(next: string | string[] | null): void {
   if (typeof next === "string" && next) emit("update:modelValue", next);
 }
 
-const hasExecuted = computed<boolean>(() => props.executed || Boolean(props.previewSource || props.choiceNote));
+const failed = computed<boolean>(() => Boolean(props.runError));
+const hasExecuted = computed<boolean>(() => failed.value || props.executed || Boolean(props.previewSource || props.choiceNote));
 const usedDefault = computed<boolean>(() => props.previewParsed === null);
 const isMuted = computed<boolean>(() => props.nodeMode === 2);
 const isBypassed = computed<boolean>(() => props.nodeMode === 4);
@@ -86,19 +91,24 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
     <div data-wp-part="last-run" data-wp-part-label="Last run"
       class="wp-var-picker__preview"
       :class="{
-        'wp-var-picker__preview--default': hasExecuted && usedDefault,
+        'wp-var-picker__preview--failed': failed,
+        'wp-var-picker__preview--default': !failed && hasExecuted && usedDefault,
         'wp-var-picker__preview--idle': !hasExecuted,
       }"
       data-test="var-picker-preview"
     >
       <span class="wp-var-picker__preview-label">last execute</span>
       <span class="wp-var-picker__preview-value">
-        <template v-if="!hasExecuted">→ <em>run workflow to see result</em></template>
+        <template v-if="failed">→ stopped the run</template>
+        <template v-else-if="!hasExecuted">→ <em>run workflow to see result</em></template>
         <template v-else-if="usedDefault">→ {{ choiceNote ? "fallback" : "default" }} ({{ previewDefault }})</template>
         <template v-else>→ {{ previewParsed }}</template>
       </span>
     </div>
-    <div data-wp-part="last-run" data-wp-part-label="Last run" v-if="hasExecuted && choiceNote" class="wp-var-picker__preview-src" data-test="var-picker-choice-note">
+    <div data-wp-part="last-run" data-wp-part-label="Last run" v-if="failed" class="wp-var-picker__preview-src wp-var-picker__preview-src--failed" role="alert" data-test="var-picker-run-error">
+      {{ runError }}
+    </div>
+    <div data-wp-part="last-run" data-wp-part-label="Last run" v-else-if="hasExecuted && choiceNote" class="wp-var-picker__preview-src" data-test="var-picker-choice-note">
       {{ choiceNote }}
     </div>
     <div data-wp-part="last-run" data-wp-part-label="Last run" v-else-if="hasExecuted && previewSource" class="wp-var-picker__preview-src" data-test="var-picker-source">
@@ -135,6 +145,9 @@ const isBypassed = computed<boolean>(() => props.nodeMode === 4);
   font-size: 10px;
 }
 .wp-var-picker__preview--default { border-left-color: var(--wp-status-modified); }
+.wp-var-picker__preview--failed { border-left-color: var(--wp-danger); }
+.wp-var-picker__preview--failed .wp-var-picker__preview-value { color: var(--wp-danger-text); }
+.wp-var-picker__preview-src.wp-var-picker__preview-src--failed { color: var(--wp-danger-text); white-space: normal; overflow-wrap: anywhere; }
 .wp-var-picker__preview--idle { border-left-color: var(--wp-text-dim); }
 .wp-var-picker__preview--idle .wp-var-picker__preview-value { color: var(--wp-text-dim); font-weight: 400; font-style: italic; }
 .wp-var-picker__preview-label { color: var(--wp-text-dim); flex: none; }
