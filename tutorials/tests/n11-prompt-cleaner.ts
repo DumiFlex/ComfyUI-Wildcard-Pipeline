@@ -140,8 +140,13 @@ tutorial(
       await t.click(page.locator('[data-test="blocklist-save"]'));
       await t.beat(600);
       await t.waitVoice();
+      const blockRule = t.node(n.cl).locator('[data-test="cleaner-rule-blocklist"]');
+      const ticked = () =>
+        blockRule.evaluate((el) => (el.getAttribute("aria-checked") ?? el.querySelector("[aria-checked]")?.getAttribute("aria-checked")) === "true");
       await t.say("Tick the blocklist rule, and run.");
-      await t.click(t.node(n.cl).locator('[data-test="cleaner-rule-blocklist"]'));
+      if (!(await ticked())) await t.click(blockRule);
+      await t.beat(300);
+      if (!(await ticked())) throw new StepError("The blocklist rule isn't ticked.");
       await run();
       await t.waitVoice();
       await t.say("Masterpiece is gone, in every capital.");
@@ -202,10 +207,17 @@ tutorial(
       await t.say("Below, one line per rule that changed something, with its count. Open one.");
       await t.waitVoice();
       await t.uncallout("rules");
-      await t.click(rules.first());
+      // Open a rule that gives reasons (blocklist or tag dedupe), not one that only tidies.
+      let open = rules.first();
+      for (const id of ["blocklist", "dedupe_exact"]) {
+        const r = win.locator(`[data-test="cleaner-run-rule-${id}"]`);
+        if (await r.isVisible().catch(() => false)) { open = r; break; }
+      }
+      await t.click(open);
       await t.beat(800);
-      const reasons = win.locator(".wp-cleaner-run__reasons").first();
-      if (await reasons.isVisible().catch(() => false)) {
+      const reasons = win.locator(".wp-cleaner-run__reasons").filter({ visible: true }).first();
+      if (!(await reasons.isVisible().catch(() => false))) throw new StepError("The opened rule shows no reasons.");
+      {
         await t.callout("why", reasons, "What went, and why", 5);
         await t.say("Each change says what was dropped, in red, what the rule did, and in blue, the reason: the tag it repeated, or the blocklist word it matched.");
         await t.waitVoice();
