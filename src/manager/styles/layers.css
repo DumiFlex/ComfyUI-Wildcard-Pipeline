@@ -1,0 +1,8 @@
+/* Cascade layer order for the manager. Imported FIRST in main.ts: the first
+   time a layer name appears fixes its rank, and the kit's sheets name
+   `wp-extension` before Tailwind names its own layers.
+
+   Tailwind 4's preflight (`@layer base`) resets padding, margin and border
+   on every element. Ranked above `base`, the kit's layered rules (Popover
+   padding, menus …) keep what they set; utilities still beat them. */
+@layer theme, base, wp-extension, components, utilities;

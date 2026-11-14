@@ -100,6 +100,12 @@ const presets = [
         its options whatever order it came in, the options become the headers, and the cells keep
         just <code>#3</code>. Two images with the same options (another seed) repeat the row.
       </p>
+      <p>
+        An image with no label line (four images, three lines), or one whose label lacks a part, goes
+        to a last row or column headed <b>(no label)</b>, so the grid stays a grid. A warning under
+        the run line says when label lines, row headers or column headers are fewer or more than the
+        images, rows or columns they are for.
+      </p>
     </DocSection>
 
     <DocSection title="Good to know">

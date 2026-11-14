@@ -40,3 +40,15 @@ def test_idempotent():
     once = apply("foo  bar", mode="tags", config={})
     twice = apply(once["text"], mode="tags", config={})
     assert once["text"] == twice["text"]
+
+
+def test_drops_space_before_comma():
+    result = apply("a knight ,, forest , tree", mode="tags", config={})
+    assert result["text"] == "a knight, forest, tree"
+
+
+def test_empty_slot_between_commas_collapses():
+    # `a, , b`: the empty slot is spacing, so whitespace owns it (punctuation
+    # drops tags made only of punctuation, like `a, ., b`).
+    result = apply("blurry, , lowres, blurry", mode="tags", config={})
+    assert result["text"] == "blurry, lowres, blurry"

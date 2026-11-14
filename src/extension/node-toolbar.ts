@@ -4,7 +4,9 @@
  *   - "?" opens the node's docs page in a dialog over the canvas, for every
  *     WP node (`NodeHelpDialog.vue`, mounted by `main.ts` on first use);
  *   - a pencil opens the node's edit view, for nodes that have one
- *     (registered in `nodeEditors` by their widget glue).
+ *     (registered in `nodeEditors` by their widget glue);
+ *   - an eye shows the node's panel on its subgraph node, or hides it, for
+ *     a WP node inside a subgraph (`show-on-subgraph.ts`).
  *
  * Both are drawn as a filled accent-coloured dot (`node-toolbar.css`) so
  * they read as Wildcard Pipeline's and not ComfyUI's. The toolbar shows a
@@ -13,9 +15,11 @@
  */
 import { ref } from "vue";
 import { nodeEditors } from "./_stashes";
+import { hidePanel, hostsOf, isShown, panelsOf, showPanel, type PanelNode } from "./show-on-subgraph";
 
 export const HELP_COMMAND = "wildcardPipeline.node.help";
 export const EDIT_COMMAND = "wildcardPipeline.node.edit";
+export const SHOW_COMMAND = "wildcardPipeline.node.showOnSubgraph";
 
 /** Node type → its page in the manager docs (`/wp/docs/<page>`). Kept in
  *  step with `manager/docs/registry.ts` (`node-toolbar.test.ts`). */
@@ -57,9 +61,22 @@ export function canEdit(item: unknown): boolean {
   return typeof item === "object" && item !== null && nodeEditors.has(item);
 }
 
-/** `getSelectionToolboxCommands`: the pencil first (when it applies), then "?". */
+/** Whether a node is inside a subgraph and has a panel it can show there. */
+export function canShow(item: unknown): boolean {
+  if (typeof item !== "object" || item === null) return false;
+  return panelsOf(item).length > 0 && hostsOf(item as PanelNode).length > 0;
+}
+
+/** Whether any of a node's panels is shown on its subgraph node. */
+export function anyShown(item: unknown): boolean {
+  if (!canShow(item)) return false;
+  return panelsOf(item as object).some((w) => isShown(item as PanelNode, w));
+}
+
+/** `getSelectionToolboxCommands`: the eye, the pencil (when they apply), then "?". */
 export function toolboxCommandsFor(item: unknown): string[] {
   const out: string[] = [];
+  if (canShow(item)) out.push(SHOW_COMMAND);
   if (canEdit(item)) out.push(EDIT_COMMAND);
   if (docPageFor(item)) out.push(HELP_COMMAND);
   return out;
@@ -107,14 +124,32 @@ export function editSelection(canvas: SelectionCanvas | null | undefined): boole
   return true;
 }
 
+/** Run the eye on the selection: the first node that can show a panel. Hides
+ *  its panels when any is shown, else shows them all. */
+export function toggleShowSelection(canvas: SelectionCanvas | null | undefined): boolean {
+  const node = selectedItems(canvas).find(canShow) as PanelNode | undefined;
+  if (!node) return false;
+  const on = anyShown(node);
+  for (const w of panelsOf(node as object)) (on ? hidePanel : showPanel)(node, w);
+  return true;
+}
+
 /** Icon classes: a PrimeIcons glyph on our accent dot (`node-toolbar.css`). */
 export const HELP_ICON = "pi pi-question wp-tb-icon wp-tb-icon--help";
 export const EDIT_ICON = "pi pi-pencil wp-tb-icon wp-tb-icon--edit";
+export const SHOW_ICON = "pi pi-eye wp-tb-icon wp-tb-icon--show";
+export const HIDE_ICON = "pi pi-eye-slash wp-tb-icon wp-tb-icon--show";
 
 /** The two commands, registered with the extension's `commands`. */
 export function toolbarCommands(getCanvas: () => SelectionCanvas | null | undefined) {
   return [
     { id: HELP_COMMAND, label: "Wildcard Pipeline help for this node", icon: HELP_ICON, function: () => void helpForSelection(getCanvas()) },
     { id: EDIT_COMMAND, label: "Edit this Wildcard Pipeline node", icon: EDIT_ICON, function: () => void editSelection(getCanvas()) },
+    {
+      id: SHOW_COMMAND,
+      label: "Show on subgraph node",
+      icon: () => (selectedItems(getCanvas()).some(anyShown) ? HIDE_ICON : SHOW_ICON),
+      function: () => void toggleShowSelection(getCanvas()),
+    },
   ];
 }

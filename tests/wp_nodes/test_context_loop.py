@@ -151,3 +151,10 @@ def test_frame_zero_payload_survives_a_bypassed_frame_zero():
     payloads = WPContextLoop.execute(seed=1, count=3, wp_context_loop_config=raw).values[0]
     assert [p.context["iteration"] for p in payloads] == ["2", "3"]
     assert all(p.internals["__wp_frame0__"]["context"]["iteration"] == "1" for p in payloads)
+
+
+def test_trace_detail_says_strategy_and_skipped_frames():
+    payloads, _ = _run(0, 5, {"override_seed": True, "bypass_frames": [1, 3]})
+    row = payloads[0].debug["__wp_trace__"][0]
+    assert row["detail"]["skipped"] == 2
+    assert "strategy" in row["detail"]

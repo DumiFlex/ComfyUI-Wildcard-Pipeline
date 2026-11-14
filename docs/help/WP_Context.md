@@ -2,6 +2,10 @@
 
 The heart of the pipeline. Holds a stack of **modules** (wildcards, fixed values, combines, derivations, constraints and bundles), runs them top to bottom on every queue, and sends the resulting `$variables` downstream.
 
+<!-- video:start -->
+▶ **Video:** [WP Context in depth](https://youtu.be/wkuk_8ytG5s) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 

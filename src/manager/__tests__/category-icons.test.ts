@@ -14,3 +14,15 @@ describe("category icons", () => {
     expect(icons).toEqual(allCuratedIcons());
   });
 });
+
+describe("bareIconName", () => {
+  it("draws icons saved with a pi- prefix", async () => {
+    const { bareIconName } = await import("../stores/categoryStore");
+    expect(bareIconName("user")).toBe("user");
+    expect(bareIconName("pi-user")).toBe("user");
+    expect(bareIconName("pi pi-palette")).toBe("palette");
+    expect(bareIconName(" pi-image ")).toBe("image");
+    expect(bareIconName(null)).toBeNull();
+    expect(bareIconName("")).toBe("");
+  });
+});

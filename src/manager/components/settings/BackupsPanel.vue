@@ -17,6 +17,7 @@
  * marked and goes at the next backup rather than the moment it's unpinned.
  */
 import { computed, onMounted, ref } from "vue";
+import Banner from "@/kit/Banner.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
@@ -240,11 +241,9 @@ onMounted(() => {
 
 <template>
   <SettingGroup title="Backups">
-    <div v-if="list?.pending_restore" class="wp-bk__pending" role="status" data-test="backup-pending-restore">
-      <Icon name="pi-history" />
-      <span>
-        <strong>{{ list.pending_restore }}</strong> replaces the database on the next ComfyUI start. Cancel it to restore it right away instead.
-      </span>
+    <Banner v-if="list?.pending_restore" tone="warn" size="sm" icon="pi-history" class="wp-bk__pending" data-test="backup-pending-restore">
+      <strong>{{ list.pending_restore }}</strong> replaces the database on the next ComfyUI start. Cancel it to restore it right away instead.
+      <template #actions>
       <Button variant="ghost" size="sm" data-test="backup-cancel-restore" @click="cancelRestore">Cancel</Button>
       <Button
         v-if="system.canRestart"
@@ -255,7 +254,8 @@ onMounted(() => {
         data-test="backup-restart"
         @click="system.restart()"
       >Restart now</Button>
-    </div>
+      </template>
+    </Banner>
     <SettingRow
       label="Automatic backups"
       hint="Copy the database before every update that changes its schema, and once a day while ComfyUI runs."
@@ -320,7 +320,7 @@ onMounted(() => {
           <Icon name="pi-bookmark-fill" :size="ICON_SM" /> {{ pinnedCount }} pinned
         </span>
       </div>
-      <p v-if="loadError" class="wp-set-error" role="alert">{{ loadError }}</p>
+      <Banner v-if="loadError" tone="danger" size="sm" class="wp-set-error">{{ loadError }}</Banner>
       <Skeleton
         v-else-if="!list"
         shape="row"
@@ -408,16 +408,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.wp-bk__pending {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-4);
-  padding: var(--wp-space-4) var(--wp-space-6);
-  border-bottom: 1px solid var(--wp-border);
-  background: color-mix(in oklab, var(--wp-warn) 12%, transparent);
-  font-size: var(--wp-text-sm);
-}
-.wp-bk__pending span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.wp-bk__pending { margin: var(--wp-space-4) var(--wp-space-6); }
 .wp-bk__dir { margin: 3px 0 0; font-size: 11px; color: var(--wp-text-dim); overflow-wrap: anywhere; }
 .wp-bk__toolbar { display: flex; align-items: center; gap: var(--wp-space-4); }
 .wp-bk__note { width: 320px; max-width: 100%; }

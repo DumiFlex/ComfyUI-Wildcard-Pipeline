@@ -12,7 +12,8 @@ import {
 } from "./presets";
 
 function run(over: Partial<LabelGridRun> = {}): LabelGridRun {
-  return { items: 1, batchSizes: [1], count: 1, labelled: false, parts: [], auto: "fill", grid: null, ...over };
+  return { items: 1, batchSizes: [1], count: 1, labelled: false, parts: [], auto: "fill", grid: null,
+    missing: 0, extra: 0, rows: null, columns: null, noLabel: 0, ...over };
 }
 
 const SWEEP = run({

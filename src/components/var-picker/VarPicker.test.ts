@@ -105,6 +105,16 @@ describe("VarPicker", () => {
     expect(preview.text()).toContain("run workflow to see result");
   });
 
+  it("shows the default in amber after a run whose variable was missing", () => {
+    const w = mount(VarPicker, {
+      props: { modelValue: "$seed", upstreamVars: ["$seed"], previewSource: "", previewParsed: null, previewDefault: "0", executed: true },
+    });
+    const preview = w.find('[data-test="var-picker-preview"]');
+    expect(preview.classes()).toContain("wp-var-picker__preview--default");
+    expect(preview.text()).toContain("→ default (0)");
+    expect(w.find('[data-test="var-picker-unset"]').text()).toBe("$seed was not set");
+  });
+
   it("shows the empty-state message when no upstream vars exist", async () => {
     const w = mount(VarPicker, {
       attachTo: document.body,
@@ -137,5 +147,19 @@ describe("VarPicker", () => {
     });
     expect(w.find('[data-test="var-picker-preview"]').text()).toContain("fallback (pony.safetensors)");
     expect(w.find('[data-test="var-picker-wired"]').exists()).toBe(false);
+  });
+
+  it("a stopped run reads red and its reason replaces the old note", () => {
+    const w = mount(VarPicker, {
+      props: {
+        modelValue: "$sampler", upstreamVars: ["$sampler"], previewSource: "", previewParsed: "euler", previewDefault: "euler",
+        executed: true, choiceNote: "No match for “x”. Used euler.", runError: "The variable is empty in KSampler > sampler_name",
+      },
+    });
+    expect(w.get('[data-test="var-picker-preview"]').classes()).toContain("wp-var-picker__preview--failed");
+    expect(w.get('[data-test="var-picker-preview"]').text()).toContain("stopped the run");
+    expect(w.get('[data-test="var-picker-run-error"]').text()).toBe("The variable is empty in KSampler > sampler_name");
+    expect(w.find('[data-test="var-picker-choice-note"]').exists()).toBe(false);
+    w.unmount();
   });
 });

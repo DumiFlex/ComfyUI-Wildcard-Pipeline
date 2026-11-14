@@ -17,7 +17,8 @@ or a toggle::
 * ``Pick one``: one toggle is on; ``needs`` is ignored. Which one, first
   match wins: the toggle the upstream ``group_var`` names (by name or
   variable, any case; only with ``group_upstream``), then the first toggle
-  upstream set to a yes word, then the first toggle whose switch is on.
+  upstream set to a yes word, then the first toggle whose switch is on,
+  and with ``pick_required`` (always one on) the first toggle.
   ``group_var`` (optional) gets the picked toggle's ``value`` (text that may
   read ``$vars``; the node resolves it) or else its name, ``""`` when none
   is on. It is internal unless ``group_visible``.
@@ -31,10 +32,13 @@ leaves the switch alone.
 ``control`` / ``groups`` (mute or bypass other nodes) are frontend-only: the
 canvas sets node modes when a toggle flips, and the run never sees them.
 
-Every toggle writes ``"true"`` / ``"false"`` to its variable, always
-internal. A pinned toggle (``pin``) also has a BOOLEAN output; ``out`` is its
-output slot (1-based, slot 0 is the context). The frontend keeps ``out``
-unique; :func:`output_values` falls back to row order when it isn't.
+Every toggle writes ``"true"`` / ``"false"`` to its variable. It is
+internal (for rules only) unless the row carries ``visible: true`` (stored
+only as ``true``; the canvas's globe "internal" button turned off), which
+lets the Assembler print it; :func:`internal_vars` lists the hidden ones.
+A pinned toggle (``pin``) also has a BOOLEAN output; ``out`` is its output
+slot (1-based, slot 0 is the context). The frontend keeps ``out`` unique;
+:func:`output_values` falls back to row order when it isn't.
 
 Mirrored in TS at ``src/extension/toggles.ts`` via the shared
 ``tests/fixtures/toggles-corpus.json``. Keep the two in step.
@@ -72,6 +76,20 @@ class Toggle:
     needs: str = ""
     upstream: bool = False
     value: str = ""
+    visible: bool = False
+    #: Negative text, filed under ``var`` while the toggle is on (and under
+    #: ``group_var`` when it is the Pick one pick).
+    negative: str = ""
+    #: What the variable gets, and the negative it carries, while the toggle
+    #: is OFF (empty: nothing). Either value makes the toggle write text
+    #: instead of true/false.
+    off_value: str = ""
+    off_negative: str = ""
+
+    @property
+    def writes_text(self) -> bool:
+        """A Value or an Off value: the variable holds text, not true/false."""
+        return bool(self.value or self.off_value)
 
 
 @dataclass
@@ -81,6 +99,8 @@ class Config:
     toggles: list[Toggle] = field(default_factory=list)
     group_visible: bool = False
     group_upstream: bool = False
+    #: Pick one: always one on; with none on, the first toggle is picked.
+    pick_required: bool = False
     #: Set by :func:`with_upstream`: the toggle the upstream ``group_var``
     #: picked, and the toggles upstream set to a yes word (row order).
     forced: str = ""
@@ -114,6 +134,9 @@ def parse_config(raw: Any) -> Config:
             continue
         out = row.get("out")
         value = row.get("value")
+        negative = row.get("negative")
+        off_value = row.get("off_value")
+        off_negative = row.get("off_negative")
         toggles.append(Toggle(
             id=tid,
             name=_str(row.get("name")) or tid,
@@ -124,6 +147,10 @@ def parse_config(raw: Any) -> Config:
             needs=_str(row.get("needs")),
             upstream=row.get("upstream") is True,
             value=value if isinstance(value, str) else "",
+            visible=row.get("visible") is True,
+            negative=negative.strip() if isinstance(negative, str) else "",
+            off_value=off_value if isinstance(off_value, str) else "",
+            off_negative=off_negative.strip() if isinstance(off_negative, str) else "",
         ))
     return Config(
         mode=mode,
@@ -131,6 +158,7 @@ def parse_config(raw: Any) -> Config:
         toggles=toggles,
         group_visible=data.get("group_visible") is True,
         group_upstream=data.get("group_upstream") is True,
+        pick_required=data.get("pick_required") is True,
     )
 
 
@@ -187,7 +215,10 @@ def picked_id(cfg: Config) -> str | None:
     first_up = next((i for i in cfg.upstream_on if i in ids), None)
     if first_up is not None:
         return first_up
-    return next((t.id for t in cfg.toggles if t.on), None)
+    on = next((t.id for t in cfg.toggles if t.on), None)
+    if on is None and cfg.pick_required and cfg.toggles:
+        return cfg.toggles[0].id
+    return on
 
 
 def effective(cfg: Config) -> dict[str, bool]:
@@ -240,18 +271,73 @@ def problems(cfg: Config) -> list[str]:
     return out
 
 
+#: Cross-node internal: every toggle variable's on/off, what `$name.bool`
+#: reads (a toggle with a value writes the value, not the boolean).
+BOOLS_KEY = "__wp_toggle_bools__"
+
+
 def resolve(cfg: Config) -> dict[str, str]:
-    """Variable → ``"true"`` / ``"false"`` (plus the Pick one variable), in
-    row order. A later row with the same variable wins."""
+    """Variable → its value (plus the Pick one variable), in row order. A
+    toggle with a Value or an Off value writes the Value while on and the Off
+    value (often ``""``) while off; one with neither writes ``"true"`` /
+    ``"false"``. A later row with the same variable wins."""
     eff = effective(cfg)
     values: dict[str, str] = {}
     for t in cfg.toggles:
         if t.var and VAR_RE.match(t.var):
-            values[t.var] = TRUE if eff[t.id] else FALSE
+            if t.writes_text:
+                values[t.var] = t.value if eff[t.id] else t.off_value
+            else:
+                values[t.var] = TRUE if eff[t.id] else FALSE
     if cfg.mode == "one" and cfg.group_var and VAR_RE.match(cfg.group_var):
         picked = next((t for t in cfg.toggles if eff[t.id]), None)
         values[cfg.group_var] = (picked.value or picked.name) if picked else ""
     return values
+
+
+def bools(cfg: Config) -> dict[str, bool]:
+    """Each toggle variable's on/off (`$name.bool`); a later row wins."""
+    eff = effective(cfg)
+    return {t.var: eff[t.id] for t in cfg.toggles if t.var and VAR_RE.match(t.var)}
+
+
+def own_negatives(cfg: Config) -> dict[str, str]:
+    """Toggle variable → its negative: the Negative while on, the Off
+    negative while off, left out when that one is empty. A later row writing
+    the same variable decides, as in :func:`resolve`."""
+    eff = effective(cfg)
+    out: dict[str, str] = {}
+    for t in cfg.toggles:
+        if t.var and VAR_RE.match(t.var):
+            text = (t.negative if eff[t.id] else t.off_negative).strip()
+            if text:
+                out[t.var] = text
+            else:
+                out.pop(t.var, None)
+    return out
+
+
+def picked_negative(cfg: Config) -> str:
+    """Pick one: the picked toggle's negative text ('' when none), the
+    negative the Pick one variable carries (send-to-negative)."""
+    if cfg.mode != "one" or not cfg.group_var or not VAR_RE.match(cfg.group_var):
+        return ""
+    eff = effective(cfg)
+    picked = next((t for t in cfg.toggles if eff[t.id]), None)
+    return picked.negative if picked else ""
+
+
+def internal_vars(cfg: Config) -> set[str]:
+    """Variables the node writes that stay out of the prompt: a toggle
+    without ``visible`` (the last row writing a variable decides, as in
+    :func:`resolve`) and the Pick one variable unless ``group_visible``."""
+    flags: dict[str, bool] = {}
+    for t in cfg.toggles:
+        if t.var and VAR_RE.match(t.var):
+            flags[t.var] = not t.visible
+    if cfg.mode == "one" and cfg.group_var and VAR_RE.match(cfg.group_var):
+        flags[cfg.group_var] = not cfg.group_visible
+    return {k for k, v in flags.items() if v}
 
 
 def output_slots(cfg: Config) -> list[Toggle]:

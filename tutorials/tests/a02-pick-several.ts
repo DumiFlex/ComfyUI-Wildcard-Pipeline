@@ -15,23 +15,26 @@ tutorial(
 
     const nodes = await t.h.step("The setup", async () => {
       await t.go("/");
-      await t.say("A wildcard picks one option. Sometimes you want two or three: here, the colors a hero wears.");
+      await t.say("A wildcard picks one option. Sometimes you want two or three: here, the colors in two-tone hair.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Colors"]);
+      await t.pickModules(ctx, ["Role", "Hair colors"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero dressed in $color");
+      await t.type("A painting of $role with $hair_color hair.");
       await t.beat(800);
       await t.waitVoice();
+      await t.normalSpeed();
       return { ctx, asm };
     });
 
     const plus = t.node(nodes.ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
 
     await t.h.step("Pick two or three", async () => {
-      await t.say("Right-click Colors and open Edit.");
-      await t.click(t.moduleRow(nodes.ctx, "Colors").locator(".wp-module-name"), { right: true });
+      await t.say("Right-click Hair colors and open Edit.");
+      await t.click(t.moduleRow(nodes.ctx, "Hair colors").locator(".wp-module-name"), { right: true });
       await t.beat(600);
       await t.click(page.getByRole("menuitem", { name: "Edit" }));
       await t.beat(1000);
@@ -81,16 +84,18 @@ tutorial(
       await t.click(modal.locator('[data-test="row-value"] [contenteditable="true"], [data-test="row-value"] textarea').first());
       await t.press("ControlOrMeta+a");
       await t.waitVoice();
-      await t.say("Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.");
-      await t.type("{2$$ and $$watercolor|ink|oil paint|charcoal} painting", { cps: 16 });
+      await t.callout("inline", modal.locator('[data-test="row-value"]').first(), "{count$$joiner$$choices}", 6);
+      await t.say("{ a count, $$, the joiner, $$, then the choices }", "Curly brackets, a count, two dollar signs, the joiner, two more dollar signs, then the choices.");
+      await t.type("A {2$$ and $$watercolor|ink|oil paint|charcoal} painting.", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
+      await t.uncallout("inline");
       await t.click(modal.locator('[data-test="fvm-save"]'));
       await t.beat(900);
       await t.say("Then print it in the template.");
       await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("End");
-      await t.type(", $style", { cps: 16 });
+      await t.type(" $style", { cps: 16 });
       await t.press("Escape");
       await t.beat(800);
       await t.waitVoice();

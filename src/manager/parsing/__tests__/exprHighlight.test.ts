@@ -62,3 +62,11 @@ describe("highlightExpression", () => {
     expect(highlightExpression("warm", new Set()).map((t) => t.kind)).toEqual(["bad"]);
   });
 });
+
+describe("highlightExpression — variables (schema v11)", () => {
+  it("marks a $name term as a variable, not a bad word", () => {
+    const toks = highlightExpression("warm and $model_variant", new Set(["warm"]));
+    expect(toks.map((t) => t.kind)).toEqual(["term", "space", "op", "space", "var"]);
+    expect(toks.map((t) => t.text).join("")).toBe("warm and $model_variant");
+  });
+});

@@ -1,10 +1,11 @@
-import { walkAllNodes, collectUpstreamVariables, type LiteGraphLike, type LiteNodeLike } from "./graph";
+import { walkAllNodes, collectUpstreamVariables, collectUpstreamVariablesAnyFrame, findRootGraph, type LiteGraphLike, type LiteNodeLike } from "./graph";
 import { startAdaptivePoll } from "./reactive";
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { filterByValidation } from "./settings";
 import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
 import { nodeBadge, nodeBadgeCleanup, nodeBadgePulseToken, nodeBadgeSeverity } from "./_stashes";
+import { bumpBadgeRevision, ensureBadgeSlot, hasBadgeSlot, removeBadgeSlot } from "./badge-slot";
 
 // ── Subgraph conflict badge ────────────────────────────────────────────
 // Users can drop our nodes inside a subgraph. From the parent graph, the
@@ -203,7 +204,8 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
       const tmpl = widgetValue(node, "template");
       const negTmpl = widgetValue(node, "negative_template");
       if (!tmpl && !negTmpl) continue;
-      const upstream = collectUpstreamVariables(rootGraph, node);
+      // Names a Loop sets on some frames count as set (not "missing").
+      const upstream = collectUpstreamVariablesAnyFrame(rootGraph, node);
       out.push(...scanTemplateConflicts(tmpl, upstream, negTmpl));
     }
   }
@@ -243,10 +245,14 @@ function cancelPulse(node: SubgraphNodeLike): void {
 function removeBadge(node: SubgraphNodeLike) {
   cancelPulse(node);
   const current = readBadge(node);
-  if (!current || !Array.isArray(node.badges)) return;
-  const idx = node.badges.indexOf(current);
-  if (idx >= 0) node.badges.splice(idx, 1);
+  if (!current) return;
+  // With a slot (see badge-slot.ts) the getter just stops returning it.
+  if (!hasBadgeSlot(node) && Array.isArray(node.badges)) {
+    const idx = node.badges.indexOf(current);
+    if (idx >= 0) node.badges.splice(idx, 1);
+  }
   nodeBadge.delete(node as object);
+  bumpBadgeRevision();
 }
 
 function applyBadge(node: SubgraphNodeLike, state: BadgeState, BadgeCtor: LGraphBadgeCtor) {
@@ -258,6 +264,7 @@ function applyBadge(node: SubgraphNodeLike, state: BadgeState, BadgeCtor: LGraph
     current.text = state.text;
     current.bgColor = colors.bg;
     current.fgColor = colors.fg;
+    bumpBadgeRevision();
     return;
   }
   const badge = new BadgeCtor({
@@ -269,9 +276,14 @@ function applyBadge(node: SubgraphNodeLike, state: BadgeState, BadgeCtor: LGraph
     height: 18,
     cornerRadius: 4,
   });
-  if (!Array.isArray(node.badges)) node.badges = [];
-  node.badges.push(badge);
   nodeBadge.set(node as object, badge);
+  // The slot's getter returns it from here on; only without a slot does the
+  // badge go into `node.badges` itself (legacy canvas only).
+  if (!ensureBadgeSlot(node)) {
+    if (!Array.isArray(node.badges)) node.badges = [];
+    node.badges.push(badge);
+  }
+  bumpBadgeRevision();
 }
 
 /**
@@ -289,12 +301,19 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
     console.warn("[wildcard-pipeline] LGraphBadge not on window — badge skipped");
     return;
   }
+  // Normally already there from nodeCreated; this covers nodes reached
+  // only through attachAllSubgraphBadges.
+  ensureBadgeSlot(node);
 
   /** Returns whether anything actually moved, which is what lets the shared
    *  adaptive poll back off on a still canvas. */
   function recompute(): "changed" | "quiet" {
     if (!node.subgraph || !Ctor) return "quiet";
-    const next = computeBadgeState(rootGraph, node.subgraph);
+    // `rootGraph` is whatever `app.graph` was at attach time, which is the
+    // open subgraph when the node was made inside one; climb from the
+    // node's own graph so the inner scans can step out through its inputs.
+    const root = findRootGraph(node.graph ?? rootGraph);
+    const next = computeBadgeState(root, node.subgraph);
     // Cache key includes both severity AND text — same severity with a new
     // variable name (e.g. user fixed $foo but $bar is still missing) needs a
     // re-render even though severity is unchanged.
@@ -358,6 +377,7 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
     node.onConnectionsChange = origCC;
     node.onRemoved = origRemoved;
     removeBadge(node);
+    removeBadgeSlot(node);
     nodeBadgeCleanup.delete(node as object);
   };
   nodeBadgeCleanup.set(node as object, cleanup);

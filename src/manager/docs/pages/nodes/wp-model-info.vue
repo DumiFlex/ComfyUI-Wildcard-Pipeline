@@ -102,6 +102,16 @@ const caveats = [
       </p>
     </DocSection>
 
+    <DocSection title="Options per model in one wildcard">
+      <p>
+        When one wildcard should offer different options per model, you don't need a constraint.
+        Tag its options with the variants (<VarToken>pony</VarToken>,
+        <VarToken>illustrious</VarToken>) and pick <VarToken>$model_variant</VarToken> under
+        <b>By variable</b> in its Pool. Each run keeps the options tagged with the loaded model,
+        plus options with no model tag. Constraints on that wildcard still apply on top.
+      </p>
+    </DocSection>
+
     <DocSection title="Constraints from the model">
       <p>
         Constraints react to a wildcard's pick, not to a variable, so the model reaches them

@@ -1,0 +1,10 @@
+[
+  {"expr": "$model_variant", "tags": ["pony", "illustrious", "beach"], "groups": {"model": ["pony", "illustrious"]}, "values": {"model_variant": ["pony"]}, "reads_as": "pony or not (pony or illustrious)", "notes": [], "matches": {"pony": true, "illustrious": false, "": true, "beach": true, "pony,beach": true}},
+  {"expr": "$model_variant", "tags": ["Pony"], "groups": {}, "values": {"model_variant": ["  PONY "]}, "reads_as": "Pony", "notes": [], "matches": {"Pony": true, "": false}},
+  {"expr": "$weather", "tags": ["light_rain", "snow"], "groups": {}, "values": {"weather": ["Light rain"]}, "reads_as": "light_rain", "notes": [], "matches": {"light_rain": true, "snow": false}},
+  {"expr": "$model_variant and not nsfw", "tags": ["pony", "illustrious", "nsfw"], "groups": {"model": ["pony", "illustrious"]}, "values": {"model_variant": null}, "reads_as": "not nsfw", "notes": ["unset"], "matches": {"pony": true, "illustrious": true, "nsfw": false}},
+  {"expr": "$model_variant", "tags": ["pony", "illustrious"], "groups": {"model": ["pony", "illustrious"]}, "values": {"model_variant": ["flux"]}, "reads_as": "", "notes": ["no_tag"], "matches": {"pony": true, "illustrious": true}},
+  {"expr": "not $model_variant", "tags": ["pony", "illustrious"], "groups": {"model": ["pony", "illustrious"]}, "values": {"model_variant": ["flux"]}, "reads_as": "", "notes": ["no_tag"], "matches": {"pony": true}},
+  {"expr": "$colors", "tags": ["red", "blue", "green"], "groups": {"color": ["red", "blue", "green"]}, "values": {"colors": ["red", "blue", "purple"]}, "reads_as": "red or blue or not (red or blue or green)", "notes": [], "matches": {"red": true, "blue": true, "green": false, "": true}},
+  {"expr": "($a or $b) and warm", "tags": ["x", "y", "warm"], "groups": {}, "values": {"a": ["x"], "b": []}, "reads_as": "x and warm", "notes": ["unset"], "matches": {"x,warm": true, "y,warm": false, "x": false}}
+]

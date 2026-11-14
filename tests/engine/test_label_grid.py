@@ -21,8 +21,12 @@ def test_item_labels_split_broadcast_and_missing():
 
 def test_item_labels_one_text_spread_over_items():
     assert g.item_labels(["a\nb\nc"], [1, 2]) == [["a"], ["b", "c"]]
-    # line count doesn't match: first item only, as usual
-    assert g.item_labels(["a\nb"], [1, 2]) == [["a"], ["", ""]]
+    # fewer lines than images: spread in order, the rest get none
+    assert g.item_labels(["a\nb"], [1, 2]) == [["a"], ["b", ""]]
+    assert g.label_fit(["a\nb"], [1, 2]) == (1, 0)
+    # more lines than images: the extra ones are reported
+    assert g.item_labels(["a\nb\nc\nd"], [1, 2]) == [["a"], ["b", "c"]]
+    assert g.label_fit(["a\nb\nc\nd"], [1, 2]) == (0, 1)
 
 
 def test_item_labels_one_line_labels_every_item():
@@ -317,3 +321,145 @@ def test_config_corpus_matches_the_canvas_mirror():
     corpus = Path(__file__).parents[1] / "fixtures" / "label-grid-config-corpus.json"
     for case in json.loads(corpus.read_text(encoding="utf-8"))["cases"]:
         assert g.parse_config(case["raw"]) == case["expected"], case["name"]
+
+
+# ── mismatched counts (fewer / more labels, rows, columns) ────────────────
+
+
+def label_rows(grid):
+    return [[c.label if c else None for c in row] for row in grid]
+
+
+def test_label_fit_per_item_fewer_and_more_lines():
+    # a batch of 4 with 3 lines: the 4th image has none
+    assert g.item_labels(["a\nb\nc"], [4]) == [["a", "b", "c", ""]]
+    assert g.label_fit(["a\nb\nc"], [4]) == (1, 0)
+    # a batch of 2 with 3 lines, plus an entry for an item that isn't there
+    assert g.label_fit(["a\nb\nc", "x"], [2]) == (0, 2)
+    # a list of three single images, two entries
+    assert g.label_fit(["a", "b"], [1, 1, 1]) == (1, 0)
+    # one line covers a whole item; nothing wired is no mismatch
+    assert g.label_fit(["same"], [4]) == (0, 0)
+    assert g.label_fit(None, [4]) == (0, 0)
+    assert g.label_fit(["", ""], [1, 1]) == (0, 0)
+
+
+def test_xy_image_without_a_label_goes_to_a_no_label_row():
+    # the screenshot: a batch of 4, three label lines
+    labels = ["portrait · warm · 11", "portrait · cold · 12", "full body · warm · 13", ""]
+    spec = g.GridSpec(row_part=1, column_part=2)
+    grid, cols, rows = g.arrange(cells_from(labels), spec)
+    assert cols == ["warm", "cold"]
+    assert rows == ["portrait", "full body", g.NO_LABEL]
+    assert label_rows(grid) == [
+        ["portrait · warm · 11", "portrait · cold · 12"],
+        ["full body · warm · 13", None],
+        ["", None],
+    ]
+    assert g.grid_fit(cells_from(labels), spec) == {"no_label": 1}
+
+
+def test_xy_label_missing_one_part_gets_a_no_label_lane():
+    labels = ["a · x", "a · y", "b", "b · y"]
+    grid, cols, rows = g.arrange(cells_from(labels), g.GridSpec(row_part=1, column_part=2))
+    assert rows == ["a", "b"] and cols == ["x", "y", g.NO_LABEL]
+    assert label_rows(grid) == [["a · x", "a · y", None], [None, "b · y", "b"]]
+
+
+def test_xy_many_unlabelled_fill_the_columns():
+    labels = ["a · x", "a · y", "", "", ""]
+    grid, cols, rows = g.arrange(cells_from(labels), g.GridSpec(row_part=1, column_part=2))
+    assert rows == ["a", g.NO_LABEL, g.NO_LABEL]
+    assert label_rows(grid) == [["a · x", "a · y"], ["", ""], ["", None]]
+
+
+def test_xy_without_any_labels_falls_back_to_the_plain_layout():
+    grid, cols, rows = g.arrange(
+        cells_from(["", "", "", ""]), g.GridSpec(row_part=1, column_part=2)
+    )
+    assert cols == [] and rows == []
+    assert len(grid) == 4  # a list of single images: one per row ("rows")
+
+
+def test_one_axis_unlabelled_gets_its_own_lane():
+    labels = ["a · 1", "b · 2", ""]
+    grid, cols, _rows = g.arrange(cells_from(labels), g.GridSpec(column_part=1))
+    assert cols == ["a", "b", g.NO_LABEL]
+    grid, _cols, rows = g.arrange(cells_from(labels), g.GridSpec(row_part=1))
+    assert rows == ["a", "b", g.NO_LABEL]
+    assert label_rows(grid) == [["a · 1"], ["b · 2"], [""]]
+
+
+def test_grid_fit_typed_headers_fewer_and_more():
+    cells = cells_from(["", "", ""], items=[0, 1, 2])
+    # a list of 3 single images in one row: 3 columns
+    few = g.GridSpec(arrange="strip", column_headers=["a", "b"])
+    many = g.GridSpec(
+        arrange="strip", column_headers=["a", "b", "c", "d"], row_headers=["r1", "r2"]
+    )
+    assert g.grid_fit(cells, few) == {"columns": [2, 3]}
+    assert g.grid_fit(cells, many) == {"columns": [4, 3], "rows": [2, 1]}
+    exact = g.GridSpec(arrange="strip", column_headers=["a", "b", "c"], row_headers=["r"])
+    assert g.grid_fit(cells, exact) == {}
+    # both still build: missing headers stay blank, extra ones are left out
+    three = g.GridSpec(arrange="strip", column_headers=["a", "b", "c"])
+    assert g.build_grid(cells, g.Style(), few).size == g.build_grid(cells, g.Style(), three).size
+    g.build_grid(cells, g.Style(), many)
+
+
+def test_unlabelled_cell_strip_takes_the_background():
+    style = g.Style(position="top", label_color="#000000", background="#ffffff", gap=0)
+    cells = cells_from(["seed 1", ""], w=120, h=80, items=[0, 0])
+    out = g.build_grid(cells, style, g.GridSpec(arrange="strip"))
+    # top-left corner of each tile's strip: black label box vs white blank
+    assert out.getpixel((1, 1)) == (0, 0, 0)
+    assert out.getpixel((121, 1)) == (255, 255, 255)
+
+
+# ── side labels: turned text, over the image ──────────────────────────────
+
+
+def test_vertical_side_label_is_a_thin_strip_along_the_edge():
+    base = img(300, 400, (0, 0, 255))
+    flat = g.label_image(base, "a long side label", g.Style(position="left"))
+    turned = g.label_image(
+        base, "a long side label", g.Style(position="left", orientation="vertical")
+    )
+    assert turned.height == flat.height == 400
+    assert turned.width < flat.width
+    # the image sits right of the strip on the left, left of it on the right
+    assert turned.getpixel((turned.width - 1, 10)) == (0, 0, 255)
+    right = g.label_image(base, "x", g.Style(position="right", orientation="vertical"))
+    assert right.getpixel((0, 10)) == (0, 0, 255)
+
+
+def test_orientation_only_turns_left_and_right():
+    style = g.Style(position="top", orientation="vertical")
+    assert not style.vertical
+    a = g.label_image(img(), "hello", style)
+    b = g.label_image(img(), "hello", g.Style(position="top"))
+    assert a.size == b.size
+
+
+def test_over_left_and_right_keep_the_image_size():
+    base = img(300, 200, (0, 0, 255))
+    for pos in ("over_left", "over_right"):
+        for orientation in ("horizontal", "vertical"):
+            style = g.Style(position=pos, orientation=orientation, label_color="#000000")
+            out = g.label_image(base, "label", style)
+            assert out.size == (300, 200)
+            band = (2, 100) if pos == "over_left" else (297, 100)
+            free = (297, 100) if pos == "over_left" else (2, 100)
+            assert out.getpixel(band) != (0, 0, 255)
+            assert out.getpixel(free) == (0, 0, 255)
+    # no text: nothing drawn
+    assert g.label_image(base, "", g.Style(position="over_left"), strip=40) is base
+
+
+def test_grid_with_over_side_labels_keeps_cell_size():
+    cells = cells_from(["a", "b"], w=100, h=80, items=[0, 0])
+    spec = g.GridSpec(arrange="strip")
+    over = g.build_grid(cells, g.Style(position="over_left", gap=0), spec)
+    assert over.size == (200, 80)
+    turned = g.build_grid(cells, g.Style(position="left", orientation="vertical", gap=0), spec)
+    assert turned.height == 80 and turned.width > 200

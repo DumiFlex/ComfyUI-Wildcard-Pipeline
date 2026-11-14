@@ -9,6 +9,7 @@
 import { onMounted, ref, watch } from "vue";
 import { useAiConfig } from "../../composables/useAiConfig";
 import { checkVision, type AiImages } from "../../composables/useAiImages";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import LoadingMark from "@/kit/LoadingMark.vue";
 
@@ -118,7 +119,7 @@ function onPaste(ev: ClipboardEvent): void {
           @change="onFiles"
         >
       </div>
-      <p v-if="images.error.value" class="wp-ai-images__error" role="alert">{{ images.error.value }}</p>
+      <Banner v-if="images.error.value" tone="danger" size="sm" class="wp-ai-images__error">{{ images.error.value }}</Banner>
       <p v-else-if="hint && !compact" class="wp-ai-images__hint">{{ hint }}</p>
     </template>
   </div>
@@ -151,5 +152,5 @@ function onPaste(ev: ClipboardEvent): void {
 .wp-ai-images__add { font-size: 12px; color: var(--wp-text-muted); display: inline-flex; gap: 6px; align-items: center; }
 .wp-ai-images__hint, .wp-ai-images__blind { margin: 0; font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-images__blind { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-.wp-ai-images__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-images__error { margin: 0; }
 </style>

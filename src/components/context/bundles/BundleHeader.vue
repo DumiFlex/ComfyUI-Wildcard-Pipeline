@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
+import type { BundleAlerts } from "./bundle-alerts";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import DragHandle from "@/kit/DragHandle.vue";
@@ -64,8 +65,12 @@ const props = withDefaults(
     /** A sub-bundle. An example sub-bundle shows no chip: its top bundle's
      *  chip already says the whole group came with the workflow. */
     nested?: boolean;
+    /** Trouble in the rows a COLLAPSED bundle hides (null while expanded:
+     *  the rows show their own chips then). Drawn as dots only, so it
+     *  fits beside EXAMPLE / MISSING on a narrow node. */
+    alerts?: BundleAlerts | null;
   }>(),
-  { example: false, nested: false, color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
+  { alerts: null, example: false, nested: false, color: null, driftedCount: 0, libraryDrifted: false, internalState: "none", lockState: null, snapshotModified: false, libraryMissing: false },
 );
 
 const emit = defineEmits<{
@@ -167,6 +172,18 @@ const summary = computed(() => {
          subtitle ("N drifted") since each child row already carries
          its own dot — re-stacking them at the bundle level would be
          visual noise. -->
+    <!-- Rows hidden by the collapse: one dot for the worst conflict, one
+         for the worst library state. Own classes (not .wp-mod-dot /
+         .wp-conflict-dot) so the "badges only" indicator style can't hide
+         the one sign a collapsed bundle gives. -->
+    <span v-if="alerts && (alerts.conflict || alerts.state)" class="wp-bundle-alerts"
+      data-test="bundle-alerts" :title="alerts.title" role="img"
+      :aria-label="alerts.title">
+      <span v-if="alerts.conflict" class="wp-bundle-alert"
+        :class="`wp-conflict-dot--${alerts.conflict}`" :data-alert="alerts.conflict"></span>
+      <span v-if="alerts.state" class="wp-bundle-alert"
+        :class="`wp-mod-dot--${alerts.state}`" :data-alert="alerts.state"></span>
+    </span>
     <span v-if="libraryMissing || libraryDrifted || snapshotModified" class="wp-mod-dots">
       <!-- Visual hierarchy: MISSING (no live library entry) is the most severe
            and shows first; LIBRARY UPDATED (drift) dominates next; MOD
@@ -346,12 +363,71 @@ const summary = computed(() => {
   flex-shrink: 0;
 }
 .wp-bundle-name {
-  flex: 1;
   font: 600 12px/1.3 var(--wp-font-sans);
   color: var(--wp-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Sized by its text and shrinking slowly next to the badges and the
+   * summary (flex-shrink 8 and 2 there), so the name gives way last; a few
+   * letters always show. */
+  flex: 1 1 auto;
+  min-width: 3em;
+}
+/* On a narrow header the state badges and the summary shorten instead of
+ * pushing the lock / internal / remove buttons past the frame. The badges
+ * keep one line (the row-wide cluster wraps, which would make the header
+ * taller than its rows) and ellipsize; the dot beside each keeps the colour. */
+.wp-bundle-header {
+  container: wp-bundle-head / inline-size;
+}
+.wp-bundle-header .wp-mod-dots {
+  flex: 0 8 auto;
+  flex-wrap: nowrap;
+  max-width: none;
+  /* Room for the dot; the badge word inside shortens to nothing first. */
+  min-width: 11px;
+  /* Start-aligned: the row-wide cluster packs to the end, which clipped a
+   * shortened badge from the LEFT ("ARY UPDATED"). */
+  justify-content: flex-start;
+}
+.wp-bundle-header .wp-mod-dots .wp-mod-badge {
+  flex-shrink: 8;
+  min-width: 3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Below 480 px the badge words go when a dot already says the same thing
+ * (indicator style "Both"): a word cut to "L…" says less than the dot and
+ * its tooltip. "Badges only" keeps its shortened word. */
+@container wp-bundle-head (max-width: 480px) {
+  .wp-indicator-both .wp-bundle-header .wp-mod-dots .wp-mod-badge:not(.wp-mod-badge--example) {
+    display: none;
+  }
+}
+/* Narrowest headers (the preview's 300 px floor, a node squeezed thin):
+ * the summary goes, the name keeps what is left. */
+@container wp-bundle-head (max-width: 280px) {
+  .wp-bundle-header .wp-bundle-summary { display: none; }
+}
+/* Dots for trouble inside a collapsed bundle. Same 7px circle as the row
+ * dots; the colour comes from the shared `.wp-conflict-dot--*` /
+ * `.wp-mod-dot--*` modifier rules. Never shrinks, so a narrow node still
+ * shows them while the name ellipsises. */
+.wp-bundle-alerts {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  cursor: help;
+}
+.wp-bundle-alert {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  flex-shrink: 0;
 }
 /* Child-count / drift summary. Was 10px in --wp-text-dim (#666 on the dark
  * theme), which sat right at the edge of legibility against the bundle frame
@@ -361,7 +437,10 @@ const summary = computed(() => {
 .wp-bundle-summary {
   font: 600 11px/1.3 var(--wp-font-sans);
   color: var(--wp-text-muted, var(--wp-text2));
-  flex-shrink: 0;
+  flex: 0 2 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 6px;
   border-radius: var(--wp-radius-cap, 999px);
   background: color-mix(in oklab, var(--wp-text-muted, var(--wp-text2)) 12%, transparent);

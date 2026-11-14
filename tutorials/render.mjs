@@ -2,12 +2,12 @@
 /**
  * Turns a recorded tutorial take into the finished video.
  *
- *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>]
+ *   node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file name>] [--ffmpeg <path>] [--fps 60] [--loudness -19] [--no-clean] [--no-squeeze] [--silent-max 12]
  *
  * The attempt folder is the take's folder in Watchwright's data folder
  * (runs/<run>/<test>/attempt-N, with video-p1.webm and files/cues.json). It writes:
  *
- * - <name>.mp4: H.264 + AAC, 30 fps, the page load cut off, fast-forward parts sped up, the voice
+ * - <name>.mp4: H.264 + AAC, 60 fps (the pack records at 60; --fps 30 for smaller files), the page load cut off, fast-forward parts sped up, the voice
  *   lines (voice/cache/<id>.wav from voice/speak.py) at their cues, chapters inside the file;
  * - <name>.srt: the narration as subtitles (YouTube, Discord and players take it);
  * - <name>.chapters.txt: the chapter list for a YouTube description (from the test's steps).
@@ -27,18 +27,25 @@ const opt = (name, dflt) => {
   const i = argv.indexOf(`--${name}`);
   return i >= 0 ? argv[i + 1] : dflt;
 };
-const attempt = argv.find((a, i) => !a.startsWith("--") && !argv[i - 1]?.startsWith("--"));
+const FLAGS = new Set(["--no-clean", "--no-squeeze"]); // options that take no value
+const attempt = argv.find((a, i) => !a.startsWith("--") && !(argv[i - 1]?.startsWith("--") && !FLAGS.has(argv[i - 1])));
 if (!attempt) {
   console.error("usage: node tutorials/render.mjs <attempt folder> [--out <folder>] [--name <file>]");
   process.exit(1);
 }
 const FFMPEG = opt("ffmpeg", "ffmpeg");
-const FPS = 30;
+const FPS = Number(opt("fps", "60"));
 
 const result = JSON.parse(readFileSync(path.join(attempt, "result.json"), "utf8"));
 const take = JSON.parse(readFileSync(path.join(attempt, "files", "cues.json"), "utf8"));
+// Watchwright encodes a high-quality take after it ends: from its raw capture (video.capture.mkv;
+// earlier 0.16 builds also left a video.finishing marker), which is removed once video.webm is done.
+if (["video.finishing", "video.capture.mkv"].some((f) => existsSync(path.join(attempt, f)))) {
+  console.error(`Watchwright is still encoding this take's video (the attempt page says "Finishing this video…"). Try again when it's done.`);
+  process.exit(1);
+}
 const video = ["video-p1.webm", "video.webm"].map((f) => path.join(attempt, f)).find((f) => existsSync(f));
-if (!video) throw new Error(`No video in ${attempt}. Was the take recorded with video on?`);
+if (!video) throw new Error(`No video in ${attempt}. Was the take recorded with video on, or is Watchwright still finishing it?`);
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const name = opt("name", `${result.test.id}-${slug(result.test.title)}`);
 const out = path.resolve(opt("out", path.join(HERE, "out")));
@@ -46,7 +53,7 @@ mkdirSync(out, { recursive: true });
 
 // ---- line the take's clock up with the video ------------------------------------------------------
 
-/** Every time (s) the sync mark comes up in the top-right corner, and the colour under it. */
+/** Every time (s) the sync mark comes up in the top-right corner, and when it goes off. */
 function findMarks() {
   const r = spawnSync(
     FFMPEG,
@@ -57,19 +64,23 @@ function findMarks() {
   const times = [...String(r.stderr).matchAll(/pts_time:\s*([\d.]+)/g)].map((m) => Number(m[1]));
   const px = r.stdout;
   const found = [];
+  // When each mark goes off again: the first unlit frame after a lit run. A busy page writes no
+  // new frame for a while, so a mark can stay on screen well past its 0.8 s; painting it out up
+  // to its off time keeps it out of the finished video.
+  const offs = [];
   let on = false;
-  let under = null;
   for (let i = 0; i < times.length; i++) {
     const [red, green, blue] = [px[i * 3], px[i * 3 + 1], px[i * 3 + 2]];
     const lit = red > 200 && green < 90 && blue > 200;
     if (lit && !on) found.push(times[i]);
-    if (!lit && under === null && times[i] > 0.5) under = [red, green, blue];
+    if (!lit && on) offs.push(times[i]);
     on = lit;
   }
-  return { found, under: under ?? [24, 24, 27] };
+  if (offs.length < found.length) offs.push((times[times.length - 1] ?? 0) + 0.1);
+  return { found, offs };
 }
 
-const { found, under } = findMarks();
+const { found, offs } = findMarks();
 if (!found.length) console.warn("No sync mark found; assuming the video starts with the take's clock.");
 // Pair each mark the take flashed with the one seen in the video, nearest to where it should be. The
 // recorder's clock drifts from the page's under load, so the voice is lined up between pairs.
@@ -127,6 +138,56 @@ for (const f of [...(take.fast ?? [])].sort((a, b) => a.from - b.from)) {
 }
 if (end > at) parts.push({ a: at, b: end, speed: 1 });
 
+// Long silences play faster: a stretch of the take with no voice line (a build the earlier videos
+// taught, a model loading) that would sit silent on screen for over SILENT_MAX seconds keeps
+// HOLD seconds at each end at normal speed and plays the middle so it lasts about SQUEEZE seconds
+// (2-8x). Parts the take already sped up or cut are left as they are. --no-squeeze turns it off.
+const SILENT_MAX = Number(opt("silent-max", "12"));
+const HOLD = 2.5;
+const SQUEEZE = 4;
+const HAND_MAX = 2;
+const HAND_GAP = 5;
+// When the hand acted, in video seconds (cues.json `acts`, from the Tutor).
+const acts = (take.acts ?? []).map((ms) => vt(ms));
+if (!argv.includes("--no-squeeze")) {
+  // Voice-free stretches, in video seconds.
+  const said = [...(take.cues ?? [])].sort((x, y) => x.at - y.at).map((c) => [vt(c.at), vt(c.at + c.ms + 400)]);
+  const quiet = [];
+  let from = start;
+  for (const [a, b] of said) {
+    if (a > from) quiet.push([from, a]);
+    from = Math.max(from, b);
+  }
+  if (end > from) quiet.push([from, end]);
+  const out = [];
+  let squeezed = 0;
+  for (const p of parts) {
+    if (p.speed !== 1) { out.push(p); continue; }
+    let cur = p.a;
+    for (const [qa, qb] of quiet) {
+      // Before the first line nothing has been shown yet: keep a moment of the page, cut the rest.
+      const lead = qa === start;
+      const a = Math.max(qa, p.a) + (lead ? 1.5 : HOLD);
+      const b = Math.min(qb, p.b) - (lead ? 0.5 : HOLD);
+      if (b < a + 2 || (!lead && b - a + 2 * HOLD <= SILENT_MAX) || (lead && b - a < 3)) continue;
+      if (a > cur) out.push({ a: cur, b: a, speed: 1 });
+      // A cut pushes nothing, as for a speed-0 fast-forward.
+      // A stretch where the hand works (clicks, drags, types) plays at most HAND_MAX: faster, the
+      // hand looks rushed and the viewer can't follow it. Takes from before `acts` squeeze as before.
+      // One click (Run, then a wait) isn't hand work to follow: it takes two or more, at least one
+      // every HAND_GAP seconds on average (a few Run clicks across a long wait are still a wait).
+      const n = acts.filter((x) => x >= a && x <= b).length;
+      const busy = n >= 2 && n * HAND_GAP >= b - a;
+      if (!lead) out.push({ a, b, speed: Math.min(busy ? HAND_MAX : 8, Math.max(2, (b - a) / SQUEEZE)) });
+      squeezed++;
+      cur = b;
+    }
+    if (p.b > cur) out.push({ a: cur, b: p.b, speed: 1 });
+  }
+  parts.splice(0, parts.length, ...out);
+  if (squeezed) console.log(`squeezed ${squeezed} silent stretch(es) over ${SILENT_MAX} s`);
+}
+
 /** Final-video seconds for a video time. */
 function ft(t) {
   let acc = 0;
@@ -177,28 +238,60 @@ chapters.forEach((c, i) => {
 const metaFile = path.join(out, `${name}.ffmeta`);
 writeFileSync(metaFile, meta.join("\n") + "\n");
 
+// Watchwright's own videos (0.16+) are full range (0-255, BT.601, from JPEG frames). A plain
+// format=yuv420p squeezes nothing and players read the MP4 as limited range, so blacks crush
+// (#171717 came out #080808). Convert to limited range BT.709 with zscale (exact); an ffmpeg without
+// zimg converts the range only and tags the file BT.601 (swscale's matrix change tints greys green).
+const probe = spawnSync(FFMPEG.replace(/ffmpeg(\.exe)?$/, "ffprobe$1"), ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=color_range,color_space", "-of", "default=nw=1", video], { encoding: "utf8" });
+const full = /color_range=pc/.test(probe.stdout ?? "");
+const src709 = /color_space=bt709/.test(probe.stdout ?? "");
+const zimg = /\bzscale\b/.test(spawnSync(FFMPEG, ["-hide_banner", "-filters"], { encoding: "utf8" }).stdout ?? "");
+const range = full ? "full" : "limited";
+const TO_TV = zimg
+  ? `zscale=rangein=${range}:range=limited:matrixin=${src709 ? "709" : "470bg"}:matrix=709,format=yuv420p`
+  : `scale=in_range=${range}:out_range=limited,format=yuv420p`;
+const space = zimg || src709 ? ["bt709", "bt709", "bt709"] : ["smpte170m", "smpte170m", "smpte170m"];
+
 // ---- the ffmpeg graph -----------------------------------------------------------------------------
 
 const inputs = ["-i", video];
 const graph = [];
-// Paint the sync marks out with the colour under them.
-const hex = under.map((c) => c.toString(16).padStart(2, "0")).join("");
-const paint = found.map((t) => `between(t,${(t - 0.1).toFixed(3)},${(t + 0.7).toFixed(3)})`).join("+");
+// Paint the sync marks out with the pixels just below them: the two rows under the 20 px corner,
+// stretched over it. One fixed colour left a visible square wherever the corner wasn't that colour
+// (the manager, another palette) or when the encoder's range made it a shade off.
+const paint = found.map((t, i) => `between(t,${(t - 0.1).toFixed(3)},${(Math.max(t + 0.7, (offs[i] ?? t + 0.7) + 0.1)).toFixed(3)})`).join("+");
 // The recorder writes a frame only when the page changes (gaps of seconds), and `trim` ends a part at
 // its last frame, so make it constant frame rate first or every still stretch at a cut drops out.
-graph.push(`[0:v]fps=${FPS},${paint ? `drawbox=x=iw-20:y=0:w=20:h=20:color=0x${hex}:t=fill:enable='${paint}',` : ""}split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
+if (paint) {
+  graph.push(`[0:v]fps=${FPS},split=2[base][src]`);
+  graph.push(`[src]crop=20:2:iw-20:20,scale=20:20:flags=neighbor:in_range=${range}:out_range=${range}[patch]`);
+  graph.push(`[base][patch]overlay=W-20:0:enable='${paint}',split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
+} else {
+  graph.push(`[0:v]fps=${FPS},split=${parts.length}${parts.map((_, i) => `[s${i}]`).join("")}`);
+}
 parts.forEach((p, i) => {
   graph.push(`[s${i}]trim=start=${p.a.toFixed(3)}:end=${p.b.toFixed(3)},setpts=(PTS-STARTPTS)/${p.speed}[v${i}]`);
 });
-graph.push(`${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0,fps=${FPS},format=yuv420p[vout]`);
+graph.push(`${parts.map((_, i) => `[v${i}]`).join("")}concat=n=${parts.length}:v=1:a=0,fps=${FPS},${TO_TV}[vout]`);
+// Each line is cleaned before it's placed: Qwen3-TTS takes carry a fizz on every word (about
+// 5-12 kHz) and audible breaths in the pauses. Rumble cut, light denoise, a gate that turns the
+// pauses down by 20 dB (ducks rather than mutes, so word endings aren't chopped), and a de-esser.
+// --no-clean renders the lines as they are.
+const CLEAN = argv.includes("--no-clean")
+  ? ""
+  : "highpass=f=70,afftdn=nr=10:nf=-50,agate=threshold=0.01:ratio=2:range=0.1:attack=5:release=120,deesser=i=0.4:m=0.5:f=0.5:s=o,";
 voiced.forEach((c, i) => {
   inputs.push("-i", path.join(HERE, "voice", "cache", `${c.id}.wav`));
   const delay = Math.round(ft(vt(c.at)) * 1000);
-  graph.push(`[${i + 1}:a]aresample=48000,adelay=${delay}|${delay}[a${i}]`);
+  graph.push(`[${i + 1}:a]${CLEAN}aresample=48000,adelay=${delay}|${delay}[a${i}]`);
 });
 // Silence the length of the video under the voice, so the audio track covers it all.
 graph.push(`anullsrc=r=48000:cl=stereo,atrim=0:${total.toFixed(3)}[bed]`);
-graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=-16:TP=-1.5:LRA=11[aout]`);
+// Loudness: -19 LUFS (--loudness). -16 sat a few dB over most tutorials, since a voice-only track
+// has no quiet music to average it down, and YouTube only turns loud videos down, never quiet ones up.
+// loudnorm upsamples to 192 kHz to find true peaks, so the track is brought back to 48 kHz.
+const LUFS = Number(opt("loudness", "-19"));
+graph.push(`[bed]${voiced.map((_, i) => `[a${i}]`).join("")}amix=inputs=${voiced.length + 1}:normalize=0:duration=first,loudnorm=I=${LUFS}:TP=-1.5:LRA=11,aresample=48000[aout]`);
 
 const mp4 = path.join(out, `${name}.mp4`);
 const args = [
@@ -209,6 +302,7 @@ const args = [
   "-map", "[vout]", "-map", "[aout]",
   "-map_metadata", String(voiced.length + 1), "-map_chapters", String(voiced.length + 1),
   "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+  "-color_range", "tv", "-colorspace", space[0], "-color_primaries", space[1], "-color_trc", space[2],
   "-c:a", "aac", "-b:a", "160k",
   "-movflags", "+faststart",
   mp4,

@@ -41,7 +41,7 @@ const STATIC_ENTRIES: SettingEntry[] = [
   { key: "whats-new", section: "general", label: "Open What's new after an update", hint: "Show the release notes once, the first time the manager opens on a new version.", keywords: "changelog release notes" },
   { key: "usage-stats", section: "general", label: "Share anonymous usage stats", hint: "Let the Community tab count page views, installs and publishes on the community site.", keywords: "privacy telemetry analytics tracking community" },
 
-  { key: "colours", section: "appearance", label: "Colours", hint: "The colour theme: Orbit, Native, Nebula, Tide, Ember or High contrast.", keywords: "theme palette colors color scheme high contrast native nebula tide ember orbit" },
+  { key: "colours", section: "appearance", label: "Colours", hint: "The colour theme: Orbit, Native, Nebula, Tide, Ember, High contrast or your ComfyUI palette.", keywords: "theme palette colors color scheme high contrast native nebula tide ember orbit comfyui comfy palette nord solarized" },
   { key: "look", section: "appearance", label: "Look", hint: "Corners, type, borders and selection: Orbit, Crisp, Soft, Terminal, Editorial, Compact or TUI.", keywords: "style shape font serif mono rounded square tui terminal editorial compact soft crisp" },
   { key: "theme", section: "appearance", label: "Mode", hint: "Dark, light, or follow the system.", keywords: "dark light mode color scheme theme" },
   { key: "accent", section: "appearance", label: "Accent color", hint: "The highlight color used for buttons, links and selection. Theme's own follows the colour theme.", keywords: "colour palette theme own indigo violet purple custom hex" },

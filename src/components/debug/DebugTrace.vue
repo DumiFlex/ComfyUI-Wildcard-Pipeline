@@ -8,7 +8,18 @@ import WpIconButton from "@/kit/WpIconButton.vue";
 import { nextTick, ref, watch } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
 import DebugStepDetail from "./DebugStepDetail.vue";
-import type { NodeInfo, TraceGroup, TraceStep, WarningRow } from "./debug-model";
+import { TEMPLATE_TYPE, valueTypeLook, type ValueTypeLook } from "../injector/value-types";
+import {
+  KIND_ICONS,
+  NODE_KINDS,
+  NODE_KIND_TITLES,
+  kindColor,
+  type Kind,
+  type NodeInfo,
+  type TraceGroup,
+  type TraceStep,
+  type WarningRow,
+} from "./debug-model";
 
 const props = defineProps<{
   groups: TraceGroup[];
@@ -27,7 +38,7 @@ const emit = defineEmits<{
   (e: "toggle", key: string): void;
   (e: "goto-step", key: string): void;
   (e: "row-menu", ev: MouseEvent, step: TraceStep): void;
-  (e: "focus-node", nodeId: string): void;
+  (e: "focus-node", nodeId: string, step?: TraceStep): void;
 }>();
 
 // Open rows whose one-line value is cut off in the row. Their detail repeats
@@ -71,12 +82,31 @@ function refName(uuid: string): string {
 function groupLabel(g: TraceGroup): string {
   if (!g.nodeId) return "Chain";
   const info = props.nodeInfo(g.nodeId);
-  return info.codename || info.title || `Node ${g.nodeId}`;
+  // The node's own title; a Context's codename sits beside it as a chip.
+  return info.title || NODE_KIND_TITLES[groupKind(g) ?? "unknown"] || (info.codename ? "WP Context" : `Node ${g.nodeId}`);
+}
+/** The node kind a group came from (Loop, Toggles …), or null for a
+ *  Context node, whose rows are modules. */
+function groupKind(g: TraceGroup): Kind | null {
+  const k = g.steps[0]?.kind;
+  return k && NODE_KINDS.has(k) ? k : null;
+}
+/** A node group's rows as card entries (each row is one variable). */
+/** An Injector step's wire type, in the Injector's own icon and colour. */
+function typeLook(s: TraceStep): ValueTypeLook {
+  return s.isTemplate ? TEMPLATE_TYPE : valueTypeLook(s.valueType);
+}
+function groupIcon(g: TraceGroup): string {
+  const k = groupKind(g);
+  return k ? KIND_ICONS[k] : "pi pi-sitemap";
+}
+function groupColor(g: TraceGroup): string {
+  const k = groupKind(g);
+  return k ? kindColor(k) : "var(--wp-accent-text, var(--wp-accent))";
 }
 function groupTooltip(g: TraceGroup): string {
   if (!g.nodeId) return "";
-  const info = props.nodeInfo(g.nodeId);
-  return [info.codename ? info.title : "", `node id ${g.nodeId}`].filter(Boolean).join(" · ");
+  return `node id ${g.nodeId}`;
 }
 </script>
 
@@ -84,12 +114,14 @@ function groupTooltip(g: TraceGroup): string {
   <div ref="root" class="wp-dbg-trace" data-test="dbg-trace">
     <section v-for="(g, gi) in groups" :key="`${g.nodeId}:${gi}`" class="wp-dbg-group">
       <header v-if="showGroupHeads" class="wp-dbg-group__head" data-test="dbg-group-head">
+        <i :class="['wp-dbg-group__icon', groupIcon(g)]" :style="{ color: groupColor(g) }" aria-hidden="true" />
+        <span class="wp-dbg-group__title" :title="groupTooltip(g)" data-test="dbg-group-title">{{ groupLabel(g) }}</span>
         <span
-          class="wp-dbg-group__title"
-          :class="{ 'wp-dbg-group__title--codename': !!(g.nodeId && nodeInfo(g.nodeId).codename) }"
-          :title="groupTooltip(g)"
-          data-test="dbg-group-title"
-        >{{ groupLabel(g) }}</span>
+          v-if="g.nodeId && nodeInfo(g.nodeId).codename"
+          class="wp-dbg-group__title wp-dbg-group__title--codename"
+          title="The Context's codename"
+          data-test="dbg-group-codename"
+        >{{ nodeInfo(g.nodeId).codename }}</span>
         <span v-if="g.seed" class="wp-dbg-group__seed" title="Chain seed this node ran with">seed {{ g.seed }}</span>
         <WpIconButton
           v-if="canFocus && g.nodeId"
@@ -111,7 +143,9 @@ function groupTooltip(g: TraceGroup): string {
             'is-ctx': ctxActiveKey === s.key,
           },
         ]"
+        :style="{ '--wp-dbg-kind': kindColor(s.kind) }"
         :data-step-key="s.key"
+        :data-kind="s.kind"
         data-test="dbg-step"
       >
         <div
@@ -126,7 +160,7 @@ function groupTooltip(g: TraceGroup): string {
           @contextmenu="(ev) => emit('row-menu', ev, s)"
         >
           <span class="wp-dbg-step__order">{{ s.order }}</span>
-          <span class="wp-kind-chip wp-dbg-step__kind" :class="`wp-kind-chip--${s.kind === 'unknown' ? 'unknown' : s.kind}`">{{ s.kindLabel }}</span>
+          <span class="wp-kind-chip wp-dbg-step__kind" :class="`wp-kind-chip--${s.kind === 'unknown' ? 'unknown' : s.kind}`"><i :class="KIND_ICONS[s.kind]" aria-hidden="true" />{{ s.kindLabel }}</span>
           <span class="wp-dbg-step__title" :title="title(s)">
             <i v-if="pinned.has(s.key)" class="pi pi-star-fill wp-dbg-pin" aria-label="pinned" />
             <span class="wp-dbg-step__title-text">{{ title(s) }}</span>
@@ -140,7 +174,7 @@ function groupTooltip(g: TraceGroup): string {
               <code>${{ refName(s.constraint.target) }}</code>
             </template>
             <template v-else-if="s.writes.length">
-              <code>${{ s.writes[0].variable }}</code>
+              <code class="wp-dbg-step__var" :title="`$${s.writes[0].variable}`">${{ s.writes[0].variable }}</code>
               <span class="wp-dbg-step__arrow">=</span>
               <span class="wp-dbg-step__val">
                 <RichTextPreview
@@ -159,7 +193,13 @@ function groupTooltip(g: TraceGroup): string {
             </template>
           </span>
           <span class="wp-dbg-step__badges">
-            <span v-if="s.valueType" class="wp-dbg-badge" :title="s.isTemplate ? 'Template rendered from $slot values' : 'Value type on the wire'">{{ s.isTemplate ? "TPL" : s.valueType }}</span>
+            <span v-if="s.source" class="wp-dbg-badge wp-dbg-badge--kind" data-test="dbg-step-source" title="Where this value came from">{{ s.source }}</span>
+            <span
+              v-if="s.valueType"
+              class="wp-dbg-badge wp-dbg-badge--type"
+              :style="{ '--wp-dbg-type': typeLook(s).color }"
+              :title="s.isTemplate ? 'Template rendered from $slot values' : 'Value type on the wire'"
+            ><i :class="['pi', typeLook(s).icon]" aria-hidden="true" />{{ s.isTemplate ? "TPL" : s.valueType }}</span>
             <span
               v-if="typeof s.detail?.chance === 'number' && s.detail.chance < 0.995"
               class="wp-dbg-badge"
@@ -216,7 +256,7 @@ function groupTooltip(g: TraceGroup): string {
             :uuid-to-kind="uuidToKind"
             :can-focus="canFocus"
             @goto-step="(k) => emit('goto-step', k)"
-            @focus-node="(id) => emit('focus-node', id)"
+            @focus-node="(id) => emit('focus-node', id, s)"
           />
         </div>
       </div>
@@ -225,6 +265,12 @@ function groupTooltip(g: TraceGroup): string {
 </template>
 
 <style scoped>
+.wp-dbg-badge.wp-dbg-badge--type {
+  display: inline-flex; align-items: center; gap: 3px;
+  color: var(--wp-dbg-type);
+  background: color-mix(in oklab, var(--wp-dbg-type) 16%, transparent);
+}
+.wp-dbg-badge--type .pi { font-size: 8px; }
 .wp-dbg-trace { display: flex; flex-direction: column; gap: 8px; }
 .wp-dbg-group { display: flex; flex-direction: column; }
 .wp-dbg-group__head {
@@ -235,6 +281,7 @@ function groupTooltip(g: TraceGroup): string {
   font-size: 10px;
   color: var(--wp-text-dim);
 }
+.wp-dbg-group__icon { font-size: 10px; }
 .wp-dbg-group__title { font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-text); }
 .wp-dbg-group__seed { font-family: var(--wp-font-mono); }
 .wp-dbg-group__title--codename {
@@ -254,7 +301,7 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-step.is-ctx .wp-dbg-step__row { outline: 1px solid var(--wp-accent); outline-offset: -1px; }
 .wp-dbg-step__row {
   display: grid;
-  grid-template-columns: 18px 68px minmax(70px, 130px) minmax(0, 1fr) auto 12px;
+  grid-template-columns: 18px 82px minmax(70px, 130px) minmax(0, 1fr) auto 12px;
   align-items: center;
   column-gap: 8px;
   padding: 5px 6px;
@@ -264,7 +311,11 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-step__row:hover { background: var(--wp-row-hover, var(--wp-bg2)); }
 .wp-dbg-step__row:focus-visible { outline: 1px solid var(--wp-accent); outline-offset: -1px; }
 .wp-dbg-step__order { font: 500 9px/1 var(--wp-font-mono); color: var(--wp-text-dim); text-align: right; }
-.wp-dbg-step__kind { font-size: 9px; justify-self: start; }
+.wp-dbg-step__kind { font-size: 9px; justify-self: start; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.wp-dbg-step__kind .pi { font-size: 8px; }
+/* Each row wears its kind's colour on the left edge, so rows from a Loop,
+   Toggles or Model Info node read apart from a Context's modules. */
+.wp-dbg-step { box-shadow: inset 2px 0 0 color-mix(in oklab, var(--wp-dbg-kind, transparent) 70%, transparent); }
 .wp-dbg-step__title {
   font: 600 11px/1.3 var(--wp-font-sans);
   color: var(--wp-text);
@@ -294,6 +345,8 @@ function groupTooltip(g: TraceGroup): string {
   flex: none;
 }
 .wp-dbg-step__arrow { color: var(--wp-text-dim); flex: none; }
+/* A long name keeps at most half the summary, so the value still shows. */
+.wp-dbg-step__sum code.wp-dbg-step__var { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
 .wp-dbg-step__val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The row is a one-line summary; the full value lives in the detail. */
 .wp-dbg-step__val :deep(*) { white-space: nowrap; }
@@ -311,6 +364,7 @@ function groupTooltip(g: TraceGroup): string {
   gap: 3px;
 }
 .wp-dbg-badge .pi { font-size: 8px; }
+.wp-dbg-badge--kind { font-family: var(--wp-font-sans); color: var(--wp-dbg-kind); background: color-mix(in oklab, var(--wp-dbg-kind) 14%, transparent); }
 .wp-dbg-badge--warn { background: color-mix(in oklab, var(--wp-warn) 18%, transparent); color: var(--wp-warn); }
 .wp-dbg-status {
   font: 600 9px/1 var(--wp-font-sans);

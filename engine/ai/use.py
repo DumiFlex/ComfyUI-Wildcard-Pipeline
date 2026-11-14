@@ -10,6 +10,9 @@ line of ``;``-separated clauses, which this module turns into instance keys:
     pick 1-3 repeats      … allowing the same option twice
     sep " and "           pick_separator (default ", ")
     filter warm and not wet   category_filter, checked against its tags
+    filter $model_variant     … a $variable term keeps the options tagged
+                          with its value at run time (untagged-for-that-axis
+                          options stay)
     no empty              exclude_null (never the empty option)
     match $model_variant  match_variable (take the option equal to it)
     hold                  seed_scope "hold" (same pick for a whole Loop run)
@@ -168,7 +171,8 @@ def _apply(word: str, rest: str, out: dict[str, Any], tags: list[str] | None) ->
         if tags is not None:
             known = set(tags)
             terms = re.findall(r"[^\s()!,]+", expr)
-            bad = [t for t in terms if t.lower() not in ("and", "or", "not") and t not in known]
+            bad = [t for t in terms if t.lower() not in ("and", "or", "not")
+                   and not t.startswith("$") and t not in known]
             if bad:
                 raise ValueError(f"no tag {bad[0]!r} on this wildcard"
                                  + (f" (its tags: {', '.join(tags[:15])})" if tags else ""))

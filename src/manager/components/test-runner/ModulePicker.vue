@@ -40,7 +40,6 @@ function setSort(v: string | number | null): void {
   if (hit) sort.value = hit.value;
 }
 const active = ref(0);
-const root = ref<HTMLElement | null>(null);
 const input = ref<InstanceType<typeof SearchInput> | null>(null);
 
 interface Entry {
@@ -108,7 +107,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div ref="root" class="wp-trp" data-test="module-picker" @keydown="onKey">
+  <div class="wp-trp" data-test="module-picker" @keydown="onKey">
     <SearchInput
       ref="input"
       v-model="query"

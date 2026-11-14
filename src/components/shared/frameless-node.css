@@ -47,4 +47,16 @@
   /* The selection outline hugs the panel. */
   .lg-node:has(.wp-frameless) [data-testid="node-state-outline-overlay"],
   .lg-node:has(.wp-frameless) > div.absolute.outline-none { inset: -2px !important; }
+
+  /* An open editor still drags: its background, rows and labels carry
+     `wp-frameless__pass` and let the press through to the canvas, which
+     moves the node; the controls in them take it back. Keep each pass
+     element a direct child of another pass element (the form > a row > the
+     controls), never inside a control. Classic first, then Nodes 2.0, whose
+     widget wrappers are forced to `none` with !important above. */
+  .wp-frameless .wp-frameless__pass { pointer-events: none; }
+  .wp-frameless .wp-frameless__pass > :not(.wp-frameless__pass) { pointer-events: auto; }
+  .lg-node:has(.wp-frameless) .lg-node-widgets .wp-frameless .wp-frameless__pass { pointer-events: none !important; }
+  .lg-node:has(.wp-frameless) .lg-node-widgets .wp-frameless__pass > :not(.wp-frameless__pass),
+  .lg-node:has(.wp-frameless) .lg-node-widgets .wp-frameless__pass > :not(.wp-frameless__pass) * { pointer-events: auto !important; }
 }

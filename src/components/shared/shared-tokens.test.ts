@@ -11,7 +11,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { SHARED_TOKENS } from "@/kit/tokens";
+import { LOCAL_TOKENS, SHARED_TOKENS } from "@/kit/tokens";
 
 const read = (p: string): string => readFileSync(resolve(__dirname, p), "utf8");
 /** The kit's source folder inside its npm package. */
@@ -32,7 +32,8 @@ describe("shared token names", () => {
   });
 
   it("are the only --wp names the shared pieces left here read", () => {
-    const shared = new Set<string>(SHARED_TOKENS);
+    // LOCAL_TOKENS are set by the piece itself or its caller (Modal's `accent`).
+    const shared = new Set<string>([...SHARED_TOKENS, ...LOCAL_TOKENS]);
     // Kit pieces are held to the list by wp-kit's tokens.test.ts.
     const files = ["ConfirmModal.vue", "Modal.vue", "ModalShell.vue"].map((f) => resolve(KIT, f));
     const stray = files.flatMap((f) =>

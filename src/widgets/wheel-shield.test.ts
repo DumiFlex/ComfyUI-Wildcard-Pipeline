@@ -50,6 +50,28 @@ describe("installWheelShield", () => {
     dispose();
   });
 
+  it("absorbs the wheel over a long textarea whose overflow reads visible", () => {
+    // Firefox can report `visible` for a textarea that still scrolls its text.
+    const nodeEl = document.createElement("div");
+    const root = document.createElement("div");
+    const ta = document.createElement("textarea");
+    ta.style.overflowY = "visible";
+    Object.defineProperty(ta, "scrollHeight", { value: 500, configurable: true });
+    Object.defineProperty(ta, "clientHeight", { value: 100, configurable: true });
+    root.appendChild(ta);
+    nodeEl.appendChild(root);
+    document.body.appendChild(nodeEl);
+    const canvasHandler = vi.fn();
+    nodeEl.addEventListener("wheel", canvasHandler);
+    const dispose = installWheelShield(root);
+    wheel(ta);
+    expect(canvasHandler).not.toHaveBeenCalled();
+    ta.style.overflowY = "hidden";
+    wheel(ta);
+    expect(canvasHandler).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
   it("lets the canvas zoom when nothing can scroll", () => {
     const { leaf, canvasHandler, dispose } = setup("auto", false);
     wheel(leaf);

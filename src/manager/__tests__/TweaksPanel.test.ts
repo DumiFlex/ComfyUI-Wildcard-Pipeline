@@ -115,9 +115,9 @@ describe("TweaksPanel.vue", () => {
 });
 
 describe("TweaksPanel.vue — colours and look", () => {
-  it("shows 6 colour themes and 7 looks, and picking one applies it", async () => {
+  it("shows 7 colour themes and 7 looks, and picking one applies it", async () => {
     const wrap = mountOpen();
-    expect(wrap.findAll('[data-test^="tweaks-palette-"]')).toHaveLength(6);
+    expect(wrap.findAll('[data-test^="tweaks-palette-"]')).toHaveLength(7);
     expect(wrap.findAll('[data-test^="tweaks-look-"]')).toHaveLength(7);
     await wrap.find('[data-test="tweaks-palette-nebula"]').trigger("click");
     await wrap.find('[data-test="tweaks-look-soft"]').trigger("click");

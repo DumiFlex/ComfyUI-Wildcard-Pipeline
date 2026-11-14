@@ -43,10 +43,16 @@ const {
   loadToast,
   loadPlayground,
   loadSubgraphBadge,
+  badgeSlotMod,
+  promoteMod,
+  showMod,
+  eyeMod,
+  textareaLabelMod,
   loadImageFilterPicker,
   loadBookmarkDock,
   loadNodeHelp,
   nodeToolbarMod,
+  runErrorsMod,
 } = await import("./boot");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
@@ -118,6 +124,13 @@ imageFilterMod.installImageFilter(
   },
 );
 
+// A WP node that stops the run shows why on the node and in a toast; some
+// frontends only flash "Job failed" (see extension/run-errors.ts).
+runErrorsMod.installRunErrors(
+  (app as unknown as { api?: Parameters<typeof runErrorsMod.installRunErrors>[0] }).api,
+  (id) => runErrorsMod.nodeForExecutionId((app as unknown as { graph?: Parameters<typeof runErrorsMod.nodeForExecutionId>[0] }).graph, id),
+);
+
 // Global clipboard shield. WP modals Teleport to <body>, so their editable
 // inputs (the Injector variable-binding field, instance-edit modals, blocklist,
 // pickers, …) sit OUTSIDE the per-widget `inner` shield — Ctrl+A/C/V there
@@ -137,6 +150,13 @@ function withBadges(fn: (badgeMod: BadgeModule) => void): void {
 }
 function isSubgraphNode(node: unknown): boolean {
   return (node as { isSubgraphNode?: () => boolean }).isSubgraphNode?.() === true;
+}
+// Nodes 2.0 only notices a badge that is in `node.badges` when it first
+// renders the node, so every SubgraphNode gets its badge getter right away,
+// before the badge module has loaded (see extension/badge-slot.ts).
+badgeSlotMod.setBadgeHost(() => (app as unknown as { extensionManager?: unknown }).extensionManager);
+function prepareBadge(node: unknown): void {
+  badgeSlotMod.ensureBadgeSlot(node as { badges?: unknown[] });
 }
 
 // ComfyUI hands us untyped LiteGraph nodes; we only care about the surface
@@ -219,6 +239,29 @@ const BOOKMARK_COMMANDS = [
   { id: "wildcardPipeline.bookmark.dock", label: "WP Bookmarks: show or hide the dock", function: toggleBookmarkDock },
 ];
 
+/** "Merge into WP Toggles" on a right-clicked Boolean-like node. */
+function mergeMenuItems(node: unknown): Array<{ content: string; callback: () => void } | null> {
+  type MergeNode = Parameters<typeof togglesMergeMod.isMergeable>[0];
+  type MergeGraph = Parameters<typeof togglesMergeMod.mergeIntoToggles>[0];
+  const canvas = (app as unknown as { canvas?: { selected_nodes?: Record<string, MergeNode>; graph?: MergeGraph } }).canvas;
+  if (!togglesMergeMod.isMergeable(node as MergeNode)) return [];
+  const picked = Object.values(canvas?.selected_nodes ?? {});
+  const selected = picked.includes(node as MergeNode) ? picked : [node as MergeNode];
+  const count = Math.min(selected.filter(togglesMergeMod.isMergeable).length, 16);
+  return [null, {
+    content: `Merge into WP Toggles (${count})`,
+    callback: () => {
+      const graph = canvas?.graph;
+      if (!graph) return;
+      const lg = (globalThis as { LiteGraph?: { createNode(type: string): MergeNode | null } }).LiteGraph;
+      const res = togglesMergeMod.mergeIntoToggles(graph, selected, () => lg?.createNode("WP_Toggles") ?? null);
+      if (res.skipped.length) {
+        toastStoreMod.pushToast(`Not merged: ${res.skipped.join(", ")}. Only nodes with one on/off value, one BOOLEAN output and no wired inputs can merge (16 at most).`, { severity: "warning" });
+      }
+    },
+  }];
+}
+
 app.registerExtension({
   name: "wildcard-pipeline",
 
@@ -226,27 +269,10 @@ app.registerExtension({
   // the repo, issue tracker, and docs. Uses PrimeIcons shipped by ComfyUI.
   aboutPageBadges: aboutMod.ABOUT_BADGES,
 
-  // "Merge into WP Toggles" on a right-clicked Boolean-like node.
+  // "Show on / Hide from subgraph node" on a WP panel node inside a
+  // subgraph, and "Merge into WP Toggles" on a Boolean-like node.
   getNodeMenuItems(node: unknown) {
-    type MergeNode = Parameters<typeof togglesMergeMod.isMergeable>[0];
-    type MergeGraph = Parameters<typeof togglesMergeMod.mergeIntoToggles>[0];
-    const canvas = (app as unknown as { canvas?: { selected_nodes?: Record<string, MergeNode>; graph?: MergeGraph } }).canvas;
-    if (!togglesMergeMod.isMergeable(node as MergeNode)) return [];
-    const picked = Object.values(canvas?.selected_nodes ?? {});
-    const selected = picked.includes(node as MergeNode) ? picked : [node as MergeNode];
-    const count = Math.min(selected.filter(togglesMergeMod.isMergeable).length, 16);
-    return [null, {
-      content: `Merge into WP Toggles (${count})`,
-      callback: () => {
-        const graph = canvas?.graph;
-        if (!graph) return;
-        const lg = (globalThis as { LiteGraph?: { createNode(type: string): MergeNode | null } }).LiteGraph;
-        const res = togglesMergeMod.mergeIntoToggles(graph, selected, () => lg?.createNode("WP_Toggles") ?? null);
-        if (res.skipped.length) {
-          toastStoreMod.pushToast(`Not merged: ${res.skipped.join(", ")}. Only nodes with one on/off value, one BOOLEAN output and no wired inputs can merge (16 at most).`, { severity: "warning" });
-        }
-      },
-    }];
+    return [...showMod.menuItems(node), ...mergeMenuItems(node)];
   },
 
   // Topbar dropdown entry — opens the SPA at /wp/dashboard. The direct
@@ -310,6 +336,15 @@ app.registerExtension({
     topbarMod.startIconReplaceLoop();
     bookmarkMod.installBookmarkKeys();
     bookmarkMod.installHiddenFilter();
+    // The eye in ComfyUI's subgraph Parameters panel shows WP panels too.
+    eyeMod.installSubgraphEye(app as unknown as Parameters<typeof eyeMod.installSubgraphEye>[0]);
+    // ComfyUI's text-box name label floats over the text once a WP node's
+    // box scrolls; fade it out there (Nodes 2.0 only).
+    textareaLabelMod.installTextareaLabelFix((id) => {
+      const graph = (app as unknown as { canvas?: { graph?: { getNodeById(id: string | number): { type?: string } | null } } }).canvas?.graph;
+      const type = graph?.getNodeById(id)?.type ?? graph?.getNodeById(Number(id))?.type;
+      return typeof type === "string" && type.startsWith("WP_");
+    });
     // A bookmark joining the graph (added, pasted or loaded) brings the
     // dock up unless the user closed it.
     bookmarkMod.onBookmarkAdded(maybeShowBookmarkDock);
@@ -347,18 +382,20 @@ app.registerExtension({
     );
   },
 
+  // Each panel is offered to Show on subgraph node (offerPanel builds it
+  // and remembers how, for the copy on the subgraph node).
   getCustomWidgets() {
     return {
       WP_CONTEXT_MODULES: (node: ContextCreateNode, inputName: string) =>
-        ctxMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => ctxMod.create(node, inputName)),
       WP_DEBUG_VIEWER: (node: DebugCreateNode, inputName: string) =>
-        dbgMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => dbgMod.create(node, inputName)),
       WP_INJECTOR_ROWS: (node: InjectorCreateNode, inputName: string) =>
-        injMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => injMod.create(node, inputName)),
       WP_CLEANER: (node: CleanerCreateNode, inputName: string) =>
-        cleanerMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => cleanerMod.create(node, inputName)),
       WP_VAR_PICKER: (node: VarPickerCreateNode, inputName: string) =>
-        varPickerMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => varPickerMod.create(node, inputName)),
       // Loop's DOM widget uses `WP_CONTEXT_LOOP_WIDGET` — a widget-only
       // TYPE (see `wp_nodes/types.py::ContextLoopWidgetInput`) distinct
       // from the wire-payload TYPE `WP_CONTEXT_LOOP_CONFIG` carried on
@@ -368,17 +405,17 @@ app.registerExtension({
       // (gated factories returning `{widget: undefined}` ended up
       // hiding the socket entirely, see the type's docstring).
       WP_CONTEXT_LOOP_WIDGET: (node: CtxLoopCreateNode, inputName: string) =>
-        ctxLoopMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => ctxLoopMod.create(node, inputName)),
       WP_SEED_LIST_CONFIG: (node: SeedListCreateNode, inputName: string) =>
-        seedListMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => seedListMod.create(node, inputName)),
       WP_MODEL_INFO: (node: ModelInfoCreateNode, inputName: string) =>
-        modelInfoMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => modelInfoMod.create(node, inputName)),
       WP_TOGGLES: (node: TogglesCreateNode, inputName: string) =>
-        togglesMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => togglesMod.create(node, inputName)),
       WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>
-        imageFilterWidgetMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => imageFilterWidgetMod.create(node, inputName)),
       WP_LABEL_GRID: (node: LabelGridCreateNode, inputName: string) =>
-        labelGridMod.create(node, inputName),
+        showMod.offerPanel(node, inputName, () => labelGridMod.create(node, inputName)),
       // The assembler's `template`. Unlike every other entry here, this key
       // is NOT the input's socket type — the socket stays STRING so links
       // still work, and the node ships `widgetType` in the input spec's
@@ -442,6 +479,10 @@ app.registerExtension({
     if (root?._nodes?.some(isSubgraphNode)) {
       withBadges((badgeMod) => badgeMod.attachAllSubgraphBadges(root));
     }
+    // Our widgets wired out to a subgraph's inputs show on its node.
+    promoteMod.refreshAllPromotedHosts(root);
+    // Panels a subgraph node was set to show (Show on subgraph node).
+    showMod.restoreAllShown(root ? (graphMod.findRootGraph(root) as Parameters<typeof showMod.restoreAllShown>[0]) : null);
   },
 
   // Fires for every node when it's instantiated — including SubgraphNodes,
@@ -451,6 +492,9 @@ app.registerExtension({
   // without opening it.
   nodeCreated(node: unknown) {
     if (!isSubgraphNode(node)) return;
+    promoteMod.installPromotedHosts(node);
+    showMod.restoreShownSoon(node);
+    prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
   },
@@ -459,6 +503,9 @@ app.registerExtension({
   // workflow. ComfyUI splits the lifecycle so we cover both paths.
   loadedGraphNode(node: unknown) {
     if (!isSubgraphNode(node)) return;
+    promoteMod.installPromotedHosts(node);
+    showMod.restoreShownSoon(node);
+    prepareBadge(node);
     const root = (app as unknown as { graph?: LiteGraphLike }).graph;
     if (root) withBadges((badgeMod) => badgeMod.attachSubgraphBadge(node as Parameters<BadgeModule["attachSubgraphBadge"]>[0], root));
   },
@@ -477,6 +524,8 @@ interface AppWithQueue {
 }
 interface AppCanvas {
   canvas?: HTMLCanvasElement;
+  graph?: LiteGraphLike | null;
+  setGraph?: (graph: LiteGraphLike) => void;
   ds?: { scale?: number; offset?: [number, number] };
   centerOnNode?: (n: unknown) => void;
   selectNode?: (n: unknown, addToCurrentSelection?: boolean) => void;
@@ -523,18 +572,27 @@ function ensureFlashStyle() {
 /** Focus + select a node, uncollapsing it first if needed and pulsing
  *  a brief border around it so the user's eye lands on it instantly.
  *  No-op when the canvas surface doesn't expose the calls (e.g.
- *  headless tests). Subgraph-resident nodes can still be focused once
- *  the user navigates into the subgraph; we don't auto-navigate to
- *  keep the flow predictable.
+ *  headless tests). A node in another graph than the one on screen
+ *  (inside a subgraph, or out at the root while the user is inside one)
+ *  opens that graph first, the same way the breadcrumb does, so Focus
+ *  reaches the node wherever it lives.
  *
  *  Flash strategy: a position:fixed DOM overlay anchored to the node's
  *  screen-space bounds via the canvas's drag-state transform. LiteGraph
  *  nodes are drawn on a `<canvas>`, so there's no per-node DOM to
  *  style — an overlay div is the cleanest way to add a CSS border
  *  without monkey-patching the canvas render loop. */
-function focusNode(node: FocusableNode) {
+function focusNode(node: FocusableNode, graph: LiteGraphLike) {
   const canvas = appQ.canvas;
   if (!canvas) return;
+  try {
+    graphMod.showGraph(canvas, graph, () => showNode(node, canvas));
+  } catch (err) {
+    console.warn("[wildcard-pipeline] focusNode failed:", err);
+  }
+}
+
+function showNode(node: FocusableNode, canvas: AppCanvas) {
   try {
     // Uncollapse before centering — a collapsed node has tiny bounds,
     // so centerOnNode would scroll to a hard-to-spot strip. Only call
@@ -601,9 +659,10 @@ function mountFlashOverlay(node: FocusableNode, canvas: AppCanvas) {
   const start = performance.now();
   let raf = 0;
   function tick() {
-    // The Vue renderer may recreate the element mid-flash; re-resolve when
-    // the one we hold falls out of the document.
-    if (nodeEl && !nodeEl.isConnected) {
+    // The Vue renderer may recreate the element mid-flash, or (right after
+    // Focus opened another graph) not have drawn it yet; re-resolve until
+    // we hold one in the document.
+    if (!nodeEl?.isConnected) {
       nodeEl = document.querySelector<HTMLElement>(nodeSelector);
     }
     const box = nodeEl?.getBoundingClientRect();
@@ -654,7 +713,9 @@ const origQueuePrompt = appQ.queuePrompt;
 if (typeof origQueuePrompt === "function") {
   appQ.queuePrompt = function (...args: unknown[]) {
     try {
-      const graph = appQ.graph as unknown as LiteGraphLike;
+      // app.graph is the graph ON SCREEN, which is a subgraph while the user
+      // is inside one; climb to the root so the scan sees every assembler.
+      const graph = graphMod.findRootGraph(appQ.graph as unknown as LiteGraphLike);
       // Note: per-Context seed snapshot now happens via each
       // seed widget's `beforeQueued` hook (registered in
       // widgets/context.ts). That fires after queue submit but
@@ -663,7 +724,7 @@ if (typeof origQueuePrompt === "function") {
       // walkAllNodes recurses into nested subgraphs so assemblers inside a
       // subgraph still get their templates scanned. collectUpstreamVariables
       // crosses boundaries the other direction.
-      for (const { node } of graphMod.walkAllNodes(graph)) {
+      for (const { node, graph: home } of graphMod.walkAllNodes(graph)) {
         if (node.type !== "WP_PromptAssembler") continue;
         // Skip bypassed (mode=4) + muted (mode=2) nodes — LiteGraph
         // omits them from execution, so flagging unresolved vars on a
@@ -683,7 +744,9 @@ if (typeof origQueuePrompt === "function") {
         const missing = assemblerVarsMod.missingAssemblerVars(
           tmpl,
           negTmpl,
-          graphMod.collectUpstreamVariables(graph, node),
+          // A name a Loop sets on some frames only is intended, not missing:
+          // the Assembler shows it as "on some frames", so stay quiet here.
+          graphMod.collectUpstreamVariablesAnyFrame(graph, node),
         );
         if (missing.length === 0) continue;
         const list = missing.map((v) => `$${v}`).join(", ");
@@ -696,7 +759,7 @@ if (typeof origQueuePrompt === "function") {
           {
             severity: "warning",
             lifeMs: 8000,
-            action: { label: "Focus", onSelect: () => focusNode(targetNode as unknown as FocusableNode) },
+            action: { label: "Focus", onSelect: () => focusNode(targetNode as unknown as FocusableNode, home) },
           },
         );
       }

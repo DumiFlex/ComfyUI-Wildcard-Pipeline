@@ -25,6 +25,7 @@ from typing import Any, cast
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
+from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
@@ -103,6 +104,8 @@ class FixedValuesHandler(ModuleHandler):
         # set + non-empty, else payload.values. Existing two-tier model
         # preserved.
         overrides = instance.get("values_overrides")
+        detail = module_detail(ctx)
+        from_override = isinstance(overrides, list) and bool(overrides)
         if isinstance(overrides, list) and overrides:
             values: list[dict[str, Any]] = [v for v in overrides if isinstance(v, dict)]
         else:
@@ -139,10 +142,22 @@ class FixedValuesHandler(ModuleHandler):
             values = list(payload.get("values", []))
 
         enabled = instance.get("enabled_options")
+        toggled_off: list[str] = []
         if enabled is not None:
             allowed = set(enabled)
             keys = _row_keys(values)
+            toggled_off = [
+                (v.get("name") or "").strip()
+                for v, k in zip(values, keys, strict=True) if k not in allowed
+            ]
             values = [v for v, k in zip(values, keys, strict=True) if k in allowed]
+        if detail is not None:
+            # WP Debug: where the rows came from and which the node turned off.
+            detail["source"] = "override" if from_override else "library"
+            if toggled_off:
+                detail["toggled_off"] = [n for n in toggled_off if n]
+            if instance.get("locked_seed") is not None:
+                detail["locked_seed"] = True
 
         # Syntax-aware emission path. When ctx is missing required keys
         # for build_resolve_ctx (legacy callers passing None / minimal
@@ -166,6 +181,8 @@ class FixedValuesHandler(ModuleHandler):
             if isinstance(_hb, dict):
                 _names = [n for n in ((v.get("name") or "").strip() for v in values) if n]
                 if _names and all(n in _hb for n in _names):
+                    if detail is not None:
+                        detail["held"] = True
                     negatives.copy_from(ctx, _hb, _names)
                     return {n: _hb[n] for n in _names}
             chain_seed = int(
@@ -197,6 +214,7 @@ class FixedValuesHandler(ModuleHandler):
         n_rng = negatives.neg_rng(effective_seed, module_key)
 
         out_resolved: dict[str, str] = {}
+        rows_detail: list[dict[str, Any]] = []
         for v in values:
             name = (v.get("name") or "").strip()
             if not name:
@@ -206,6 +224,12 @@ class FixedValuesHandler(ModuleHandler):
                 ctx_local, surface="fixed_values",
                 stream=stream_key(effective_seed, f"{module_key}/{name}"),
             ))
+            if detail is not None:
+                # The text as written, when resolving changed it ($vars, {a|b}).
+                row: dict[str, Any] = {"name": name}
+                if raw != out_resolved[name]:
+                    row["raw"] = raw[:240]
+                rows_detail.append(row)
             if "negative" in v:
                 own = negatives.clean_negative(v.get("negative"))
             else:
@@ -214,6 +238,8 @@ class FixedValuesHandler(ModuleHandler):
             negatives.set_entries(ctx, name, negatives.own_entries(
                 [own] if own else [], resolve_ctx, n_rng, pick=None, source=name,
             ))
+        if detail is not None:
+            detail["rows"] = rows_detail
         return out_resolved
 
 

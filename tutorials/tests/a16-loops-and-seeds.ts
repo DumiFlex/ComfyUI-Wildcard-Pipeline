@@ -1,6 +1,6 @@
-// Advanced 16: loops and seeds. A Context Loop runs four frames of Hero, Time of day and Outfit;
+// Advanced 16: loops and seeds. A Context Loop runs four frames of Role, Hair and Time of day;
 // $iteration (shown, not internal) numbers each prompt. The seeds window lists each frame's seed and
-// locks one. Sweep combinations runs every Time of day × Outfit pair while the hero holds. A WP Seed
+// locks one. Sweep combinations runs every Time of day × Hair pair while the role holds. A WP Seed
 // List on loop_config gives the sampler one seed per frame. Run with Easy-Use's Show Any, which lists every frame (Preview as Text shows only one).
 import { tutorial } from "../tutorial.js";
 
@@ -13,16 +13,34 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
+    // A highlight on a Show Any waits until the run's text is in it, not just until the run ends.
+    // The node's text, its fields' values included: innerText skips what a textarea holds, so a
+    // wait on it alone ran to its 15 s limit (the dead pauses after each run).
+    const textOf = (node: string) =>
+      t.node(node)
+        .evaluate((el) => `${(el as HTMLElement).innerText} ${[...el.querySelectorAll("textarea, input")].map((f) => (f as HTMLInputElement).value).join(" ")}`)
+        .catch(() => "");
+    const filled = async (node: string, re: RegExp) => {
+      for (let i = 0; i < 60; i++) {
+        if (re.test(await textOf(node))) break;
+        await t.beat(250);
+      }
+      if (!re.test(await textOf(node))) t.h.log(`${node} never showed ${re}`);
+      await t.beat(400);
+    };
 
     const nodes = await t.h.step("Four frames", async () => {
       await t.go("/");
       await t.say("A Context Loop runs everything after it several times from one Run. Put it before your first Context.");
+      // The setup earlier videos taught: sped up.
+      await t.speedUp();
       const loop = await t.addNode("WP Context Loop", { x: 270, y: 170 });
       const ctx = await t.addNode("WP Context", { x: 790, y: 170 });
       await t.wire(loop, "context", ctx, "upstream");
-      await t.pickModules(ctx, ["Hero", "Time of day", "Outfit"]);
+      await t.pickModules(ctx, ["Role", "Hair", "Time of day"]);
       const asm = await t.addNode("WP Prompt Assembler", { x: 1340, y: 170 });
       await t.wire(ctx, "context", asm, "context");
+      await t.normalSpeed();
       await t.say("To read the prompts, add Show Any from the Easy-Use pack: it lists every prompt the loop makes.");
       const text = await t.addNode("Show Any", { x: 1340, y: 620 });
       await t.wire(asm, "prompt", text, "anything");
@@ -35,7 +53,7 @@ tutorial(
       await t.waitVoice();
       await t.uncallout("it");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("frame $iteration: $hero wearing $outfit at $time", { cps: 16 });
+      await t.type("frame $iteration: a painting of $role with $hair, $time", { cps: 16 });
       await t.beat(600);
       await t.say("Set the count to four, and Run.");
       const more = t.node(loop).locator('[data-widget-name="count"] button').last();
@@ -43,7 +61,11 @@ tutorial(
         await t.click(more);
         await t.beat(350);
       }
-      await t.run();
+      // The wait for the run plays sped up, so it never sits silent on screen.
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(text, /frame 4/);
+      }, 8);
       await t.callout("out", t.node(text), "Four numbered prompts", 6);
       await t.say("Four prompts from one click, each with its own picks.");
       await t.waitVoice();
@@ -52,12 +74,18 @@ tutorial(
     });
 
     await t.h.step("A seed per frame", async () => {
+      const seedsBtn = t.node(nodes.loop).locator('[data-test="loop-seeds-btn"]');
+      await t.callout("btn", seedsBtn, "Seeds", 4);
       await t.say("Each frame rolls on its own seed. The seeds button lists them.");
-      await t.click(t.node(nodes.loop).locator('[data-test="loop-seeds-btn"]'));
+      await t.waitVoice();
+      await t.uncallout("btn");
+      await t.click(seedsBtn);
       await t.beat(900);
       const modal = page.locator('[data-test="seed-modal"]').last();
       await t.callout("seeds", modal, "One seed per frame", 5);
+      await t.say("Here they are, one seed for each frame.");
       await t.waitVoice();
+      await t.beat(300);
       await t.uncallout("seeds");
       await t.say("Lock a frame you like, and it keeps its seed while the others change. That's how you keep a good one and reroll the rest.");
       const lock = modal.locator('[data-test="seedrow-lock"]').nth(1);
@@ -65,7 +93,8 @@ tutorial(
       await t.beat(700);
       await t.waitVoice();
       await t.say("Same base seed, same strategy, same batch: a loop is repeatable.");
-      await t.click(modal.locator('[data-test="seed-modal-done"]'));
+      // The Done button sits in the kit Modal's footer, outside the seed-modal body.
+      await t.click(page.locator('[data-test="seed-modal-done"]').last());
       await t.beat(700);
       await t.waitVoice();
     });
@@ -78,28 +107,37 @@ tutorial(
       await t.click(modal.locator('[data-test="sweep-toggle"]'));
       await t.beat(600);
       await t.waitVoice();
-      await t.say("Add Time of day, then Outfit.");
-      for (const name of [/time/i, /outfit/i]) {
+      await t.say("Add Time of day, then Hair.");
+      for (const name of [/^\$?time\b/i, /^\$?hair\b/i]) {
         // The add list is a native drop-down: choose the option whose label matches.
         const add = modal.locator('[data-test="sweep-add"]');
         const select = (await add.evaluate((el) => el.tagName)) === "SELECT" ? add : add.locator("select").first();
         const value = await select.locator("option").evaluateAll(
-          (opts, src) => (opts as HTMLOptionElement[]).find((o) => new RegExp(src, "i").test(o.text))?.value ?? "",
+          (opts, src) => (opts as HTMLOptionElement[]).find((o) => !o.disabled && new RegExp(src, "i").test(o.text.trim()))?.value ?? "",
           name.source,
         );
+        if (!value) throw new Error(`No sweep option matches ${name}`);
         await t.choose(select, value);
         await t.beat(800);
       }
+      // Off the last control, so its tooltip doesn't cover the combinations.
+      await t.moveTo(await t.centre(modal.locator('[data-test="sweep-total"]')));
+      await t.beat(300);
       await t.callout("total", modal.locator('[data-test="sweep-total"]'), "3 times 4: twelve frames", 5);
-      await t.say("Three times of day by four outfits: twelve frames. The hero isn't swept, so Hold other picks keeps one hero on all of them.");
+      await t.say("Three times of day by four hair styles: twelve frames. The role isn't swept, so Hold other picks keeps one role on all of them.");
       await t.waitVoice();
       await t.uncallout("total");
-      await t.click(modal.locator('[data-test="sweep-modal-done"]'));
+      await t.click(page.locator('[data-test="sweep-modal-done"]').last());
       await t.beat(700);
       await t.say("Run.");
-      await t.run();
-      await t.callout("out", t.node(nodes.text), "Every pair, one hero", 6);
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(nodes.text, /frame 12/);
+      }, 8);
+      await t.callout("out", t.node(nodes.text), "Every pair, one role", 6);
+      await t.say("Twelve prompts: every time of day with every hair style, and the same role on all of them.");
       await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("out");
     });
 
@@ -109,9 +147,19 @@ tutorial(
       await t.wire(nodes.loop, "loop_config", sl, "loop_config");
       const p2 = await t.addNode("Show Any", { x: 790, y: 720 });
       await t.wire(sl, "seed", p2, "anything");
-      await t.run();
-      await t.callout("sl", t.node(p2), "One sampler seed per frame", 5);
       await t.waitVoice();
+      await t.fastForward(async () => {
+        await t.run();
+        await filled(p2, /\d{4,}[\s\S]*\d{4,}/);
+      }, 8);
+      // Both land low, under the caption: bring them up once, let the view settle, then box the
+      // seeds for their own line. The view stays there (panning back right after flashed the box).
+      await t.zoomOn(sl, { scale: 0.9, top: 160 });
+      await t.beat(600);
+      await t.callout("sl", t.node(p2), "One sampler seed per frame", 5);
+      await t.say("Each frame gets its own sampler seed.");
+      await t.waitVoice();
+      await t.beat(400);
       await t.uncallout("sl");
       await t.say("Without it, a plain KSampler uses one seed for every frame, which is what you want for a clean sweep comparison.");
       await t.waitVoice();

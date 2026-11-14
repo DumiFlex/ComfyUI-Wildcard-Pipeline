@@ -66,6 +66,21 @@ pnpm build
 The [Quick Start wiki page](https://github.com/DumiFlex/ComfyUI-Wildcard-Pipeline/wiki/Quick-Start)
 walks through a fuller example.
 
+### Video tutorials
+
+Every feature is shown in a narrated video on YouTube, one playlist per
+section. Start with **Get started**; the built-in docs show each page's own
+videos under its title, and **Docs › Video tutorials** lists them all.
+
+| Playlist | Videos |
+| --- | --- |
+| [Get started](https://www.youtube.com/playlist?list=PLL3gpkYlX_Lk) | 13 |
+| [Advanced](https://www.youtube.com/playlist?list=PLDrl0ZXngWsY) | 20 |
+| [Library](https://www.youtube.com/playlist?list=PLGQhUveOpjMs) | 6 |
+| [Nodes](https://www.youtube.com/playlist?list=PLD9orcFSB7nI) | 19 |
+| [Examples](https://www.youtube.com/playlist?list=PLPLr4xEq-3TA) | 4 |
+| [AI assistant](https://www.youtube.com/playlist?list=PLTkbhMOBM8zs) | 4 |
+
 ### Example workflows
 
 Prefer to start from something that already runs? Open **Workflow › Browse
@@ -116,14 +131,14 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 | Node | What it does |
 |---|---|
 | **WP Context** | Holds your module stack and outputs the picked variables. Chain several together. |
-| **WP Prompt Assembler** | Fills `$variables` in a template and collects their negative words into a second output. |
+| **WP Prompt Assembler** | Fills `$variables` in a template and collects their negative words into a second output. One button hides the variables no Assembler prints. |
 | **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed, or sweep every combination of chosen wildcard options. |
 | **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
 | **WP Model Info** | Reads the loaded checkpoint into `$model_family` / `$model_variant` (Pony, Illustrious, …) so rules can pick LoRAs and tags per model. |
 | **WP Toggles** | Several on/off switches in one node: each writes a true/false `$variable` for rules, can have a BOOLEAN output, and can mute or bypass the nodes wired into it. Merges existing Boolean nodes. |
 | **WP Node Group** | Gathers nodes so one WP Toggles switch mutes or bypasses them all. With nothing wired in, it stands for the canvas group it sits in (frontend only, never runs). |
 | **WP Mode Relay** | Watches nodes' mute / bypass and passes a mode on to a WP Node Group, for chains (frontend only, never runs). |
-| **WP Bookmark** | Marks a spot on the canvas to jump back to with a shortcut or from the Bookmarks dock: pick the corner, edge or centre it lands at and the zoom; the shortcut field shows clashes with ComfyUI and other extensions. Can hide itself from the canvas (frontend only, never runs). |
+| **WP Bookmark** | Marks a spot on the canvas to jump back to with a shortcut or from the Bookmarks dock: pick the corner, edge or centre it lands at and the zoom; the shortcut field shows clashes with ComfyUI and other extensions. The dock shows them as rows or as icon tiles. Can hide itself from the canvas (frontend only, never runs). |
 | **WP Image Filter** | Pauses the run so you pick which images go on to the upscaler. Their latent, conditioning, prompt text and Context are filtered with them, and you can edit a prompt or paint a mask before they go on. |
 | **WP Label & Grid** | Writes labels on images and lays them out in one labelled grid, or an XY plot sorted by each image's sweep options. Works on one image, a batch, a list or a loop's frames; grid presets follow the shape of the run. |
 | **WP Prompt Cleaner** | Tidies the final prompt: spacing, stray commas, empty `()`, nested weights, LoRA tags, duplicates, a blocklist. |

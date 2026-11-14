@@ -16,11 +16,15 @@ def test_corpus(case):
     parsed = toggles.parse_config(json.dumps(case["config"]))
     cfg, _ = toggles.with_upstream(parsed, case.get("upstream"))
     assert toggles.resolve(cfg) == case["values"]
+    assert toggles.bools(cfg) == case["bools"]
+    assert toggles.own_negatives(cfg) == case.get("negatives", {})
     n = len(case["outputs"])
     vals = toggles.output_values(cfg)
     assert len(vals) == toggles.MAX_OUTPUTS
     assert vals[:n] == case["outputs"]
     assert not any(vals[n:])
+    if "internal" in case:
+        assert sorted(toggles.internal_vars(cfg)) == case["internal"]
 
 
 @pytest.mark.parametrize(

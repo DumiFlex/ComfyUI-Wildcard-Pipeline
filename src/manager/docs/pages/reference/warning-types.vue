@@ -26,6 +26,7 @@ const runtimeWarnings: WarningRow[] = [
   { label: "Constraint source missing", severity: "warn", desc: "The constraint's source wildcard hadn't run yet when the constraint was reached." },
   { label: "Constraint excluded every option", severity: "warn", desc: "The constraint ruled out every option of the target and there was no fallback, so it printed nothing." },
   { label: "Fallback used", severity: "info", desc: "Nothing was left to pick, so the wildcard's fallback option stood in." },
+  { label: "Filter variable left out", severity: "info", desc: "A $variable in a pool or reference filter was unset, or its value is no tag on that wildcard, so that part of the filter narrowed nothing." },
   { label: "No option matches the variable", severity: "info", desc: "A wildcard set to Match variable found no option equal to the variable's value and has no fallback, so it rolled as usual." },
   { label: "Pinned option missing", severity: "warn", desc: "A sweep frame (or other pin) points at an option the wildcard no longer has, so that frame rolled instead." },
   { label: "Constraint factor ignored (allow)", severity: "info", desc: "A rule set to Allow also has a number; Allow ignores it." },
@@ -34,7 +35,11 @@ const runtimeWarnings: WarningRow[] = [
   { label: "Constraint failed to register", severity: "warn", desc: "A constraint couldn't be set up, usually because its data is damaged. It was skipped." },
   { label: "Module failed", severity: "warn", desc: "A module hit an error and was skipped. The message says which." },
   { label: "Invalid injector name", severity: "warn", desc: "A WP Context Injector row used a variable name that isn't valid." },
-  { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row name starts with two underscores, which are kept for the engine." },
+  { label: "Reserved injector name", severity: "warn", desc: "A WP Context Injector row name starts with _, which is kept for the engine." },
+  { label: "Model Info found nothing", severity: "warn", desc: "WP Model Info has no model wired and nothing pinned, so $model_family, $model_variant and $model_name are empty." },
+  { label: "Model Info rule skipped", severity: "warn", desc: "One of WP Model Info's variant rules couldn't be read (often a broken pattern), so it was skipped." },
+  { label: "Toggles setup problem", severity: "warn", desc: "Something in a WP Toggles node's setup doesn't add up, such as two rows writing the same variable. The message says what." },
+  { label: "Upstream turned on several", severity: "warn", desc: "In Pick one with Upstream can pick, upstream variables turned on more than one row, so the first of them was picked." },
 ];
 
 const scannerRules: WarningRow[] = [

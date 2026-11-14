@@ -70,7 +70,7 @@ export const derivationV1 = moduleRowBase.extend({
     rules: z.array(z.object({
       id: z.string(),
       branches: z.array(z.unknown()),
-      else: z.unknown(),
+      else: z.unknown().optional(),
     })),
   }),
 }).strict();
@@ -83,7 +83,7 @@ export const constraintV1 = moduleRowBase.extend({
     source_wildcard_id: z.string().optional(),
     target_wildcard_id: z.string().optional(),
     exceptions: z.array(z.unknown()).optional(),
-    matrix: z.record(z.unknown()).optional(),
+    matrix: z.record(z.string(), z.unknown()).optional(),
     // SP3 reach selector. Additive + optional (absent ⇒ the engine defaults it
     // to {mode: "all"}), listed here so a shared constraint's reach survives
     // the round-trip instead of being stripped back to "all". Shape mirrors

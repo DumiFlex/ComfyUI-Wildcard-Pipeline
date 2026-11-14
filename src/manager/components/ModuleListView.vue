@@ -20,6 +20,7 @@ import SearchInput from "@/kit/SearchInput.vue";
 import { inputEl } from "../utils/kit-field-el";
 import Input from "@/kit/Input.vue";
 import Banner from "@/kit/Banner.vue";
+import { vBarRoom } from "@/kit/overlay-scrollbars";
 import { computed, defineAsyncComponent, nextTick, ref, watch, useSlots } from "vue";
 import { useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
@@ -1069,6 +1070,7 @@ defineExpose({
          descendant bubbles here — and is itself focusable so Tab / a click
          in the gutter lands keyboard nav. -->
     <div
+      v-bar-room
       class="wp-table-wrap wp-table-wrap--scroll"
       tabindex="0"
       @keydown="onTableKeydown"

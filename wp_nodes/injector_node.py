@@ -12,6 +12,7 @@ from typing import Any
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import negatives
+from engine.syntax.types import bool_text
 from wp_nodes.types import InjectorRowsInput, PipelineContext
 
 _BINDING_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
@@ -26,8 +27,8 @@ def _render_template(template: str, slot_values: dict[str, Any]) -> str:
 
     - `$$` -> literal `$`
     - `$slot_name` where slot is wired -> stringified value at that slot
-       (Python `str()` semantics — booleans yield "True"/"False" to match
-       the pass-through path's downstream stringification.)
+       (booleans yield "true"/"false", as everywhere a variable is read,
+       so a Boolean node can drive a derivation's `equals true`.)
     - `$slot_name` where slot is NOT wired -> left as literal `$slot_name`
        so the user can spot the typo in the rendered output
     """
@@ -37,11 +38,16 @@ def _render_template(template: str, slot_values: dict[str, Any]) -> str:
             return "$"
         name = m.group(1)
         if name in slot_values:
-            return str(slot_values[name])
+            value = slot_values[name]
+            return bool_text(value) if isinstance(value, bool) else str(value)
         return m.group(0)
 
     return _TEMPLATE_TOKEN_RE.sub(repl, template)
 
+
+
+#: `$name` (not `$$`) in a template, for WP Debug's list of what it read.
+_TEMPLATE_VAR_RE = re.compile(r"(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)")
 
 class WPContextInjector(io.ComfyNode):
     """Graph-side ctx writer. No library, no payload, no resolve-time logic.
@@ -144,21 +150,28 @@ class WPContextInjector(io.ComfyNode):
 
         def _file_row_negative(
             binding_name: str, row: dict, slots: dict[str, Any],
+            reads: list[str] | None = None,
         ) -> None:
+            # A template row that reads `$var`s carries their negatives, as a
+            # combine does (negatives follow usage), then its own Negative.
+            entries = negatives.entries_for_reads(
+                {negatives.NEG_KEY: neg_table}, [(n, None) for n in reads or []],
+            )
             raw = row.get("negative")
             text = (
                 _render_template(raw.strip(), slots).strip()
                 if isinstance(raw, str) and raw.strip() else ""
             )
             if text:
-                neg_table[binding_name] = [
-                    {"text": text, "pick": None, "source": "injector"},
-                ]
+                entries.append({"text": text, "pick": None, "source": "injector"})
+            if entries:
+                neg_table[binding_name] = entries
             else:
                 neg_table.pop(binding_name, None)
 
         def _emit_trace(
-            binding_name: str, stored_val: Any, trace_kind: str, is_internal: bool
+            binding_name: str, stored_val: Any, trace_kind: str, is_internal: bool,
+            detail: dict[str, Any] | None = None,
         ) -> None:
             # `value` surfaces the written ctx value in Debug's trace
             # tab. Engine module traces use `writes: [{...}]` for the
@@ -178,7 +191,19 @@ class WPContextInjector(io.ComfyNode):
                 "internal": is_internal,
                 "type": trace_kind,
                 "value": value,
+                **({"detail": detail} if detail else {}),
             })
+
+        def _template_detail(tmpl: str, scope: dict[str, Any]) -> dict[str, Any]:
+            """WP Debug: the template and what each `$name` in it filled with
+            (``None`` when nothing in scope set it)."""
+            reads: dict[str, str | None] = {}
+            for name in _TEMPLATE_VAR_RE.findall(tmpl):
+                if name in reads:
+                    continue
+                val = scope.get(name)
+                reads[name] = None if val is None else str(val)[:160]
+            return {"template": tmpl[:400], **({"reads": reads} if reads else {})}
 
         def _validated_binding(row: dict) -> str | None:
             """Shared binding validation for both row kinds. Returns the
@@ -191,6 +216,11 @@ class WPContextInjector(io.ComfyNode):
             if stripped.startswith("_"):
                 warnings.append({
                     "type": "injector_reserved_binding",
+                    "severity": "warning",
+                    "message": (
+                        f"WP Context Injector skipped ${stripped}: names that "
+                        "start with _ are kept for the engine."
+                    ),
                     "binding": stripped,
                     "row_uid": row.get("_uid"),
                 })
@@ -198,6 +228,11 @@ class WPContextInjector(io.ComfyNode):
             if not _BINDING_RE.match(stripped):
                 warnings.append({
                     "type": "injector_invalid_binding",
+                    "severity": "warning",
+                    "message": (
+                        f"WP Context Injector skipped \"{stripped}\": a variable "
+                        "name starts with a letter and uses only letters, digits and _."
+                    ),
                     "binding": stripped,
                     "row_uid": row.get("_uid"),
                 })
@@ -238,6 +273,7 @@ class WPContextInjector(io.ComfyNode):
                 if isinstance(template_raw, str) and template_raw.strip()
                 else ""
             )
+            own_slot: dict[str, Any] = {}
             # Pass-through path: row has no template, just needs the
             # wired socket value. Requires the slot to be wired or the
             # row is skipped (matches legacy behavior).
@@ -259,7 +295,7 @@ class WPContextInjector(io.ComfyNode):
                 # as any unknown ref) — top-to-bottom resolution means an
                 # early socket row must not read a later socket. To
                 # compose multiple sockets, use a GENERAL row instead.
-                own_slot: dict[str, Any] = (
+                own_slot = (
                     {slot_name: slot_values.get(slot_name, "")}
                     if isinstance(slot_name, str)
                     else {}
@@ -275,7 +311,13 @@ class WPContextInjector(io.ComfyNode):
             is_internal = bool(row.get("internal", False))
             if is_internal:
                 internal_keys.add(stripped)
-            _emit_trace(stripped, stored, trace_type, is_internal)
+            _emit_trace(
+                stripped, stored, trace_type, is_internal,
+                {
+                    **({"input": slot_name} if isinstance(slot_name, str) and slot_name else {}),
+                    **(_template_detail(template_str, own_slot) if template_str else {}),
+                },
+            )
 
         # ── Pass 2: general rows (in order, after all socket rows) ────
         # A general row resolves its template against `merged`: every
@@ -306,11 +348,21 @@ class WPContextInjector(io.ComfyNode):
             merged.update(slot_values)
             stored = _render_template(template_str, merged)
             ctx[stripped] = stored
-            _file_row_negative(stripped, row, merged)
+            # Variables the template read (not raw sockets: those carry no
+            # negatives of their own).
+            var_reads = [
+                m.group(1) for m in _TEMPLATE_TOKEN_RE.finditer(template_str)
+                if m.group(1) and m.group(1) not in slot_values
+                and m.group(1) in merged
+            ]
+            _file_row_negative(stripped, row, merged, var_reads)
             is_internal = bool(row.get("internal", False))
             if is_internal:
                 internal_keys.add(stripped)
-            _emit_trace(stripped, stored, "str(template)", is_internal)
+            _emit_trace(
+                stripped, stored, "str(template)", is_internal,
+                _template_detail(template_str, merged),
+            )
 
         if internal_keys:
             ctx["__wp_internal_keys__"] = sorted(internal_keys)
@@ -335,7 +387,7 @@ class WPContextInjector(io.ComfyNode):
         hidden = getattr(cls, "hidden", None)
         node_id = getattr(hidden, "unique_id", None) if hidden is not None else None
         if node_id is not None:
-            for row in traces:
+            for row in traces + warnings:
                 row["node_id"] = str(node_id)
         if traces:
             existing_trace = debug.get("__wp_trace__", [])

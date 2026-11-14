@@ -13,6 +13,7 @@
  * Save flow appends a snapshot to `payload.history` (utils/history.ts) so
  * the EditorFrame's history button works on the next mount.
  */
+import Banner from "@/kit/Banner.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import type { BreadcrumbItem } from "../components/Breadcrumb.types";
@@ -1713,7 +1714,7 @@ defineExpose({
           @delete-selected="deleteSelected"
           @clear="clearSelection"
         />
-        <p v-if="bulkNote" class="wpc-bulk-note" role="status">{{ bulkNote }}</p>
+        <Banner v-if="bulkNote" tone="warn" size="sm">{{ bulkNote }}</Banner>
       </div>
       </template>
       <!-- Not in the sticky subheader: a tall panel there covered the
@@ -1839,6 +1840,7 @@ defineExpose({
             </td>
             <td>
               <WpNumber commit="input"
+                class="opt-weight"
                 :model-value="o.weight"
                 size="sm"
                 :min="0.01"
@@ -2034,6 +2036,9 @@ defineExpose({
   font-size: var(--wp-text-sm);
 }
 .opt-col-weight { width: 90px; }
+/* The field's own input asks for ~20 characters, so without a width the
+ * auto-layout table stretched the box to ~210px for a 1-4 digit weight. */
+.opt-weight { width: 76px; }
 .opt-col-sub { width: 200px; }
 .opt-col-check { width: 34px; text-align: center; }
 .wc-opt-row--selected > td { background: color-mix(in oklab, var(--wp-accent) 8%, transparent); }
@@ -2044,11 +2049,6 @@ defineExpose({
   padding: 12px 16px 14px;
 }
 .wpc-ai-controls { border-bottom: 1px solid var(--wp-border); }
-.wpc-bulk-note {
-  margin: 0;
-  font-size: 12px;
-  color: var(--wp-warn);
-}
 .opt-col-prob { width: 130px; }
 .opt-col-trash { width: 40px; }
 .opt-empty {

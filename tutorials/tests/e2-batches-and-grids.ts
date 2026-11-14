@@ -1,7 +1,7 @@
 // Example 2: a tour of the "Batches and grids" example workflow: a Context Loop sweeping Shot × Light
 // into nine frames, a label per frame, Quick / Full toggles, and Label & Grid's XY sheet. Run when the
 // pack makes real images (showcase).
-import { openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
+import { jumpTo, openExample, showcasing, tutorial, useCheckpoint } from "../tutorial.js";
 
 tutorial(
   "E2",
@@ -12,9 +12,9 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
+    // Each step's jump zooms in to a readable size and boxes the step's note.
     const stop = async (row: number) => {
-      await t.click(page.locator(`[data-test="bm-dock-row-${row}"]`));
-      await t.beat(1200);
+      await jumpTo(t, row);
     };
 
     await t.h.step("Open it", async () => {
@@ -30,7 +30,12 @@ tutorial(
 
     await t.h.step("The steps", async () => {
       await stop(1);
+      const sweep = page.locator('[data-test="loop-sweep-badge"]').first();
+      const showSweep = await sweep.isVisible().catch(() => false);
+      if (showSweep) await t.callout("sweep", sweep, "Shot × Light: nine frames", 6);
       await t.say("The Context Loop runs everything after it once per frame. Sweep combinations walks Shot against Light: nine frames. Hold other picks keeps the person, outfit and place the same, so only the swept lists change.");
+      await t.waitVoice();
+      if (showSweep) await t.uncallout("sweep");
       await t.waitVoice();
       await stop(2);
       await t.say("The Assembler writes each frame's prompt. A second one writes its label, shot and light, which become the grid's rows and columns.");

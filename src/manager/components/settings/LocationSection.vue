@@ -22,6 +22,7 @@
  *   5. Show success toast: "Restart ComfyUI to apply changes."
  */
 import { computed, ref, watch } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Icon from "@/kit/Icon.vue";
 import Modal from "@/kit/Modal.vue";
@@ -213,12 +214,11 @@ function fmtBytes(n: number | null): string {
     </div>
 
     <!-- Env-lock notice -->
-    <div v-if="envLocked" class="wp-loc__envlock" role="status" data-test="location-env-locked">
-      <Icon name="pi-lock" />
+    <Banner v-if="envLocked" tone="neutral" size="sm" icon="pi-lock" note class="wp-loc__envlock" data-test="location-env-locked">
       Location is controlled by an environment variable
       (<span class="wp-mono">WP_DB_PATH</span> or <span class="wp-mono">COMFYUI_USER_DIR</span>).
       Unset to manage from this UI.
-    </div>
+    </Banner>
 
     <!-- Radio group -->
     <RadioGroup
@@ -337,16 +337,7 @@ function fmtBytes(n: number | null): string {
   flex-wrap: wrap;
 }
 .wp-loc__pending .pi { color: var(--wp-warn); }
-.wp-loc__envlock {
-  display: flex; align-items: center; gap: var(--wp-space-3);
-  padding: var(--wp-space-3) var(--wp-space-4);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius-sm);
-  background: var(--wp-bg-2);
-  color: var(--wp-text-muted);
-  font-size: var(--wp-text-sm);
-  margin-bottom: var(--wp-space-4);
-}
+.wp-loc__envlock { margin-bottom: var(--wp-space-4); }
 .wp-loc__group { margin: 0 0 var(--wp-space-4); }
 .wp-loc__option-head {
   display: flex; align-items: center; gap: var(--wp-space-3);

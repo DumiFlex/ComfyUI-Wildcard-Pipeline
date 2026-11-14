@@ -1,3 +1,57 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4. Only the manager SPA is scanned for classes (`source(none)` +
+   `@source`); extension code never sees Tailwind. */
+@import "tailwindcss" source(none);
+@source "../**/*.{vue,ts}";
+@source "../../manager.html";
+
+/* `inline`: utilities read the --wp-* variables directly, so theme changes
+   at runtime reach them. */
+@theme inline {
+  --color-wp-bg: var(--wp-bg);
+  --color-wp-bg2: var(--wp-bg2);
+  --color-wp-bg3: var(--wp-bg3);
+  --color-wp-bg4: var(--wp-bg4);
+  --color-wp-border: var(--wp-border);
+  --color-wp-border2: var(--wp-border2);
+  --color-wp-text: var(--wp-text);
+  --color-wp-text2: var(--wp-text2);
+  --color-wp-text3: var(--wp-text3);
+  --color-wp-text4: var(--wp-text4);
+  --color-wp-accent: var(--wp-accent);
+  --color-wp-accent2: var(--wp-accent2);
+  --color-wp-violet: var(--wp-violet);
+  --color-wp-teal: var(--wp-teal);
+  --color-wp-green: var(--wp-green);
+  --color-wp-amber: var(--wp-amber);
+  --color-wp-red: var(--wp-red);
+  --color-wp-rose: var(--wp-rose);
+
+  --font-sans: var(--wp-font-sans);
+  --font-mono: var(--wp-font-mono);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/* v4 buttons use the default cursor; v3 used a pointer. Keep it. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}

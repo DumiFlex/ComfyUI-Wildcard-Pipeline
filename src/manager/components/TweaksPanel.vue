@@ -11,7 +11,6 @@ import {
   ACCENT_LABELS,
   ACCENT_OPTIONS,
   DENSITY_OPTIONS,
-  PALETTE_OPTIONS,
   SWATCH_PREVIEW,
   useTweaksStore,
   type AccentName,
@@ -24,7 +23,7 @@ const ui = useUiStore();
 /** "Theme's own" first, then the presets, then Custom. */
 const SWATCHES: AccentName[] = ["theme", ...ACCENT_OPTIONS, "custom"];
 /** The colour theme's own accent, for the "Theme's own" swatch. */
-const ownAccent = computed(() => PALETTE_OPTIONS.find((p) => p.id === tweaks.palette)?.swatch[ui.resolvedTheme][2]);
+const ownAccent = computed(() => tweaks.swatchFor(tweaks.palette, ui.resolvedTheme)?.[2]);
 
 const sidebarCollapsed = computed<boolean>({
   get: () => ui.sidebarCollapsed,

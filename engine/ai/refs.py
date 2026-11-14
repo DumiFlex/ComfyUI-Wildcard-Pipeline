@@ -231,6 +231,8 @@ def _check_filter(expr: str, row: dict[str, Any]) -> str:
     terms: list[str] = []
 
     def walk(n: dict[str, Any]) -> None:
+        if "var" in n:
+            return
         if "tag" in n:
             terms.append(n["tag"])
         elif n["op"] == "not":
@@ -389,4 +391,6 @@ def has_pick(text: Any) -> bool:
 
 
 def valid_axis_name(name: str) -> bool:
-    return bool(_IDENT.fullmatch(name)) and name != "neg" and not validate_subcat_name(name)
+    if name in ("neg", "bool"):
+        return False
+    return bool(_IDENT.fullmatch(name)) and not validate_subcat_name(name)

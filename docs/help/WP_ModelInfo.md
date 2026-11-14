@@ -2,6 +2,10 @@
 
 Names the loaded checkpoint so your rules can branch on it. Writes three variables into the Context:
 
+<!-- video:start -->
+▶ **Video:** [WP Model Info in depth](https://youtu.be/QWK6l4IMCD4) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 - `$model_family`: the architecture, read from the model itself (`sd15`, `sdxl`, `flux`, `sd3`, …).
 - `$model_variant`: the fine-tune line, read from the file name by the variant rules (`pony`, `illustrious`, `noobai`, `animagine`, or empty when nothing matches).
 - `$model_name`: the file name without folders or extension.

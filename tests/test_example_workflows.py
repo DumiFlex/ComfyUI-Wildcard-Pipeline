@@ -292,3 +292,20 @@ def test_sets_and_stories_modes_hold_what_they_say():
     beats = graph.run_frames(loop, asm)
     assert len({_subject(p) for p in beats}) == 1, beats
     assert len(set(beats)) == len(beats)
+
+
+@pytest.mark.parametrize("pick,quick", [("Quick", True), ("Full", False)])
+def test_quick_preview_switch_follows_the_pick(pick: str, quick: bool):
+    """Example 2: the Quick toggle has a Value (its steps), so Var → Bool reads its switch
+    through `$quick_preview.bool`, not the value."""
+    path = next(p for p in EXAMPLES if p.stem.startswith("2 "))
+    wf = _load(path)
+    tog = next(n for n in wf["nodes"] if n["type"] == "WP_Toggles")
+    wv = tog["widgets_values"]
+    i = wv.index(_json_value(wv, "rows"))
+    cfg = json.loads(wv[i])
+    for row in cfg["rows"]:
+        row["on"] = row.get("name") == pick
+    wv[i] = json.dumps(cfg)
+    node = next(n for n in wf["nodes"] if n["type"] == "WP_VarToBool")
+    assert Graph(wf).output(node, 0) is quick

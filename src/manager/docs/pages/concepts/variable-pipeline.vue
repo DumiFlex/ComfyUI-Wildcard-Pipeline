@@ -59,6 +59,11 @@ import DocRef from "../../../components/docs/DocRef.vue";
             <td>The variable's negative words. See <DocRef id="negatives" />.</td>
           </tr>
           <tr>
+            <td><VarToken>$name.bool</VarToken></td>
+            <td>A <DocRef id="wp-toggles" /> variable's switch, <code>true</code> or
+              <code>false</code>, even when the toggle writes its own Value.</td>
+          </tr>
+          <tr>
             <td><VarToken kind="ref">@{…}</VarToken></td>
             <td>A fresh pick from another wildcard. Type <b>@</b> to insert one; it shows as a chip.
               It can narrow the pick to some tags (<code>warm or cool</code>) or leave out the null
@@ -81,8 +86,10 @@ import DocRef from "../../../components/docs/DocRef.vue";
               part twice.</td>
           </tr>
           <tr>
-            <td><VarToken kind="inline">$$</VarToken> · <VarToken kind="inline">@@</VarToken> · <VarToken kind="inline">&#123;&#123;</VarToken></td>
-            <td>Print a plain <code>$</code>, <code>@</code> or <code>&#123;</code>.</td>
+            <td><VarToken kind="inline">$$</VarToken> · <VarToken kind="inline">@@</VarToken></td>
+            <td>Print a plain <code>$</code> or <code>@</code>. Braces need no escape: only a closed
+              <code>&#123;…&#125;</code> with a <code>|</code> (or a <code>&#123;2$$…&#125;</code> count) is a
+              pick, so <code>&#123;word&#125;</code> and <code>&#123;&#123;word&#125;&#125;</code> print as written.</td>
           </tr>
         </tbody>
       </table>

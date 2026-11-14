@@ -7,6 +7,7 @@ import {
   collectUpstreamProducers,
   collectUpstreamRenderableVariables,
   collectUpstreamResolved,
+  readToggleBools,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
   findWildcardHomesElsewhere,
@@ -275,6 +276,49 @@ describe("collectUpstreamProducers", () => {
       character: "modern clothing",
       plain: null,
     });
+  });
+
+  it("collectUpstreamInjectorNegatives: a template row carries the negatives of what it reads", () => {
+    const inj: LiteNodeLike = {
+      id: 1,
+      type: "WP_ContextInjector",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_rows",
+        value: JSON.stringify({
+          version: 1,
+          rows: [
+            { kind: "general", binding: "outfit", enabled: true, template: "$cloak, $input_0 $$x", negative: "dull" },
+            { binding: "cloak", enabled: true, slot_name: "input_0", negative: "torn fabric" },
+            { kind: "general", binding: "raw", enabled: true, template: "$input_0" },
+          ],
+        }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([inj, pov], { 100: { origin_id: 1, target_id: 2 } });
+    expect(collectUpstreamInjectorNegatives(g, pov)).toEqual({
+      cloak: "torn fabric",
+      outfit: "torn fabric, dull",
+      raw: null,
+    });
+  });
+
+  it("collectUpstreamInjectorNegatives: a toggle's own negative, or null when it has none", () => {
+    const rows = [
+      { id: "a", kind: "toggle", name: "Rain", var: "rain", on: true, pin: false, out: 0, style: "switch", value: "in the rain", negative: "sunny sky" },
+      { id: "b", kind: "toggle", name: "Fog", var: "fog", on: false, pin: false, out: 0, style: "switch", off_negative: "clear air" },
+      { id: "c", kind: "toggle", name: "Wind", var: "wind", on: true, pin: false, out: 0, style: "switch" },
+    ];
+    const tg: LiteNodeLike = {
+      id: 1,
+      type: "WP_Toggles",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_toggles", value: JSON.stringify({ version: 1, mode: "any", group_var: "", rows }) }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([tg, pov], { 100: { origin_id: 1, target_id: 2 } });
+    expect(collectUpstreamInjectorNegatives(g, pov)).toEqual({ rain: "sunny sky", fog: "clear air", wind: null });
   });
 
   it("attributes the loop's iteration vars, including the _total pair", () => {
@@ -671,6 +715,21 @@ describe("findRootGraph", () => {
     };
     expect(findRootGraph(orphan)).toBe(orphan);
   });
+
+  it("uses `rootGraph` when litegraph gives one (root carries a UUID id there)", () => {
+    // Current ComfyUI frontends: the root LGraph has a UUID `id`, every
+    // subgraph points at the root through `rootGraph`, and there is no
+    // `_subgraph_node`. The id test alone returned the subgraph itself.
+    const root: LiteGraphLike & { rootGraph?: LiteGraphLike } = {
+      id: "0f1e2d3c-root", _nodes: [], links: {}, getNodeById: () => null,
+    };
+    root.rootGraph = root;
+    const sub: LiteGraphLike & { rootGraph?: LiteGraphLike } = {
+      id: "sub-uuid", _nodes: [], links: {}, getNodeById: () => null, rootGraph: root,
+    };
+    expect(findRootGraph(sub)).toBe(root);
+    expect(findRootGraph(root)).toBe(root);
+  });
 });
 
 describe("findDownstreamAssemblers", () => {
@@ -697,6 +756,77 @@ describe("findDownstreamAssemblers", () => {
 //   - SubgraphOutputNode (id = -20) — boundary inside the subgraph that
 //     proxies external outputs.
 // We model both shapes here and assert the walk doesn't get stuck on either.
+
+describe("subgraph boundaries with text ids (ComfyUI frontend 1.5x)", () => {
+  // Current frontends key nodes and links by strings: the input proxy is
+  // "-10", the output proxy "-20". The walkers compared against the numbers
+  // and stopped at every subgraph edge.
+  const sid = (n: number) => String(n) as unknown as number;
+
+  it("steps OUT through a \"-10\" input proxy", () => {
+    const ctx = fakeContextNode(1, ["time"]);
+    ctx.id = sid(1);
+    ctx.outputs = [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }];
+    const innerAsm: LiteNodeLike = { id: sid(2), type: "WP_PromptAssembler", inputs: [{ name: "context", link: 200 }] };
+    const subgraph: LiteGraphLike = {
+      id: "sg-uuid",
+      _nodes: [innerAsm],
+      links: { 200: { id: 200, origin_id: sid(-10), origin_slot: 0, target_id: sid(2), target_slot: 0 } },
+      getNodeById: (id) => (String(id) === "2" ? innerAsm : null),
+      inputNode: { id: sid(-10), slots: [{ name: "upstream", linkIds: [200] }] },
+      outputNode: { id: sid(-20), slots: [] },
+    };
+    innerAsm.graph = subgraph;
+    const subNode: LiteNodeLike = {
+      id: sid(4), type: "sg-uuid", inputs: [{ name: "upstream", link: 100 }], outputs: [], subgraph, isSubgraphNode: () => true,
+    };
+    const root: LiteGraphLike & { rootGraph?: LiteGraphLike } = {
+      id: "root-uuid",
+      _nodes: [ctx, subNode],
+      links: { 100: { id: 100, origin_id: sid(1), origin_slot: 0, target_id: sid(4), target_slot: 0 } },
+      getNodeById: (id) => ({ 1: ctx, 4: subNode } as Record<string, LiteNodeLike>)[String(id)] ?? null,
+    };
+    root.rootGraph = root;
+    (subgraph as { rootGraph?: LiteGraphLike }).rootGraph = root;
+    ctx.graph = root;
+    subNode.graph = root;
+
+    expect(findRootGraph(subgraph)).toBe(root);
+    expect(collectUpstreamVariables(findRootGraph(subgraph), innerAsm)).toEqual(["time"]);
+  });
+
+  it("walks downstream out through a \"-20\" output proxy", () => {
+    const innerCtx = fakeContextNode(1, ["hero"]);
+    innerCtx.id = sid(1);
+    innerCtx.outputs = [{ name: "context", links: [200], type: "PIPELINE_CONTEXT" }];
+    const subgraph: LiteGraphLike = {
+      id: "sg-uuid",
+      _nodes: [innerCtx],
+      links: { 200: { id: 200, origin_id: sid(1), origin_slot: 0, target_id: sid(-20), target_slot: 0 } },
+      getNodeById: (id) => (String(id) === "1" ? innerCtx : null),
+      inputNode: { id: sid(-10), slots: [] },
+      outputNode: { id: sid(-20), slots: [{ name: "context", linkIds: [200] }] },
+    };
+    innerCtx.graph = subgraph;
+    const subNode: LiteNodeLike = {
+      id: sid(4), type: "sg-uuid", inputs: [],
+      outputs: [{ name: "context", links: [300], type: "PIPELINE_CONTEXT" }],
+      subgraph, isSubgraphNode: () => true,
+    };
+    const asm: LiteNodeLike = { id: sid(5), type: "WP_PromptAssembler", inputs: [{ name: "context", link: 300 }] };
+    const root: LiteGraphLike = {
+      id: "root-uuid",
+      _nodes: [subNode, asm],
+      links: { 300: { id: 300, origin_id: sid(4), origin_slot: 0, target_id: sid(5), target_slot: 0 } },
+      getNodeById: (id) => ({ 4: subNode, 5: asm } as Record<string, LiteNodeLike>)[String(id)] ?? null,
+    };
+    subNode.graph = root;
+    asm.graph = root;
+
+    expect(findDownstreamAssemblers(root, innerCtx).map((n) => String(n.id))).toEqual(["5"]);
+    expect(collectUpstreamVariables(root, asm)).toEqual(["hero"]);
+  });
+});
 
 describe("collectUpstreamVariables across subgraph boundaries", () => {
   it("steps OUT of a subgraph to reach an upstream Context in the parent graph", () => {
@@ -864,6 +994,61 @@ describe("collectUpstreamResolved axis reads", () => {
       id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }],
     });
     expect(out.scene).toBe("wearing a white t-shirt");
+  });
+});
+
+describe("collectUpstreamResolved toggle values", () => {
+  it("reads variables and prints $$ as $ in a toggle's value, as the node does", () => {
+    const rows = [
+      { id: "a", kind: "toggle", name: "Rain", var: "rain", on: true, pin: false, out: 0, style: "switch", value: "rain on a $$5 coat" },
+      { id: "b", kind: "toggle", name: "Mail", var: "mail", on: true, pin: false, out: 0, style: "switch", value: "$zed at mail@@home" },
+      { id: "c", kind: "toggle", name: "Plain", var: "plain", on: true, pin: false, out: 0, style: "switch", value: "mail@@home" },
+      { id: "d", kind: "toggle", name: "Zed", var: "zed", on: true, pin: false, out: 0, style: "switch", value: "$rain, $$1" },
+    ];
+    const tg: LiteNodeLike = {
+      id: 1,
+      type: "WP_Toggles",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_toggles", value: JSON.stringify({ version: 1, mode: "any", group_var: "", rows }) }],
+    };
+    const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }] };
+    const g = {
+      _nodes: [tg, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: tg, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+    const out = collectUpstreamResolved(g, asm);
+    expect(out.rain).toBe("rain on a $5 coat");
+    // A value read by another is resolved first, whatever the row order.
+    expect(out.zed).toBe("rain on a $5 coat, $1");
+    expect(out.mail).toBe("rain on a $5 coat, $1 at mail@home");
+    expect(out.plain).toBe("mail@home");
+  });
+});
+
+describe("collectUpstreamResolved toggle switches", () => {
+  it("carries each toggle's switch for $name.bool, whatever words it writes", () => {
+    const rows = [
+      { id: "a", kind: "toggle", name: "Lantern", var: "lantern", on: false, pin: false, out: 0, style: "switch", value: "holding a lantern", off_value: "with empty hands" },
+      { id: "b", kind: "toggle", name: "Note", var: "note", on: true, pin: false, out: 0, style: "switch", value: "lantern on: $lantern.bool" },
+    ];
+    const tg: LiteNodeLike = {
+      id: 1,
+      type: "WP_Toggles",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{ name: "wp_toggles", value: JSON.stringify({ version: 1, mode: "any", group_var: "", rows }) }],
+    };
+    const asm: LiteNodeLike = { id: 2, type: "WP_PromptAssembler", inputs: [{ name: "context", link: 100 }] };
+    const g = {
+      _nodes: [tg, asm],
+      links: { 100: { id: 100, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => ({ 1: tg, 2: asm } as Record<number, LiteNodeLike>)[id] ?? null,
+    } as LiteGraphLike;
+    const out = collectUpstreamResolved(g, asm);
+    expect(out.lantern).toBe("with empty hands");
+    expect(readToggleBools(out)).toEqual({ lantern: false, note: true });
+    // Off with an Off value is still false, not "has words, so true".
+    expect(out.note).toBe("lantern on: false");
   });
 });
 
@@ -1219,6 +1404,30 @@ describe("collectLocalResolvedForModule", () => {
     expect(result.style).toBe("moody");
     // editing module excluded — its own binding doesn't surface
     expect(result.result).toBeUndefined();
+  });
+
+  it("prints $$ / @@ in module values as one $ / @, as the engine does", () => {
+    const { ctx, graph } = singleNode([
+      {
+        id: "fv000009", type: "fixed_values", enabled: true, meta: { name: "" }, entries: [],
+        payload: { values: [{ id: "v1", name: "price", value: "$$5" }] },
+      },
+      {
+        id: "wc000009", type: "wildcard", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { var_binding: "$tag", options: [{ id: "o1", value: "mail@@home, $$tag" }] },
+      },
+      {
+        id: "cb000009", type: "combine", enabled: true,
+        meta: { name: "" }, entries: [],
+        payload: { template: "$$$price coin, $$tag, {2$$, $$a|b}", output_var: "line" },
+      },
+    ]);
+    const result = collectLocalResolvedForModule(graph, ctx);
+    expect(result.price).toBe("$5");
+    expect(result.tag).toBe("mail@home, $tag");
+    // `$$` then a read of `$price` (already "$5"); a pick stays as written.
+    expect(result.line).toBe("$$5 coin, $tag, {2$$, $$a|b}");
   });
 
   it("match_variable only matches options the node's toggles keep", () => {

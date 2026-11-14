@@ -29,7 +29,7 @@ import { bundleContentKey } from "./bundles/bundle-fingerprint";
 import type { BundleInstance } from "../../widgets/_shared";
 import Checkbox from "@/kit/Checkbox.vue";
 import Button from "@/kit/Button.vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import { vToggleRow } from "@/kit/toggle-row";
 
 interface ChildPreview {
@@ -421,16 +421,8 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
 </script>
 
 <template>
-  <ModalShell :visible="!!(open && bundle)" labelledby="wp-pbtl-title" @close="close">
-    <div
-      class="wp-ptl"
-      data-test="pbtl"
-    >
-      <header class="wp-ptl__head">
-        <h3 id="wp-pbtl-title" class="wp-ptl__title">Push bundle to library</h3>
-        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="pbtl-close" @click="close" />
-      </header>
-
+  <Modal :open="!!(open && bundle)" title="Push bundle to library" size="md" flush @update:open="(v: boolean) => { if (!v) close(); }">
+    <div class="wp-ptl" data-test="pbtl">
       <div class="wp-ptl__body">
         <div class="wp-ptl-field">
           <label class="wp-ptl-field__label" for="wp-pbtl-name">Name</label>
@@ -605,46 +597,30 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
         </div>
       </div>
 
-      <footer class="wp-ptl__foot">
-        <Button size="sm" data-test="pbtl-cancel" :disabled="busy" @click="close">Cancel</Button>
-        <span class="wp-ptl-spacer" />
-        <Button
-          size="sm"
-          data-test="pbtl-save-new"
-          :disabled="busy"
-          @click="doSaveAsNew"
-        >Save as new entry</Button>
-        <Button
-          size="sm"
-          variant="primary"
-          data-test="pbtl-update"
-          :disabled="busy || !canUpdateExisting"
-          :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
-          @click="doUpdate"
-        >Update existing</Button>
-      </footer>
     </div>
-  </ModalShell>
+    <template #footer>
+      <Button size="sm" data-test="pbtl-cancel" :disabled="busy" @click="close">Cancel</Button>
+      <span class="wp-ptl-spacer" />
+      <Button
+        size="sm"
+        data-test="pbtl-save-new"
+        :disabled="busy"
+        @click="doSaveAsNew"
+      >Save as new entry</Button>
+      <Button
+        size="sm"
+        variant="primary"
+        data-test="pbtl-update"
+        :disabled="busy || !canUpdateExisting"
+        :hint="!isLibraryTracked ? 'No existing library entry to update' : isLibraryMissing ? 'Library entry has been deleted — save as new entry instead' : undefined"
+        @click="doUpdate"
+      >Update existing</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-ptl {
-  width: min(620px, 100%);
-  max-height: calc(100vh - 32px);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius-lg, 10px);
-  box-shadow: var(--wp-shadow-lg);
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  color: var(--wp-text);
-}
-.wp-ptl__head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--wp-border);
-}
-.wp-ptl__title { margin: 0; font-size: 14px; font-weight: 600; }
+.wp-ptl { color: var(--wp-text); }
 .wp-ptl__body {
   flex: 1; min-height: 0; overflow-y: auto;
   padding: 14px;
@@ -800,12 +776,6 @@ function pickCopyName(base: string, taken: ReadonlySet<string>): string {
   border: 1px solid color-mix(in oklab, var(--wp-danger) 32%, transparent);
   color: var(--wp-danger);
   font-size: 12px;
-}
-.wp-ptl__foot {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--wp-border);
-  background: var(--wp-bg-1);
 }
 .wp-ptl-spacer { flex: 1; }
 </style>

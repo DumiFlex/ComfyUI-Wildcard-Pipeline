@@ -53,6 +53,17 @@ describe("matchSuggestions", () => {
     expect(match({ trigger: "$", query: "nope.n" })).toEqual([]);
   });
 
+  it("offers .bool for a toggle variable only", () => {
+    const producers = new Map([...base.varProducers, ["rain", { kind: "toggle", shadowed: 0 }]]);
+    const m = (query: string): string[] => matchSuggestions(
+      "$", query, [...base.varSuggestions, "rain"], base.refSuggestions, base.uuidToName, producers,
+    );
+    expect(m("rain.b")).toEqual(["rain.bool"]);
+    expect(m("rain.")).toEqual(["rain.neg", "rain.bool"]);
+    expect(m("mood.b")).toEqual([]);
+    expect(axisKnownFor({ kind: "var", name: "rain", axis: "bool" }, producers)).toBe(true);
+  });
+
   it("exposes the row cap", () => {
     expect(AC_MAX_ITEMS).toBe(50);
   });
@@ -116,5 +127,17 @@ describe("varSpanAttrsFor", () => {
 
   it("stays quiet without a graph", () => {
     expect(attrs("ghost", false)).toMatch(/--wp-var-/);
+  });
+});
+
+describe("varSpanAttrsFor with loop frame notes", () => {
+  it("draws a name a loop sets on some frames calm and dotted, not as an error", () => {
+    const notes = { companion: "$companion is set on frame 4 only. Frames 1–3 render it empty." };
+    const attrs = varSpanAttrsFor("companion", true, ["role"], undefined, notes);
+    expect(attrs).toContain("--wp-info");
+    expect(attrs).toContain("dotted");
+    expect(attrs).not.toContain("--wp-danger");
+    // A name no frame sets is still the error.
+    expect(varSpanAttrsFor("nope", true, ["role"], undefined, notes)).toContain("--wp-danger");
   });
 });

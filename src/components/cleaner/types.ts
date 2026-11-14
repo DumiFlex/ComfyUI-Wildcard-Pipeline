@@ -47,3 +47,19 @@ export function emptyCleanerConfig(): CleanerNodeConfig {
     blocklist: { kind: "list", entries: [] },
   };
 }
+
+/** A trace step's rule: a cleaner rule, or the negative's drop of tags the
+ *  prompt also has. */
+export type StepRule = RuleId | "prompt_overlap";
+
+/** `wp_cleaner_trace` / `wp_cleaner_negative_trace` (engine/cleaner/pipeline.py
+ *  `_trace`): the text before the first rule, the text after the last, the
+ *  mode it ran in, and each rule that ran in run order with its text
+ *  afterwards (`text` left out when the rule changed nothing). Feeds the
+ *  Last run window. */
+export interface CleanerTrace {
+  input: string;
+  output: string;
+  mode?: Mode;
+  steps: { rule: StepRule; text?: string }[];
+}

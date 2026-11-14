@@ -374,7 +374,33 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 630 -> 640 KB on 2026-11-04 for pictures in WP Note: the
 // Pictures panel, the canvas re-encode (note-images.ts) and the picture
 // syntax ride in the note's lazy editor chunk (dev was already ~636.9 KB).
-const TOTAL_LIMIT = 640 * 1024;     // 640 KB
+// RAISED 640 -> 650 KB on 2026-11-10: kit 0.14 -> 0.15.3 (colour picker
+// fixes, PostCard samples, overlay-scrollbar room) put the total at ~640.9 KB.
+// RAISED 650 -> 655 KB on 2026-11-11: WP Debug's newer-node support (node
+// cards in Variables, Show node blink, toggle values/.bool) put it at ~650.04 KB.
+// RAISED 655 -> 665 KB on 2026-11-12: every docs screenshot can go in a WP
+// Note (note-assets.json + the kit's ImageGrid/SearchInput in the note's lazy
+// editor chunk) put the total at ~652.9 KB.
+// RAISED 660 -> 670 KB on 2026-11-12: with both of those, WP Toggles' toggle
+// window (Value box, icon picker and colour fields in a lazy chunk) and the
+// toggle looks put the total at ~660.0 KB, 9 bytes under the old line.
+// RAISED 670 -> 685 KB on 2026-11-12 for zod 3 -> 4 (Dependabot): the lazy
+// shape-check chunk (Note add-to-library press, Import tab) grew 17.9 ->
+// 33.5 KB gzip, putting the total at ~684.0 KB. Moving the validators to
+// `zod/mini` could win most of it back.
+// RAISED 685 -> 700 KB on 2026-11-12 for kit 0.19.0: the shared row drag
+// (useRowDrag + row-drag.css, now in the Toggles and Injector chunks) and the
+// audit's eight kit pieces put the total at ~687.9 KB.
+// RAISED 700 -> 715 KB on 2026-11-13 for the subgraph work: the promoted
+// template editor (#394), Show on subgraph node (#398) and its Choose what
+// shows frame (lazy mirror-frame chunk + part marks in every panel) put the
+// total at ~701.5 KB.
+// RAISED 715 -> 720 KB on 2026-11-14 for the Bookmarks dock grid mode
+// (DockTile), its shared SpotGrid and Bookmark this view's spot choice put
+// the total at ~715.6 KB. Run errors on WP nodes (the execution_error
+// listener, the strip every widget host can draw and the Var → Choice red
+// row, 14/11/2026) put it at ~717.5 KB.
+const TOTAL_LIMIT = 720 * 1024;     // 720 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

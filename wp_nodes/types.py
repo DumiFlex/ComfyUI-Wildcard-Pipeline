@@ -505,6 +505,9 @@ _CROSS_NODE_INTERNAL_KEYS = (
     # variable read in a later node's Assembler must bring the negatives it
     # was rolled with, wherever it was rolled.
     "__wp_negatives__",
+    # WP Toggles' on/off per toggle variable (`$name.bool`): a toggle with a
+    # value writes the value, so the boolean rides here.
+    "__wp_toggle_bools__",
     # Loop bookkeeping from WP_ContextLoop. These reach the FIRST
     # WP_Context (direct ContextLoop child) via the payload internals,
     # but were dropped at that node's output boundary — so a SECOND,

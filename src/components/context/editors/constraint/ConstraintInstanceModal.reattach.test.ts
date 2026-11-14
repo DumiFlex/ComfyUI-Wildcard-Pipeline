@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, config } from "@vue/test-utils";
 import ConstraintInstanceModal from "./ConstraintInstanceModal.vue";
+
+// The window is a kit Modal, which teleports to <body>: render it in place.
+config.global.stubs = { ...config.global.stubs, teleport: true };
 
 // Preview-resolver lookups MISS so the source uuid reads as dangling.
 vi.mock("../../../../extension/preview-resolver", () => ({

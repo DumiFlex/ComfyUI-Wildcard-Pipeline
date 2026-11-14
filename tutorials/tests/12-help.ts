@@ -1,7 +1,7 @@
 // Tutorial 12: where to find help. The ? over a selected node, the example workflows in ComfyUI's
 // Templates, the button that opens the manager, the built-in docs, the shortcut sheet and command
 // palette, and What's new after an update.
-import { tutorial } from "../tutorial.js";
+import { tutorial, hideOtherPacks } from "../tutorial.js";
 
 tutorial(
   "T12",
@@ -23,10 +23,12 @@ tutorial(
       await t.beat(500);
       const help = page.locator(".wp-tb-icon--help").first().locator("xpath=ancestor::button[1]");
       await t.callout("help", help, "This node's help", 6);
+      // The box stays up for the whole line and the click comes after it, so the two line up.
       await t.say("Select it and press the question mark above it.");
+      await t.waitVoice();
+      await t.beat(300);
       await t.click(help);
       await t.uncallout("help");
-      await t.waitVoice();
       await t.say("Its page opens over the canvas: what each part does, with a picture.");
       await t.beat(1500);
       await t.waitVoice();
@@ -40,6 +42,8 @@ tutorial(
       await t.beat(1200);
       const dialog = page.getByRole("dialog").last();
       const ours = dialog.getByText("ComfyUI-Wildcard-Pipeline", { exact: true });
+      await ours.waitFor({ state: "attached", timeout: 15_000 });
+      await hideOtherPacks(ours);
       // It sits at the bottom of the list, below the window's edge on a 1080p screen.
       await t.moveTo({ x: 370, y: 700 });
       await ours.scrollIntoViewIfNeeded();
@@ -53,14 +57,19 @@ tutorial(
       await t.uncallout("examples");
       await t.say("The example workflow videos go through each of them.");
       await t.press("Escape");
+      // The closing dialog still covers the toolbar for a moment, and a box drawn over it is taken
+      // for hidden and dropped at once (the "Opens the manager" box flashed for half a second).
+      await dialog.waitFor({ state: "hidden", timeout: 5_000 }).catch(() => undefined);
       await t.waitVoice();
+      await t.beat(400);
     });
 
     await t.h.step("The manager's docs", async () => {
       const open = page.getByRole("button", { name: /Wildcard Pipeline Workspace/ }).first();
       if ((await open.count()) > 0) {
-        await t.callout("open", open, "Opens the manager", 6);
+        // The box comes up with its line and stays for all of it.
         await t.say("This button opens the manager. Its Documentation covers every node and every module, with examples.");
+        await t.callout("open", open, "Opens the manager", 6);
         await t.waitVoice();
         await t.uncallout("open");
       }
@@ -77,8 +86,13 @@ tutorial(
       await t.say("Control and slash shows every keyboard shortcut.");
       await t.press("Control+/");
       await t.beat(1200);
-      await t.callout("keys", page.getByRole("dialog").last(), "Keyboard shortcuts", 4);
+      // The dialog role sits on a full-width wrapper; box the panel inside it.
       await t.waitVoice();
+      // The box gets its own line (it came at the end of the last one and flashed past).
+      await t.callout("keys", page.getByRole("dialog").last().locator(".wp-modal").first(), "Keyboard shortcuts", 4);
+      await t.say("Here they all are, in one list.");
+      await t.waitVoice();
+      await t.beat(500);
       await t.uncallout("keys");
       await t.press("Escape");
       await t.beat(500);
@@ -96,10 +110,11 @@ tutorial(
       const news = page.locator('[data-test="topbar-whats-new"]');
       await t.callout("news", news, "What's new", 6);
       await t.say("After an update, the megaphone gets a dot. It shows what changed in each version.");
+      await t.waitVoice();
+      await t.beat(300);
       await t.click(news);
       await t.uncallout("news");
       await t.beat(1500);
-      await t.waitVoice();
       const discord = page.locator('[data-test="topbar-discord"]');
       if ((await discord.count()) > 0) {
         await t.callout("discord", discord, "Ask on Discord", 4);

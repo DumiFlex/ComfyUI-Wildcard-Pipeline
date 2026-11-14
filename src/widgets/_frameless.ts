@@ -44,39 +44,56 @@ export function setPinned(node: FramelessNode, pinned: boolean): void {
  * zooms like a node while it looks like a panel. ComfyUI's wrapper around a
  * DOM widget takes pointer events and its style binding writes `auto` back
  * on every layout change, so keep it at `none` with an observer. The panel's
- * buttons and forms take events again in their own CSS. Returns a stop
- * function, or null while the wrapper isn't there yet.
+ * buttons and forms take events again in their own CSS.
+ *
+ * `when` says whether to pass clicks through right now. While it is false
+ * (a note being edited is a form, not a panel to drag) the wrapper keeps
+ * ComfyUI's own `auto`: with `none` on an ancestor, Firefox's overlay
+ * scrollbars inside the form ignored the pointer until the form was clicked.
+ * Returns `{ stop, refresh }` (call `refresh` when `when` may have changed),
+ * or null while the wrapper isn't there yet.
  */
-export function passPointerThrough(el: HTMLElement): (() => void) | null {
+export function passPointerThrough(
+  el: HTMLElement,
+  when: () => boolean = () => true,
+): { stop: () => void; refresh: () => void } | null {
   const wrap = el.closest<HTMLElement>(".dom-widget");
   if (!wrap) return null;
   const apply = (): void => {
-    if (wrap.style.getPropertyValue("pointer-events") !== "none") {
-      wrap.style.setProperty("pointer-events", "none", "important");
-    }
+    const pass = when();
+    const current = wrap.style.getPropertyValue("pointer-events");
+    const forced = wrap.style.getPropertyPriority("pointer-events") === "important";
+    if (pass && current !== "none") wrap.style.setProperty("pointer-events", "none", "important");
+    else if (!pass && forced) wrap.style.removeProperty("pointer-events");
   };
   apply();
   const obs = new MutationObserver(apply);
   obs.observe(wrap, { attributes: true, attributeFilter: ["style"] });
-  return () => obs.disconnect();
+  return { stop: () => obs.disconnect(), refresh: apply };
 }
 
-/** Keeps ComfyUI's wrapper letting clicks through. It is created after the
- *  node, and again when the graph is re-shown, so check on each draw. */
-export function keepPassThrough(node: FramelessNode, host: DomWidgetHost): void {
+/** Keeps ComfyUI's wrapper letting clicks through while `when()` holds. It
+ *  is created after the node, and again when the graph is re-shown, so check
+ *  on each draw. Returns `refresh`, to call when `when` may have changed. */
+export function keepPassThrough(
+  node: FramelessNode,
+  host: DomWidgetHost,
+  when: () => boolean = () => true,
+): () => void {
   let wrap: HTMLElement | null = null;
-  let stopPass: (() => void) | null = null;
-  host.onCleanup(() => stopPass?.());
+  let pass: { stop: () => void; refresh: () => void } | null = null;
+  host.onCleanup(() => pass?.stop());
   const prevDraw = node.onDrawForeground;
   node.onDrawForeground = function (this: FramelessNode, ...args: unknown[]) {
     prevDraw?.apply(this, args);
     const parent = host.element.closest<HTMLElement>(".dom-widget");
     if (parent && parent !== wrap) {
-      stopPass?.();
-      stopPass = passPointerThrough(host.element);
-      wrap = stopPass ? parent : null;
+      pass?.stop();
+      pass = passPointerThrough(host.element, when);
+      wrap = pass ? parent : null;
     }
   };
+  return () => pass?.refresh();
 }
 
 /**

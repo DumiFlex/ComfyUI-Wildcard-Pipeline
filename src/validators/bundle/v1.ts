@@ -23,9 +23,9 @@ export const bundleV1Child = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
   // Leaf snapshot fields.
-  meta: z.record(z.unknown()).optional(),
-  payload: z.record(z.unknown()).optional(),
-  instance: z.record(z.unknown()).optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
+  instance: z.record(z.string(), z.unknown()).optional(),
   enabled: z.boolean().optional(),
   collapsed: z.boolean().optional(),
   payload_hash: z.string().optional(),

@@ -10,9 +10,10 @@
  * **Where the theme is read from**, in order (the signal moved between
  * frontend releases; checked against live builds):
  *
- *   1. The active colour palette, `extensionManager.colorPalette
- *      .getActiveColorPalette().light_theme` (`true` only for light
- *      palettes). The authority wherever the API exists. Frontend 1.58.5
+ *   1. The active colour palette (`comfy-palette.ts:paletteIsLight`): its
+ *      `light_theme` flag, else how light the widgets it paints are, so a
+ *      light palette that sets no flag (Easy-Use's Milk White) still counts
+ *      as light. The authority wherever the API exists. Frontend 1.58.5
  *      sets no `dark-theme` class at all, so without this the extension
  *      painted its light tokens onto a dark ComfyUI.
  *   2. A `dark-theme` class on `<html>` (1.47.10) or `<body>` (1.45.21).
@@ -29,11 +30,9 @@
  *    theme, observe future changes, return cleanup
  */
 
-export type WpTheme = "dark" | "light";
+import { paletteIsLight } from "./comfy-palette";
 
-interface PaletteLike {
-  light_theme?: boolean;
-}
+export type WpTheme = "dark" | "light";
 
 interface AppLike {
   extensionManager?: unknown;
@@ -51,24 +50,6 @@ function themeSignalTargets(): HTMLElement[] {
   if (document.documentElement) out.push(document.documentElement);
   if (document.body) out.push(document.body);
   return out;
-}
-
-/** The active palette's `light_theme`, or `undefined` when this frontend has
- *  no palette API (or it throws). */
-function paletteIsLight(app?: AppLike): boolean | undefined {
-  const em = app?.extensionManager;
-  if (!em || typeof em !== "object" || !("colorPalette" in em)) return undefined;
-  const cp: unknown = em.colorPalette;
-  if (!cp || typeof cp !== "object" || !("getActiveColorPalette" in cp)) return undefined;
-  const get: unknown = cp.getActiveColorPalette;
-  if (typeof get !== "function") return undefined;
-  try {
-    const palette = get.call(cp) as PaletteLike | null | undefined;
-    if (!palette || typeof palette !== "object") return undefined;
-    return palette.light_theme === true;
-  } catch {
-    return undefined;
-  }
 }
 
 /** True when ComfyUI is dark, read from the signals in the file header.
@@ -151,4 +132,40 @@ export function attachThemeDetector(host: HTMLElement, app?: AppLike): () => voi
       /* idempotent */
     }
   };
+}
+
+let rootObserver: MutationObserver | null = null;
+
+/**
+ * Keep `<html>`'s `wp-theme-*` class in step with ComfyUI for the whole page.
+ *
+ * Each widget's `attachThemeDetector` also writes `<html>`, but only while
+ * that widget lives: once the widgets that saw the last switch are gone
+ * (a workflow reload, nodes removed), nothing moved `<html>` on the next
+ * palette switch and it kept the old theme. This one observer lives for the
+ * page. Writes only on a real change, so its own write can't re-fire it.
+ */
+export function watchRootTheme(app?: AppLike): void {
+  if (typeof document === "undefined" || !document.documentElement) return;
+  const root = document.documentElement;
+  const sync = () => {
+    const dark = isDark(app);
+    const want = dark ? CLASS_DARK : CLASS_LIGHT;
+    const other = dark ? CLASS_LIGHT : CLASS_DARK;
+    if (!root.classList.contains(want)) root.classList.add(want);
+    if (root.classList.contains(other)) root.classList.remove(other);
+  };
+  sync();
+  if (rootObserver || typeof MutationObserver === "undefined") return;
+  rootObserver = new MutationObserver(sync);
+  for (const t of themeSignalTargets()) {
+    const filter = t === root ? ["class", "style"] : ["class"];
+    rootObserver.observe(t, { attributes: true, attributeFilter: filter });
+  }
+}
+
+/** Tests only. */
+export function _resetRootThemeForTests(): void {
+  rootObserver?.disconnect();
+  rootObserver = null;
 }

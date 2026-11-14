@@ -66,6 +66,11 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <code>false</code>.
       </p>
       <Banner tone="info" note>
+        A WP Toggles toggle with a Value holds that value in its variable, not true or false. Read
+        its switch with <code>.bool</code>: <VarToken>$rain.bool</VarToken> is <code>true</code>
+        while the toggle is on and <code>false</code> while it's off.
+      </Banner>
+      <Banner tone="info" note>
         A wildcard with options <code>on</code> and <code>off</code> through WP Var → Bool switches
         any true/false input at random. Weights set how often.
       </Banner>

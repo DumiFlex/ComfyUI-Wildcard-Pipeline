@@ -155,3 +155,196 @@ def test_upstream_group_var_names_the_pick():
     payload, *_ = _run(cfg, upstream=up).values
     assert payload.context["look"] == "Dusk"
     assert payload.context["dusk"] == "true" and payload.context["night"] == "false"
+
+
+def test_visible_toggle_shows_in_the_assembler():
+    rows = [dict(r) for r in CFG["rows"]]
+    rows[3]["visible"] = True  # Anime look: the globe turned off
+    up = ContextPayload(
+        context={}, debug={}, internals={"__wp_internal_flags__": {"anime_look": True}},
+    )
+    payload, *_ = _run({**CFG, "rows": rows}, upstream=up).values
+    flags = payload.internals["__wp_internal_flags__"]
+    assert "anime_look" not in flags
+    assert flags["use_lora_character"] is True
+    trace = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    assert trace["anime_look"]["internal"] is False
+
+
+def _pick_value(value: str) -> dict:
+    rows = [dict(r) for r in PICK["rows"]]
+    rows[0]["value"] = value
+    return {**PICK, "rows": rows}
+
+
+def test_pick_value_keeps_inline_picks_as_written():
+    up = ContextPayload(context={"time": "noon"}, debug={"node_seed": 5}, internals={})
+    payload, *_ = _run(_pick_value("{golden|soft} $time light"), upstream=up).values
+    assert payload.context["look"] == "{golden|soft} noon light"
+
+
+def test_plain_pick_name_is_kept():
+    payload, *_ = _run({**PICK, "rows": [{**PICK["rows"][1], "on": True}]}).values
+    assert payload.context["look"] == "Night"
+
+
+def test_pick_value_missing_variable_warns():
+    payload, *_ = _run(_pick_value("$nowhere light")).values
+    warns = payload.debug["__wp_warnings__"]
+    assert any(w["type"] == "unknown_var" and "$nowhere" in w["message"] for w in warns)
+    assert all(w["node_id"] == "7" for w in warns)
+
+
+def test_pick_one_files_the_picked_negative():
+    up = ContextPayload(
+        context={"shade": "dark"},
+        debug={},
+        internals={negatives.NEG_KEY: {"time": [{"text": "old", "pick": None, "source": "x"}]}},
+    )
+    cfg = {"mode": "one", "group_var": "time", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Day", "var": "day", "on": False,
+         "negative": "night sky"},
+        {"id": "2", "kind": "toggle", "name": "Night", "var": "night", "on": True,
+         "negative": " $shade sun "},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert payload.internals[negatives.NEG_KEY]["time"] == [
+        {"text": "dark sun", "pick": None, "source": "WP_Toggles"},
+    ]
+
+
+def test_pick_one_without_negative_clears_old_one():
+    up = ContextPayload(
+        context={}, debug={},
+        internals={negatives.NEG_KEY: {"time": [{"text": "old", "pick": None, "source": "x"}]}},
+    )
+    cfg = {"mode": "one", "group_var": "time", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Day", "var": "day", "on": True},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert "time" not in payload.internals[negatives.NEG_KEY]
+
+
+def test_any_on_value_bool_and_negative():
+    up = ContextPayload(
+        context={"weather": "storm"}, debug={},
+        internals={negatives.NEG_KEY: {"fog": [{"text": "old", "pick": None, "source": "x"}]}},
+    )
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "value": "heavy $weather rain", "negative": "sunny"},
+        {"id": "2", "kind": "toggle", "name": "Fog", "var": "fog", "on": False,
+         "value": "thick fog", "negative": "clear air"},
+        {"id": "3", "kind": "toggle", "name": "Wind", "var": "wind", "on": True},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert payload.context["rain"] == "heavy storm rain"
+    assert payload.context["fog"] == ""
+    assert payload.context["wind"] == "true"
+    assert payload.internals["__wp_toggle_bools__"] == {"rain": True, "fog": False, "wind": True}
+    neg = payload.internals[negatives.NEG_KEY]
+    assert neg["rain"] == [{"text": "sunny", "pick": None, "source": "WP_Toggles"}]
+    assert "fog" not in neg  # off: the old negative is cleared, its own not filed
+    rows = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    assert rows["rain"]["bool"] is True and rows["rain"]["has_value"] is True
+    assert rows["rain"]["negative"] == "sunny"
+    assert rows["wind"]["bool"] is True and "has_value" not in rows["wind"]
+
+
+def test_any_on_off_value_and_off_negative():
+    up = ContextPayload(context={"look": "film"}, debug={}, internals={})
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Style", "var": "style", "on": False,
+         "value": "anime style", "negative": "photo",
+         "off_value": "$look photo", "off_negative": "anime, cartoon"},
+        {"id": "2", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "off_value": "clear sky", "off_negative": "rain"},
+    ]}
+    payload = _run(config=cfg, upstream=up).values[0]
+    assert payload.context["style"] == "film photo"
+    assert payload.context["rain"] == ""  # on, no Value: nothing, not "true"
+    assert payload.internals["__wp_toggle_bools__"] == {"style": False, "rain": True}
+    neg = payload.internals[negatives.NEG_KEY]
+    assert neg["style"] == [{"text": "anime, cartoon", "pick": None, "source": "WP_Toggles"}]
+    assert "rain" not in neg
+    rows = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    assert rows["style"]["has_value"] is True and rows["style"]["negative"] == "anime, cartoon"
+
+
+def test_bool_accessor_reads_across_nodes_in_the_assembler():
+    from engine import template
+    from engine.context import strip_internals, with_resolver_tables
+
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "value": "heavy rain", "visible": True},
+        {"id": "2", "kind": "toggle", "name": "Wind", "var": "wind", "on": False},
+    ]}
+    payload = _run(config=cfg).values[0]
+    render = {**payload.context, **payload.internals}
+    ctx = with_resolver_tables(strip_internals(render), render)
+    out = template.resolve_variables("$rain | $rain.bool | $wind.bool", ctx)
+    assert out == "heavy rain | true | false"
+
+
+def test_trace_details_say_why_a_toggle_is_off_and_how_pick_one_chose():
+    payload, *_ = _run().values
+    trace = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    child = trace["use_own_clothes"]["detail"]
+    assert child == {"switch": True, "needs": "LoRA character", "held_off": True}
+    cfg = json.loads(json.dumps(PICK))
+    cfg["group_upstream"] = True
+    up = ContextPayload(
+        context={"time": "noon", "night": "yes", "look": "Dusk"}, debug={}, internals={},
+    )
+    payload, *_ = _run(cfg, upstream=up).values
+    trace = {t["binding"]: t for t in payload.debug["__wp_trace__"]}
+    pick = trace["look"]["detail"]
+    assert pick["picked"] == "Dusk" and pick["forced_by"] == "Dusk"
+    assert pick["upstream_on"] == ["Night"]
+    assert trace["night"]["detail"]["upstream_read"] == "yes"
+
+
+def test_a_value_carries_the_negatives_of_what_it_reads():
+    up = ContextPayload(
+        context={"weather": "storm", "shade": "dark"}, debug={},
+        internals={negatives.NEG_KEY: {
+            "weather": [{"text": "clear sky", "pick": None, "source": "weather"}],
+            "shade": [{"text": "bright", "pick": None, "source": "shade"}],
+        }},
+    )
+    cfg = {"mode": "any", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Rain", "var": "rain", "on": True,
+         "value": "heavy $weather rain", "negative": "sunny"},
+        {"id": "2", "kind": "toggle", "name": "Mist", "var": "mist", "on": True,
+         "value": "thin mist"},
+    ]}
+    neg = _run(config=cfg, upstream=up).values[0].internals[negatives.NEG_KEY]
+    assert [e["text"] for e in neg["rain"]] == ["clear sky", "sunny"]
+    assert "mist" not in neg
+    # The pick's value reads upstream $shade: its negatives come along.
+    one = {"mode": "one", "group_var": "time", "rows": [
+        {"id": "1", "kind": "toggle", "name": "Night", "var": "night", "on": True,
+         "value": "$shade night", "negative": "noon"},
+    ]}
+    neg = _run(config=one, upstream=up).values[0].internals[negatives.NEG_KEY]
+    assert [e["text"] for e in neg["time"]] == ["bright", "noon"]
+
+
+def test_values_print_escapes_and_read_resolved_toggles():
+    """`$$` / `@@` print one `$` / `@` in every value, and a value that reads
+    another toggle sees that toggle's resolved text, whatever the order."""
+    def row(tid, var, value):
+        return {"id": tid, "kind": "toggle", "name": var, "var": var, "on": True,
+                "pin": False, "out": 0, "style": "switch", "value": value}
+    cfg = {"version": 1, "mode": "any", "group_var": "", "rows": [
+        row("00000001", "rain", "rain on a $$5 coat"),
+        row("00000002", "mail", "$zed at mail@@home"),
+        row("00000003", "plain", "mail@@home"),
+        row("00000004", "zed", "$rain, $$1"),
+    ]}
+    ctx = _run(cfg).values[0].context
+    assert ctx["rain"] == "rain on a $5 coat"
+    assert ctx["zed"] == "rain on a $5 coat, $1"
+    assert ctx["mail"] == "rain on a $5 coat, $1 at mail@home"
+    assert ctx["plain"] == "mail@home"

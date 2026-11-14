@@ -9,6 +9,7 @@ import Banner from "@/kit/Banner.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Button from "@/kit/Button.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
+import SpotGrid from "./SpotGrid.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import { pushToast } from "../shared/toast-store";
@@ -138,21 +139,15 @@ function suggest(): void {
 </script>
 
 <template>
-  <div class="wp-bmf">
-    <div class="wp-bmf__row wp-bmf__row--top">
+  <div class="wp-bmf wp-frameless__pass">
+    <div class="wp-bmf__row wp-bmf__row--top wp-frameless__pass">
       <span class="wp-bmf__label">Lands at</span>
-      <div class="wp-bmf__grid" role="radiogroup" aria-label="Where the bookmark lands on screen">
-        <WpIconButton
-          v-for="a in BOOKMARK_ANCHORS"
-          :key="a.id"
-          :icon="value.anchor === a.id ? 'pi-circle-fill' : 'pi-circle'"
-          :label="a.label"
-          :pressed="value.anchor === a.id"
-          :tone="value.anchor === a.id ? 'accent' : 'neutral'"
-          :data-test="`bm-anchor-${a.id}`"
-          @click="emit('update', { anchor: a.id as BookmarkAnchor })"
-        />
-      </div>
+      <SpotGrid
+        :model-value="value.anchor"
+        label="Where the bookmark lands on screen"
+        test-prefix="bm-anchor"
+        @update:model-value="(a: BookmarkAnchor) => emit('update', { anchor: a })"
+      />
       <div class="wp-bmf__anchor-note">
         <span class="wp-bmf__anchor-name" data-test="bm-anchor-name">{{ anchorLabel }}</span>
         <span class="wp-bmf__hint">{{ value.anchor === "custom" ? "the view you set, at its zoom" : `of the screen, ${BOOKMARK_MARGIN} px in` }}</span>
@@ -167,7 +162,7 @@ function suggest(): void {
       </div>
     </div>
 
-    <div class="wp-bmf__row">
+    <div class="wp-bmf__row wp-frameless__pass">
       <span class="wp-bmf__label">Zoom</span>
       <WpSegmented
         :model-value="value.zoomMode"
@@ -199,7 +194,7 @@ function suggest(): void {
       </template>
     </div>
 
-    <div class="wp-bmf__row">
+    <div class="wp-bmf__row wp-frameless__pass">
       <span class="wp-bmf__label">Shortcut</span>
       <Button
         size="sm"
@@ -223,7 +218,7 @@ function suggest(): void {
         @click="emit('update', { shortcut: '' })"
       />
     </div>
-    <p v-if="refused" class="wp-bmf__refused" role="alert" data-test="bm-refused">{{ refused }}</p>
+    <Banner v-if="refused" tone="danger" size="sm" data-test="bm-refused">{{ refused }}</Banner>
     <Banner
       v-else-if="conflicts.length && worst !== 'info'"
       :tone="worst"
@@ -261,21 +256,14 @@ function suggest(): void {
   font-weight: 600;
   color: var(--wp-text-dim);
 }
-.wp-bmf__grid {
-  display: grid;
-  grid-template-columns: repeat(3, 20px);
-  gap: 1px;
-  padding: 2px;
-  border: 1px solid var(--wp-border);
-  border-radius: min(4px, var(--wp-radius-cap, 999px));
-}
-.wp-bmf__grid :deep(.pi) { font-size: 8px; }
 .wp-bmf__anchor-note { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .wp-bmf__anchor-name { font-weight: 600; }
 .wp-bmf__zoom { width: 84px; }
 .wp-bmf__record { min-width: 86px; }
+/* The keys sit in the label line on its baseline, about 2px low; centre them
+ * in the button instead. */
+.wp-bmf__record :deep(.wp-btn__label) { display: inline-flex; align-items: center; }
 .wp-bmf__hint { font-size: 10.5px; color: var(--wp-text-dim); }
 .wp-bmf__hint--block { margin: 0; padding: 0 6px; }
-.wp-bmf__refused { margin: 0; padding: 0 6px; font-size: 11px; color: var(--wp-danger); }
 .wp-bmf__conflict { display: block; }
 </style>

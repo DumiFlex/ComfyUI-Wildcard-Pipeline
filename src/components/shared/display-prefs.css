@@ -351,6 +351,10 @@ body.wp-color-muted {
   --wp-kind-derivation:  oklch(from #fbbf24 l calc(c * 0.55) h);
   --wp-kind-constraint:  oklch(from #f472b6 l calc(c * 0.55) h);
   --wp-kind-fixed:       oklch(from #22d3ee l calc(c * 0.55) h);
+  --wp-kind-injector:  oklch(from #60a5fa l calc(c * 0.55) h);
+  --wp-kind-loop:      oklch(from #fb923c l calc(c * 0.55) h);
+  --wp-kind-model:     oklch(from #a3e635 l calc(c * 0.55) h);
+  --wp-kind-toggle:    oklch(from #818cf8 l calc(c * 0.55) h);
 }
 
 body.wp-color-vivid {
@@ -367,6 +371,10 @@ body.wp-color-vivid {
   --wp-kind-derivation:  oklch(from #fbbf24 l calc(c * 1.30) h);
   --wp-kind-constraint:  oklch(from #f472b6 l calc(c * 1.30) h);
   --wp-kind-fixed:       oklch(from #22d3ee l calc(c * 1.30) h);
+  --wp-kind-injector:  oklch(from #60a5fa l calc(c * 1.30) h);
+  --wp-kind-loop:      oklch(from #fb923c l calc(c * 1.30) h);
+  --wp-kind-model:     oklch(from #a3e635 l calc(c * 1.30) h);
+  --wp-kind-toggle:    oklch(from #818cf8 l calc(c * 1.30) h);
 }
 
 /* Light-theme muted/vivid — re-seed the kind-color relative adjustments
@@ -384,6 +392,10 @@ body.wp-color-muted .wp-theme-light {
   --wp-kind-combine:     oklch(from #065f46 l calc(c * 0.55) h);
   --wp-kind-derivation:  oklch(from #92400e l calc(c * 0.55) h);
   --wp-kind-constraint:  oklch(from #9d174d l calc(c * 0.55) h);
+  --wp-kind-injector:  oklch(from #0369a1 l calc(c * 0.55) h);
+  --wp-kind-loop:      oklch(from #9a3412 l calc(c * 0.55) h);
+  --wp-kind-model:     oklch(from #3f6212 l calc(c * 0.55) h);
+  --wp-kind-toggle:    oklch(from #4338ca l calc(c * 0.55) h);
 }
 
 .wp-theme-light body.wp-color-vivid,
@@ -393,5 +405,9 @@ body.wp-color-vivid .wp-theme-light {
   --wp-kind-combine:     oklch(from #065f46 l calc(c * 1.30) h);
   --wp-kind-derivation:  oklch(from #92400e l calc(c * 1.30) h);
   --wp-kind-constraint:  oklch(from #9d174d l calc(c * 1.30) h);
+  --wp-kind-injector:  oklch(from #0369a1 l calc(c * 1.30) h);
+  --wp-kind-loop:      oklch(from #9a3412 l calc(c * 1.30) h);
+  --wp-kind-model:     oklch(from #3f6212 l calc(c * 1.30) h);
+  --wp-kind-toggle:    oklch(from #4338ca l calc(c * 1.30) h);
 }
 }  /* end @layer wp-extension */

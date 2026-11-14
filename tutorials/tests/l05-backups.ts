@@ -1,8 +1,10 @@
 // Library 5: backups. Settings › Library & data: automatic backups (daily, how many to keep), Back up
-// now with a note, a change (Hero loses "an inventor"), Restore of the noted backup (live, no
+// now with a note, a change (Role loses "a clockwork inventor"), the item's own History (last three
+// saves), Restore of the noted backup (live, no
 // restart, with its own "Before restore" backup), pins, then the database's location and
 // maintenance, and exporting settings (Advanced). Backups the recording's own lifecycle made are
 // hidden from the list so it shows only this video's.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 
 tutorial(
@@ -10,7 +12,7 @@ tutorial(
   {
     title: "Backups",
     description: "Keep your library safe: automatic backups, a backup before a big change, restoring one without a restart, and where the library lives.",
-    learn: "Automatic and manual backups, notes and pins, live restore, the database location and maintenance, exporting your settings.",
+    learn: "Automatic and manual backups, notes and pins, an item's own version history, live restore, the database location and maintenance, exporting your settings.",
   },
   async (t) => {
     const page = t.page;
@@ -57,17 +59,61 @@ tutorial(
     });
 
     await t.h.step("Restore, without a restart", async () => {
-      await t.say("Now the big edit: Hero loses the inventor.");
+      await t.say("Now the big edit: Role loses the clockwork inventor.");
       await t.go("/wp/wildcards/808878ba/edit");
       await t.beat(900);
-      const row = page.locator('[data-test="wc-opt-row-5"]');
+      const row = page.locator('[data-test="wc-opt-row-3"]');
+      await t.scrollTo(row, { at: 0.35, force: true });
+      await t.callout("gone", row, "The clockwork inventor", 4);
+      await t.waitVoice();
+      await t.uncallout("gone");
       await t.hover(row);
       await t.beat(400);
       await t.click(row.getByRole("button", { name: "Remove option" }));
-      await t.beat(500);
-      await t.click(page.locator('[data-test="save-btn"]'));
-      await t.beat(1200);
-      await t.say("Changed your mind? Back in Library and data, press Restore on the backup.");
+      await t.beat(900);
+      // The History button only shows once the save has stored the version before it: wait for
+      // that, and say what went wrong when it didn't (run 820247b4 reopened Role with none).
+      const history = async () => {
+        const r = await t.h.api("/wp/api/modules/808878ba");
+        const row = (r.json?.data ?? r.json) as { payload?: { history?: unknown } } | undefined;
+        const h = row?.payload?.history;
+        return Array.isArray(h) ? h.length : 0;
+      };
+      const before = await history();
+      const save = page.locator('[data-test="save-btn"]');
+      for (let tries = 0; ; tries++) {
+        await t.click(save);
+        const state = await page
+          .waitForFunction(() => {
+            const s = document.querySelector('[data-test="save-btn"]')?.getAttribute("data-save-state");
+            return s === "saved" || s === "error" ? s : null;
+          }, null, { timeout: 10_000 })
+          .then((h) => h.jsonValue())
+          .catch(() => "no answer");
+        const after = await history();
+        if (after > before || (before >= 3 && state === "saved")) break;
+        if (tries >= 1) throw new StepError(`Saving Role didn't add a history entry (save state: ${state}, history ${before} → ${after}).`);
+        t.h.log(`Saving Role: state ${state}, history ${before} → ${after}; trying Save again.`);
+        await t.beat(800);
+      }
+      await t.beat(600);
+      // Each save keeps the version before it in the item's own history (the last three).
+      await t.say("Each save also keeps the version before it. Open Role again.");
+      await t.go("/wp/wildcards/808878ba/edit");
+      await t.beat(900);
+      await t.callout("histbtn", page.locator('[data-test="history-btn"]'), "Up to three earlier versions", 3);
+      await t.say("History, at the bottom of the editor, holds its last three versions.");
+      await t.waitVoice();
+      await t.click(page.locator('[data-test="history-btn"]'));
+      await t.uncallout("histbtn");
+      await t.beat(900);
+      await t.callout("hist", page.locator('[data-test="history-panel"]'), "This item's earlier versions", 6);
+      await t.say("Pick one to see it, and Restore this version brings back just this item. For one item, that's the quick way back.");
+      await t.waitVoice();
+      await t.uncallout("hist");
+      await t.press("Escape");
+      await t.beat(600);
+      await t.say("A backup goes further: it brings back the whole library. Back in Library and data, press Restore on the backup.");
       await t.go("/wp/settings/library");
       await hideOld();
       await t.scrollTo(list, { at: 0.4 });
@@ -82,7 +128,7 @@ tutorial(
       await t.beat(1800);
       await t.go("/wp/wildcards/808878ba/edit");
       await t.beat(900);
-      await t.callout("back", page.locator('[data-test="wc-opt-row-5"]'), "The inventor is back", 4);
+      await t.callout("back", page.locator('[data-test="wc-opt-row-3"]'), "The inventor is back", 4);
       await t.waitVoice();
       await t.uncallout("back");
     });
@@ -100,9 +146,10 @@ tutorial(
       await t.callout("db", [page.locator('[data-test="database-file"]'), page.locator('[data-test="database-run-integrity"]')], "The file, and its upkeep", 5);
       await t.waitVoice();
       await t.uncallout("db");
-      await t.say("And where it's kept: per ComfyUI install, shared by every install on this PC, or inside the plugin's folder.");
-      await t.scrollTo(page.locator('[data-test="location-option-user"]'), { at: 0.4 });
+      // The last option (Root) must clear the caption: scroll by it, box all three, then say them.
+      await t.scrollTo(page.locator('[data-test="location-option-root"]'), { at: 0.5, force: true });
       await t.callout("loc", [page.locator('[data-test="location-option-user"]'), page.locator('[data-test="location-option-root"]')], "Per install is the default", 5);
+      await t.say("And where it's kept: per ComfyUI install, shared by every install on this PC, or inside the plugin's folder.");
       await t.waitVoice();
       await t.uncallout("loc");
     });

@@ -11,6 +11,7 @@ import PickerModal from "./PickerModal.vue";
 import { app } from "#comfyui/app";
 import { submitAnswer, waiting } from "../../extension/image-filter";
 import type { PickAnswer } from "./types";
+import type { LiteGraphLike } from "../../extension/graph";
 
 const current = computed(() => waiting.value[0] ?? null);
 const minimized = ref(false);
@@ -19,6 +20,12 @@ const minimized = ref(false);
 watch(() => current.value?.token, (token, prev) => {
   if (token && token !== prev) minimized.value = false;
 });
+
+// The host types `app.graph` as unknown; the picker reads it as a graph,
+// like the other walkers do.
+function hostGraph(): LiteGraphLike | undefined {
+  return app.graph as LiteGraphLike | undefined;
+}
 
 function onAnswer(answer: PickAnswer): void {
   const req = current.value;
@@ -31,7 +38,7 @@ function onAnswer(answer: PickAnswer): void {
     v-if="current && !minimized"
     :request="current"
     :more-waiting="waiting.length - 1"
-    :graph="app.graph"
+    :graph="hostGraph()"
     @answer="onAnswer"
     @minimize="minimized = true"
   />

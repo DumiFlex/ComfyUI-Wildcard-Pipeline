@@ -7,6 +7,7 @@
  * Popover, which closes it on Escape or a click outside.
  */
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import {
   aiDebugSent, aiDebugUnseen, clearAiDebug, fetchAiDebug, listAiDebug, type AiDebugRow,
@@ -97,7 +98,7 @@ watch(() => aiDebugSent.value.length, () => {
       tool calls and tokens. <b>Copy debug</b> gives a readable copy to paste anywhere.
       <template v-if="folder"> Also saved as files in <code>{{ folder }}</code>.</template>
     </p>
-    <p v-if="failed" class="wp-ai-debug__error" role="alert">{{ failed }}</p>
+    <Banner v-if="failed" tone="danger" size="sm" class="wp-ai-debug__error">{{ failed }}</Banner>
     <p v-if="!rows.length && !failed" class="wp-ai-debug__empty" data-test="ai-debug-empty">
       Nothing yet. Use any AI feature and it shows up here.
     </p>
@@ -152,7 +153,7 @@ watch(() => aiDebugSent.value.length, () => {
 .wp-ai-debug__title { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
 .wp-ai-debug__note, .wp-ai-debug__empty { margin: 0; font-size: 12px; color: var(--wp-text-muted); line-height: 1.45; }
 .wp-ai-debug__note code { font-size: 11px; word-break: break-all; }
-.wp-ai-debug__error { margin: 0; font-size: 12px; color: var(--wp-danger-text); }
+.wp-ai-debug__error { margin: 0; }
 .wp-ai-debug__rows { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .wp-ai-debug__row {
   display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: min(8px, var(--wp-radius-cap, 999px));

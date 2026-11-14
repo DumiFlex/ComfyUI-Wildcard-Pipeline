@@ -2,6 +2,7 @@ import { defineAsyncComponent, h, ref, type Component } from "vue";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
   createDomWidgetHost,
+  isMirrorBuild,
   parseWidgetJsonWithRecovery,
   serializeWidgetJson,
   type MountTargetNode,
@@ -11,6 +12,7 @@ import { reactiveFromGraph } from "../extension/reactive";
 import {
   emptyCleanerConfig,
   type CleanerNodeConfig,
+  type CleanerTrace,
   type NegativeRunReport,
   type RunReport,
 } from "../components/cleaner/types";
@@ -20,6 +22,9 @@ const CleanerWidget = defineAsyncComponent(
 );
 const BlocklistModal = defineAsyncComponent(
   () => import("../components/cleaner/BlocklistModal.vue"),
+);
+const CleanerRunModal = defineAsyncComponent(
+  () => import("../components/cleaner/CleanerRunModal.vue"),
 );
 
 interface CleanerHostNode extends MountTargetNode {
@@ -45,6 +50,8 @@ interface CleanerHostNode extends MountTargetNode {
  * entries are persisted via the widget JSON.
  */
 export function create(node: CleanerHostNode, inputName: string) {
+  /** Shown on a subgraph node: the dots stay on the node itself. */
+  const mirrored = isMirrorBuild(node);
   const initialRaw = "";
   const parsed = parseWidgetJsonWithRecovery<CleanerNodeConfig>(initialRaw, emptyCleanerConfig());
   const config = ref<CleanerNodeConfig>(parsed.value);
@@ -55,6 +62,10 @@ export function create(node: CleanerHostNode, inputName: string) {
   const negativeReport = ref<NegativeRunReport | null>(null);
   const negativeWordCount = ref<number | null>(null);
   const blocklistOpen = ref(false);
+  // The Last run window: the run's traces (text in, out, and each rule's step).
+  const trace = ref<CleanerTrace | null>(null);
+  const negativeTrace = ref<CleanerTrace | null>(null);
+  const lastRunOpen = ref(false);
 
   const wrapper: Component = {
     setup() {
@@ -89,8 +100,10 @@ export function create(node: CleanerHostNode, inputName: string) {
           negativeReport: negativeReport.value,
           negativeWordCount: negativeWordCount.value,
           blocklistWired: blocklistWired.value,
+          lastRunTrace: trace.value,
           "onUpdate:modelValue": onUpdate,
           "onOpen-blocklist": () => { blocklistOpen.value = true; },
+          "onOpen-last-run": () => { lastRunOpen.value = true; },
         }),
         h(BlocklistModal, {
           visible: blocklistOpen.value,
@@ -98,6 +111,14 @@ export function create(node: CleanerHostNode, inputName: string) {
           "onUpdate:modelValue": onUpdateBlocklist,
           onClose: () => { blocklistOpen.value = false; },
         }),
+        lastRunOpen.value ? h(CleanerRunModal, {
+          open: true,
+          trace: trace.value,
+          report: lastRunReport.value,
+          negativeTrace: negativeTrace.value,
+          negativeReport: negativeReport.value,
+          "onUpdate:open": (v: boolean) => { lastRunOpen.value = v; },
+        }) : null,
       ]);
     },
   };
@@ -131,6 +152,11 @@ export function create(node: CleanerHostNode, inputName: string) {
     }
     return undefined;
   }
+  function isTrace(v: unknown): v is CleanerTrace {
+    if (!v || typeof v !== "object") return false;
+    const t = v as Record<string, unknown>;
+    return typeof t.input === "string" && typeof t.output === "string" && Array.isArray(t.steps);
+  }
   function onExecuted(ev: Event) {
     const detail = (ev as ExecutedEvent).detail;
     if (!detail || String(detail.node) !== String(node.id)) return;
@@ -140,6 +166,10 @@ export function create(node: CleanerHostNode, inputName: string) {
     if (report && typeof report === "object") {
       lastRunReport.value = report as RunReport;
     }
+    const t = pickFirst(out, "wp_cleaner_trace");
+    trace.value = isTrace(t) ? t : null;
+    const nt = pickFirst(out, "wp_cleaner_negative_trace");
+    negativeTrace.value = isTrace(nt) ? nt : null;
     const w = pickFirst(out, "wp_cleaner_word_count");
     if (typeof w === "number") wordCount.value = w;
     const c = pickFirst(out, "wp_cleaner_char_count");
@@ -156,7 +186,7 @@ export function create(node: CleanerHostNode, inputName: string) {
   }
   listenApi(host, "executed", onExecuted);
 
-  host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["blocklist"]));
+  if (!mirrored) host.onCleanup(attachFieldSockets(node as FieldSocketNode, host.element, inputName, ["blocklist"]));
   return host;
 }
 

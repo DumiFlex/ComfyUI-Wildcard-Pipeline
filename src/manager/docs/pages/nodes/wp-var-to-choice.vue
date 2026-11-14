@@ -70,7 +70,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </ul>
       <p>
         After a run the picker shows what it sent and how it found it. When it used the fallback,
-        the line turns amber and a warning pops up.
+        the line turns amber and a warning pops up. When <b>stop the run</b> stopped it, the line
+        reads <b>stopped the run</b> in red with the reason under it (the variable was empty, or
+        nothing matched, with some of the options), and a message says the same at the corner of
+        the canvas. The next run that gets past the node clears it.
       </p>
       <Banner tone="warn" note>
         Without this node ComfyUI doesn't check text that comes in through a wire: a name that

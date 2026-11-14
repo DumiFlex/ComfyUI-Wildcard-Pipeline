@@ -1,6 +1,7 @@
 """/wp/api/import/* + /wp/api/export/* — library bundle commit pipeline."""
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from aiohttp import web
@@ -8,6 +9,7 @@ from aiohttp import web
 from engine.exporter import build_export_payload
 from engine.importer import commit_import, get_undo_entry, undo_import
 from engine.modules import get_handler
+from engine.wildcard_export import export_envelope, slug
 from wp_api._helpers import db_session, json_error, json_ok
 from wp_api._validators import (
     MAX_IMPORT_BODY_BYTES,
@@ -32,6 +34,38 @@ _EXPORT_BUILD_KEYS = (
 )
 
 
+async def _read_export_request(request: web.Request) -> dict[str, Any] | web.Response:
+    """The export body as a dict, or the error response to send."""
+    err = validate_body_size(request.content_length)
+    if err is not None:
+        return json_error(err, status=400)
+    try:
+        body = await request.json()
+    except Exception:
+        return json_error("invalid JSON body", status=400)
+    if not isinstance(body, dict):
+        return json_error("body must be a JSON object", status=400)
+    for key in _EXPORT_BUILD_KEYS:
+        if key in body and not isinstance(body[key], list):
+            return json_error("uuid lists must be arrays", status=400)
+    return body
+
+
+def _build(request: web.Request, body: dict[str, Any]) -> dict[str, Any]:
+    with db_session(request) as conn:
+        return build_export_payload(
+            conn,
+            bundle_uuids=body.get("bundle_uuids", []),
+            wildcard_uuids=body.get("wildcard_uuids", []),
+            fixed_values_uuids=body.get("fixed_values_uuids", []),
+            combine_uuids=body.get("combine_uuids", []),
+            derivation_uuids=body.get("derivation_uuids", []),
+            constraint_uuids=body.get("constraint_uuids", []),
+            category_uuids=body.get("category_uuids", []),
+            template_uuids=body.get("template_uuids", []),
+        )
+
+
 async def export_build(request: web.Request) -> web.Response:
     """POST /wp/api/export/build — assemble an 8-bucket export payload.
 
@@ -53,32 +87,33 @@ async def export_build(request: web.Request) -> web.Response:
     type tracking. Response is the exporter payload returned directly
     (no ``{"ok": true, ...}`` wrapper).
     """
-    err = validate_body_size(request.content_length)
-    if err is not None:
-        return json_error(err, status=400)
-    try:
-        body = await request.json()
-    except Exception:
-        return json_error("invalid JSON body", status=400)
-    if not isinstance(body, dict):
-        return json_error("body must be a JSON object", status=400)
-    for key in _EXPORT_BUILD_KEYS:
-        if key in body and not isinstance(body[key], list):
-            return json_error("uuid lists must be arrays", status=400)
+    body = await _read_export_request(request)
+    if isinstance(body, web.Response):
+        return body
+    return json_ok(_build(request, body))
 
-    with db_session(request) as conn:
-        payload = build_export_payload(
-            conn,
-            bundle_uuids=body.get("bundle_uuids", []),
-            wildcard_uuids=body.get("wildcard_uuids", []),
-            fixed_values_uuids=body.get("fixed_values_uuids", []),
-            combine_uuids=body.get("combine_uuids", []),
-            derivation_uuids=body.get("derivation_uuids", []),
-            constraint_uuids=body.get("constraint_uuids", []),
-            category_uuids=body.get("category_uuids", []),
-            template_uuids=body.get("template_uuids", []),
-        )
-    return json_ok(payload)
+
+async def export_plain(request: web.Request) -> web.Response:
+    """POST /wp/api/export/plain — the same picks as ``export/build``, as
+    plain wildcard files (``engine/wildcard_export.py``) for Dynamic
+    Prompts, Impact Pack and the like. Optional ``name`` names the pack
+    folder. Returns ``{filename, data (base64 zip), files, skipped}``.
+    """
+    body = await _read_export_request(request)
+    if isinstance(body, web.Response):
+        return body
+    raw_name = body.get("name")
+    name = raw_name.strip()[:80] if isinstance(raw_name, str) and raw_name.strip() else "wildcards"
+    plain = export_envelope(_build(request, body), name)
+    if not plain.files:
+        return json_error("nothing in the selection can be written as wildcard files", status=400)
+    data = plain.to_zip(title=name)
+    return json_ok({
+        "filename": f"{slug(name, 'wildcards')}-wildcards.zip",
+        "data": base64.b64encode(data).decode("ascii"),
+        "files": len(plain.files),
+        "skipped": plain.skipped,
+    })
 
 
 def _validate_wildcard_grammar(body: dict) -> str | None:
@@ -335,5 +370,6 @@ async def import_undo(request: web.Request) -> web.Response:
 
 def register(router) -> None:
     router.add_post("/wp/api/export/build", export_build)
+    router.add_post("/wp/api/export/plain", export_plain)
     router.add_post("/wp/api/import/commit", import_commit)
     router.add_post("/wp/api/import/undo", import_undo)

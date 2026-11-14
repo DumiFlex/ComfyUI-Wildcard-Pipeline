@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import NoteTextEditor from "./NoteTextEditor.vue";
+import { NOTE_ASSETS } from "./note-format";
 import { ref } from "vue";
 import NoteMarkdown from "./note-markdown";
 import { NOTE_ACTIONS, NOTE_CONTEXTS, type NoteActions } from "./note-actions";
@@ -250,8 +251,16 @@ describe("NoteTextEditor pictures", () => {
     const area = w.get('[data-test="note-text"]').element as HTMLTextAreaElement;
     area.setSelectionRange(5, 5);
     await w.get('[data-test="note-fmt-image"]').trigger("click");
-    await w.get('[data-test="note-asset-toolbar-help"]').trigger("click");
+    // No grid until something is searched; the box says how many there are.
+    expect(w.find('[data-test="note-assets"]').exists()).toBe(false);
+    expect(w.text()).toContain(`${NOTE_ASSETS.length} pictures`);
+    await w.get('input[aria-label="Find a picture from the extension"]').setValue("help button");
+    const tiles = w.findAll('[data-test="note-assets"] .wp-image-grid__open');
+    expect(tiles).toHaveLength(1);
+    await tiles[0]?.trigger("click");
     expect(lastText(w)).toBe("Look:\n\n![Node toolbar with the ? help button](wp:asset/toolbar-help)");
+    // The panel stays open, now listing the picture with its size controls.
+    expect(w.find('[data-test="note-image-panel"]').exists()).toBe(true);
     w.unmount();
   });
 

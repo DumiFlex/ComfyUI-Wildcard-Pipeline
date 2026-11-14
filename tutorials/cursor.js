@@ -11,15 +11,97 @@
   if (window.__tut) return;
   const Z = "2147483647";
   const ARROW =
-    '<svg width="26" height="32" viewBox="0 0 26 32" xmlns="http://www.w3.org/2000/svg">' +
+    '<svg width="20" height="25" viewBox="0 0 26 32" xmlns="http://www.w3.org/2000/svg">' +
     '<path d="M2 2 L2 26 L8.5 20 L13 30 L17.5 28 L13 18.5 L22 18.5 Z" fill="#fff" stroke="#111" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 
   let root = null;
   let pointer = null;
   let caption = null;
   const callouts = new Map();
+  /**
+   * Puts a callout's box around `rect`, kept a few px inside the window so its stroke is never cut
+   * off at an edge, and its label (above, or below near the top) shifted in when it would run off.
+   */
+  const EDGE = 6;
+  function placeCallout(box, rect) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Padding is the same on both sides of an axis: near an edge (a top-bar button) it shrinks on
+    // both, so the box stays centred on its part instead of losing only the side at the edge.
+    const room = (lo, hi, max) => Math.max(2, Math.min(8, lo - EDGE, max - EDGE - hi));
+    // And the same on every side: a top-bar button only has a few pixels above it, and a box with
+    // 8 px at the sides but 2 px above and below read as off-centre (wide and squat round a square
+    // button), so the tighter axis sets both.
+    const pad = Math.min(room(rect.x, rect.x + rect.width, vw), room(rect.y, rect.y + rect.height, vh));
+    const padX = pad;
+    const padY = pad;
+    // Clamped to the window, a side can still lose padding (a top-bar button sits closer to the
+    // top than EDGE): take the same off the opposite side, so the box stays centred on the part.
+    const cut = (lo, hi, p, max) => Math.min(p, lo - EDGE, max - EDGE - hi);
+    // Still the same on every side, for the reason above.
+    const px = Math.min(cut(rect.x, rect.x + rect.width, padX, vw), cut(rect.y, rect.y + rect.height, padY, vh));
+    const py = px;
+    const left = rect.x - px;
+    const top = rect.y - py;
+    const right = rect.x + rect.width + px;
+    const bottom = rect.y + rect.height + py;
+    box.style.left = `${left}px`;
+    box.style.top = `${top}px`;
+    box.style.width = `${Math.max(0, right - left)}px`;
+    box.style.height = `${Math.max(0, bottom - top)}px`;
+    const tag = box.firstElementChild;
+    if (!tag) return;
+    const tw = tag.offsetWidth;
+    const th = tag.offsetHeight;
+    // Above the box when there is room, else below it, else inside its top edge.
+    if (top - th - 8 >= EDGE) {
+      tag.style.top = "";
+      tag.style.bottom = "calc(100% + 8px)";
+    } else if (bottom + th + 8 <= vh - EDGE) {
+      tag.style.bottom = "";
+      tag.style.top = "calc(100% + 8px)";
+    } else {
+      tag.style.bottom = "";
+      tag.style.top = "8px";
+    }
+    // From the box's left edge, moved left as far as it must to stay inside the window.
+    const x = Math.min(-3, vw - EDGE - tw - left);
+    tag.style.left = `${Math.max(EDGE - left, x)}px`;
+  }
   let x = -100;
   let y = -100;
+
+  /**
+   * The caption sits at the bottom, unless a callout reaches down into its band (a canvas node or a
+   * dialog's footer that can't be scrolled up) and none sits at the top: then it moves up there.
+   */
+  const BAND = 200;
+  function placeCaption() {
+    if (!caption) return;
+    const vh = window.innerHeight;
+    let low = false;
+    let high = false;
+    for (const box of callouts.values()) {
+      const top = parseFloat(box.style.top) || 0;
+      const bottom = top + (parseFloat(box.style.height) || 0);
+      if (bottom > vh - BAND) low = true;
+      if (top < BAND) high = true;
+    }
+    // An open list or menu (a mode dropdown, a picker) counts too: the viewer is reading it.
+    for (const el of document.querySelectorAll('[role="listbox"], [role="menu"], .p-select-overlay, .p-autocomplete-overlay')) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || getComputedStyle(el).visibility === "hidden") continue;
+      if (r.bottom > vh - BAND) low = true;
+      if (r.top < BAND) high = true;
+    }
+    if (low && !high) {
+      caption.style.bottom = "";
+      caption.style.top = "72px";
+    } else {
+      caption.style.top = "";
+      caption.style.bottom = "44px";
+    }
+  }
 
   function layer() {
     if (root && root.isConnected) return root;
@@ -28,7 +110,7 @@
     root.setAttribute("data-tut", "layer");
     root.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${Z};`;
     pointer = document.createElement("div");
-    pointer.style.cssText = "position:absolute;left:0;top:0;width:26px;height:32px;transform:translate(-100px,-100px);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));will-change:transform;";
+    pointer.style.cssText = "position:absolute;left:0;top:0;width:20px;height:25px;transform:translate(-100px,-100px);filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));will-change:transform;";
     pointer.innerHTML = ARROW;
     caption = document.createElement("div");
     caption.style.cssText =
@@ -51,7 +133,7 @@
     if (!r) return;
     const el = document.createElement("div");
     el.style.cssText =
-      `position:absolute;left:${px - 18}px;top:${py - 18}px;width:36px;height:36px;border-radius:50%;` +
+      `position:absolute;left:${px - 14}px;top:${py - 14}px;width:28px;height:28px;border-radius:50%;` +
       "border:3px solid rgba(124,108,255,.95);background:rgba(124,108,255,.22);transform:scale(.4);opacity:1;" +
       "transition:transform .35s ease-out,opacity .45s ease-out;";
     r.insertBefore(el, pointer);
@@ -88,7 +170,7 @@
       const m = document.createElement("div");
       m.style.cssText = "position:absolute;right:0;top:0;width:16px;height:16px;background:#ff00ff;";
       r.appendChild(m);
-      setTimeout(() => m.remove(), ms);
+      setTimeout(() => requestAnimationFrame(() => m.remove()), ms);
     },
     caption(text) {
       layer();
@@ -105,28 +187,36 @@
       if (!r) return;
       this.uncallout(id);
       const box = document.createElement("div");
-      const pad = 8;
       box.style.cssText =
-        `position:absolute;left:${rect.x - pad}px;top:${rect.y - pad}px;width:${rect.width + pad * 2}px;height:${rect.height + pad * 2}px;` +
+        "position:absolute;box-sizing:border-box;" +
         "border:3px solid #7c6cff;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,0,0,.28),0 0 18px rgba(124,108,255,.7);" +
         "opacity:0;transition:opacity .3s ease;";
       if (label) {
         const tag = document.createElement("div");
         tag.textContent = label;
-        const above = rect.y > 70;
         tag.style.cssText =
-          `position:absolute;left:-3px;${above ? "bottom:calc(100% + 8px)" : "top:calc(100% + 8px)"};white-space:nowrap;` +
+          "position:absolute;left:-3px;white-space:nowrap;" +
           "padding:6px 14px;border-radius:8px;background:#7c6cff;color:#fff;font:600 22px/1.3 'Inter','Segoe UI',system-ui,sans-serif;";
         box.appendChild(tag);
       }
       r.insertBefore(box, caption);
+      placeCallout(box, rect);
       requestAnimationFrame(() => (box.style.opacity = "1"));
       callouts.set(id, box);
+      placeCaption();
+    },
+    /** Moves a callout to a new rect (its part moved or changed size). */
+    recallout(id, rect) {
+      const box = callouts.get(id);
+      if (!box) return;
+      placeCallout(box, rect);
+      placeCaption();
     },
     uncallout(id) {
       const old = callouts.get(id);
       if (!old) return;
       callouts.delete(id);
+      placeCaption();
       old.style.opacity = "0";
       setTimeout(() => old.remove(), 320);
     },
@@ -136,4 +226,6 @@
     },
   };
   document.addEventListener("DOMContentLoaded", () => layer());
+  // Lists open and close without a callout changing, so the caption checks its place on a timer.
+  setInterval(() => { if (caption && caption.textContent) placeCaption(); }, 250);
 })();

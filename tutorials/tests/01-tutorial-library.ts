@@ -28,9 +28,9 @@ tutorial(
     try {
       await t.h.step("An empty library", async () => {
         await t.go("/wp/");
-        await t.say("The library from the tour is the one every tutorial uses: a hero, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.");
+        await t.say("The library from the tour is the one every tutorial uses: a role, a setting, outfits, and a few rules. A new install starts with an empty library, like this one.");
         await t.waitVoice();
-        await t.say("So first, bring the tutorial library in. The file, WP Tutorials library dot json, comes with the videos.");
+        await t.say("So first, bring the tutorial library in. The file, WP Tutorials library.json, comes with the videos.");
         await t.waitVoice();
       });
 
@@ -40,7 +40,7 @@ tutorial(
         await t.click(page.locator('[data-test="io-tab-import"]'));
         await t.beat(800);
         await t.waitVoice();
-        await t.say("Choose the file.");
+        await t.say("Choose WP Tutorials library.json.");
         const chooser = page.waitForEvent("filechooser");
         await t.click(page.locator('[data-test="import-file-btn"]'));
         await (await chooser).setFiles(fixture);
@@ -55,13 +55,14 @@ tutorial(
         // dialog with its own Import button.
         const commit = page.locator('[data-test="commit-btn"]');
         if (await commit.isVisible().catch(() => false)) await t.click(commit);
-        await t.beat(1200);
-        const toast = page.getByText("Import committed").first();
-        const shown = await toast.isVisible().catch(() => false);
-        if (shown) await t.callout("done", toast, "Imported, with Undo", 5);
+        // The message only stays a few seconds: box the whole card as it appears and say the line
+        // over it; the box leaves with the card.
+        const toast = page.locator('[data-test="toast"]').filter({ hasText: "Import committed" }).first();
+        const shown = await toast.waitFor({ state: "visible", timeout: 8000 }).then(() => true, () => false);
+        if (shown) await t.callout("done", toast, "Imported, with Undo", 4);
         await t.say("Nothing clashes with an empty library, so it goes straight in. The message has Undo, in case you change your mind.");
         await t.waitVoice();
-        if (shown) await t.uncallout("done");
+        await t.uncallout("done");
       });
 
       await t.h.step("The items", async () => {
@@ -69,6 +70,13 @@ tutorial(
         await t.say("The wildcards, rules and bundles are in your library now, and every tutorial can use them.");
         await t.beat(1500);
         await t.waitVoice();
+        const health = page.locator('[data-test="dashboard-health"]');
+        if (await health.isVisible().catch(() => false)) {
+          await t.callout("health", health, "One expected note", 6);
+          await t.say("Library health notes one problem: a LoRA rule reads a variable no list sets. That's expected. The LoRA video sets it from the canvas.");
+          await t.waitVoice();
+          await t.uncallout("health");
+        }
         await t.say("The example workflows carry their lists too. Their first note has an Add to my library button that saves them, if you'd rather start there.");
         await t.waitVoice();
       });

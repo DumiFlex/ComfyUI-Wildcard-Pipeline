@@ -163,3 +163,14 @@ export function tokenize(text: string, surface: Surface): PreviewToken[] {
   pushText(out, textBuf);
   return out;
 }
+
+/** Words for a field that writes text as it is, with no seed to roll on
+ *  (Context Injector templates, a WP Toggles Pick one Value): inline
+ *  `{a|b}` picks and `{N$$…}` repeats print as written there. */
+export const INLINE_PICKS_NOTE = "{a|b} picks need a seed, so they print as written here. Roll them in a wildcard or WP Context instead.";
+
+/** Whether `text` holds an inline pick or repeat (`{a|b}`, `{2$$, $$a|b}`). */
+export function hasInlinePicks(text: string): boolean {
+  if (!text.includes("{")) return false;
+  return tokenize(text, "assembler").some((t) => t.kind === "alt" || t.kind === "repeat");
+}

@@ -1,4 +1,4 @@
-// Library 1: the Test Runner. Stack Hero and Setting, run 100 seeds and read the shares; add the Hero
+// Library 1: the Test Runner. Stack Role and Setting, run 100 seeds and read the shares; add the Role
 // fits the place constraint at the end (100 warnings: it runs after its target), move Setting after
 // it and run again; open a sample's trace; switch to random seeds and a larger count.
 import { tutorial } from "../tutorial.js";
@@ -12,18 +12,24 @@ tutorial(
   },
   async (t) => {
     const page = t.page;
-    const add = async (name: RegExp) => {
+    const add = async (name: string) => {
       await t.click(page.locator('[data-test="stack-add"]'));
-      await t.beat(700);
-      await t.click(page.locator('[data-test="picker-option"]', { hasText: name }).first());
+      await t.beat(600);
+      await t.click(page.locator('[data-test="picker-search"]'));
+      await t.type(name, { cps: 14 });
+      await t.beat(600);
+      const row = page.locator('[data-test="picker-option"]').filter({
+        has: page.locator(".wp-trp__name", { hasText: new RegExp(`^\\s*${name}\\s*$`) }),
+      });
+      await t.click(row.first());
       await t.beat(700);
     };
 
     await t.h.step("A stack", async () => {
       await t.go("/wp/test");
-      await t.say("The Test Runner rolls your items on many seeds at once, without a canvas. Add the items you want to test, like the modules on a Context node.");
-      await add(/^Hero \$hero/);
-      await add(/^Setting \$setting/);
+      await t.say("The Test Runner rolls your items on many seeds at once, without a canvas. Add the items you want to test, like the rows on a Context node: type a name in the search and pick it.");
+      await add("Role");
+      await add("Setting");
       await t.waitVoice();
       await t.say("It runs seeds zero to ninety nine. Press Run.");
       await t.callout("seeds", page.locator('[data-test="seed-control"]'), "Which seeds, and how many", 4);
@@ -37,8 +43,8 @@ tutorial(
     });
 
     await t.h.step("Order and warnings", async () => {
-      await t.say("Now add the Hero fits the place constraint, at the end, and run.");
-      await add(/^Hero fits the place/);
+      await t.say("Now add the Role fits the place constraint, at the end, and run.");
+      await add("Role fits the place");
       await t.click(page.locator('[data-test="run-btn"]'));
       await t.beat(2500);
       await t.callout("warn", page.locator('[data-test="run-stats"]'), "A warning on every seed", 5);
@@ -48,11 +54,11 @@ tutorial(
       await t.say("Remove Setting and add it again, so it comes after the constraint. You can also drag cards to reorder.");
       await t.click(page.locator('[data-test="stack-card"]').nth(1).locator('[data-test="stack-remove"]'));
       await t.beat(600);
-      await add(/^Setting \$setting/);
+      await add("Setting");
       await t.click(page.locator('[data-test="run-btn"]'));
       await t.beat(2500);
       await t.callout("vars", page.locator('[data-test="variables-panel"]'), "No warnings, and the odds moved", 6);
-      await t.say("No warnings now, and the settings' shares moved, because each hero leans to its own places.");
+      await t.say("No warnings now, and the settings' shares moved, because each role leans to its own places.");
       await t.waitVoice();
       await t.uncallout("vars");
     });
@@ -64,7 +70,7 @@ tutorial(
       await t.click(page.locator('[data-test="sample-row"]').first());
       await t.beat(1000);
       await t.callout("trace", page.locator('[data-test="trace-drawer"]'), "Each step, in order", 6);
-      await t.say("The trace shows each step in order: what the hero rolled, what the constraint did, and the setting it picked. The same seed on a canvas Context gives the same values, and Copy seed takes it there.");
+      await t.say("The trace shows each step in order: what the role rolled, what the constraint did, and the setting it picked. The same seed on a canvas Context gives the same values, and Copy seed takes it there.");
       await t.waitVoice();
       await t.uncallout("trace");
       await t.click(page.locator('[data-test="close-trace"]'));

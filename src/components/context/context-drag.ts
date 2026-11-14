@@ -71,6 +71,8 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
   // lifted-ghost class so the source visually picks up alongside the
   // browser's default drag image.
   const draggingModuleUid = ref<string | null>(null);
+  // `_uid` of the bundle being dragged by its header: its frame dims.
+  const draggingBundleUid = ref<string | null>(null);
   // `_uid` of the most recently dropped row — pulses for 450ms after a
   // drop lands, then clears.
   // Phase B.4: Set + order map for multi-child pulse on cross-node bundle
@@ -88,9 +90,9 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
   const suppressMove = ref(false);
   let suppressMoveTimer: number | null = null;
 
-  // Drag anchor: the row or bundle whose CSS class opens the gap for the
-  // indicator bar. Computed once per dragOver change so rowGap +
-  // bundleGap + dropBarFor all consult the same source of truth.
+  // Drag anchor: the row or bundle whose kit class (row-drag.css) opens
+  // the gap with the drop line in it. Computed once per dragOver change so
+  // rowGap, bundleHeaderGap and the line styles share one answer.
   //
   // Slot semantics:
   //   - `insertIdx === <item start_idx>` → anchor at THAT item with pos
@@ -98,11 +100,14 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
   //   - No matching item → anchor at the LAST item in the container with
   //     pos "after" (bar below)
   //
-  // Empty container → no anchor (bar paints at container center via the
-  // dropBarFor fallback).
+  // Empty container → no anchor (the empty-state hero takes the drop).
+  // A closed bundle → "into": the whole frame is the target.
   type AnchorInfo =
     | { kind: "row"; idx: number; pos: "before" | "after"; containerUid: string | null }
-    | { kind: "bundle"; uid: string; pos: "before" | "after"; containerUid: string | null };
+    | { kind: "bundle"; uid: string; pos: "before" | "after"; containerUid: string | null }
+    // A closed bundle takes the drop as a whole: its frame lights up and a
+    // line in its colour runs under the header (no gap, its rows are hidden).
+    | { kind: "into"; uid: string; containerUid: string };
 
   function containerItems(
     containerUid: string | null,
@@ -145,6 +150,10 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
   const dragAnchor = computed<AnchorInfo | null>(() => {
     const z = dragOver.value;
     if (!z) return null;
+    if (z.containerUid !== null) {
+      const target = (value.value.bundles ?? []).find((b) => b._uid === z.containerUid);
+      if (target?.collapsed) return { kind: "into", uid: target._uid, containerUid: target._uid };
+    }
     const items = containerItems(z.containerUid, value.value);
     if (items.length === 0) return null;
     for (const it of items) {
@@ -175,6 +184,41 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
     return a.pos;
   }
 
+  /** The drop line's colour: a bundle's own colour when the drop lands in
+   *  that bundle, the accent at the top level (the kit's default). */
+  function containerLineColor(containerUid: string | null): string | null {
+    if (containerUid === null) return null;
+    const b = (value.value.bundles ?? []).find((bb) => bb._uid === containerUid);
+    if (!b) return null;
+    return b.color ? b.color : "var(--wp-bundle-default)";
+  }
+
+  /** CSS variables for the kit's drop line on its anchor (row or bundle
+   *  frame), so a line inside a bundle wears that bundle's colour. */
+  function dropLineStyle(a: AnchorInfo | null): Record<string, string> | undefined {
+    if (!a) return undefined;
+    const color = containerLineColor(a.containerUid);
+    return color ? { "--wp-rowdrag-color": color } : undefined;
+  }
+
+  function rowLineStyle(idx: number): Record<string, string> | undefined {
+    const a = dragAnchor.value;
+    if (!a || a.kind !== "row" || a.idx !== idx) return undefined;
+    return dropLineStyle(a);
+  }
+
+  function bundleLineStyle(uid: string): Record<string, string> | undefined {
+    const a = dragAnchor.value;
+    if (!a || a.kind !== "bundle" || a.uid !== uid) return undefined;
+    return dropLineStyle(a);
+  }
+
+  /** True when the drop goes into this CLOSED bundle (it opens on drop). */
+  function isBundleDropInto(uid: string): boolean {
+    const a = dragAnchor.value;
+    return a?.kind === "into" && a.uid === uid;
+  }
+
   // Bundle gap (frame margin opens above/below the bundle). Reads the
   // drag anchor; returns "before" when this bundle is the anchor with
   // pos "before", "after" when it's the anchor with pos "after".
@@ -193,110 +237,6 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
     const z = dragOver.value;
     if (!z) return false;
     return z.containerUid === uid;
-  }
-
-  /** Looks up the indicator-bar position for a drop container.
-   *
-   *  `containerUid = null` → top-level list (the `.wp-modules` container
-   *  inside the `.wp-modules-frame` ref).
-   *  `containerUid = bundleUid` → that bundle's `.wp-bundle-children`
-   *  scrolling body.
-   *
-   *  Returns `{top}` in pixels relative to that container's content box
-   *  when the resolved zone targets the container; null otherwise. The
-   *  BundleDropBar component renders an absolutely-positioned line at the
-   *  returned offset.
-   *
-   *  The bar paints in the MIDDLE of the gap opened by the `wp-gap-*`
-   *  margin (14px) — half that offset (7px) lifts the bar off the row's
-   *  edge so it sits in the gap visibly rather than overlapping the
-   *  row's own top/bottom border. That gives ONE clear line per drop
-   *  position instead of "is that the bar or the row's border?".
-   */
-  const GAP_BAR_OFFSET = 7;
-  function dropBarFor(containerUid: string | null): { top: number } | null {
-    const a = dragAnchor.value;
-    if (!a) {
-      // Empty container case (only fires for empty top-level — bundles
-      // always have ≥1 child by invariant). Paint at container center.
-      const z = dragOver.value;
-      if (!z || (z.containerUid ?? null) !== (containerUid ?? null)) return null;
-      const containerEl = findContainerEl(containerUid);
-      if (!containerEl) return null;
-      return { top: containerEl.clientHeight / 2 };
-    }
-    if ((a.containerUid ?? null) !== (containerUid ?? null)) return null;
-    const containerEl = findContainerEl(containerUid);
-    if (!containerEl) return null;
-
-    // CRITICAL: ComfyUI applies `transform: scale(zoom)` to the dom-widget
-    // container. `getBoundingClientRect` returns VIEWPORT pixels (scaled).
-    // `offsetTop` is in CSS pixels relative to offsetParent — that's the
-    // right unit for `position:absolute; top` under a transformed ancestor.
-    const anchorEl: HTMLElement | null =
-      a.kind === "row" ? findRowEl(a.idx, containerEl) : findBundleFrameEl(a.uid, containerEl);
-    if (!anchorEl) return null;
-    const off = elementOffsetTopWithin(anchorEl, containerEl);
-    return {
-      top: a.pos === "before"
-        ? off - GAP_BAR_OFFSET
-        : off + anchorEl.offsetHeight + GAP_BAR_OFFSET,
-    };
-  }
-
-  /** Walks `offsetParent` chain from `el` up until reaching `containerEl`,
-   *  accumulating CSS-pixel offsets. Returns `el`'s top relative to
-   *  `containerEl`'s padding edge (i.e. the same unit `position:absolute;
-   *  top: <value>` resolves against when `containerEl` is positioned).
-   *  Falls back to `el.offsetTop` if `containerEl` isn't reachable via
-   *  the offsetParent chain (defensive — would indicate broken layout). */
-  function elementOffsetTopWithin(el: HTMLElement, containerEl: HTMLElement): number {
-    let off = 0;
-    let cur: HTMLElement | null = el;
-    let safety = 0;
-    while (cur && cur !== containerEl && safety < 32) {
-      off += cur.offsetTop;
-      cur = cur.offsetParent as HTMLElement | null;
-      safety += 1;
-    }
-    if (cur !== containerEl) return el.offsetTop;
-    return off;
-  }
-
-  /** Locate the offset container for a given scope. Top-level → the
-   *  `.wp-modules` div inside modulesContainer.value. Nested → that
-   *  bundle's `.wp-bundle-children`. Returns null when the container
-   *  isn't mounted yet (e.g. early reactive read). */
-  function findContainerEl(containerUid: string | null): HTMLElement | null {
-    const frame = modulesContainer.value;
-    if (!frame) return null;
-    if (containerUid === null) {
-      return frame.querySelector<HTMLElement>(":scope > .wp-modules");
-    }
-    return frame.querySelector<HTMLElement>(
-      `.wp-bundle[data-bundle-uid="${containerUid}"] > .wp-bundle-children`,
-    );
-  }
-
-  /** Find a module row by its absolute module idx, restricted to a given
-   *  container scope (so nested rows don't get matched at top level). */
-  function findRowEl(moduleIdx: number, containerEl: HTMLElement): HTMLElement | null {
-    return containerEl.querySelector<HTMLElement>(
-      `:scope > .wp-module[data-module-idx="${moduleIdx}"]`,
-    ) ?? containerEl.querySelector<HTMLElement>(
-      `.wp-module[data-module-idx="${moduleIdx}"]`,
-    );
-  }
-
-  /** Find a bundle's outer wrapper element. Used for header.before/after
-   *  anchoring; `:scope >` keeps us in the container's immediate scope
-   *  so nested bundles don't bleed into a parent container's lookup. */
-  function findBundleFrameEl(uid: string, containerEl: HTMLElement): HTMLElement | null {
-    return containerEl.querySelector<HTMLElement>(
-      `:scope > .wp-bundle[data-bundle-uid="${uid}"]`,
-    ) ?? containerEl.querySelector<HTMLElement>(
-      `.wp-bundle[data-bundle-uid="${uid}"]`,
-    );
   }
 
   function clearDragHover() {
@@ -468,6 +408,7 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
       children,
       innerInstances,
     };
+    draggingBundleUid.value = uid;
     if (ev.dataTransfer) {
       ev.dataTransfer.effectAllowed = "move";
       ev.dataTransfer.setData("text/plain", `bundle:${uid}`);
@@ -529,6 +470,7 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
     sameNodeDropHandled = false;
     dragOver.value = null;
     draggingModuleUid.value = null;
+    draggingBundleUid.value = null;
   }
 
   let sameNodeDropHandled = false;
@@ -543,9 +485,8 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
   /** Dragover handler — delegates pointer-to-zone classification to the
    *  pure resolver. The resolver walks DOM from the pointer (innermost
    *  `.wp-bundle` ancestor wins as the target container) and applies the
-   *  tier-2 cap. ContextWidget just sets `dragOver.value`; the indicator
-   *  paint happens via the per-container `<BundleDropBar>` reading
-   *  `dropBarFor()`. */
+   *  tier-2 cap. ContextWidget just sets `dragOver.value`; the anchor's
+   *  kit classes paint the gap and line. */
   function onListDragOver(ev: DragEvent) {
     const ds = dragState.value;
     if (!ds) return;
@@ -713,7 +654,10 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
         return;
       }
       holdSuppressMove();
-      commitModules(next.modules, next.bundles);
+      // A bundle dropped into a closed bundle opens it, like a row does.
+      const parentUid = zone?.containerUid ?? null;
+      commitModules(next.modules, (next.bundles ?? []).map((b) =>
+        parentUid && b._uid === parentUid && b.collapsed ? { ...b, collapsed: false } : b));
       await nextTick();
       playFlipSnapshot(flipSnap);
       // Pulse the bundle wrapper AND every row in its range so a
@@ -768,7 +712,11 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
       // reconcileBundleRanges (via commitModules) will recompute
       // start_idx/end_idx for every bundle from each child's bundle_origin
       // chain — the placeholder ranges on freshInners get overwritten.
-      commitModules(list, [...bundles, newBundle, ...freshInners]);
+      commitModules(list, [
+        ...bundles.map((b) => (outerParentUid && b._uid === outerParentUid && b.collapsed ? { ...b, collapsed: false } : b)),
+        newBundle,
+        ...freshInners,
+      ]);
       // Snap fingerprints on the freshly-cloned outer + inners so the
       // cross-node receive registers as a clean baseline (matches the
       // semantics of a library insert).
@@ -851,11 +799,11 @@ export function useContextDrag(state: WidgetState, props: { readonly nodeId: num
   }
 
   const rowCtx = {
-    rowGap, draggingModuleUid, recentDropUids, pulseDelayFor, onDragStart, onDragEnd,
+    rowGap, rowLineStyle, draggingModuleUid, recentDropUids, pulseDelayFor, onDragStart, onDragEnd,
   } satisfies Partial<ModuleRowCtx>;
   const frameCtx = {
-    bundleHeaderGap, isBundleDropTarget, recentDropUids, pulseDelayFor,
-    onBundleDragStart, onDragEnd, dropBarFor,
+    bundleHeaderGap, bundleLineStyle, isBundleDropTarget, isBundleDropInto, draggingBundleUid,
+    recentDropUids, pulseDelayFor, onBundleDragStart, onDragEnd,
   } satisfies Partial<BundleFrameCtx>;
 
   return {

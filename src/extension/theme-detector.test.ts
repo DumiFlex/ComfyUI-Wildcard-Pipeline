@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyTheme, attachThemeDetector, detectInitialTheme } from "./theme-detector";
+import { _resetRootThemeForTests, applyTheme, attachThemeDetector, detectInitialTheme, watchRootTheme } from "./theme-detector";
 
 describe("theme-detector", () => {
   let host: HTMLDivElement;
@@ -206,6 +206,26 @@ describe("theme-detector", () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       expect(host.classList.contains("wp-theme-dark")).toBe(true);
       cleanup();
+    });
+  });
+
+  describe("watchRootTheme", () => {
+    afterEach(() => _resetRootThemeForTests());
+
+    it("keeps <html> in step after every widget detector is gone", async () => {
+      let palette: { id: string; light_theme?: boolean } = { id: "milk", light_theme: true };
+      const app = { extensionManager: { colorPalette: { getActiveColorPalette: () => palette } } };
+      const cleanup = attachThemeDetector(host, app);
+      watchRootTheme(app);
+      cleanup();
+      expect(document.documentElement.classList.contains("wp-theme-light")).toBe(true);
+
+      palette = { id: "dark" };
+      document.documentElement.style.setProperty("--background", "#171718");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(document.documentElement.classList.contains("wp-theme-dark")).toBe(true);
+      expect(document.documentElement.classList.contains("wp-theme-light")).toBe(false);
+      document.documentElement.style.removeProperty("--background");
     });
   });
 });

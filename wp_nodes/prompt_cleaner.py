@@ -16,7 +16,8 @@ Output:
 No PIPELINE_CONTEXT input — all rules operate on the prompt string +
 widget config alone. The node parses the widget JSON, runs
 PromptCleaner.run(), and emits the cleaned text plus a UI payload
-(per-rule report + word/char counts) the widget reads via the
+(per-rule report, word/char counts and the run's trace for the Last
+run window) the widget reads via the
 ComfyUI `executed` event.
 """
 
@@ -129,6 +130,7 @@ class WPPromptCleaner(io.ComfyNode):
         text = result["text"]
         ui_payload = {
             "wp_cleaner_report": [result["report"]],
+            "wp_cleaner_trace": [result["trace"]],
             "wp_cleaner_word_count": [count_words(text)],
             "wp_cleaner_char_count": [count_chars(text)],
         }
@@ -137,5 +139,6 @@ class WPPromptCleaner(io.ComfyNode):
             neg = cleaner.run_negative(negative, cfg, prompt=text)
             neg_text = neg["text"]
             ui_payload["wp_cleaner_negative_report"] = [neg["report"]]
+            ui_payload["wp_cleaner_negative_trace"] = [neg["trace"]]
             ui_payload["wp_cleaner_negative_word_count"] = [count_words(neg_text)]
         return io.NodeOutput(text, neg_text, ui=ui_payload)

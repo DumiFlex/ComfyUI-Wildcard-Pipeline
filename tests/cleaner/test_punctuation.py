@@ -45,3 +45,15 @@ def test_idempotent():
     once = apply(". cfg, avoid:", mode="tags", config={})
     twice = apply(once["text"], mode="tags", config={})
     assert once["text"] == twice["text"]
+
+
+def test_keeps_emoticon_tags():
+    result = apply("-_-, :3, ^_^, >_<, o_o, :d, ;), ..., -", mode="tags", config={})
+    assert result["text"] == "-_-, :3, ^_^, >_<, o_o, :d, ;)"
+
+
+def test_text_mode_keeps_the_closing_full_stop():
+    prose = "A cat sits. Then runs!"
+    assert apply(prose, mode="text", config={})["text"] == prose
+    assert apply("Wait...", mode="text", config={})["text"] == "Wait..."
+    assert apply(", hello world,", mode="text", config={})["text"] == "hello world"

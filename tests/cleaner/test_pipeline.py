@@ -186,3 +186,26 @@ def test_node_negative_is_a_text_box():
     # widget is optional too.
     assert [i.name for i in schema.inputs] == ["prompt", "negative", "blocklist", "wp_cleaner"]
     assert all(i.optional for i in schema.inputs[1:])
+
+
+def test_run_traces_each_rule_in_order():
+    out = PromptCleaner().run("foo,  foo, bar", {"mode": "tags", "intensity": "balanced"})
+    trace = out["trace"]
+    assert trace["input"] == "foo,  foo, bar"
+    assert trace["output"] == out["text"] == "foo, bar"
+    assert trace["mode"] == "tags"
+    assert [s["rule"] for s in trace["steps"]] == list(out["report"].keys())
+    # A step that changed nothing carries no text.
+    assert trace["steps"][0] == {"rule": "empty_groups"}
+    ws = next(s for s in trace["steps"] if s["rule"] == "whitespace")
+    assert ws["text"] == "foo, foo, bar"
+    dd = next(s for s in trace["steps"] if s["rule"] == "dedupe_exact")
+    assert dd["text"] == "foo, bar"
+
+
+def test_run_negative_traces_the_overlap_drop():
+    cfg = {"mode": "tags", "intensity": "gentle", "drop_prompt_overlap": True}
+    out = PromptCleaner().run_negative("lowres, red", cfg, prompt="red, cat")
+    steps = out["trace"]["steps"]
+    assert steps[-1] == {"rule": "prompt_overlap", "text": "lowres"}
+    assert out["trace"]["output"] == out["text"] == "lowres"

@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from "vitest";
 
-import { tokenize, type Surface } from "./preview-tokens";
+import { hasInlinePicks, tokenize, type Surface } from "./preview-tokens";
 
 describe("preview-tokens", () => {
   describe("VAR token", () => {
@@ -132,5 +132,14 @@ describe("preview-tokens", () => {
         expect(t.invalid).toBe(true);
       });
     });
+  });
+});
+
+describe("hasInlinePicks", () => {
+  it("finds picks and repeats, not plain braces or vars", () => {
+    expect(hasInlinePicks("{a|b|c}")).toBe(true);
+    expect(hasInlinePicks("x {2$$, $$a|b} y")).toBe(true);
+    expect(hasInlinePicks("$time light")).toBe(false);
+    expect(hasInlinePicks("")).toBe(false);
   });
 });

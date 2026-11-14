@@ -1,5 +1,5 @@
 // Advanced 4: reading a pick's parts. $gear.SHOES prints the tag a Travel gear pick rolled from
-// its SHOES accepts group; $color.0 / $color.1 read single picks of a two-pick Colors; $outfit.neg
+// its SHOES accepts group; $hair_color.0 / .1 read single picks of a two-pick Hair colors; $outfit.neg
 // reads a variable's negative, placed first in the Assembler's negative box.
 import { addDebugUnder, showcase, showcasing, tutorial } from "../tutorial.js";
 
@@ -7,7 +7,7 @@ tutorial(
   "A04",
   {
     title: "Reading a pick's parts",
-    description: "Print the tag a pick rolled with $gear.SHOES, one of several picks with $color.0, and a variable's negative with $outfit.neg.",
+    description: "Print the tag a pick rolled with $gear.SHOES, one of several picks with $hair_color.0, and a variable's negative with $outfit.neg.",
     learn: "The .GROUP, .0 / .1 and .neg readers, and where each one is useful.",
   },
   async (t) => {
@@ -28,15 +28,17 @@ tutorial(
 
     const nodes = await t.h.step("Print the tag", async () => {
       await t.go("/");
-      await t.say("Pick Hero, Travel gear, Colors and Outfit.");
+      await t.say("Pick Role, Travel gear and Hair colors, then the rule that fits the outfit to the role, and Outfit.");
       const ctx = await t.addNode("WP Context", { x: 520, y: 170 });
-      await t.pickModules(ctx, ["Hero", "Travel gear", "Colors", "Outfit"]);
+      await t.pickModules(ctx, ["Role", "Travel gear", "Hair colors", "Outfit fits the role", "Outfit"]);
+      await t.waitVoice();
+      await t.say("Then a Prompt Assembler, wired to the Context.");
       const asm = await t.addNode("WP Prompt Assembler", { x: 1180, y: 170 });
       await t.wire(ctx, "context", asm, "context");
       await t.waitVoice();
-      await t.say("Dollar gear prints the gear. Dollar gear dot SHOES prints the shoe it rolled, in the group's name, in capitals.");
+      await t.say("$gear prints the gear. $gear.SHOES prints the shoe it rolled: the group's name, in capitals.", "Dollar gear prints the gear. Dollar gear dot shoes prints the shoe it rolled: the group's name, in capitals.");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero in $gear and $gear.SHOES", { cps: 16 });
+      await t.type("A painting of $role in $gear and $gear.SHOES", { cps: 16 });
       await t.beat(800);
       await t.waitVoice();
       const plus = t.node(ctx).getByRole("button", { name: /increment|increase|\+/i }).first();
@@ -52,8 +54,8 @@ tutorial(
     });
 
     await t.h.step("One of several picks", async () => {
-      await t.say("Now make Colors pick two for this node: right-click it, Edit, and set the pick to exactly two.");
-      await t.click(t.moduleRow(nodes.ctx, "Colors").locator(".wp-module-name"), { right: true });
+      await t.say("Now make Hair colors pick two for this node: right-click it, Edit, and set the pick to exactly two.");
+      await t.click(t.moduleRow(nodes.ctx, "Hair colors").locator(".wp-module-name"), { right: true });
       await t.beat(600);
       await t.click(page.getByRole("menuitem", { name: "Edit" }));
       await t.beat(1000);
@@ -66,13 +68,16 @@ tutorial(
       await t.click(modal.locator('[data-test="wcm-save"]'));
       await t.beat(900);
       await t.waitVoice();
-      await t.say("Dollar color prints both. Dot zero is the first pick, dot one the second. Give one to the hair and one to the eyes.");
+      await t.say("$hair_color prints both. .0 is the first pick, .1 the second. Use one for the hair and one for its streaks.", "Dollar hair color prints both. Dot zero is the first pick, dot one the second. Use one for the hair and one for its streaks.");
       await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
       await t.press("End");
-      await t.type(", $color.0 hair, $color.1 eyes", { cps: 16 });
+      await t.type(", with $hair_color.0 hair and $hair_color.1 streaks", { cps: 16 });
+      // Close the suggestion list the last name opened, so it doesn't sit over the preview.
+      await t.press("Escape");
       await t.beat(800);
       await t.waitVoice();
       await t.callout("prev", preview(nodes.asm), "Two colors, never the same", 6);
+      await t.say("Change the seed a few times: the two colors are never the same.");
       for (let i = 0; i < 3; i++) {
         await t.click(nodes.plus);
         await t.beat(1100);
@@ -99,17 +104,18 @@ tutorial(
       await t.say("Plate armor carries a negative, and it lands in the negative prompt by itself.");
       await t.waitVoice();
       await t.uncallout("neg");
-      await t.say("Dot neg reads it on its own. Here it goes first in the negative box, before the rest.");
+      await t.say(".neg reads it on its own. Here it goes first in the negative box, before the rest.", "Dot neg reads it on its own. Here it goes first in the negative box, before the rest.");
       // Open the negative box unless it already is (it starts open or folded depending on its text).
       const negToggle = t.node(nodes.asm).locator('[data-test="neg-template-toggle"]');
-      if ((await negToggle.getAttribute("aria-expanded")) !== "true") await t.click(negToggle);
+      // Click its "negative" label, at the left: the row's centre can sit under a ref's hover card.
+      if ((await negToggle.getAttribute("aria-expanded")) !== "true") await t.click(negToggle.locator(".wp-negbox__label"));
       await t.beat(500);
       await t.click(t.node(nodes.asm).locator('[data-test="neg-template-box"] [contenteditable="true"], [data-test="neg-template-box"] textarea').first());
       await t.press("ControlOrMeta+a");
       await t.type("$outfit.neg, $negatives, lowres", { cps: 16 });
       await t.beat(1000);
       await t.callout("neg", neg, "Each word once", 6);
-      await t.say("Each word still comes once. Dot neg works in combines and derivations too.");
+      await t.say("Each word still comes once. .neg works in combines and derivations too.", "Each word still comes once. Dot neg works in combines and derivations too.");
       await t.waitVoice();
       await t.uncallout("neg");
     });
@@ -120,14 +126,14 @@ tutorial(
         const dbg = await addDebugUnder(t, nodes.ctx);
         await showcase(t, { from: nodes.asm, preview: { x: 1440, y: 150, width: 450, height: 780 }, chain: { x: 1820, y: 960 }, between: () => t.click(nodes.plus) });
         await t.callout("parts", t.node(dbg), "Each pick, its tags and negatives");
-        await t.say("Debug shows each pick with its tags and its negative.");
+        await t.say("Debug shows each pick with its tags, and its negative when it has one.");
         await t.waitVoice();
         await t.uncallout("parts");
       });
     }
 
     await t.h.step("Outro", async () => {
-      await t.say("Dot a group's name for a tag, dot a number for one pick, dot neg for the negative. Next: holding a value, and matching one.");
+      await t.say(".GROUP for a tag, .0 for one pick, .neg for the negative. Next: holding a value, and matching one.", "Dot a group's name for a tag, dot a number for one pick, dot neg for the negative. Next: holding a value, and matching one.");
     });
   },
 );

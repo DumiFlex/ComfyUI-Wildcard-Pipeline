@@ -7,6 +7,7 @@ import ValuesSection from "./sections/ValuesSection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import Button from "@/kit/Button.vue";
+import Modal from "@/kit/Modal.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -32,6 +33,17 @@ const emit = defineEmits<{
   "save-to-library": [];
   "clear-all-overrides": [];
 }>();
+/** The kit Modal closes on Escape, the backdrop and its ×: that is Cancel. */
+function onModalOpen(open: boolean): void {
+  if (!open) emit("cancel");
+}
+/** Ctrl/Cmd+Enter saves from anywhere in the window. */
+function onModalKey(ev: KeyboardEvent): void {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+    ev.preventDefault();
+    emit("save");
+  }
+}
 
 const isLibraryTracked = computed(() => Boolean(props.module.payload_hash));
 // See WildcardInstanceModal — PushToLibraryModal owns the update vs fork
@@ -53,26 +65,28 @@ function onSpaClick(): void {
 </script>
 
 <template>
-  <div class="wp-fvm">
-    <header class="wp-fvm__head">
-      <i class="pi pi-tag wp-fvm__head-icon" aria-hidden="true" />
+  <Modal :open="true" size="lg" flush accent="var(--wp-kind-fixed)" icon="tag" @update:open="onModalOpen" @keydown="onModalKey">
+    <template #header="{ titleId }">
       <div class="wp-fvm__title-block">
         <div class="wp-fvm__title-row">
-          <span class="wp-fvm__name" data-test="fvm-name">{{ module.meta?.name ?? module.type }}</span>
+          <span :id="titleId" class="wp-fvm__name" data-test="fvm-name">{{ module.meta?.name ?? module.type }}</span>
           <span class="wp-fvm__chip" data-test="fvm-chip">fixed</span>
           <InstanceIdChip :id="module.id" :uid="module._uid" />
         </div>
         <div class="wp-fvm__sub">Library entry · static $var → value pairs</div>
       </div>
-      <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="fvm-close" @click="emit('cancel')" />
-    </header>
-
+    </template>
+  <div class="wp-fvm">
+    <slot name="banner" />
+    
     <IdentitySection :module="module" @update="onUpdate" />
     <ValuesSection :module="module" @update="onUpdate" />
     <div class="wp-fvm__dock">
     <RuntimeSection :module="module" :frame-active="frameActive" @update="onUpdate" />
 
-    <footer class="wp-fvm__foot">
+        </div>
+  </div>
+    <template #footer>
       <a
         v-if="isLibraryTracked"
         class="wp-fvm__spa-link"
@@ -105,41 +119,26 @@ function onSpaClick(): void {
       >Save to library</Button>
       <Button size="sm" data-test="fvm-cancel" @click="emit('cancel')">Cancel</Button>
       <Button size="sm" variant="primary" data-test="fvm-save" @click="emit('save')">Save</Button>
-    </footer>
-    </div>
-  </div>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
 .wp-fvm {
-  background: var(--wp-bg2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius);
-  width: 820px;
-  max-width: 100%;
-  max-height: 80vh;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
   font-family: var(--wp-font-sans, sans-serif);
   font-size: 12px;
   color: var(--wp-text);
 }
-/* Head styling lives in src/components/context/editors/_modal-head.css
+/* The frame, the coloured header and the footer row are the kit Modal's;
+ * the title block's styles live in src/components/context/editors/_modal-head.css
  * (imported once by ContextWidget). */
 .wp-fvm__dock {
   position: sticky;
   bottom: 0;
   z-index: 2;
   background: var(--wp-bg2);
-}
-.wp-fvm__foot {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--wp-bg3);
-  border-top: 1px solid var(--wp-border);
 }
 .wp-fvm__spa-link {
   display: inline-flex;

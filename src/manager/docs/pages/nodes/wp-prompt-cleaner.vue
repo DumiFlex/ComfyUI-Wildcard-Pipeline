@@ -10,9 +10,9 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
 import DocRef from "../../../components/docs/DocRef.vue";
 
 const presets = [
-  { term: "Gentle", desc: "Only tidies spaces: removes doubled spaces and spaces at the ends. The safest choice." },
+  { term: "Gentle", desc: "Only tidies spaces and commas: doubled spaces, spaces at the ends and before a comma, doubled commas and empty slots between them (blurry, , lowres becomes blurry, lowres). The safest choice." },
   { term: "Balanced", desc: "Also removes empty brackets, tidies LoRA tags and stray punctuation, and drops exact duplicate tags. None of these change what the prompt means. A good default." },
-  { term: "Aggressive", desc: "Also merges stacked weights and drops near-duplicates (\"bad hand\" and \"bad hands\"). Now and then it removes something you meant to keep." },
+  { term: "Aggressive", desc: "Also merges stacked weights and drops near-duplicates: the same words up to plurals and a leading a, an or the (\"a knight\", \"knight\" and \"knights\" keep the first), or tags 90% alike letter by letter, which includes the same tag at another weight. Now and then it removes something you meant to keep." },
   { term: "Custom", desc: "Shown when you've switched single rules away from the preset." },
 ];
 
@@ -56,7 +56,7 @@ const syntaxRules = [
       <DocAnnotated
         src="images/docs/wp-prompt-cleaner.png"
         ratio="1720 / 860"
-        caption="A messy tag list and negative go into WP Prompt Cleaner and come out without the doubled tags, empty brackets and stray commas. Each rule counts its fixes, and Last run sums them up."
+        caption="A messy tag list and negative go into WP Prompt Cleaner and come out without the doubled tags, empty brackets and stray commas. Each rule counts its fixes, and Last run sums them up; click it for the before and after."
       />
     </DocSection>
 
@@ -99,7 +99,44 @@ const syntaxRules = [
       <p>
         <b>Drop negative tags also in prompt</b> (off by default) removes a tag from the negative
         when the prompt asks for it too, since the model can't both draw it and avoid it. Either
-        way, the run stats name the tags the two share.
+        way, the Last run strip names the tags the two share on an amber line of their own.
+      </p>
+    </DocSection>
+
+    <DocSection title="Last run">
+      <p>
+        After a run, the <b>Last run</b> strip at the bottom of the node says how many rules changed
+        the prompt and what they dropped. Click it to open the last run in a window:
+      </p>
+      <ul>
+        <li>
+          <b>Before and After</b> side by side, with removed tags struck through in red and added
+          ones in green. In tags mode whole tags are compared, so <code>((silver hair))</code> →
+          <code>(silver hair:1.21)</code> reads as one tag out and one in.
+        </li>
+        <li>
+          <b>One line per rule that changed something</b>, in the order they ran. Open a line to see
+          that rule's own before and after, and why it fired: a dropped duplicate beside the tag it
+          repeats, a near-duplicate beside the tag it is close to (and how close), a blocked tag
+          beside the blocklist entry it matched. The cause is marked in blue in the text.
+        </li>
+        <li>
+          <b>Prompt / Negative</b> switches sides when the run cleaned a negative too; the negative
+          side also lists tags the prompt has as well. <b>Copy cleaned text</b> copies the side you
+          are on.
+        </li>
+      </ul>
+      <p>
+        Each rule runs once per run, in the order of the list (bracket and LoRA rules first,
+        then whitespace, punctuation, tag dedupe, fuzzy dedupe, blocklist), and each works on what
+        the one before left. So a rule can count 0 because an earlier one already fixed it: the
+        empty slot in <code>blurry, , lowres</code> goes with whitespace, leaving punctuation
+        nothing. Duplicate removal never touches <code>BREAK</code> or <code>AND</code>, and
+        punctuation keeps emoticon tags such as <code>:3</code> and <code>-_-</code>.
+      </p>
+      <p>
+        It's the quickest way to check a pack: if a rule keeps removing the same thing, fix the
+        option that wrote it.
       </p>
     </DocSection>
 

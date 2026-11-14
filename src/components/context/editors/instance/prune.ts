@@ -9,7 +9,7 @@ type Instance = NonNullable<ModuleEntry["instance"]>;
 
 /** Distinct sub-category tags referenced by a parsed filter expression. */
 function exprTags(ast: Ast | null): string[] {
-  if (!ast) return [];
+  if (!ast || "var" in ast) return [];
   if ("tag" in ast) return [ast.tag];
   if (ast.op === "not") return exprTags(ast.x);
   return ast.kids.flatMap(exprTags);

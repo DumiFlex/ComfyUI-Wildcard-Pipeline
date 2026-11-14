@@ -4,6 +4,7 @@ import { computed, ref, watch } from "vue";
 import { varColorClass } from "../shared/var-color";
 import { modelSyntaxHtml } from "../../widgets/richTokenize";
 import { buildNegativePreview, type NegativesTable } from "../../extension/negatives";
+import { templatePieces, templateVarReads } from "../../extension/template-pieces";
 import ContextMenu, { type ContextMenuItem } from "@/kit/ContextMenu.vue";
 import { kindIcon, type WpKind } from "../shared/kind-icons";
 import {
@@ -14,6 +15,8 @@ import {
   type RolledAxes,
 } from "../../widgets/richTokenize";
 import Button from "@/kit/Button.vue";
+import { vTooltip } from "@/kit/tooltip";
+import { frameSentence, frameTag } from "./loop-frames";
 
 const props = defineProps<{
   /** Flat array of upstream variable names. Primary prop shape. */
@@ -31,6 +34,9 @@ const props = defineProps<{
    *  this, never against `resolvedMap` — the axis names a tag menu, not the
    *  variable's text. */
   varAxes?: Record<string, Record<string, string>>;
+  /** Each upstream toggle variable's switch: what `$name.bool` reads, since a
+   *  toggle with a Value writes the Value to `$name`, not true / false. */
+  varBools?: Record<string, boolean>;
   /** What the preview run actually rolled, keyed by binding (the preview
    *  endpoint's `axes`). Preferred over `varAxes` for any axis the chain
    *  declares, because `varAxes` only knows the axis's first tag — it printed
@@ -69,6 +75,10 @@ const props = defineProps<{
   /** Open the load-template-from-library picker. Toolbar Load button.
    *  Optional. */
   onLoadTemplate?: () => void;
+  /** Mark every upstream variable neither box reads as internal (keeping
+   *  any another Assembler on the same context reads). Toolbar button;
+   *  optional. */
+  onMarkUnused?: () => void;
   /** Per-var module-kind lookup. When known, each chip renders a
    *  small pi-icon matching the source module's kind (wildcard,
    *  fixed_values, combine, derivation, constraint,
@@ -82,6 +92,12 @@ const props = defineProps<{
    *  the dim overlay so muted/bypassed state matches litegraph's
    *  native node-frame dim. */
   nodeMode?: number;
+  /** A WP Context Loop upstream: the frame the chips and preview show
+   *  (0-based), the Loop's frame count, and the names only some frames set
+   *  (name → 0-based frames). Absent without a Loop. */
+  loopFrames?: { frame: number; count: number; partial: Record<string, number[]> };
+  /** Move the shared frame cursor (the Loop's EDIT FRAME) to a 0-based frame. */
+  onPickFrame?: (frame: number) => void;
 }>();
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -103,27 +119,22 @@ const emit = defineEmits<{
 /** Upstream variable names. */
 const upstreamNames = computed(() => props.upstreamVars ?? []);
 
-// Sentinel survives both regex passes — the Unicode replacement character;
-// doubled, it can't appear in real prompts.
-const ESCAPE_PLACEHOLDER = "��";
-const VAR_RE = /\$([A-Za-z_][A-Za-z0-9_]*)/g;
-// SP2a: capture an optional `.K` list accessor (group 2) so `$mood.0` consumes
-// the whole token — `m[0].length` then advances past `.K` (no stranded ".0"
-// literal) and group 2 drives applyVarAccessor in the substitution below.
-// Groups: 1=name · 2=index · 3=axis. The accessor has to be part of the match
-// or the preview prints the resolved value and strands ".SHOES" after it.
-// Both accessor orders the engine accepts (`$o.0.SHOES`, `$o.SHOES.0`); the
-// match is re-split by `varAccessorParts`, the one canonical grammar.
-const TEMPLATE_VAR_RE =
-  /(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(?:\d+(?:\.[A-Za-z_][A-Za-z0-9_]*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?))?/g;
-
 /** Variable names referenced in the template. */
 const templateVarsInternal = computed(() => {
   if (props.templateVars) return props.templateVars;
-  const sanitized = props.template.replace(/\$\$/g, ESCAPE_PLACEHOLDER);
-  const matches = sanitized.match(VAR_RE);
-  if (!matches) return [];
-  return [...new Set(matches.map((m) => m.slice(1)).filter((v) => !v.startsWith("__")))];
+  const names = templateVarReads(props.template).map((r) => r.name);
+  return [...new Set(names.filter((v) => !v.startsWith("__")))];
+});
+
+/** Upstream variables neither the prompt nor the negative box reads — what
+ *  the Mark unused button would look at (other Assemblers are checked when
+ *  it is pressed). */
+const unusedHere = computed(() => {
+  const used = new Set<string>();
+  for (const text of [props.template, props.negativeTemplate ?? ""]) {
+    for (const r of templateVarReads(text)) used.add(r.name);
+  }
+  return upstreamNames.value.filter((v) => !used.has(v));
 });
 
 /**
@@ -131,7 +142,52 @@ const templateVarsInternal = computed(() => {
  */
 const missing = computed(() => {
   const upstream = props.upstreamVars ?? [];
-  return templateVarsInternal.value.filter((v) => !upstream.includes(v));
+  const partial = props.loopFrames?.partial ?? {};
+  return templateVarsInternal.value.filter((v) => !upstream.includes(v) && !(v in partial));
+});
+
+/** Frames that set `v` when a Loop sets it on some frames only. */
+function partialFrames(v: string): number[] | undefined {
+  return props.loopFrames?.partial[v];
+}
+
+/** Template names a Loop sets on some frames but not on the frame shown:
+ *  not missing (another frame sets them), empty in this preview. */
+const offFrame = computed(() => {
+  const upstream = props.upstreamVars ?? [];
+  const partial = props.loopFrames?.partial ?? {};
+  return templateVarsInternal.value.filter((v) => !upstream.includes(v) && v in partial);
+});
+
+/** Template names set on some frames only, shown or not. */
+const someFrames = computed(() => {
+  const partial = props.loopFrames?.partial ?? {};
+  return templateVarsInternal.value.filter((v) => v in partial);
+});
+
+function chipFrameTag(v: string): string {
+  const f = partialFrames(v);
+  return f && props.loopFrames ? frameTag(f, props.loopFrames.count) : "";
+}
+
+function chipFrameHint(v: string): string {
+  const f = partialFrames(v);
+  return f && props.loopFrames ? frameSentence(v, f, props.loopFrames.count) : "";
+}
+
+/** Hover text for the preview note: each off-frame name's frames. */
+const offFrameHint = computed(() => offFrame.value.map((v) => chipFrameHint(v)).join(" "));
+
+/** Hover text for the header's "on some frames" count. */
+const someFramesHint = computed(() =>
+  `Set on some loop frames only: ${someFrames.value.map((v) => "$" + v).join(", ")}`,
+);
+
+/** The preview's frame stepper: only with a Loop of two or more frames. */
+const stepper = computed(() => {
+  const lf = props.loopFrames;
+  if (!lf || lf.count < 2) return null;
+  return { frame: lf.frame, count: lf.count };
 });
 
 // ── Formula-driven minWidth ────────────────────────────────────────
@@ -162,7 +218,8 @@ watch(
 // Preview tokenisation
 // ---------------------------------------------------------------------------
 
-interface PreviewToken { kind: "literal" | "var"; text: string; varName?: string }
+/** `off`: a name a loop sets on other frames, empty on the frame shown. */
+interface PreviewToken { kind: "literal" | "var" | "off"; text: string; varName?: string }
 
 /** An axis read resolves to a TAG. Falling through to the value is what
  *  rendered "a white t-shirt and denim skirt.SHOES". An axis the chain does not
@@ -180,31 +237,45 @@ function axisText(name: string, axis: string, index: number | undefined, raw: st
   return index != null && index > 0 ? "" : guess;
 }
 
+/** `$name.bool`, as the engine reads it (`converters._lookup_bool`): the
+ *  toggle's switch when a Toggles node set it, else the value when it already
+ *  is true / false, else nothing. */
+function boolText(name: string, value: ResolvedValue | undefined): string {
+  const on = props.varBools?.[name];
+  if (on !== undefined) return on ? "true" : "false";
+  const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return v === "true" || v === "false" ? v : "";
+}
+
 const previewTokens = computed<PreviewToken[]>(() => {
   if (!props.template) return [];
 
   // Primary path: per-var resolved map. Walk template + look up each $var
   // directly. No boundary-disambiguation needed.
   if (props.resolvedMap !== undefined) {
+    // `$$` / `@@` print one `$` / `@`, as the engine prints them.
     const tokens: PreviewToken[] = [];
-    let last = 0;
-    for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
-      const idx = m.index ?? 0;
-      if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
-      const raw = m[0];
+    for (const piece of templatePieces(props.template)) {
+      if (piece.kind !== "var") {
+        tokens.push({ kind: "literal", text: piece.kind === "text" ? piece.text : piece.raw });
+        continue;
+      }
+      const raw = piece.raw;
       const { base: name, index, axis } = varAccessorParts(raw);
       const has = Object.prototype.hasOwnProperty.call(props.resolvedMap, name);
+      if (!has && partialFrames(name)) {
+        tokens.push({ kind: "off", text: raw, varName: name });
+        continue;
+      }
       tokens.push({
         kind: "var",
-        text: axis
+        text: axis === "bool"
+          ? boolText(name, has ? props.resolvedMap[name] : undefined)
+          : axis
           ? axisText(name, axis, index, raw)
           : (has ? applyVarAccessor(props.resolvedMap[name], index) : raw),
         varName: name,
       });
-      last = idx + m[0].length;
-    }
-    if (last < props.template.length) {
-      tokens.push({ kind: "literal", text: props.template.slice(last) });
     }
     return tokens;
   }
@@ -212,16 +283,10 @@ const previewTokens = computed<PreviewToken[]>(() => {
   if (props.resolved !== undefined) {
     if (!props.resolved) {
       // No resolved string yet — render template with var highlights.
-      const tokens: PreviewToken[] = [];
-      let last = 0;
-      for (const m of props.template.matchAll(TEMPLATE_VAR_RE)) {
-        const idx = m.index ?? 0;
-        if (idx > last) tokens.push({ kind: "literal", text: props.template.slice(last, idx) });
-        tokens.push({ kind: "var", text: m[0], varName: m[1] });
-        last = idx + m[0].length;
-      }
-      if (last < props.template.length) tokens.push({ kind: "literal", text: props.template.slice(last) });
-      return tokens;
+      return templatePieces(props.template).map((p): PreviewToken =>
+        p.kind === "var"
+          ? { kind: "var", text: p.raw, varName: p.name }
+          : { kind: "literal", text: p.kind === "text" ? p.text : p.raw });
     }
 
     // Legacy fallback — walk template + resolved in parallel. Suffers from
@@ -229,15 +294,11 @@ const previewTokens = computed<PreviewToken[]>(() => {
     // contains the literal that bounds the next var. Prefer `resolvedMap`.
     const tpl = props.template;
     const res = props.resolved;
-    const segments: Array<{ kind: "literal" | "var"; text: string; varName?: string }> = [];
-    let last = 0;
-    for (const m of tpl.matchAll(TEMPLATE_VAR_RE)) {
-      const idx = m.index ?? 0;
-      if (idx > last) segments.push({ kind: "literal", text: tpl.slice(last, idx) });
-      segments.push({ kind: "var", text: m[0], varName: m[1] });
-      last = idx + m[0].length;
-    }
-    if (last < tpl.length) segments.push({ kind: "literal", text: tpl.slice(last) });
+    const segments: Array<{ kind: "literal" | "var"; text: string; varName?: string }> =
+      templatePieces(tpl).map((p) =>
+        p.kind === "var"
+          ? { kind: "var" as const, text: p.raw, varName: p.name }
+          : { kind: "literal" as const, text: p.kind === "text" ? p.text : p.raw });
 
     const tokens: PreviewToken[] = [];
     let cursor = 0;
@@ -272,14 +333,16 @@ const previewTokens = computed<PreviewToken[]>(() => {
  *  axis); a variable with no value renders nothing, as in the engine. */
 function renderVarsRaw(text: string): string {
   const map = props.resolvedMap ?? {};
-  return text.replace(TEMPLATE_VAR_RE, (raw) => {
-    const { base, index, axis } = varAccessorParts(raw);
+  return templatePieces(text).map((p) => {
+    if (p.kind === "text") return p.text;
+    if (p.kind !== "var") return p.raw;
+    const { base, index, axis } = varAccessorParts(p.raw);
     if (axis) {
-      const out = axisText(base, axis, index, raw);
-      return out === raw ? "" : out;
+      const out = axisText(base, axis, index, p.raw);
+      return out === p.raw ? "" : out;
     }
     return Object.prototype.hasOwnProperty.call(map, base) ? applyVarAccessor(map[base], index) : "";
-  });
+  }).join("");
 }
 
 /** What the node's `negative` output will be, built locally from the
@@ -302,6 +365,18 @@ const showNegative = computed(
 const isResolved = computed(() => {
   if (props.resolvedMap !== undefined) return Object.keys(props.resolvedMap).length > 0;
   return Boolean(props.resolved);
+});
+
+/** The preview header's note. A template with no `$names` is plain text: it
+ *  passes through as typed (the node then works as a multiline text box with
+ *  its own negative), so it is neither "empty" nor "unresolved". */
+const previewStatus = computed<{ text: string; tone: "ok" | "warn" | "info" | "" }>(() => {
+  if (!props.template.trim()) return { text: "(template empty)", tone: "" };
+  if (templateVarsInternal.value.length === 0) return { text: "plain text", tone: "ok" };
+  if (missing.value.length > 0) return { text: `${missing.value.length} unresolved`, tone: "warn" };
+  if (offFrame.value.length > 0) return { text: `${offFrame.value.length} empty`, tone: "info" };
+  if (isResolved.value) return { text: "resolved", tone: "ok" };
+  return { text: "(not resolved yet)", tone: "" };
 });
 
 // ---------------------------------------------------------------------------
@@ -486,6 +561,19 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             @click="onSaveTemplate"
           />
           <Button
+            v-if="onMarkUnused"
+            size="sm"
+            variant="outline"
+            icon="pi-eye-slash"
+            :disabled="unusedHere.length === 0"
+            data-test="asm-mark-unused"
+            :hint="unusedHere.length
+              ? `Mark the ${unusedHere.length} unused ${unusedHere.length === 1 ? 'variable' : 'variables'} internal (keeps any that another Assembler uses)`
+              : 'Every variable here is in the prompt or the negative'"
+            aria-label="Mark unused variables internal"
+            @click="onMarkUnused"
+          />
+          <Button
             v-if="onClearTemplate"
             size="sm"
             variant="danger"
@@ -499,6 +587,13 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
         </div>
         <span class="wp-asm-section-stat">
           {{ upstreamNames.length }} upstream
+          <template v-if="someFrames.length">
+            · <span
+              v-tooltip="someFramesHint"
+              class="wp-asm-section-stat--info"
+              data-test="asm-some-frames"
+            >{{ someFrames.length }} on some frames</span>
+          </template>
           <template v-if="missing.length">
             · <span class="wp-asm-section-stat--warn">{{ missing.length }} missing</span>
           </template>
@@ -524,6 +619,33 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
             aria-hidden="true"
           />
           <span class="var-tok">{{ v }}</span>
+          <span
+            v-if="chipFrameTag(v)"
+            v-tooltip="chipFrameHint(v)"
+            class="wp-asm-var__frames"
+            :data-test="`asm-frames-${v}`"
+          >{{ chipFrameTag(v) }}</span>
+        </span>
+        <span
+          v-for="v in offFrame"
+          :key="`off-${v}`"
+          v-tooltip="chipFrameHint(v)"
+          :data-test="`asm-chip-${v}`"
+          :class="['wp-asm-var', 'wp-asm-var--off-frame', {
+            'wp-asm__chip--ripple': ripples.has(v),
+            'wp-asm-var--ctx-active': ctxActiveVar === v,
+          }]"
+          :style="rippleStyle(v)"
+          @click="(ev) => onChipClick(ev, v)"
+          @contextmenu="(ev) => openChipMenu(ev, v, false)"
+        >
+          <i
+            v-if="chipKindIcon(v)"
+            :class="['wp-asm-var__kind-icon', chipKindIcon(v)]"
+            aria-hidden="true"
+          />
+          <span class="var-tok">{{ v }}</span>
+          <span class="wp-asm-var__frames" :data-test="`asm-frames-${v}`">{{ chipFrameTag(v) }}</span>
         </span>
         <span
           v-for="v in missing"
@@ -537,14 +659,49 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
           @click="onRemoveVar?.(v)"
           @contextmenu="(ev) => openChipMenu(ev, v, true)"
         ><i class="pi pi-exclamation-triangle" aria-hidden="true" />{{ v }}</span>
+        <span
+          v-if="upstreamNames.length === 0 && missing.length === 0 && offFrame.length === 0"
+          class="wp-asm-vars__none"
+          data-test="asm-vars-none"
+        >No variables here: wire a Context or Injector to use $names. Plain text passes through as typed.</span>
       </div>
 
       <!-- preview section -->
       <div class="wp-asm-section">
         <span>preview</span>
-        <span :class="['wp-asm-section-stat', isResolved ? 'is-ok' : '']">
-          {{ isResolved ? "resolved" : "(template empty or unresolved)" }}
+        <span v-if="stepper" class="wp-asm-frame-step" data-test="asm-frame-step">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="pi-chevron-left"
+            :disabled="stepper.frame <= 0"
+            hint="Previous loop frame"
+            aria-label="Previous loop frame"
+            data-test="asm-frame-prev"
+            @click="onPickFrame?.(stepper.frame - 1)"
+          />
+          <span class="wp-asm-frame-step__label" data-test="asm-frame-label" :aria-label="`Loop frame ${stepper.frame + 1} of ${stepper.count}`">{{ stepper.frame + 1 }}/{{ stepper.count }}</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="pi-chevron-right"
+            :disabled="stepper.frame >= stepper.count - 1"
+            hint="Next loop frame"
+            aria-label="Next loop frame"
+            data-test="asm-frame-next"
+            @click="onPickFrame?.(stepper.frame + 1)"
+          />
         </span>
+        <span
+          v-tooltip="offFrameHint"
+          :class="['wp-asm-section-stat', {
+            'is-ok': previewStatus.tone === 'ok',
+            'wp-asm-section-stat--warn': previewStatus.tone === 'warn',
+            'wp-asm-section-stat--info': previewStatus.tone === 'info',
+            'wp-asm-section-stat--after-step': !!stepper,
+          }]"
+          data-test="asm-preview-status"
+        >{{ previewStatus.text }}</span>
       </div>
       <div
         class="wp-asm-preview"
@@ -572,6 +729,12 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
                 class="literal"
                 v-html="modelSyntaxHtml(tok.text)"
               ></span>
+              <span
+                v-else-if="tok.kind === 'off'"
+                v-tooltip="chipFrameHint(tok.varName ?? '')"
+                class="wp-asm-preview__off"
+                data-test="asm-preview-off"
+              >{{ tok.text }}</span>
               <span v-else :class="['res', varColorClass(tok.varName ?? '')]">{{ tok.text }}</span>
             </template>
           </div>
@@ -634,6 +797,8 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 .wp-asm-helper--skipped { opacity: 0.45; }
 .wp-asm-section {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 4px;
   align-items: center;
   margin: 6px 0 4px;
   font: 500 11px/1 var(--wp-font-sans);
@@ -642,11 +807,60 @@ function openChipMenu(ev: MouseEvent, v: string, isMissing: boolean): void {
 }
 .wp-asm-section-stat {
   margin-left: auto;
+  white-space: nowrap;
   font: 11px/1 var(--wp-font-mono);
   color: var(--wp-text-dim);
 }
 .wp-asm-section-stat--warn { color: var(--wp-warn); }
+.wp-asm-section-stat--info { color: var(--wp-info); }
+/* The frame stepper takes the `margin-left: auto`; the status sits after it. */
+.wp-asm-section-stat--after-step { margin-left: 6px; }
+.wp-asm-frame-step {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  text-transform: none;
+}
+.wp-asm-frame-step__label {
+  font: 11px/1 var(--wp-font-mono);
+  color: var(--wp-text-muted);
+  padding: 0 2px;
+  white-space: nowrap;
+}
+/* A loop sets this name on some frames only: a small frame tag inside the
+   chip (hover names the frames). */
+.wp-asm-var__frames {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+  font-size: 9px;
+  line-height: 14px;
+  color: var(--wp-info);
+  background: color-mix(in oklab, var(--wp-info) 18%, transparent);
+}
+/* In the preview: renders empty on this frame. Kept in place, struck and
+   faint, so the sentence still shows where it goes. */
+.wp-asm-preview__off {
+  color: var(--wp-text-dim);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklab, var(--wp-info) 60%, transparent);
+}
+/* Set on other loop frames, not the one shown: not missing, so the calm
+   info colour with a dashed edge instead of the warning. */
+.wp-asm-var.wp-asm-var--off-frame {
+  color: var(--wp-info);
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--wp-info) 55%, transparent);
+  background: color-mix(in oklab, var(--wp-info) 10%, transparent);
+}
 .wp-asm-section-stat.is-ok { color: var(--wp-green); }
+.wp-asm-vars__none {
+  color: var(--wp-text-dim);
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 2px 4px;
+}
 .wp-asm-section-stat--neg {
   padding: 2px 6px;
   border-radius: min(3px, var(--wp-radius-cap, 999px));

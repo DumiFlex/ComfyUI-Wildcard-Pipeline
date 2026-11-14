@@ -61,7 +61,7 @@ function wireDblClick(): void {
 
 /** The narrowest a card note gets, and the width a label opens its editor at. */
 const CARD_MIN_WIDTH = 160;
-const FORM_WIDTH = 340;
+const FORM_WIDTH = 360;
 
 /** Mounts the note's one widget. Its value is the JSON NoteConfig. */
 export function mountNote(node: NoteNode) {
@@ -198,8 +198,10 @@ export function mountNote(node: NoteNode) {
     const w = isLabel() ? want[0] : Math.max(size[0], want[0]);
     const h = want[1];
     if (Math.abs(w - size[0]) <= 1 && Math.abs(h - size[1]) <= 1) return;
-    size[0] = w;
-    size[1] = h;
+    // setSize, not the array in place: Nodes 2.0 keeps its own copy of the
+    // node's size and only hears about it through setSize / onResize.
+    if (node.setSize) node.setSize([w, h]);
+    else { size[0] = w; size[1] = h; }
     node.setDirtyCanvas?.(true, true);
   }
   const sizeObserver = new ResizeObserver(() => applySize());
@@ -211,11 +213,10 @@ export function mountNote(node: NoteNode) {
     fitSize();
   }
   // Nothing restored by the next tick: the user just added this note. It
-  // starts pinned. (Pinning in the constructor would also pin every loaded
-  // note: an unpinned one saves no flag, so the default would win.)
+  // opens in its editor, unpinned like any new node; a loaded note keeps
+  // the pin it was saved with.
   setTimeout(() => {
     if (restored) return;
-    setPinned(node, true);
     setEditing(true);
   }, 0);
 
@@ -233,7 +234,9 @@ export function mountNote(node: NoteNode) {
   editTargets.add(editTarget);
   host.onCleanup(() => editTargets.delete(editTarget));
 
-  // Keep ComfyUI's wrapper letting clicks through (see _frameless.ts).
+  // Keep ComfyUI's wrapper letting clicks through (see _frameless.ts), the
+  // open editor too: its background drags the note, its controls take the
+  // pointer back (wp-frameless__pass).
   keepPassThrough(node, host);
   // Double-click anywhere on the note (it reaches the canvas) edits it.
   const prevDbl = node.onDblClick;
@@ -277,7 +280,7 @@ export function fixFrontendDef(defs: NodeDefLike[], type: string, displayName: s
 /**
  * Registers WP Note: a frontend-only node like ComfyUI's own Note. It is
  * virtual, so it never runs and is left out of the prompt; its text is
- * saved with the workflow. A new note starts pinned.
+ * saved with the workflow. A new note starts unpinned.
  */
 export function registerNoteNode(): void {
   publishTitleHeight();

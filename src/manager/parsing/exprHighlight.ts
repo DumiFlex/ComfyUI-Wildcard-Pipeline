@@ -22,6 +22,8 @@ export type ExprTokenKind =
   | "paren"
   /** A tag the wildcard declares. */
   | "term"
+  /** A `$name` term: reads a variable at run time (schema v11). */
+  | "var"
   /** A word that is not an operator and not a declared tag. */
   | "bad"
   /** Runs of whitespace, kept verbatim so the mirror aligns with the input. */
@@ -45,7 +47,7 @@ export function highlightExpression(src: string, known: ReadonlySet<string>): Ex
   const out: ExprToken[] = [];
   // Whitespace | paren | word (tags may contain - and _) | any other single
   // char, so stray punctuation still lands in a token rather than vanishing.
-  const scanner = /(\s+)|([()])|([\w-]+)|([^\s()\w-])/g;
+  const scanner = /(\s+)|([()])|(\$[A-Za-z_]\w*)|([\w-]+)|([^\s()\w-])/g;
   let m: RegExpExecArray | null;
   while ((m = scanner.exec(src)) !== null) {
     if (m[1] !== undefined) {
@@ -53,12 +55,14 @@ export function highlightExpression(src: string, known: ReadonlySet<string>): Ex
     } else if (m[2] !== undefined) {
       out.push({ text: m[2], kind: "paren" });
     } else if (m[3] !== undefined) {
-      const word = m[3];
+      out.push({ text: m[3], kind: "var" });
+    } else if (m[4] !== undefined) {
+      const word = m[4];
       if (OPERATORS.has(word.toLowerCase())) out.push({ text: word, kind: "op" });
       else out.push({ text: word, kind: known.has(word) ? "term" : "bad" });
     } else {
       // Not valid in an expression, so it reads as bad rather than as text.
-      out.push({ text: m[4], kind: "bad" });
+      out.push({ text: m[5], kind: "bad" });
     }
   }
   return out;

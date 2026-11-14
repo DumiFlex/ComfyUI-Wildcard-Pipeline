@@ -11,6 +11,7 @@ import IdentitySection from "./sections/IdentitySection.vue";
 import RuntimeSection from "./sections/RuntimeSection.vue";
 import InstanceIdChip from "../InstanceIdChip.vue";
 import Button from "@/kit/Button.vue";
+import Modal from "@/kit/Modal.vue";
 
 
 /** Platform-correct save chord for the footer hint. */
@@ -46,6 +47,17 @@ const emit = defineEmits<{
   (e: "reset-to-library"): void;
   (e: "open-spa"): void;
 }>();
+/** The kit Modal closes on Escape, the backdrop and its ×: that is Cancel. */
+function onModalOpen(open: boolean): void {
+  if (!open) emit("cancel");
+}
+/** Ctrl/Cmd+Enter saves from anywhere in the window. */
+function onModalKey(ev: KeyboardEvent): void {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+    ev.preventDefault();
+    emit("save");
+  }
+}
 
 /** SPA URL for the bundle library entry. Mirrors WildcardInstanceModal's
  *  `/wp/wildcards/{id}/edit` pattern. */
@@ -68,12 +80,11 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
 </script>
 
 <template>
-  <div class="wp-bdm" :style="{ '--modal-accent': headerColor }">
-    <header class="wp-bdm__head">
-      <i class="pi pi-box wp-bdm__head-icon" aria-hidden="true" />
+  <Modal :open="true" size="lg" flush :accent="headerColor" icon="box" @update:open="onModalOpen" @keydown="onModalKey">
+    <template #header="{ titleId }">
       <div class="wp-bdm__title-block">
         <div class="wp-bdm__title-row">
-          <span class="wp-bdm__name" data-test="bdm-name-display">{{ headerName }}</span>
+          <span :id="titleId" class="wp-bdm__name" data-test="bdm-name-display">{{ headerName }}</span>
           <span class="wp-bdm__chip" data-test="bdm-chip">bundle</span>
           <InstanceIdChip :id="bundle.library_id" :uid="bundle._uid" />
           <span
@@ -91,9 +102,10 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
         </div>
         <div class="wp-bdm__sub">Per-Context instance · name + color edits stay local</div>
       </div>
-      <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="bdm-close" @click="emit('cancel')" />
-    </header>
-
+    </template>
+  <div class="wp-bdm">
+    <slot name="banner" />
+    
     <IdentitySection
       :bundle="bundle"
       :library-name="libraryName"
@@ -108,7 +120,9 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
       @toggle-internal="emit('toggle-internal')"
     />
 
-    <footer class="wp-bdm__foot">
+        </div>
+  </div>
+    <template #footer>
       <a
         v-if="bundle.library_id"
         class="wp-bdm__spa-link"
@@ -141,25 +155,21 @@ const headerName = computed(() => props.bundle.name || props.libraryName || "Bun
       >Save to library</Button>
       <Button size="sm" data-test="bdm-cancel" @click="emit('cancel')">Cancel</Button>
       <Button size="sm" variant="primary" data-test="bdm-save" @click="emit('save')">Save</Button>
-    </footer>
-    </div>
-  </div>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-bdm { background: var(--wp-bg2); border: 1px solid var(--wp-border); border-radius: var(--wp-radius); width: 720px; max-width: 100%; max-height: 80vh; display: flex; flex-direction: column; overflow-y: auto; font-family: var(--wp-font-sans, sans-serif); font-size: 12px; color: var(--wp-text); }
-.wp-bdm__head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 9%, var(--wp-bg2)); border-bottom: 1px solid var(--wp-border); }
-.wp-bdm__head-icon { color: var(--modal-accent, var(--wp-accent)); font-size: 18px; width: 24px; text-align: center; }
+.wp-bdm { display: flex; flex-direction: column; font-family: var(--wp-font-sans, sans-serif); font-size: 12px; color: var(--wp-text); }
 .wp-bdm__title-block { flex: 1; min-width: 0; }
 .wp-bdm__title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wp-bdm__name { font: 600 13px var(--wp-font-sans); color: var(--wp-text); }
-.wp-bdm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--modal-accent, var(--wp-accent)) 22%, transparent); color: var(--modal-accent, var(--wp-accent)); }
+.wp-bdm__chip { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-modal-accent, var(--wp-accent)) 22%, transparent); color: var(--wp-modal-accent, var(--wp-accent)); }
 .wp-bdm__sub { font: 400 10px var(--wp-font-mono); color: var(--wp-text-dim, var(--wp-text3)); margin-top: 2px; }
 .wp-bdm__badge { font: 600 9px var(--wp-font-sans); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 6px; border-radius: min(2px, var(--wp-radius-cap, 999px)); }
 .wp-bdm__badge--drift { background: color-mix(in srgb, var(--wp-warn) 22%, transparent); color: var(--wp-warn); }
 .wp-bdm__badge--mod { background: color-mix(in srgb, var(--wp-status-modified) 22%, transparent); color: var(--wp-status-modified); }
 .wp-bdm__dock { position: sticky; bottom: 0; z-index: 2; background: var(--wp-bg2); }
-.wp-bdm__foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--wp-bg3); border-top: 1px solid var(--wp-border); }
 .wp-bdm__spa-link { display: inline-flex; align-items: center; gap: 5px; font: 10px var(--wp-font-sans); color: var(--wp-text-muted, var(--wp-text2)); text-decoration: none; }
 .wp-bdm__spa-link:hover { color: var(--wp-accent-text, var(--wp-text)); }
 .wp-bdm__spa-link .pi { font-size: 10px; }

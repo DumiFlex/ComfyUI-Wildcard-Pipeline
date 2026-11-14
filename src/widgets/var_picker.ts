@@ -29,6 +29,7 @@ import {
 import { reactiveFromGraph } from "../extension/reactive";
 import { describeChoiceTargets, fallbackChoices, findChoiceTargets } from "../extension/choice-targets";
 import { pushToast } from "../components/shared/toast-store";
+import { runErrorOf } from "../extension/run-errors";
 
 const VarPicker = defineAsyncComponent(() => import("../components/var-picker/VarPicker.vue"));
 
@@ -189,6 +190,9 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
           nodeMode: nodeMode.value,
           wiredTo: wiredTo?.value ?? "",
           choiceNote: hasExecuted.value ? choiceNote.value : "",
+          executed: hasExecuted.value,
+          // Only Var → Choice stops a run; it paints its own row for it.
+          runError: isChoice ? runErrorOf(node)?.message ?? "" : "",
           "onUpdate:modelValue": onUpdate,
         });
     },
@@ -205,6 +209,7 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
       currentVar.value = v;
     },
     minHeight: isChoice ? 106 : 92,
+    ownRunError: isChoice,
     minWidth: 260,
   });
 
@@ -220,7 +225,7 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
     const src = pickFirst(out, "wp_varpicker_source");
     const parsed = pickFirst(out, "wp_varpicker_parsed");
     const def = pickFirst(out, "wp_varpicker_default");
-    if (typeof src === "string") previewSource.value = src;
+    previewSource.value = typeof src === "string" ? src : "";
     // Python sends `null` when the parser fell back to default — keep
     // the null so the SFC paints the amber "default" state.
     previewParsed.value = typeof parsed === "string" ? parsed : null;

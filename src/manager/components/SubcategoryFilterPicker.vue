@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import Banner from "@/kit/Banner.vue";
 import SearchInput from "@/kit/SearchInput.vue";
 import { textareaEl } from "../utils/kit-field-el";
 import Button from "@/kit/Button.vue";
@@ -12,6 +13,7 @@ import {
   matches,
   readsAs,
   validateExpression,
+  exprVariables,
 } from "@/manager/parsing/subcatFilter";
 import {
   collectTermPolarity,
@@ -156,6 +158,9 @@ const ast = computed(() => {
     return null;
   }
 });
+
+/** `$name` terms: read at run time, so the count below is before them. */
+const exprVars = computed<string[]>(() => (error.value ? [] : exprVariables(expr.value)));
 
 /** Normalized "reads as" preview — empty string for an empty/invalid
  *  expression. */
@@ -504,6 +509,12 @@ function onApply(): void {
       </div>
     </div>
 
+    <Banner v-if="exprVars.length" tone="neutral" size="sm" icon="pi-bolt" note data-test="vars-note">
+        {{ exprVars.map((v) => `$${v}`).join(", ") }} {{ exprVars.length > 1 ? "are" : "is" }} read
+        when the prompt runs: options tagged with the value stay, as do options with no tag in
+        that value's group. The count is before {{ exprVars.length > 1 ? "them" : "it" }}.
+    </Banner>
+
     <!-- Valid, and matches nothing. Not an error — the expression is
          well-formed over declared tags, it just happens that no option carries
          the combination. Today this applies silently and the ref resolves to
@@ -727,6 +738,7 @@ function onApply(): void {
 }
 .wp-subcat-tok--term { color: var(--wp-accent-300); }
 .wp-subcat-tok--op { color: var(--wp-info); }
+.wp-subcat-tok--var { color: var(--wp-var-3); }
 .wp-subcat-tok--paren { color: var(--wp-text-dim, var(--wp-text3)); }
 /* Marked as you type, before the validator has finished the sentence. */
 .wp-subcat-tok--bad {

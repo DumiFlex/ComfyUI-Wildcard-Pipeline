@@ -13,6 +13,7 @@
  * answer, and clicking a step shows its answer.
  */
 import { textareaEl } from "../../utils/kit-field-el";
+import Banner from "@/kit/Banner.vue";
 import Textarea from "@/kit/Textarea.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
@@ -239,7 +240,7 @@ function onKeydown(ev: KeyboardEvent): void {
       >{{ verb }}</Button>
     </div>
     <AiWorking v-if="loading" class="wp-ai-frame__status" :label="`Asking ${modelLabel || 'the model'}`" data-test="ai-loading" />
-    <p v-if="error" class="wp-ai-frame__error" role="alert" data-test="ai-error">{{ error }}</p>
+    <Banner v-if="error" tone="danger" size="sm" class="wp-ai-frame__error" data-test="ai-error">{{ error }}</Banner>
     <div v-if="answered && research?.length && !loading" class="wp-ai-frame__research" data-test="ai-research">
       <i class="pi pi-globe" aria-hidden="true" />
       <span class="wp-ai-frame__research-text">
@@ -306,5 +307,5 @@ function onKeydown(ev: KeyboardEvent): void {
 .wp-ai-frame__hint { font-size: 12px; color: var(--wp-text-dim); }
 .wp-ai-frame__spacer { flex: 1; }
 .wp-ai-frame__status { margin: 0; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 6px; align-items: center; }
-.wp-ai-frame__error { margin: 0; font-size: 12px; color: var(--wp-danger); }
+.wp-ai-frame__error { margin: 0; }
 </style>

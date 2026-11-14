@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
 import corpus from "../../tests/fixtures/toggles-corpus.json";
 import {
+  collectUpstreamKinds,
+  collectUpstreamRenderableVariables,
+  collectUpstreamVariables,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "./graph";
+import {
   MAX_OUTPUTS,
   defaultTogglesConfig,
+  dropToggleRow,
+  visibleRows,
   withUpstream,
   groupsOf,
+  internalToggleVars,
+  ownToggleNegatives,
+  toggleBools,
   needsDepth,
   needsLoop,
   newToggle,
@@ -16,6 +28,7 @@ import {
   rowsOf,
   toggleProblems,
   toggleRows,
+  togglesPreviewModules,
   uniqueVar,
   varFromName,
   type ToggleRow,
@@ -34,10 +47,13 @@ describe("toggles corpus (shared with engine/toggles.py)", () => {
     it(c.name, () => {
       const parsed = withUpstream(parseTogglesConfig(JSON.stringify(c.config)), "upstream" in c ? c.upstream : null).config;
       expect(resolveToggles(parsed)).toEqual(c.values);
+      expect(toggleBools(parsed)).toEqual(c.bools);
+      expect(ownToggleNegatives(parsed)).toEqual("negatives" in c ? c.negatives : {});
       const vals = outputValues(parsed);
       expect(vals).toHaveLength(MAX_OUTPUTS);
       expect(vals.slice(0, c.outputs.length)).toEqual(c.outputs);
       expect(vals.slice(c.outputs.length).some(Boolean)).toBe(false);
+      if ("internal" in c) expect([...internalToggleVars(parsed)].sort()).toEqual(c.internal);
     });
   }
 });
@@ -47,7 +63,7 @@ describe("parseTogglesConfig", () => {
     for (const raw of ["", "{", "[]", null, 5]) {
       const c = parseTogglesConfig(raw);
       expect(toggleRows(c)).toHaveLength(1);
-      expect(toggleRows(c)[0]).toMatchObject({ pin: true, out: 1, style: "switch" });
+      expect(toggleRows(c)[0]).toMatchObject({ pin: false, out: 0, style: "switch" });
     }
   });
   it("keeps labels, labels and styles; drops junk; re-ids repeats", () => {
@@ -84,7 +100,7 @@ describe("names", () => {
     expect(uniqueVar("rain", c)).toBe("rain_3");
     expect(uniqueVar("rain", c, "1")).toBe("rain");
     expect(newToggle(c).var).toBe("toggle_3");
-    expect(defaultTogglesConfig().rows[0]).toMatchObject({ name: "Toggle 1", var: "toggle_1", out: 1 });
+    expect(defaultTogglesConfig().rows[0]).toMatchObject({ name: "Toggle 1", var: "toggle_1", pin: false, out: 0 });
   });
 });
 
@@ -170,5 +186,191 @@ describe("needs + problems + groups", () => {
     const g = groupsOf(c);
     expect(g.map((x) => [x.label?.id ?? null, x.toggles.map((r) => r.id)])).toEqual([[null, ["a"]], ["L", ["b"]]]);
     expect(rowsOf(g)).toEqual(c.rows);
+  });
+});
+
+describe("toggle variables in the graph walkers", () => {
+  function chain(config: TogglesConfig) {
+    const nodes: LiteNodeLike[] = [];
+    const g = {
+      _nodes: nodes,
+      links: { 10: { id: 10, origin_id: 1, origin_slot: 0, target_id: 2, target_slot: 0 } },
+      getNodeById: (id: number) => nodes.find((n) => n.id === id) ?? null,
+    } as unknown as LiteGraphLike;
+    nodes.push(
+      {
+        id: 1, type: "WP_Toggles", graph: g,
+        inputs: [{ name: "upstream", link: null }],
+        outputs: [{ name: "context", links: [10], type: "PIPELINE_CONTEXT" }],
+        widgets: [{ name: "wp_toggles", value: JSON.stringify(config) }],
+      },
+      {
+        id: 2, type: "WP_PromptAssembler", graph: g,
+        inputs: [{ name: "context", link: 10 }],
+        outputs: [],
+        widgets: [],
+      },
+    );
+    return { g, asm: nodes[1] };
+  }
+
+  it("keeps internal toggles out of the Assembler and shows the rest", () => {
+    const c = { ...cfg([t("a", "dawn", true), t("b", "dusk", false, { visible: true })], "one"), group_var: "time", group_visible: true as const };
+    const { g, asm } = chain(c);
+    expect(collectUpstreamVariables(g, asm).sort()).toEqual(["dawn", "dusk", "time"]);
+    expect(collectUpstreamRenderableVariables(g, asm).sort()).toEqual(["dusk", "time"]);
+    const kinds = collectUpstreamKinds(g, asm);
+    expect(kinds.time).toBe("toggle");
+    expect(kinds.__wp_internal_flags__).toBe(JSON.stringify({ dawn: true }));
+  });
+
+  it("the Pick one variable is internal without Show in Assembler", () => {
+    const { g, asm } = chain({ ...cfg([t("a", "dawn", true)], "one"), group_var: "time" });
+    expect(collectUpstreamRenderableVariables(g, asm)).toEqual([]);
+  });
+
+  it("the preview carries each variable's negative (Any on and Pick one)", () => {
+    const any = cfg([
+      t("a", "rain", true, { value: "in the rain", negative: "sunny sky", visible: true }),
+      t("b", "fog", false, { value: "fog", off_negative: "clear air", visible: true }),
+      t("c", "wind", true, { visible: true }),
+    ]);
+    const steps = togglesPreviewModules({ widgets: [{ name: "wp_toggles", value: JSON.stringify(any) }] });
+    expect(steps[0]?.entries).toEqual([
+      { variable_name: "rain", value: "in the rain", negative: "sunny sky" },
+      { variable_name: "fog", value: "", negative: "clear air" },
+      { variable_name: "wind", value: "true" },
+    ]);
+    const one = { ...cfg([t("a", "day", false), t("b", "night", true, { value: "at night", negative: "daylight" })], "one"), group_var: "time", group_visible: true };
+    const picked = togglesPreviewModules({ widgets: [{ name: "wp_toggles", value: JSON.stringify(one) }] });
+    const entries = picked.flatMap((s) => s.entries as { variable_name: string; negative?: string }[]);
+    expect(entries.find((e) => e.variable_name === "time")?.negative).toBe("daylight");
+  });
+
+  it("the preview splits shown and internal variables", () => {
+    const c = cfg([t("a", "dawn", true), t("b", "dusk", false, { visible: true })]);
+    const steps = togglesPreviewModules({ widgets: [{ name: "wp_toggles", value: JSON.stringify(c) }] });
+    expect(steps.map((s) => [s.instance, (s.entries as { variable_name: string }[]).map((e) => e.variable_name)])).toEqual([
+      [{}, ["dusk"]],
+      [{ internal: true }, ["dawn"]],
+    ]);
+  });
+});
+
+describe("pick_style", () => {
+  it("keeps a known Pick one style and drops radio or junk", () => {
+    expect(parseTogglesConfig({ mode: "one", rows: [], pick_style: "chip" }).pick_style).toBe("chip");
+    expect(parseTogglesConfig({ mode: "one", rows: [], pick_style: "radio" }).pick_style).toBeUndefined();
+    expect(parseTogglesConfig({ mode: "one", rows: [], pick_style: "buttons" }).pick_style).toBeUndefined();
+  });
+  it("keeps visible only as true", () => {
+    const c = parseTogglesConfig({ rows: [{ id: "a", kind: "toggle", name: "a", var: "a", visible: true }, { id: "b", kind: "toggle", name: "b", var: "b", visible: "yes" }] });
+    expect(toggleRows(c).map((r) => r.visible)).toEqual([true, undefined]);
+  });
+});
+
+describe("dropToggleRow (edit view drag across groups)", () => {
+  const L = (id: string, collapsed = false): TogglesConfig["rows"][number] => ({ id, kind: "label", name: id, color: 1, ...(collapsed ? { collapsed: true } : {}) });
+  const ids = (rows: TogglesConfig["rows"] | undefined) => rows?.map((r) => r.id);
+  const groupIds = (c: TogglesConfig) => groupsOf(c).map((g) => `${g.label?.id ?? "-"}:${g.toggles.map((x) => x.id).join("")}`);
+  const c = cfg([t("a", "a", true), L("L1"), t("b", "b", true), t("c", "c", true), L("L2"), t("d", "d", true)]);
+
+  it("moves a toggle into another group, beside a toggle or first after its label", () => {
+    expect(ids(dropToggleRow(c, "a", "d", "before")?.rows)).toEqual(["L1", "b", "c", "L2", "a", "d"]);
+    const first = dropToggleRow(c, "d", "L1", "after");
+    expect(ids(first?.rows)).toEqual(["a", "L1", "d", "b", "c", "L2"]);
+    expect(first?.group?.id).toBe("L1");
+  });
+  it("moves a toggle out of a group, above the first label", () => {
+    expect(ids(dropToggleRow(c, "b", "a", "after")?.rows)).toEqual(["a", "b", "L1", "c", "L2", "d"]);
+    expect(dropToggleRow(c, "b", "L1", "before")?.group).toBeNull();
+  });
+  it("drops a toggle below a group, in no group, and reads it back the same", () => {
+    const below = dropToggleRow(c, "a", "L2", "before");
+    expect(below?.group).toBeNull();
+    const back = parseTogglesConfig({ rows: below?.rows });
+    expect(groupIds(back)).toEqual(["-:", "L1:bc", "-:a", "L2:d"]);
+    expect(back.rows.find((r) => r.id === "a")).toMatchObject({ ungrouped: true });
+    const end = dropToggleRow(c, "b", "d", "end");
+    expect(groupIds({ ...c, rows: end?.rows ?? [] })).toEqual(["-:a", "L1:c", "L2:d", "-:b"]);
+    // Back into a group, the mark goes.
+    const again = dropToggleRow({ ...c, rows: end?.rows ?? [] }, "b", "d", "after");
+    expect(again?.rows.find((r) => r.id === "b")).not.toHaveProperty("ungrouped");
+  });
+  it("lands nowhere new when nothing would change", () => {
+    expect(dropToggleRow(c, "b", "b", "after")).toBeNull();
+    expect(dropToggleRow(c, "c", "b", "after")).toBeNull();
+    expect(dropToggleRow(c, "a", "L1", "before")).toBeNull();
+  });
+  it("moves a label with its toggles, only between groups", () => {
+    expect(ids(dropToggleRow(c, "L2", "L1", "before")?.rows)).toEqual(["a", "L2", "d", "L1", "b", "c"]);
+    expect(ids(dropToggleRow(c, "L1", "d", "end")?.rows)).toEqual(["a", "L2", "d", "L1", "b", "c"]);
+    expect(ids(dropToggleRow(c, "L2", "c", "after")?.rows)).toBeUndefined(); // already there
+    expect(dropToggleRow(c, "L2", "b", "after")).toBeNull(); // would split L1
+    expect(dropToggleRow(c, "L1", "L2", "after")).toBeNull(); // inside L2
+    expect(dropToggleRow(c, "L1", "b", "before")).toBeNull(); // its own toggles
+  });
+  it("puts a label among toggles in no group, splitting their run", () => {
+    const loose = cfg([t("a", "a", true), t("b", "b", true), L("L1"), t("c", "c", true)]);
+    const out = dropToggleRow(loose, "L1", "a", "after");
+    expect(groupIds({ ...loose, rows: out?.rows ?? [] })).toEqual(["-:a", "L1:c", "-:b"]);
+  });
+  it("keeps a folded group's hidden toggles and unfolds on a drop into it", () => {
+    const f = cfg([t("a", "a", true), L("L1", true), t("b", "b", true), L("L2"), t("d", "d", true)]);
+    expect(ids(visibleRows(f))).toEqual(["a", "L1", "L2", "d"]);
+    const out = dropToggleRow(f, "d", "L1", "after");
+    expect(ids(out?.rows)).toEqual(["a", "L1", "d", "b", "L2"]);
+    expect(out?.rows[1]).toMatchObject({ id: "L1", collapsed: false });
+    expect(ids(dropToggleRow(f, "L1", "d", "end")?.rows)).toEqual(["a", "L2", "d", "L1", "b"]);
+    // After a folded label is between groups for a label.
+    expect(ids(dropToggleRow(f, "L2", "L1", "after")?.rows)).toBeUndefined();
+  });
+});
+
+describe("parseTogglesConfig negative", () => {
+  it("keeps a toggle's negative and drops a blank one", () => {
+    const cfg = parseTogglesConfig(JSON.stringify({
+      mode: "one",
+      rows: [
+        { id: "t1", name: "Day", var: "day", negative: "night sky" },
+        { id: "t2", name: "Night", var: "night", negative: "   " },
+      ],
+    }));
+    expect(cfg.rows.find((r) => r.id === "t1")).toMatchObject({ negative: "night sky" });
+    expect(cfg.rows.find((r) => r.id === "t2")).not.toHaveProperty("negative");
+  });
+});
+
+describe("parseTogglesConfig off value", () => {
+  it("keeps an Off value and Off negative, drops blank ones", () => {
+    const cfg = parseTogglesConfig(JSON.stringify({
+      mode: "any",
+      rows: [
+        { id: "t1", name: "Style", var: "style", off_value: "photo", off_negative: "anime" },
+        { id: "t2", name: "Rain", var: "rain", off_value: "", off_negative: "  " },
+      ],
+    }));
+    expect(cfg.rows.find((r) => r.id === "t1")).toMatchObject({ off_value: "photo", off_negative: "anime" });
+    const t2 = cfg.rows.find((r) => r.id === "t2");
+    expect(t2).not.toHaveProperty("off_value");
+    expect(t2).not.toHaveProperty("off_negative");
+  });
+});
+
+describe("parseTogglesConfig looks", () => {
+  it("keeps icons and #rrggbb colours, drops anything else", () => {
+    const cfg = parseTogglesConfig({
+      rows: [
+        { id: "l1", kind: "label", name: "G", color: 3, hex: "#FFAA00", icon: "pi-clock" },
+        { id: "l2", kind: "label", name: "H", color: 3, hex: "red", icon: "<b>" },
+        { id: "t1", name: "Day", var: "day", icon: "sun", icon_color: "#ffcc00", text_color: "#123456", tint: "#00AAFF" },
+        { id: "t2", name: "Night", var: "night", icon: "", icon_color: "blue", tint: "#12345" },
+      ],
+    });
+    expect(cfg.rows[0]).toMatchObject({ hex: "#ffaa00", icon: "clock" });
+    expect(cfg.rows[1]).not.toHaveProperty("hex");
+    expect(cfg.rows[1]).not.toHaveProperty("icon");
+    expect(cfg.rows[2]).toMatchObject({ icon: "sun", icon_color: "#ffcc00", text_color: "#123456", tint: "#00aaff" });
+    for (const k of ["icon", "icon_color", "text_color", "tint"]) expect(cfg.rows[3]).not.toHaveProperty(k);
   });
 });

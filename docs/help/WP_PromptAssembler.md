@@ -2,14 +2,25 @@
 
 Write a prompt with `$variables` in it and get the finished prompt, plus a matching negative.
 
+<!-- video:start -->
+▶ **Video:** [WP Prompt Assembler in depth](https://youtu.be/Zq7pY42f_qI) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 
 - **context (in)** `context`: The variables from a WP Context (or anything that ends in one).
-- **template** `STRING`: Your prompt with $variables in it.
-- **negative_template** `STRING`: Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative).
+- **template** `STRING`: Your prompt with $variables in it. Wire another node's text into it to use that text as the template instead: the box then says "From the template input", and the $variables in the wired text still fill in.
+- **negative_template** `STRING`: Optional, in the collapsible negative section. Your standing negative, with $negatives where the collected negative words go. New Assemblers start with $negatives; without it the negative is only your own text (empty = no negative). It takes a wired text the same way the template does.
 - **prompt (out)** `STRING`: The finished prompt. Wire it into CLIP Text Encode or a WP Prompt Cleaner.
 - **negative (out)** `STRING`: The negative words of the variables this template printed, plus your negative template. Wire it into your negative CLIP Text Encode.
+
+## On the node
+
+- **Load / Save (toolbar)**: Load a template from your library into both boxes, or save this one (prompt and negative) to it.
+- **Mark unused internal (toolbar)**: The eye button. Marks every upstream variable that neither box reads as internal, so it stops showing here; combines and rules still read it. Variables another Assembler on the same context reads are kept, and so is a module that also writes a variable in use. Undo in the message puts it back.
+- **Clear (toolbar)**: Empties the template and the negative template, after asking.
+- **Frame arrows (preview)**: Only with a WP Context Loop upstream: ‹ 1/4 › steps the preview through the loop's frames and moves the Loop's Edit frame pick with it. A variable only some frames set shows as a blue chip with its frames (#4), never as missing.
 <!-- fields:end -->
 
 ## How to use

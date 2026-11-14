@@ -4,7 +4,9 @@ import {
   parseWidgetJson,
   type ContextWidgetValue,
 } from "../widgets/_shared";
-import { applyVarAccessor, type ResolvedValue } from "../widgets/richTokenize";
+import { applyVarAccessor, varAccessorParts, type ResolvedValue } from "../widgets/richTokenize";
+import { templatePieces, templateVarReads, unescapeTemplate } from "./template-pieces";
+import { bindFilterForRun } from "@/manager/parsing/subcatFilter";
 // probability.ts is a pure (no-Vue) module despite its path — reused here so
 // the static multi-pick representative mirrors the engine pool exactly.
 import {
@@ -18,10 +20,11 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
-import { TOGGLES_NODE, staticToggleValues, togglesPreviewModules } from "./toggles";
+import { TOGGLES_NODE, TOGGLE_BOOLS_KEY, nodeTogglesConfig, resolveToggles, staticToggleInternals, toggleBools, staticToggleNegatives, staticToggleValues, togglesPreviewModules, type TogglesConfig } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
+import { effectiveEnabled, withFrameInstance } from "../components/context/frame-overrides";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
 // ComfyUI subgraphs are nested LGraph instances attached to a parent node
@@ -39,6 +42,13 @@ import type { SeedStrategy } from "../components/shared/seed-derive";
 
 const SUBGRAPH_INPUT_NODE_ID = -10;
 const SUBGRAPH_OUTPUT_NODE_ID = -20;
+
+/** Node and link ids are numbers in older litegraph and strings ("-10",
+ *  "4") in current ComfyUI frontends (1.5x), so `=== -10` never matched
+ *  there and every walk stopped at a subgraph's edge. */
+function isNodeId(id: unknown, want: number): boolean {
+  return id === want || (typeof id === "string" && id !== "" && Number(id) === want);
+}
 const BOUNDARY_RECURSION_LIMIT = 32;
 
 export interface LiteLink {
@@ -243,6 +253,13 @@ function graphOf(node: LiteNodeLike, fallback: LiteGraphLike): LiteGraphLike {
  * graph dodges that misalignment.
  */
 export function findRootGraph(start: LiteGraphLike): LiteGraphLike {
+  // Current litegraph gives every graph a `rootGraph` (the root returns
+  // itself) AND gives the root a UUID `id`, so the id test below never
+  // finds it there and the old `_subgraph_node` link doesn't exist: a node
+  // inside a subgraph got the SUBGRAPH back as "root", couldn't step out
+  // through its inputs, and flagged every outside variable as missing.
+  const declared = (start as { rootGraph?: LiteGraphLike }).rootGraph;
+  if (declared && Array.isArray(declared._nodes)) return declared;
   let cur: LiteGraphLike | null = start;
   // Litegraph SubgraphLGraph instances expose `_subgraph_node` pointing
   // at the wrapping SubgraphNode in the parent graph. Climbing through
@@ -258,6 +275,38 @@ export function findRootGraph(start: LiteGraphLike): LiteGraphLike {
     cur = parentGraph;
   }
   return start;
+}
+
+/** The canvas calls `showGraph` needs: the graph on screen and the switch. */
+export interface GraphCanvasLike {
+  graph?: LiteGraphLike | null;
+  setGraph?: (graph: LiteGraphLike) => void;
+}
+
+/** How long ComfyUI takes to restore the viewport it keeps for a graph after
+ *  `setGraph`; pan or centre after it, or the restore pans straight back. */
+export const GRAPH_SWITCH_SETTLE_MS = 50;
+
+/**
+ * Put `graph` on screen, then run `then`. A graph other than the one shown
+ * (a subgraph, or the root seen from inside one) is opened first, the same
+ * way the breadcrumb does, and `then` waits for the viewport restore.
+ * Returns false (and skips `then`) when the canvas can't switch graphs, since
+ * centring a node of another graph would pan over empty canvas.
+ */
+export function showGraph(
+  canvas: GraphCanvasLike,
+  graph: LiteGraphLike | null | undefined,
+  then: () => void,
+): boolean {
+  if (!graph || canvas.graph === graph) {
+    then();
+    return true;
+  }
+  if (typeof canvas.setGraph !== "function") return false;
+  canvas.setGraph(graph);
+  setTimeout(then, GRAPH_SWITCH_SETTLE_MS);
+  return true;
 }
 
 type SubgraphParent = { node: LiteNodeLike; graph: LiteGraphLike };
@@ -351,7 +400,7 @@ function resolveThroughBoundaries(
 ): BoundaryStep | null {
   let cur: BoundaryStep | null = start;
   for (let i = 0; cur && i < BOUNDARY_RECURSION_LIMIT; i++) {
-    if (cur.node.id === SUBGRAPH_INPUT_NODE_ID) {
+    if (isNodeId(cur.node.id, SUBGRAPH_INPUT_NODE_ID)) {
       cur = stepOutOfSubgraph(cur.graph, cur.originSlot, parents);
       continue;
     }
@@ -380,7 +429,7 @@ function pipelineUpstreamOf(
     if (!link) continue;
 
     let step: BoundaryStep | null;
-    if (link.origin_id === SUBGRAPH_INPUT_NODE_ID) {
+    if (isNodeId(link.origin_id, SUBGRAPH_INPUT_NODE_ID)) {
       // Boundary at this very link — step OUT before we can even read origin.
       step = stepOutOfSubgraph(graph, link.origin_slot, parents);
     } else {
@@ -713,23 +762,53 @@ export function collectUpstreamInjectorNegatives(
       continue;
     }
     if (n.type === TOGGLES_NODE && !isSkippedMode(n)) {
-      for (const v of Object.keys(staticToggleValues(n))) out[v] = null;
+      // A write replaces the variable's negatives with the toggle's own, after
+      // those of the `$vars` its value reads (as the node files them).
+      const values = staticToggleValues(n);
+      const negs = staticToggleNegatives(n);
+      const before = { ...out };
+      for (const v of Object.keys(negs)) out[v] = inheritNegatives(before, values[v] ?? "", negs[v] ?? "");
       continue;
     }
     if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
     const inj = parseCached<{
       version: 1;
-      rows?: Array<{ binding?: string; enabled?: boolean; negative?: string }>;
+      rows?: Array<{ binding?: string; enabled?: boolean; negative?: string; kind?: string; template?: string }>;
     }>(widgetValue(n, "wp_rows"), { version: 1, rows: [] });
-    for (const row of inj.rows ?? []) {
+    // Socket rows first, then template rows in order, as the node runs them.
+    const rows = inj.rows ?? [];
+    const ordered = [...rows.filter((r) => r.kind !== "general"), ...rows.filter((r) => r.kind === "general")];
+    for (const row of ordered) {
       if (row.enabled !== true) continue;
       const binding = (row.binding ?? "").trim();
       if (!binding) continue;
       const neg = typeof row.negative === "string" ? row.negative.trim() : "";
-      out[binding] = neg || null;
+      // A template row carries the negatives of the variables it reads.
+      out[binding] = row.kind === "general"
+        ? inheritNegatives(out, row.template ?? "", neg)
+        : neg || null;
     }
   }
   return out;
+}
+
+const READ_RE = /\$\$|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const SOCKET_RE = /^input_\d+$/;
+
+/** `own` after the negatives (in `known`) of each `$var` `text` reads, or
+ *  `null` when there are none. Raw sockets (`$input_N`) carry nothing. */
+function inheritNegatives(known: Record<string, string | null>, text: string, own: string): string | null {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const m of text.matchAll(READ_RE)) {
+    const name = m[1];
+    if (!name || SOCKET_RE.test(name) || seen.has(name)) continue;
+    seen.add(name);
+    const got = known[name];
+    if (got) parts.push(got);
+  }
+  if (own) parts.push(own);
+  return parts.length ? parts.join(", ") : null;
 }
 
 /**
@@ -800,7 +879,7 @@ export function collectUpstreamChain(
    *  `seeds`: filled with one entry per returned step, the Context's own
    *  `seed` widget (null for a model / toggles step, or a seed it can't
    *  read), so the preview rolls each step on the seed the run will use. */
-  opts: { modelSteps?: boolean; seeds?: (number | null)[] } = {},
+  opts: { modelSteps?: boolean; seeds?: (number | null)[]; frame?: number | null } = {},
 ): unknown[][] {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
@@ -845,12 +924,16 @@ export function collectUpstreamChain(
     // gate, the assembler's API preview returns bindings from
     // bundle-disabled modules while the static fallback (which IS
     // gated) doesn't, and chip strip / preview disagree.
+    // `frame`: the server runs a flat module list with no loop, so lay the
+    // frame's switches and instance patches on before sending it.
+    const frame = opts.frame;
+    const modules = frame != null && frame >= 0 ? v.modules.map((m) => frameModule(m, frame)) : v.modules;
     const bundleIndex = buildBundleEnabledMap(v.bundles);
     if (bundleIndex.enabled.size === 0) {
-      out.push(v.modules);
+      out.push(modules);
       continue;
     }
-    const gated = v.modules.map((m) => {
+    const gated = modules.map((m) => {
       if (m.enabled === false) return m;
       // isModuleEffectivelyEnabled walks the parent_uid chain so a
       // disabled outer disables inner-bundle leaves too. AND with the
@@ -888,6 +971,8 @@ export const collectUpstreamValues = collectUpstreamResolved;
 export function collectUpstreamKinds(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
+  /** A loop frame (0-based): modules as that frame runs them. */
+  frame: number | null = null,
 ): Record<string, string> {
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
@@ -937,9 +1022,10 @@ export function collectUpstreamKinds(
       continue;
     }
     if (n.type === TOGGLES_NODE) {
+      const hidden = staticToggleInternals(n);
       for (const v of Object.keys(staticToggleValues(n))) {
         kinds[v] = "toggle";
-        flagInternal(v, true);
+        flagInternal(v, hidden.has(v));
       }
       continue;
     }
@@ -973,7 +1059,8 @@ export function collectUpstreamKinds(
       { version: 1, modules: [] },
     );
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
-    for (const m of v.modules) {
+    for (const entry of v.modules) {
+      const m = frame != null ? frameModule(entry, frame) : entry;
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
       // Per-kind binding emission — mirrors writeBindings, recording
       // kind instead of value. fixed_values fans out per row; the
@@ -1213,7 +1300,8 @@ export function collectUpstreamProducers(
     }
 
     if (n.type === TOGGLES_NODE) {
-      for (const v of Object.keys(staticToggleValues(n))) write(v, { kind: "toggle", nodeId, nodeLabel, internal: true });
+      const hidden = staticToggleInternals(n);
+      for (const v of Object.keys(staticToggleValues(n))) write(v, { kind: "toggle", nodeId, nodeLabel, internal: hidden.has(v) });
       continue;
     }
 
@@ -1339,11 +1427,6 @@ export function collectUpstreamProducers(
  * matching the runtime walker's `max_ref_depth`.
  * -------------------------------------------------------------------- */
 
-// SP2a: optional `.K` list accessor (group 2) so `$mood.0` is consumed whole
-// (no stranded ".0" literal) and the index drives applyVarAccessor below.
-const VAR_REF_RE =
-  /\$([A-Za-z_][A-Za-z0-9_]*)(?:\.(\d+))?(?:\.([A-Za-z_][A-Za-z0-9_]*))?(?:\.(\d+))?/g;
-const WC_REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
 const MAX_REF_DEPTH = 8;
 
 interface MinimalWildcard {
@@ -1402,7 +1485,8 @@ interface ChainMemo {
   ctx: Record<string, ResolvedValue>;
   externalRefs: Set<string>;
 }
-const chainMemo = new WeakMap<LiteNodeLike, ChainMemo>();
+/** Per head node: one entry per view ("base", or "frame/count"). */
+const chainMemo = new WeakMap<LiteNodeLike, Map<string, ChainMemo>>();
 let chainMemoEnabled = true;
 
 /** @internal test hook — measure or compare against the unmemoised path. */
@@ -1427,6 +1511,9 @@ function chainParts(chain: LiteNodeLike[]): unknown[] {
       parts.push(JSON.stringify(staticModelValues(n)), [...internalModelVars(n)].join(","));
     }
     if (n.type === TOGGLES_NODE) parts.push(widgetValue(n, "wp_toggles"));
+    // Wiring the Loop's `values` input adds `$<name>_value` without
+    // touching a widget, so the link has to key the memo too.
+    if (n.type === "WP_ContextLoop") parts.push(loopValuesWired(n));
   }
   return parts;
 }
@@ -1437,12 +1524,14 @@ function sameParts(a: unknown[], b: unknown[]): boolean {
   return true;
 }
 
-function resolveChainMemo(chain: LiteNodeLike[]): Record<string, ResolvedValue> {
-  if (!chainMemoEnabled || chain.length === 0) return resolveChainStatic(chain);
+function resolveChainMemo(chain: LiteNodeLike[], view?: FrameView): Record<string, ResolvedValue> {
+  if (!chainMemoEnabled || chain.length === 0) return resolveChainStatic(chain, undefined, view);
   const head = chain[0];
   const parts = chainParts(chain);
   const version = previewCacheVersion.value;
-  const hit = chainMemo.get(head);
+  const key = view ? `${view.frame}/${view.count}` : "base";
+  let byView = chainMemo.get(head);
+  const hit = byView?.get(key);
   if (hit && hit.version === version && sameParts(hit.parts, parts)) {
     // Keep the lazy fetch alive: `ensure` is a no-op for fresh entries, but it
     // retries expired failures and refetches after `markAllStale`.
@@ -1450,14 +1539,30 @@ function resolveChainMemo(chain: LiteNodeLike[]): Record<string, ResolvedValue> 
     return { ...hit.ctx };
   }
   const externalRefs = new Set<string>();
-  const ctx = resolveChainStatic(chain, externalRefs);
-  chainMemo.set(head, { parts, version, ctx: { ...ctx }, externalRefs });
+  const ctx = resolveChainStatic(chain, externalRefs, view);
+  if (!byView) {
+    byView = new Map();
+    chainMemo.set(head, byView);
+  }
+  // A frame view is keyed by its frame, so a long loop stepped through
+  // frame by frame would grow the map without bound: keep the latest few.
+  if (byView.size > 16) byView.clear();
+  byView.set(key, { parts, version, ctx: { ...ctx }, externalRefs });
   return ctx;
+}
+
+/** One loop frame to resolve the chain at: `frame` is 0-based (`-1` reads
+ *  every module at its base state, with no frame override), `count` the
+ *  Loop's frame count. */
+export interface FrameView {
+  frame: number;
+  count: number;
 }
 
 function resolveChainStatic(
   chain: LiteNodeLike[],
   externalRefs: Set<string> = new Set<string>(),
+  view?: FrameView,
 ): Record<string, ResolvedValue> {
   // First pass: collect every wildcard payload across the whole chain
   // into one `id → payload` catalog so `@{}` refs inside option values
@@ -1560,9 +1665,16 @@ function resolveChainStatic(
       continue;
     }
     if (n.type === TOGGLES_NODE) {
-      for (const [k, v] of Object.entries(staticToggleValues(n))) {
+      const hidden = staticToggleInternals(n);
+      const cfg = nodeTogglesConfig(n);
+      // What `$name.bool` reads: the switch, not the Value it writes
+      // (engine `toggles.BOOLS_KEY`, carried on across nodes). Set first, as
+      // the node does, so a toggle's own value can read another's switch.
+      ctx[TOGGLE_BOOLS_KEY] = JSON.stringify({ ...readToggleBools(ctx), ...toggleBools(cfg) });
+      for (const [k, v] of Object.entries(resolveToggleTexts(cfg, ctx, catalog))) {
         ctx[k] = v;
-        internalKeys.add(k);
+        if (hidden.has(k)) internalKeys.add(k);
+        else internalKeys.delete(k);
       }
       continue;
     }
@@ -1582,8 +1694,8 @@ function resolveChainStatic(
       }>(typeof raw === "string" ? raw : "", {});
       const baseName = (cfg.iteration_var_name ?? "iteration").trim() || "iteration";
       const totalName = `${baseName}_total`;
-      ctx[baseName] = "1";
-      ctx[totalName] = "1";
+      ctx[baseName] = view && view.frame >= 0 ? String(view.frame + 1) : "1";
+      ctx[totalName] = view ? String(view.count) : "1";
       if (cfg.iteration_internal === true) internalKeys.add(baseName);
       else internalKeys.delete(baseName);
       if (cfg.total_internal === true) internalKeys.add(totalName);
@@ -1601,7 +1713,10 @@ function resolveChainStatic(
       { version: 1, modules: [] },
     );
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
-    for (const m of v.modules) {
+    for (const entry of v.modules) {
+      // A loop frame turns modules on or off and patches their instance
+      // (`frame_enabled`, `iteration_overrides`), as the engine does per frame.
+      const m = view ? frameModule(entry, view.frame) : entry;
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
       // Snapshot VALUES, not just keys: an override rebinds an existing key,
       // so a key-presence check never sees it and the flag could not flip.
@@ -1632,6 +1747,138 @@ function resolveChainStatic(
   return ctx;
 }
 
+/** `m` as loop frame `frame` runs it: the frame's instance patch laid
+ *  over, and `enabled` the frame's own state. */
+function frameModule<M extends ContextWidgetValue["modules"][number]>(m: M, frame: number): M {
+  const on = effectiveEnabled(m, frame);
+  const patched = withFrameInstance(m, frame) as M;
+  if ((patched.enabled !== false) === on) return patched;
+  return { ...patched, enabled: on };
+}
+
+/** The upstream chain of `node`, nearest first (the walk every collector
+ *  shares). */
+function upstreamChain(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLike[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  return chain;
+}
+
+/** Most frames the coverage scan looks at. Frames past it are read as the
+ *  last one scanned; a loop that long is rare and the scan stays cheap. */
+export const MAX_COVERAGE_FRAMES = 1000;
+
+/** The frame count of the first running WP Context Loop in `chain`, or
+ *  null when none drives it. */
+function chainLoopCount(chain: LiteNodeLike[]): number | null {
+  for (const n of chain) {
+    if (n.type !== "WP_ContextLoop" || isSkippedMode(n)) continue;
+    const raw = widgetNumber(n, "count");
+    return Number.isFinite(raw) && raw >= 1 ? Math.min(Math.floor(raw), MAX_COVERAGE_FRAMES) : 1;
+  }
+  return null;
+}
+
+/** 0-based frames below `count` on which some Context module in `chain`
+ *  differs from its base (an on/off switch or an instance patch). Every
+ *  other frame resolves like the base. */
+function overrideFrames(chain: LiteNodeLike[], count: number): number[] {
+  const out = new Set<number>();
+  const add = (k: number) => {
+    if (Number.isInteger(k) && k >= 0 && k < count) out.add(k);
+  };
+  for (const n of chain) {
+    if (n.type !== "WP_Context" || isSkippedMode(n)) continue;
+    const v = parseCached<ContextWidgetValue>(widgetValue(n, "wp_modules"), { version: 1, modules: [] });
+    for (const m of v.modules) {
+      for (const k of Object.keys(m.frame_enabled ?? {})) add(Number(k));
+      for (const k of m.disabled_frames ?? []) add(k);
+      for (const k of Object.keys(m.iteration_overrides ?? {})) add(Number(k));
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/** What a WP Context Loop upstream does to `node`'s variables. */
+export interface LoopFrames {
+  /** Frames the Loop runs. */
+  count: number;
+  /** Names set on SOME frames but not all: name → the 0-based frames that
+   *  set it (ascending). A name set on every frame, or on none, is absent. */
+  partial: Record<string, number[]>;
+  /** Every name set on at least one frame. */
+  anyFrame: string[];
+}
+
+/**
+ * Per-frame variable coverage when a WP Context Loop drives `node`, or null
+ * when none does. A module switched on (or off) for some frames only, or a
+ * frame patch that changes what a module writes, makes its names exist on
+ * those frames alone; the Assembler shows them as "on some frames" instead
+ * of missing, and the Run check warns only about names no frame sets.
+ *
+ * Resolves the chain once at its base state and once per frame that carries
+ * an override, so a long loop costs as much as its overridden frames.
+ */
+export function collectLoopFrames(rootGraph: LiteGraphLike, node: LiteNodeLike): LoopFrames | null {
+  const chain = upstreamChain(rootGraph, node);
+  const count = chainLoopCount(chain);
+  if (count == null) return null;
+  const keysAt = (frame: number): Set<string> =>
+    new Set(Object.keys(resolveChainMemo(chain, { frame, count })).filter((k) => !k.startsWith("__")));
+  const base = keysAt(-1);
+  const frames = overrideFrames(chain, count);
+  const perFrame = new Map(frames.map((k) => [k, keysAt(k)] as const));
+  const names = new Set(base);
+  for (const keys of perFrame.values()) for (const k of keys) names.add(k);
+  const partial: Record<string, number[]> = {};
+  for (const name of names) {
+    const on: number[] = [];
+    for (let k = 0; k < count; k++) {
+      const keys = perFrame.get(k) ?? base;
+      if (keys.has(name)) on.push(k);
+    }
+    if (on.length > 0 && on.length < count) partial[name] = on;
+  }
+  return { count, partial, anyFrame: [...names] };
+}
+
+/**
+ * Like {@link collectUpstreamResolved}, read at one loop frame (0-based):
+ * that frame's module switches and instance patches, its `$iteration` and
+ * `$iteration_total`. Same as the plain walk when no Loop drives `node`.
+ */
+export function collectUpstreamResolvedAtFrame(
+  rootGraph: LiteGraphLike,
+  node: LiteNodeLike,
+  frame: number,
+): Record<string, ResolvedValue> {
+  const chain = upstreamChain(rootGraph, node);
+  const count = chainLoopCount(chain);
+  if (count == null) return resolveChainMemo(chain);
+  return resolveChainMemo(chain, { frame: Math.min(Math.max(0, frame), count - 1), count });
+}
+
+/**
+ * Upstream names set on at least one frame: {@link collectUpstreamVariables}
+ * for a plain chain, and every frame's names when a Loop drives `node`. What
+ * the Run check and the subgraph badge test a template against, so a name a
+ * frame switches on is not reported as missing.
+ */
+export function collectUpstreamVariablesAnyFrame(rootGraph: LiteGraphLike, node: LiteNodeLike): string[] {
+  const loop = collectLoopFrames(rootGraph, node);
+  const base = collectUpstreamVariables(rootGraph, node);
+  if (!loop) return base;
+  return [...new Set([...base, ...loop.anyFrame])];
+}
+
 function writeBindings(
   ctx: Record<string, ResolvedValue>,
   m: ContextWidgetValue["modules"][number],
@@ -1646,6 +1893,7 @@ function writeBindings(
     // `instance.enabled_options` filters which row ids emit bindings
     // (engine `fixed_values_handler.py:64`). Apply the same filter
     // here so disabled rows don't appear in upstream-vars / preview.
+    // A value prints `$$` / `@@` as one `$` / `@`, as the engine does.
     const inst = (m.instance ?? {}) as {
       values_overrides?: Array<{ id?: string; name?: string; value?: string }>;
       enabled_options?: string[] | null;
@@ -1661,7 +1909,7 @@ function writeBindings(
       for (const val of overrides) {
         if (!passesFilter(val.id)) continue;
         const name = (val.name ?? "").replace(/^\$/, "").trim();
-        if (name) ctx[name] = String(val.value ?? "");
+        if (name) ctx[name] = unescapeTemplate(String(val.value ?? ""));
       }
       return;
     }
@@ -1689,12 +1937,12 @@ function writeBindings(
       if (!name) continue;
       const libId = libNameToId.get(e.variable_name);
       if (!passesFilter(libId)) continue;
-      ctx[name] = String(e.value ?? "");
+      ctx[name] = unescapeTemplate(String(e.value ?? ""));
     }
     for (const val of libValues) {
       if (!passesFilter(val.id)) continue;
       const name = (val.name ?? "").replace(/^\$/, "").trim();
-      if (name) ctx[name] = String(val.value ?? "");
+      if (name) ctx[name] = unescapeTemplate(String(val.value ?? ""));
     }
     return;
   }
@@ -1728,6 +1976,12 @@ function writeBindings(
       };
       const lo = coerce(inst.pick_min, 1);
       const hi = Math.max(lo, coerce(inst.pick_max, lo));
+      // Schema v11: a `$name` in the pool filter reads the run's variables,
+      // as the engine does, so the preview narrows by $model_variant too.
+      const rawFilter = (m.instance as { category_filter?: unknown } | undefined)?.category_filter;
+      const poolInst = (typeof rawFilter === "string" && rawFilter.includes("$")
+        ? { ...m.instance, category_filter: bindFilterForRun(rawFilter, (n) => ctx[n], p) }
+        : m.instance) as unknown as InstanceLike;
       if (lo === 1 && hi === 1) {
         // "Match variable" (engine `_match_variable_option`): the option
         // whose text equals the variable, else the fallback, else option 0.
@@ -1742,7 +1996,7 @@ function writeBindings(
           // toggled-off option never matches and a toggled-off fallback is
           // never used — as the engine does.
           const pool = options.filter((o) =>
-            isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike),
+            isEnabled(o as unknown as WildcardOption, poolInst),
           );
           chosen = (wanted
             ? pool.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
@@ -1759,7 +2013,7 @@ function writeBindings(
         // leaks null (a stray leading separator) or filtered-out options. The
         // API-backed preview shows the real seeded roll.
         const pool = options.filter((o) =>
-          isEnabled(o as unknown as WildcardOption, m.instance as unknown as InstanceLike, true),
+          isEnabled(o as unknown as WildcardOption, poolInst, true),
         );
         const sep = typeof inst.pick_separator === "string" ? inst.pick_separator : ", ";
         const n = Math.min(hi, pool.length);
@@ -1899,70 +2153,152 @@ function expandValue(
 ): string {
   if (!raw) return raw;
   if (depth > MAX_REF_DEPTH) return raw;
-  // 1. Substitute `$var` (+ optional `.K` accessor) with ctx values; leave
-  //    unknowns (incl. their accessor) intact. ctx values are strings in this
-  //    static resolver, so applyVarAccessor treats `$s.0` as `$s` and `$s.K>0`
-  //    as "" — never leaking the literal ".K" into the preview.
-  let out = raw.replace(
-    VAR_REF_RE,
-    (full, name, idxA, axis, idxB) => {
-      if (!Object.prototype.hasOwnProperty.call(ctx, name)) return full;
-      const idx = idxA ?? idxB;
-      const base = applyVarAccessor(
-        ctx[name],
-        idx != null ? parseInt(idx, 10) : undefined,
-      );
-      // An axis read resolves to a TAG, not to the variable's text. Without
-      // this the preview substituted `$outfit` and left `.SHOES` stranded, so
-      // both the preview and the resolved line read
-      // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
-      // in exactly the editor meant to teach it.
-      if (axis == null) return base;
-      // `$name.neg` reads the variable's negatives, which the static preview
-      // doesn't track: render nothing rather than a stray accessor.
-      if (axis === "neg") return "";
-      const tag = previewAxisTag(catalog, name, axis);
-      return tag ?? full;
-    },
-  );
-  // 2. Substitute `@{8hex}` with the referenced wildcard's first option,
-  //    recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")
-  //    flatten. Resolution ladder:
-  //      a. chain catalog (sibling/cousin wildcards in any chain Context)
-  //      b. lazy preview-resolver cache (background-fetched from DB)
-  //      c. preview-resolver name fallback → render `[name]` so users
-  //         see something meaningful even before the fetch resolves
-  //         a `firstOption`, or for non-wildcard kinds that have no
-  //         option to expand
-  //      d. raw `@{uuid}` placeholder (last resort — will resolve to
-  //         the real value at runtime via the live DB walker)
-  //
-  // Deep-nesting note: when (b) recurses into a cached firstOption that
-  // ITSELF contains `@{}` refs not yet cached, the inner replace lands
-  // back here on the next pass. Cache-miss + fire `ensure()` for that
-  // nested uuid so the next 400ms poll has it ready. Chain length N
-  // therefore takes ~N polling ticks to fully expand; each tick
-  // surfaces one more level instead of stalling at the first miss.
-  out = out.replace(WC_REF_RE, (full, uuid) => {
-    const target = catalog.get(uuid);
-    const opts = target?.options ?? [];
-    if (opts.length) {
-      return expandValue(String(opts[0].value ?? ""), ctx, catalog, depth + 1);
+  // One pass over the text as the engine reads it (`templatePieces`): `$$`
+  // and `@@` print one `$` / `@`, `$var` and `@{uuid}` are substituted, and
+  // a `{…}` pick stays as written (no rng here). One pass, so an escape is
+  // undone exactly once and a value is never re-read as syntax.
+  return templatePieces(raw).map((piece) => {
+    if (piece.kind === "text") return piece.text;
+    if (piece.kind === "pick") return piece.raw;
+    if (piece.kind === "var") return expandVar(piece.raw, ctx, catalog);
+    return expandRef(piece.raw, piece.uuid, ctx, catalog, depth);
+  }).join("");
+}
+
+/** Whether a toggle value needs resolving (mirror of the node's
+ *  `_has_syntax`): plain text is left exactly as written. */
+function hasTemplateSyntax(text: string): boolean {
+  return text.includes("$") || text.includes("{") || text.includes("@");
+}
+
+/**
+ * A WP Toggles node's variables with their values resolved as the node
+ * resolves them (`wp_nodes/toggles_node.py`): a value reads upstream
+ * variables and the toggles' own, `$$` / `@@` print one `$` / `@`, and a
+ * value read by another is resolved first; the Pick one value goes last.
+ */
+function resolveToggleTexts(
+  cfg: TogglesConfig,
+  ctx: Record<string, ResolvedValue>,
+  catalog: Map<string, MinimalWildcard>,
+): Record<string, string> {
+  const values = resolveToggles(cfg);
+  const group = cfg.mode === "one" ? cfg.group_var : "";
+  const out: Record<string, string> = { ...values };
+  const done = new Set<string>();
+  const busy = new Set<string>();
+  const resolve = (name: string): void => {
+    if (done.has(name) || busy.has(name)) return;
+    const raw = values[name] ?? "";
+    if (hasTemplateSyntax(raw)) {
+      busy.add(name);
+      for (const r of templateVarReads(raw)) {
+        if (r.name !== group && Object.prototype.hasOwnProperty.call(values, r.name)) resolve(r.name);
+      }
+      busy.delete(name);
+      out[name] = expandValue(raw, { ...ctx, ...out }, catalog, 0);
     }
-    const lk = previewLookup(uuid);
-    if (lk?.firstOption !== undefined) {
-      return expandValue(lk.firstOption, ctx, catalog, depth + 1);
-    }
-    if (lk === undefined) {
-      // First time we see this uuid in any expansion path — queue it.
-      // `ensure` is idempotent + fire-and-forget; subsequent ticks read
-      // from cache via the branch above.
-      ensurePreviewLookup([uuid]);
-    }
-    if (lk?.name) return `[${lk.name}]`;
-    return full;
-  });
+    done.add(name);
+  };
+  for (const name of Object.keys(values)) if (name !== group) resolve(name);
+  if (group && Object.prototype.hasOwnProperty.call(values, group)) resolve(group);
   return out;
+}
+
+/** The toggle switches carried in a static ctx (`TOGGLE_BOOLS_KEY`), what
+ *  `$name.bool` reads; {} when no Toggles node is upstream. */
+export function readToggleBools(ctx: Record<string, ResolvedValue>): Record<string, boolean> {
+  const raw = ctx[TOGGLE_BOOLS_KEY];
+  if (typeof raw !== "string") return {};
+  try {
+    const t: unknown = JSON.parse(raw);
+    if (!t || typeof t !== "object" || Array.isArray(t)) return {};
+    const out: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(t)) if (typeof v === "boolean") out[k] = v;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** A `$var` read (+ optional `.K` / `.AXIS` accessor) with its ctx value;
+ *  an unknown name (accessor included) stays as written. ctx values are
+ *  strings in this static resolver, so applyVarAccessor treats `$s.0` as
+ *  `$s` and `$s.K>0` as "" — never leaking the literal ".K" into the
+ *  preview. */
+function expandVar(
+  full: string,
+  ctx: Record<string, ResolvedValue>,
+  catalog: Map<string, MinimalWildcard>,
+): string {
+  const { base: name, index, axis } = varAccessorParts(full);
+  if (!Object.prototype.hasOwnProperty.call(ctx, name)) return full;
+  const base = applyVarAccessor(ctx[name], index);
+  // An axis read resolves to a TAG, not to the variable's text. Without
+  // this the preview substituted `$outfit` and left `.SHOES` stranded, so
+  // both the preview and the resolved line read
+  // "a white t-shirt and denim skirt.SHOES" — the accessor looked broken
+  // in exactly the editor meant to teach it.
+  if (axis == null) return base;
+  // `$name.neg` reads the variable's negatives, which the static preview
+  // doesn't track: render nothing rather than a stray accessor.
+  if (axis === "neg") return "";
+  // `$name.bool` reads a toggle's on/off: a toggle with a value holds the
+  // value while on and nothing while off.
+  if (axis === "bool") {
+    const on = readToggleBools(ctx)[name];
+    if (on !== undefined) return on ? "true" : "false";
+    const v = base.trim().toLowerCase();
+    return v === "true" || v === "false" ? v : v ? "true" : "false";
+  }
+  const tag = previewAxisTag(catalog, name, axis);
+  return tag ?? full;
+}
+
+/**
+ * Substitute `@{8hex}` with the referenced wildcard's first option,
+ * recursively expanded so chains (`@{a}` → "@{b} hat" → "blue hat")
+ * flatten. Resolution ladder:
+ *   a. chain catalog (sibling/cousin wildcards in any chain Context)
+ *   b. lazy preview-resolver cache (background-fetched from DB)
+ *   c. preview-resolver name fallback → render `[name]` so users
+ *      see something meaningful even before the fetch resolves
+ *      a `firstOption`, or for non-wildcard kinds that have no
+ *      option to expand
+ *   d. raw `@{uuid}` placeholder (last resort — will resolve to
+ *      the real value at runtime via the live DB walker)
+ *
+ * Deep-nesting note: when (b) recurses into a cached firstOption that
+ * ITSELF contains `@{}` refs not yet cached, the inner expansion lands
+ * back here on the next pass. Cache-miss + fire `ensure()` for that
+ * nested uuid so the next 400ms poll has it ready. Chain length N
+ * therefore takes ~N polling ticks to fully expand; each tick
+ * surfaces one more level instead of stalling at the first miss.
+ */
+function expandRef(
+  full: string,
+  uuid: string,
+  ctx: Record<string, ResolvedValue>,
+  catalog: Map<string, MinimalWildcard>,
+  depth: number,
+): string {
+  const target = catalog.get(uuid);
+  const opts = target?.options ?? [];
+  if (opts.length) {
+    return expandValue(String(opts[0].value ?? ""), ctx, catalog, depth + 1);
+  }
+  const lk = previewLookup(uuid);
+  if (lk?.firstOption !== undefined) {
+    return expandValue(lk.firstOption, ctx, catalog, depth + 1);
+  }
+  if (lk === undefined) {
+    // First time we see this uuid in any expansion path — queue it.
+    // `ensure` is idempotent + fire-and-forget; subsequent ticks read
+    // from cache via the branch above.
+    ensurePreviewLookup([uuid]);
+  }
+  if (lk?.name) return `[${lk.name}]`;
+  return full;
 }
 
 /**
@@ -2164,6 +2500,25 @@ export function findDownstreamAssemblers(rootGraph: LiteGraphLike, node: LiteNod
 }
 
 /**
+ * The PIPELINE_CONTEXT chain above `node`, closest first (the node itself is
+ * not included). Same walk the chip list and producer map use, so callers
+ * that act on a writer (Assembler › Mark unused internal) see the chain the
+ * Assembler sees. Muted / bypassed nodes are left in; callers skip them.
+ */
+export function upstreamChainOf(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLike[] {
+  const parents = buildSubgraphParents(rootGraph);
+  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
+  const chain: LiteNodeLike[] = [];
+  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
+  while (cur && !seen.has(locator(cur.graph, cur.node))) {
+    seen.add(locator(cur.graph, cur.node));
+    chain.push(cur.node);
+    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
+  }
+  return chain;
+}
+
+/**
  * Resolve a downstream link target through any subgraph boundaries:
  *   - target_id === -20: link enters the SubgraphOutputNode → resume from
  *     the parent SubgraphNode's matching output in the parent graph.
@@ -2176,7 +2531,7 @@ function downstreamStep(
   link: LiteLink,
   parents: Map<string, SubgraphParent>,
 ): { graph: LiteGraphLike; node: LiteNodeLike } | null {
-  if (link.target_id === SUBGRAPH_OUTPUT_NODE_ID) {
+  if (isNodeId(link.target_id, SUBGRAPH_OUTPUT_NODE_ID)) {
     // Find which output of the parent SubgraphNode this proxies, then resume.
     const innerSlot = graph.outputNode?.slots[link.target_slot];
     if (!innerSlot || !graph.id) return null;

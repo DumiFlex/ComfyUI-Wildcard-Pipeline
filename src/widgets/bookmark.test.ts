@@ -10,6 +10,7 @@ import {
   installHiddenFilter,
   jumpBack,
   jumpStep,
+  addBookmarkHere,
   jumpTo,
   listBookmarks,
   readDockPrefs,
@@ -199,7 +200,7 @@ describe("WP Bookmark shortcuts", () => {
 describe("Bookmarks dock prefs", () => {
   it("reads the old side setting as a spot", () => {
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ open: true, collapsed: false, side: "right", pos: { x: 5, y: 5 } }));
-    expect(readDockPrefs()).toEqual({ open: true, collapsed: false, spot: "tr", clearDock: true });
+    expect(readDockPrefs()).toEqual({ open: true, collapsed: false, spot: "tr", clearDock: true, layout: "list", newSpot: "tl" });
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "bc" }));
     expect(readDockPrefs().spot).toBe("bc");
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ spot: "nowhere" }));
@@ -212,6 +213,16 @@ describe("Bookmarks dock prefs", () => {
     expect(readDockPrefs().clearDock).toBe(true);
     localStorage.setItem("wp.bookmarkDock", JSON.stringify({ clearDock: false }));
     expect(readDockPrefs().clearDock).toBe(false);
+    localStorage.removeItem("wp.bookmarkDock");
+  });
+
+  it("shows a list unless the grid was picked", () => {
+    localStorage.removeItem("wp.bookmarkDock");
+    expect(readDockPrefs().layout).toBe("list");
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ layout: "grid" }));
+    expect(readDockPrefs().layout).toBe("grid");
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ layout: "tiles" }));
+    expect(readDockPrefs().layout).toBe("list");
     localStorage.removeItem("wp.bookmarkDock");
   });
 });
@@ -295,6 +306,86 @@ describe("Bookmark jumps around the host's floating pieces", () => {
   });
 });
 
+
+describe("Bookmark this view", () => {
+  const made: Element[] = [];
+  function el(tag: string, box: [number, number, number, number]): HTMLElement {
+    const e = document.createElement(tag);
+    const [left, top, right, bottom] = box;
+    e.getBoundingClientRect = (): DOMRect =>
+      ({ left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+    document.body.appendChild(e);
+    made.push(e);
+    return e;
+  }
+  beforeEach(() => {
+    Object.assign(canvas, { canvas: el("canvas", [0, 0, 1000, 800]) });
+    el("div", [0, 0, 1000, 800]).id = "graph-canvas-panel";
+    const dock = el("section", [0, 0, 300, 400]);
+    dock.dataset.test = "bm-dock";
+    let n = 0;
+    (globalThis as { LiteGraph?: unknown }).LiteGraph = {
+      createNode: () => {
+        // Like LiteGraph: `boundingRect` is cached at the last draw (a new
+        // node's is all zeros); `getBounding` works it out from pos and size.
+        const node = {
+          id: 100 + n++, title: "WP Bookmark", type: BOOKMARK_NODE_TYPE, graph: root, pos: [0, 0], size: [160, 30],
+          boundingRect: [0, 0, 0, 0],
+          getBounding(): number[] { return [this.pos[0] ?? 0, (this.pos[1] ?? 0) - 30, 160, 60]; },
+        };
+        let config: BookmarkConfig = defaultBookmarkConfig();
+        bookmarkCells.set(node, { get: () => config, set: (next) => { config = next as BookmarkConfig; } });
+        return node;
+      },
+    };
+    Object.assign(root, { add: (node: unknown) => root._nodes.push(node) });
+  });
+  afterEach(() => {
+    for (const e of made.splice(0)) e.remove();
+    localStorage.removeItem("wp.bookmarkDock");
+    Object.assign(canvas, { canvas: undefined });
+    delete (globalThis as { LiteGraph?: unknown }).LiteGraph;
+  });
+
+  it.each(["tl", "c", "br"] as const)("stores the view itself and sits at the %s spot, clear of the dock", (spot) => {
+    canvas.ds.offset = [-500, -200];
+    canvas.ds.scale = 1.5;
+    addBookmarkHere(undefined, spot);
+    const b = listBookmarks()[0];
+    expect(b?.config.anchor).toBe("custom");
+    expect(b?.config.view).toEqual({ x: Math.round(500 / 1.5 + 500), y: Math.round(400 / 1.5 + 200) });
+    expect(b?.config.zoom).toBe(1.5);
+    const sx = ((b?.node.pos[0] ?? 0) + ox()) * 1.5;
+    const sy = ((b?.node.pos[1] ?? 0) + oy()) * 1.5;
+    // On screen, at its spot, and not under the dock.
+    expect(sx >= 300 || sy >= 400).toBe(true);
+    if (spot === "br") expect(sx > 500 && sy > 400).toBe(true);
+    if (spot === "c") expect(Math.abs(sx + 120 * 1.5 - 500)).toBeLessThan(60);
+    // Pan away; the jump brings this exact view back, wherever the node is.
+    canvas.ds.offset = [900, 900];
+    canvas.ds.scale = 0.5;
+    if (b) jumpTo(b.node);
+    expect(ox()).toBeCloseTo(-500, 0);
+    expect(oy()).toBeCloseTo(-200, 0);
+    expect(canvas.ds.scale).toBe(1.5);
+  });
+
+  it("places the node before it joins the graph (the Vue renderer ignores later moves)", () => {
+    canvas.ds.offset = [-500, -200];
+    let atAdd: number[] = [];
+    Object.assign(root, { add: (node: { pos: number[] }) => { atAdd = [...node.pos]; root._nodes.push(node); } });
+    addBookmarkHere(undefined, "c");
+    expect(atAdd).toEqual([...(listBookmarks()[0]?.node.pos ?? [])]);
+  });
+
+  it("uses the dock's chosen spot", () => {
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ newSpot: "br", clearDock: false }));
+    addBookmarkHere();
+    const n = listBookmarks()[0]?.node;
+    expect((n?.pos[0] ?? 0) + ox()).toBeGreaterThan(500);
+    expect((n?.pos[1] ?? 0) + oy()).toBeGreaterThan(400);
+  });
+});
 
 describe("The free area only follows the host's layout", () => {
   const made: Element[] = [];

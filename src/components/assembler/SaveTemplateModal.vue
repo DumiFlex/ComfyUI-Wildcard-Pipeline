@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { api } from "../../manager/api/client";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import Textarea from "@/kit/Textarea.vue";
 import Input from "@/kit/Input.vue";
 import WpSelect from "@/kit/WpSelect.vue";
@@ -100,12 +100,8 @@ async function submit(mode: "update" | "new") {
 </script>
 
 <template>
-  <ModalShell :visible="open" labelledby="wp-stm-title" @close="emit('close')">
-    <div class="wp-stm" @click.stop>
-      <header class="wp-stm__head">
-        <h3 id="wp-stm-title" class="wp-stm__title">Save template</h3>
-        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="save-tpl-close" @click="emit('close')" />
-      </header>
+  <Modal :open="open" title="Save template" size="md" flush accent="brand" icon="save" @update:open="(v: boolean) => { if (!v) emit('close'); }">
+    <div class="wp-stm">
 
       <div class="wp-stm__body">
         <div class="wp-stm-field">
@@ -182,60 +178,30 @@ async function submit(mode: "update" | "new") {
         <p v-if="errorMsg" class="wp-stm-error" data-test="save-tpl-error">{{ errorMsg }}</p>
       </div>
 
-      <footer class="wp-stm__foot">
-        <Button size="sm" data-test="save-tpl-cancel" @click="emit('close')">Cancel</Button>
-        <span class="wp-stm-spacer" />
-        <Button
-          v-if="updateTargetId"
-          size="sm"
-          :disabled="!canSubmit"
-          data-test="save-tpl-save-new"
-          @click="submit('new')"
-        >Save as new entry</Button>
-        <Button
-          size="sm"
-          variant="primary"
-          :disabled="!canSubmit"
-          data-test="save-tpl-submit"
-          @click="submit(updateTargetId ? 'update' : 'new')"
-        >{{ updateTargetId ? "Update existing" : "Save" }}</Button>
-      </footer>
     </div>
-  </ModalShell>
+    <template #footer>
+      <Button size="sm" data-test="save-tpl-cancel" @click="emit('close')">Cancel</Button>
+      <span class="wp-stm-spacer" />
+      <Button
+        v-if="updateTargetId"
+        size="sm"
+        :disabled="!canSubmit"
+        data-test="save-tpl-save-new"
+        @click="submit('new')"
+      >Save as new entry</Button>
+      <Button
+        size="sm"
+        variant="primary"
+        :disabled="!canSubmit"
+        data-test="save-tpl-submit"
+        @click="submit(updateTargetId ? 'update' : 'new')"
+      >{{ updateTargetId ? "Update existing" : "Save" }}</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-stm {
-  width: min(560px, 100%);
-  max-height: calc(100vh - 40px);
-  background: var(--wp-bg-1);
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius-lg, 12px);
-  box-shadow: var(--wp-shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.55));
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  color: var(--wp-text);
-  font-family: var(--wp-font-sans, sans-serif);
-}
-.wp-stm__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--wp-border);
-  background: var(--wp-brand-gradient, transparent);
-  position: relative;
-}
-.wp-stm__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
-  pointer-events: none;
-}
-.wp-stm__head > * { position: relative; z-index: 1; }
-.wp-stm__title { margin: 0; font-size: 14px; font-weight: 600; }
+.wp-stm { display: flex; flex-direction: column; color: var(--wp-text); font-family: var(--wp-font-sans, sans-serif); }
 
 .wp-stm__body {
   flex: 1;
@@ -280,13 +246,5 @@ async function submit(mode: "update" | "new") {
   color: var(--wp-danger);
 }
 
-.wp-stm__foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 16px;
-  border-top: 1px solid var(--wp-border);
-  background: var(--wp-bg-1);
-}
 .wp-stm-spacer { flex: 1; }
 </style>

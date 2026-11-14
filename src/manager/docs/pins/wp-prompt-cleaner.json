@@ -5,38 +5,38 @@
     {
       "group": "ports",
       "term": "prompt (in)",
-      "x": 0.332,
-      "y": 0.2011
+      "x": 0.3369,
+      "y": 0.1974
     },
     {
       "group": "ports",
       "term": "cleaner widget",
-      "x": 0.3429,
-      "y": 0.2748
+      "x": 0.3474,
+      "y": 0.2687
     },
     {
       "group": "ports",
       "term": "negative (in)",
-      "x": 0.332,
-      "y": 0.2339
+      "x": 0.3369,
+      "y": 0.2291
     },
     {
       "group": "ports",
       "term": "prompt (out)",
-      "x": 0.668,
-      "y": 0.141
+      "x": 0.6631,
+      "y": 0.1392
     },
     {
       "group": "ports",
       "term": "blocklist (in)",
-      "x": 0.332,
-      "y": 0.7962
+      "x": 0.3369,
+      "y": 0.796
     },
     {
       "group": "ports",
       "term": "negative (out)",
-      "x": 0.668,
-      "y": 0.1683
+      "x": 0.6631,
+      "y": 0.1657
     }
   ]
 }

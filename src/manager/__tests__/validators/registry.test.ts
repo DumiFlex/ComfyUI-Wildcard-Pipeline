@@ -48,7 +48,7 @@ describe("validator registry", () => {
     const result = v.safeParse(withExtra);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect("mystery_field" in result.data).toBe(false);
+      expect(result.data).not.toHaveProperty("mystery_field");
     }
   });
 

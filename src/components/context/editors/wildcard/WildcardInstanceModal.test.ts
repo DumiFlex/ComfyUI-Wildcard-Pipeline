@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, config } from "@vue/test-utils";
 import WildcardInstanceModal from "./WildcardInstanceModal.vue";
 import type { ModuleEntry } from "../../../../widgets/_shared";
+
+// The window is a kit Modal, which teleports to <body>: render it in place.
+config.global.stubs = { ...config.global.stubs, teleport: true };
 
 function makeModule(overrides: Partial<ModuleEntry> = {}): ModuleEntry {
   return {

@@ -13,7 +13,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import WpSelect from "@/kit/WpSelect.vue";
 import { api } from "../../manager/api/client";
 import type { TemplateRow } from "../../manager/api/types";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import Skeleton from "@/kit/Skeleton.vue";
 import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
@@ -128,19 +128,17 @@ function pick(row: TemplateRow) {
 </script>
 
 <template>
-  <ModalShell :visible="open" labelledby="wp-ltm-title" @close="emit('close')">
-    <div class="wp-ltm" @click.stop>
-      <header class="wp-ltm__head">
-        <div class="wp-ltm__head-text">
-          <div class="wp-ltm__eyebrow">Load template from library</div>
-          <div id="wp-ltm-title" class="wp-ltm__title">
-            Browse Templates
-            <span class="wp-ltm__title-detail">· {{ rows.length }} {{ rows.length === 1 ? "template" : "templates" }}</span>
-          </div>
+  <Modal :open="open" size="lg" flush accent="brand" icon="folder-open" @update:open="(v: boolean) => { if (!v) emit('close'); }">
+    <template #header="{ titleId }">
+      <div class="wp-ltm__head-text">
+        <div class="wp-ltm__eyebrow">Load template from library</div>
+        <div :id="titleId" class="wp-ltm__title">
+          Browse Templates
+          <span class="wp-ltm__title-detail">· {{ rows.length }} {{ rows.length === 1 ? "template" : "templates" }}</span>
         </div>
-        <Button variant="ghost" icon="times" aria-label="Close" size="sm" kbd="Esc" data-test="load-tpl-close" @click="emit('close')" />
-      </header>
-
+      </div>
+    </template>
+    <div class="wp-ltm">
       <div class="wp-ltm__toolbar">
         <SearchInput
           ref="searchInput"
@@ -269,49 +267,26 @@ function pick(row: TemplateRow) {
         </template>
       </div>
 
-      <footer class="wp-ltm__foot">
-        <span class="wp-ltm__hint">Click a template to load it into the assembler.</span>
-        <span class="wp-ltm__foot-spacer" />
-        <Button size="sm" data-test="load-tpl-cancel" @click="emit('close')">Cancel</Button>
-      </footer>
     </div>
-  </ModalShell>
+    <template #footer>
+      <span class="wp-ltm__hint">Click a template to load it into the assembler.</span>
+      <span class="wp-ltm__foot-spacer" />
+      <Button size="sm" data-test="load-tpl-cancel" @click="emit('close')">Cancel</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
 .wp-ltm {
-  background: var(--wp-bg-2);
-  border: 1px solid var(--wp-border-strong, var(--wp-border));
-  border-radius: var(--wp-radius-lg, 12px);
-  box-shadow: var(--wp-shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.55));
-  width: 640px;
-  max-width: calc(100vw - 32px);
-  height: 560px;
-  max-height: calc(100vh - 32px);
+  height: 480px;
+  max-height: calc(100vh - 160px);
   display: flex;
   flex-direction: column;
   color: var(--wp-text);
-  overflow: hidden;
   font-family: var(--wp-font-sans, sans-serif);
 }
 
-/* Header — brand wash mirrors ModulePickerModal. */
-.wp-ltm__head {
-  display: flex; align-items: center; gap: 10px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--wp-border);
-  background: var(--wp-brand-gradient, transparent);
-  position: relative;
-}
-.wp-ltm__head::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: color-mix(in srgb, var(--wp-bg) 85%, transparent);
-  pointer-events: none;
-}
-.wp-ltm__head > * { position: relative; z-index: 1; }
-.wp-ltm__head-text { flex: 1; min-width: 0; }
+.wp-ltm__head-text { flex: 1 1 auto; min-width: 0; }
 .wp-ltm__eyebrow {
   font-size: 11px;
   text-transform: uppercase;
@@ -453,12 +428,6 @@ function pick(row: TemplateRow) {
 }
 
 /* Footer */
-.wp-ltm__foot {
-  height: 44px; padding: 0 16px;
-  display: flex; align-items: center; gap: 10px;
-  border-top: 1px solid var(--wp-border);
-  background: var(--wp-bg-1);
-  color: var(--wp-text-dim); font-size: 11px;
-}
 .wp-ltm__foot-spacer { flex: 1; }
+.wp-ltm__hint { align-self: center; color: var(--wp-text-dim); font-size: 11px; }
 </style>

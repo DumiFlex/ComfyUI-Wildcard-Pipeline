@@ -10,8 +10,11 @@ import {
   collectUpstreamKinds,
   collectUpstreamProducers,
   collectUpstreamResolved,
+  collectUpstreamResolvedAtFrame,
+  collectLoopFrames,
   findRootGraph,
   internalVarNames,
+  readToggleBools,
   resolveUpstreamLoopSeed,
   type LiteGraphLike,
   type LiteNodeLike,
@@ -22,6 +25,7 @@ import { templateInsertAtCaret } from "../extension/_stashes";
 import type { NegativesTable } from "../extension/negatives";
 import { withSlot } from "../extension/assembler-vars";
 import { applySeedLocks, deriveLoopSeeds } from "../components/shared/seed-derive";
+import { currentFrame, setFrame } from "../components/context-loop/frame-cursor";
 
 const PREVIEW_SEED = 42;
 
@@ -70,6 +74,39 @@ function negativeTemplateOf(node: AssemblerNode): string {
 function writeNegativeTemplate(node: AssemblerNode, next: string) {
   const w = negativeTemplateWidget(node);
   if (w) w.value = next;
+}
+
+/**
+ * Toolbar › Mark unused internal: flag every upstream variable neither box
+ * reads as internal, keeping any another Assembler on the same context reads
+ * (`extension/mark-unused.ts`). Toast with Undo.
+ */
+async function markUnused(node: AssemblerNode): Promise<void> {
+  const start = (node as unknown as { graph?: LiteGraphLike }).graph
+    ?? (app.graph as unknown as LiteGraphLike);
+  const root = findRootGraph(start);
+  const mu = await import("../extension/mark-unused");
+  const plan = mu.planMarkUnused(root, node as unknown as LiteNodeLike);
+  if (plan.wired) {
+    pushToast("This Assembler's template comes from a wire, so it can't tell what the prompt uses.", { severity: "warning" });
+    return;
+  }
+  if (!plan.marked.length) {
+    pushToast(mu.summary(plan) || "Every variable here is in use.", { severity: "info", lifeMs: 8000 });
+    return;
+  }
+  const changes = mu.applyMarkUnused(plan);
+  pushToast(mu.summary(plan), {
+    severity: "success",
+    lifeMs: 12000,
+    action: {
+      label: "Undo",
+      onSelect: () => {
+        const skipped = mu.undoMarkUnused(changes);
+        if (skipped) pushToast(`${skipped} node${skipped === 1 ? " was" : "s were"} edited since and left as they are.`, { severity: "warning" });
+      },
+    },
+  });
 }
 
 /** `node.properties` key marking an Assembler whose negative box follows the
@@ -159,6 +196,9 @@ interface UpstreamSnapshot {
   /** `{ varName: { AXIS: firstTag } }` for every upstream `accepts` axis, so
    *  the preview can resolve a `$var.AXIS` read to the tag it will roll. */
   varAxes: Record<string, Record<string, string>>;
+  /** Each upstream toggle variable's switch, what `$name.bool` reads (a
+   *  toggle with a Value writes the Value, not true / false). */
+  varBools: Record<string, boolean>;
   /** Bindings contributed by upstream WP_ContextInjector nodes. The
    *  preview API doesn't simulate injectors — these keys must come
    *  from the static fallback even when api results are available,
@@ -170,13 +210,19 @@ interface UpstreamSnapshot {
   injectorNegatives: Record<string, string | null>;
   template: string;
   negativeTemplate: string;
+  /** A WP Context Loop upstream: the frame the preview shows (0-based, the
+   *  Loop's EDIT FRAME pick, frame 1 on base), its frame count and the
+   *  names only some frames set. Null when no Loop drives this node. */
+  loop: { frame: number; count: number; partial: Record<string, number[]> } | null;
 }
 
 function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
+  if (JSON.stringify(a.loop) !== JSON.stringify(b.loop)) return false;
   if (a.template !== b.template) return false;
   if (a.negativeTemplate !== b.negativeTemplate) return false;
   if (JSON.stringify(a.injectorNegatives) !== JSON.stringify(b.injectorNegatives)) return false;
   if (a.chainKey !== b.chainKey) return false;
+  if (JSON.stringify(a.varBools) !== JSON.stringify(b.varBools)) return false;
   // Injector bindings live in `fallbackResolved` only — the API
   // resolver only knows WP_Context modules, so `chainKey` misses
   // changes to injector rows. Diff the resolved map keys + values so
@@ -344,14 +390,16 @@ function previewSeeds(
   g: LiteGraphLike,
   node: LiteNodeLike,
   widgetSeeds: (number | null)[],
+  frame = 0,
 ): (number | null)[] {
   const loop = resolveUpstreamLoopSeed(g, node);
   if (!loop?.overrideSeed) return widgetSeeds;
-  const first = applySeedLocks(
+  const seeds = applySeedLocks(
     deriveLoopSeeds(loop.baseSeed, loop.count, loop.strategy),
     loop.seedLocks,
-  )[0];
-  return widgetSeeds.map((s) => (s === null ? null : (first ?? s)));
+  );
+  const pick = seeds[Math.min(frame, seeds.length - 1)];
+  return widgetSeeds.map((s) => (s === null ? null : (pick ?? s)));
 }
 
 export function mountHelper(node: AssemblerNode) {
@@ -412,9 +460,14 @@ export function mountHelper(node: AssemblerNode) {
             (node as unknown as { graph?: LiteGraphLike }).graph
             ?? (app.graph as unknown as LiteGraphLike);
           const g = findRootGraph(startGraph);
+          // A Loop upstream: the preview shows one real frame, the one the
+          // Loop's EDIT FRAME has picked (frame 1 while it is on base), so
+          // modules switched on or off per frame show as the run will.
+          const frames = collectLoopFrames(g, node);
+          const frame = frames ? Math.min(currentFrame.value ?? 0, frames.count - 1) : null;
           const seeds: (number | null)[] = [];
-          const chain = collectUpstreamChain(g, node, { modelSteps: true, seeds });
-          const stepSeeds = previewSeeds(g, node, seeds);
+          const chain = collectUpstreamChain(g, node, { modelSteps: true, seeds, frame });
+          const stepSeeds = previewSeeds(g, node, seeds, frame ?? 0);
           // `collectUpstreamResolved` now returns the full ctx,
           // including user-flagged internal vars (engine commit a345bd4
           // propagates them across socket boundaries; only the prompt
@@ -422,7 +475,9 @@ export function mountHelper(node: AssemblerNode) {
           // we mirror runtime: drop user-flagged internal vars + the
           // engine flag map itself so chip strip + preview match the
           // server-side resolve result.
-          const rawResolved = collectUpstreamResolved(g, node);
+          const rawResolved = frame == null
+            ? collectUpstreamResolved(g, node)
+            : collectUpstreamResolvedAtFrame(g, node, frame);
           // Shared with the template editor's `$` suggestion list — both
           // surfaces on this node have to agree on which names the prompt
           // will actually render, and they disagreed while each kept its
@@ -449,13 +504,19 @@ export function mountHelper(node: AssemblerNode) {
             seeds: stepSeeds,
             fallbackResolved,
             varAxes,
+            varBools: readToggleBools(rawResolved),
             injectorKeys: collectUpstreamInjectorBindings(g, node),
             injectorNegatives: collectUpstreamInjectorNegatives(g, node),
             template: templateOf(node),
             negativeTemplate: negativeTemplateOf(node),
+            loop: frames && frame != null
+              ? { frame, count: frames.count, partial: frames.partial }
+              : null,
           };
         },
         snapshotEqual,
+        undefined,
+        [currentFrame],
       );
 
       // Litegraph mode tracker — instant updates via property
@@ -567,7 +628,15 @@ export function mountHelper(node: AssemblerNode) {
         const injectorKeys = snapshot.value.injectorKeys;
         let fresh: Record<string, ResolvedValue>;
         if (api) {
-          fresh = { ...fallback, ...api };
+          // Until the run for THIS chain answers, the last answer may be for
+          // another loop frame: keep its values (no flicker) but only for
+          // names this frame sets, or a module switched off on this frame
+          // would still show its variable.
+          const current = apiKey.value === snapshot.value.chainKey;
+          fresh = { ...fallback };
+          for (const [k, v] of Object.entries(api)) {
+            if (current || k in fallback) fresh[k] = v;
+          }
           for (const k of injectorKeys) {
             if (k in fallback) fresh[k] = fallback[k];
           }
@@ -621,7 +690,7 @@ export function mountHelper(node: AssemblerNode) {
         // with the kind chips used everywhere else in the extension.
         const rootG2 = findRootGraph(node as unknown as Parameters<typeof findRootGraph>[0]);
         const rawKindByVar = rootG2
-          ? collectUpstreamKinds(rootG2, node as unknown as LiteNodeLike)
+          ? collectUpstreamKinds(rootG2, node as unknown as LiteNodeLike, snapshot.value.loop?.frame ?? null)
           : {};
         // Keep the kind for EVERY var that appears as a chip — including
         // user-flagged internal ones. The chip strip (`upstreamVars` =
@@ -638,6 +707,16 @@ export function mountHelper(node: AssemblerNode) {
           if (k.startsWith("__")) continue;
           kindByVar[k] = v;
         }
+        // A name this frame doesn't set still shows as a chip (set on other
+        // frames): take its kind from the first frame that sets it.
+        const loop = snapshot.value.loop;
+        if (loop && rootG2) {
+          for (const [name, frames] of Object.entries(loop.partial)) {
+            if (kindByVar[name] || frames.length === 0) continue;
+            const k = collectUpstreamKinds(rootG2, node as unknown as LiteNodeLike, frames[0])[name];
+            if (k) kindByVar[name] = k;
+          }
+        }
 
         return [
           h(AssemblerHelper, {
@@ -648,8 +727,11 @@ export function mountHelper(node: AssemblerNode) {
             negatives,
             resolvedMap: fresh,
             varAxes: snapshot.value.varAxes,
+            varBools: snapshot.value.varBools,
             rolledAxes: api ? (apiAxes.value ?? undefined) : undefined,
             kindByVar,
+            loopFrames: loop ?? undefined,
+            onPickFrame: (k: number) => setFrame(k),
             previewSeed: PREVIEW_SEED,
             nodeMode: nodeMode.value,
             onInsert: (token: string) => insertIntoTemplate(node, token),
@@ -675,6 +757,7 @@ export function mountHelper(node: AssemblerNode) {
             onLoadTemplate: () => {
               loadOpen.value = true;
             },
+            onMarkUnused: () => { void markUnused(node); },
             onRequestMinWidth: (w: number) => {
               if (w === dynamicMinWidth) return;
               dynamicMinWidth = w;

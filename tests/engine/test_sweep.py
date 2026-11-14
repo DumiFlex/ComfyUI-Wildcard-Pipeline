@@ -124,6 +124,17 @@ def test_pipeline_picks_the_pinned_option():
     assert mods[0]["instance"] == {"variable_binding": "hair"}
 
 
+def test_swept_pick_says_so_in_the_debug_detail():
+    """WP Debug says "swept" rather than "pinned option" for a sweep frame."""
+    mods = [_wildcard("u1", "hair", ["red", "blue"])]
+    ctx = PipelineEngine().run(
+        mods, ctx={PIN_KEY: {"u1": "hair1"}, "__wp_explain__": True}, seed=7,
+    )
+    row = next(t for t in ctx["__wp_trace__"] if t.get("_uid") == "u1")
+    assert row["detail"]["mode"] == "pinned"
+    assert row["detail"]["swept"] is True
+
+
 def test_unknown_pinned_option_falls_back_to_a_roll():
     mods = [_wildcard("u1", "hair", ["red", "blue"])]
     ctx = PipelineEngine().run(mods, ctx={PIN_KEY: {"u1": "gone"}}, seed=7)

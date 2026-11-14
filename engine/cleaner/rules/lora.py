@@ -24,9 +24,10 @@ _TAG_RE = re.compile(
     re.IGNORECASE,
 )
 # A tag needs a space from a neighbour unless that neighbour is whitespace,
-# a separator or a bracket edge.
+# a separator, a bracket edge or (after it) punctuation that ends a clause
+# (`text <lora:x:1>.` stays as written, not `<lora:x:1> .`).
 _NO_SPACE_BEFORE = set(" \t\n,([{")
-_NO_SPACE_AFTER = set(" \t\n,)]}")
+_NO_SPACE_AFTER = set(" \t\n,)]}.;:!?")
 
 
 def apply(text: str, mode: str, config: dict) -> RuleResult:

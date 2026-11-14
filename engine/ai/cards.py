@@ -66,7 +66,8 @@ CARDS: tuple[Card, ...] = (
          "stack item the same filter is the use setting \"filter warm and not wet\". Tag the "
          "source wildcard's options (\"tags\": [\"warm\"]) so the filter has something to "
          "match. \"Options using only warm colours from Palette\" means options like "
-         "\"a @{Palette:warm} sky\", never the colours copied in.",
+         "\"a @{Palette:warm} sky\", never the colours copied in. A $var term reads the run: "
+         "@{Setting:$model_variant} keeps options tagged pony on Pony.",
          _w(r"\bonly (?:the )?\w+ (?:ones|options|colou?rs|items)\b|\btagged\b|\bby tags?\b|"
             r"\bwith the tag\b|\bfilter\w*|\bonly uses?\b|@\{\w+:"),
          offers=("add_options", "edit_options")),

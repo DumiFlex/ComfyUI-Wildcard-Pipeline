@@ -2215,35 +2215,35 @@
    "id": "bench_characters",
    "name": "Bench: Characters",
    "color": "#a78bfa",
-   "icon": "pi-user",
+   "icon": "user",
    "sort_order": 0
   },
   {
    "id": "bench_clothing",
    "name": "Bench: Clothing",
    "color": "#f472b6",
-   "icon": "pi-shopping-bag",
+   "icon": "shopping-bag",
    "sort_order": 0
   },
   {
    "id": "bench_scene",
    "name": "Bench: Scene",
    "color": "#34d399",
-   "icon": "pi-image",
+   "icon": "image",
    "sort_order": 0
   },
   {
    "id": "bench_style",
    "name": "Bench: Style",
    "color": "#fbbf24",
-   "icon": "pi-palette",
+   "icon": "palette",
    "sort_order": 0
   },
   {
    "id": "old_stuff",
    "name": "Old stuff",
    "color": "#9ca3af",
-   "icon": "pi-folder",
+   "icon": "folder",
    "sort_order": 0
   }
  ],

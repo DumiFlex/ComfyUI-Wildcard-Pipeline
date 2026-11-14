@@ -1,4 +1,12 @@
-import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { computed, defineAsyncComponent, h, ref, watch, type Component } from "vue";
+import { app } from "#comfyui/app";
+import {
+  collectUpstreamProducers,
+  collectUpstreamVariables,
+  findRootGraph,
+  type LiteGraphLike,
+  type LiteNodeLike,
+} from "../extension/graph";
 import { attachRowOutputs, queueRowOutputs, type RowOutputNode } from "../extension/row-outputs";
 import { attachFieldSockets, type FieldSocketNode } from "../extension/field-sockets";
 import {
@@ -12,9 +20,9 @@ import {
   wantedCtlInputs,
   type CtlNode,
 } from "../extension/toggle-control";
-import { createDomWidgetHost, serializeWidgetJson, type MountTargetNode } from "./_shared";
+import { createDomWidgetHost, isMirrorBuild, serializeWidgetJson, type MountTargetNode } from "./_shared";
 import { nodeEditors } from "../extension/_stashes";
-import { reactiveFromGraph } from "../extension/reactive";
+import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import {
   effectiveToggles,
   defaultTogglesConfig,
@@ -24,6 +32,7 @@ import {
   toggleRows,
   type TogglesConfig,
 } from "../extension/toggles";
+import { ctlInputName } from "../extension/toggle-control";
 
 const TogglesWidget = defineAsyncComponent(
   () => import("../components/toggles/TogglesWidget.vue"),
@@ -33,6 +42,7 @@ interface ToggleOutput {
   name: string;
   type: string;
   label?: string;
+  localized_name?: string;
   links?: number[] | null;
 }
 
@@ -94,6 +104,19 @@ function relabel(node: TogglesHostNode, cfg: TogglesConfig): void {
     slot.name = `toggle_${t.out}`;
     slot.type = "BOOLEAN";
     slot.label = t.name;
+    // The hover tooltip reads `localized_name` before `name` ("toggle_4"
+    // is a slot number, not `$toggle_4`).
+    slot.localized_name = t.name;
+  }
+  // A control dot's tooltip says the toggle's name, not its `ctl_<id>`.
+  for (const t of toggleRows(cfg)) {
+    const input: { name: string; label?: string; localized_name?: string } | undefined = t.control
+      ? node.inputs?.find((i) => i.name === ctlInputName(t.id))
+      : undefined;
+    if (input) {
+      input.label = t.name;
+      input.localized_name = t.name;
+    }
   }
 }
 
@@ -107,16 +130,21 @@ function relabel(node: TogglesHostNode, cfg: TogglesConfig): void {
  * at the right edge of its row (`extension/row-outputs.ts`).
  */
 export function create(node: TogglesHostNode, inputName: string) {
+  /** Shown on a subgraph node: the node's own copy keeps its outputs, dots
+   *  and pencil; this one only edits the config (which reaches both). */
+  const mirrored = isMirrorBuild(node);
   const config = ref<TogglesConfig>(defaultTogglesConfig());
   /** `ctl_*` input names, shared with `attachFieldSockets`. */
   const ctlNames: string[] = [];
   const ctlNode = node as unknown as CtlNode;
   /** Bumped by the pencil in ComfyUI's selection toolbar
-   *  (extension/node-toolbar.ts); the widget flips its edit view. */
+   *  (extension/node-toolbar.ts); the widget opens its edit window. */
   const editRequest = ref(0);
-  nodeEditors.set(node, () => {
-    editRequest.value += 1;
-  });
+  if (!mirrored) {
+    nodeEditors.set(node, () => {
+      editRequest.value += 1;
+    });
+  }
 
   function store(next: TogglesConfig): void {
     config.value = next;
@@ -177,7 +205,7 @@ export function create(node: TogglesHostNode, inputName: string) {
         () => wiring(node, config.value),
         sameWiring,
       );
-      watch(drives, (now, was) => {
+      if (!mirrored) watch(drives, (now, was) => {
         for (const t of toggleRows(config.value)) {
           if (!t.control) continue;
           const old = new Set(was.get(t.id) ?? []);
@@ -194,6 +222,27 @@ export function create(node: TogglesHostNode, inputName: string) {
         () => groupTitles(ctlNode.graph),
         (a, b) => a.join("\u0000") === b.join("\u0000"),
       );
+      // `$` suggestions for the Pick one Value: every upstream variable
+      // (the node resolves the value against the whole upstream Context,
+      // internal ones too). `app.graph` is the subgraph while inside one,
+      // so climb from the node's own graph.
+      const rootGraph = (): LiteGraphLike | null => {
+        const start = (node as unknown as { graph?: LiteGraphLike }).graph ?? (app.graph as unknown as LiteGraphLike);
+        return start ? findRootGraph(start) : null;
+      };
+      const upstreamVars = reactiveFromGraph<string[]>(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const g = rootGraph();
+          return g ? collectUpstreamVariables(g, node as unknown as LiteNodeLike) : [];
+        },
+        stringArrayEqual,
+      );
+      const varProducers = computed(() => {
+        void upstreamVars.value;
+        const g = rootGraph();
+        return g ? new Map(Object.entries(collectUpstreamProducers(g, node as unknown as LiteNodeLike))) : undefined;
+      });
       return () => {
         const controls: Record<string, ControlState> = {};
         const eff = effectiveToggles(config.value);
@@ -209,6 +258,9 @@ export function create(node: TogglesHostNode, inputName: string) {
           controls,
           canvasGroups: canvasGroups.value,
           editRequest: editRequest.value,
+          nodeTitle: (node as { title?: string }).title ?? "",
+          upstreamVars: upstreamVars.value,
+          varProducers: varProducers.value,
           "onUpdate:modelValue": onUpdate,
         });
       };
@@ -224,12 +276,13 @@ export function create(node: TogglesHostNode, inputName: string) {
       const parsed = normalizeOuts(parseTogglesConfig(raw));
       if (JSON.stringify(parsed) === JSON.stringify(config.value)) return;
       config.value = parsed;
-      reconcile();
+      if (!mirrored) reconcile();
     },
   });
 
   // The constructor adds outputs after widgets, so trim them once it is done
   // (a load or paste configures the node in the same task, before this runs).
+  if (mirrored) return host;
   queueMicrotask(reconcile);
 
   host.onCleanup(attachRowOutputs(node, host.element, inputName, isToggleOutput));

@@ -38,16 +38,36 @@ export default pack({
       default: false,
       description: "End tutorials with real images: the prompt goes into a checkpoint and sampler and a few runs land on screen. Needs a GPU and the checkpoint below.",
     },
+    unet: {
+      type: "string",
+      default: "flux3/flux3-image-klein-int8-convrot.safetensors",
+      description: "A diffusion model in models/diffusion_models (Flux 3 Klein by default). When set, the showcase loads it with its own text encoder and VAE below, at cfg 1 with an empty negative; leave it empty to load the checkpoint instead.",
+    },
+    clip: { type: "string", default: "qwen3vl_4b_int8_convrot.safetensors", description: "The text encoder for the diffusion model, in models/text_encoders." },
+    clipType: { type: "string", default: "flux3", description: "The CLIP loader's type for that text encoder." },
+    vae: { type: "string", default: "flux2-vae.safetensors", description: "The VAE for the diffusion model, in models/vae." },
     checkpoint: {
       type: "string",
-      default: "waiIllustriousSDXL_v170",
-      description: "The checkpoint the showcase loads, by its file name in models/checkpoints (the .safetensors ending is optional).",
+      default: "",
+      description: "A checkpoint in models/checkpoints to load instead of the diffusion model (when unet is empty), e.g. an SDXL model.",
     },
-    steps: { type: "number", default: 24, description: "Sampler steps for the showcase." },
-    cfg: { type: "number", default: 5, description: "CFG for the showcase." },
+    exampleCheckpoint: {
+      type: "string",
+      default: "juggernautXL_ragnarokBy",
+      description: "The SDXL checkpoint the example workflows (E1-E4, N12, N13) load, since they are built on a checkpoint loader. The `checkpoint` param wins when it is set.",
+    },
+    steps: { type: "number", default: 12, description: "Sampler steps for the showcase (Klein: 8 to 16)." },
+    cfg: { type: "number", default: 1, description: "CFG for the showcase (1 for Klein; about 5 for an SDXL checkpoint)." },
+    width: { type: "number", default: 1024, description: "Image width for the showcase." },
+    height: { type: "number", default: 1280, description: "Image height for the showcase." },
   },
-  // One take per tutorial, every take keeps its video, no robot labels in the picture.
-  run: { video: "always", showActions: false, chapters: false, frameQuality: 92, trace: "problems", pauseLimitMinutes: 5, testTimeout: 15 * 60_000 },
+  // One take per tutorial, every take keeps its video, no robot labels in the picture. High quality
+  // (Watchwright 0.16+): JPEG 100 frames, every frame kept, encoded after the take; 60 fps so the
+  // pointer (moved every 16 ms) glides; followVideo keeps the picture on whichever tab is in front.
+  run: {
+    video: "always", videoQuality: "high", videoFps: 60, followVideo: true,
+    showActions: false, chapters: false, trace: "problems", pauseLimitMinutes: 5, testTimeout: 15 * 60_000,
+  },
   helpers: benchHelpers,
 
   async setup(ctx) {

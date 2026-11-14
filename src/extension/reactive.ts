@@ -1,4 +1,4 @@
-import { ref, type Ref, onScopeDispose } from "vue";
+import { ref, watch, type Ref, type WatchSource, onScopeDispose } from "vue";
 import { onGraphLoaded } from "./graph-events";
 
 export { notifyGraphLoaded } from "./graph-events";
@@ -259,6 +259,9 @@ export function reactiveFromGraph<T>(
   compute: () => T,
   equals: (a: T, b: T) => boolean = Object.is,
   pollMs = 400,
+  /** Vue sources `compute` reads besides the graph (e.g. the Loop's frame
+   *  cursor): a change refreshes at once instead of on the next poll. */
+  triggers: WatchSource[] = [],
 ): Ref<T> {
   const state = ref(compute()) as Ref<T>;
 
@@ -266,6 +269,8 @@ export function reactiveFromGraph<T>(
     const next = compute();
     if (!equals(state.value, next)) state.value = next;
   }
+
+  const stopTriggers = triggers.length ? watch(triggers, refresh) : () => {};
 
   const unwatchConnections = watchConnections(node, refresh);
 
@@ -320,6 +325,7 @@ export function reactiveFromGraph<T>(
   });
 
   onScopeDispose(() => {
+    stopTriggers();
     stopPoll();
     unsubscribe();
     unwatchMode();

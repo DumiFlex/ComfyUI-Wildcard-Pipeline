@@ -1,16 +1,19 @@
-// Advanced 9: how far a constraint reaches. Three chained Contexts: Hero (only the thief) + the
+// Advanced 9: how far a constraint reaches. Three chained Contexts: Role (only the inventor) + the
 // constraint, then Setting, then Setting again bound to $later. Reach "all" keeps both settings out of
-// castles; "first" covers only the next one, so the later one can roll a castle; "pick" ticks exactly
+// the forest; "first" covers only the next one, so the later one can roll a forest; "pick" ticks exactly
 // which ones. The constraint's reach is changed for this node in its Edit view. One Int node feeds
-// all three seeds, so a step rolls the whole chain.
+// all three seeds, so a step rolls the whole chain. Last, a wildcard that reads Setting through an
+// @{} reference ("Daydream", in the tutorial library) shows the constraint reaching inside nested picks too.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
+
 
 tutorial(
   "A09",
   {
     title: "How far a constraint reaches",
-    description: "Choose which of the wildcards after a constraint it covers: the first, the next few, all of them, or ones you pick, even across chained Contexts.",
-    learn: "Target reach (first / next N / all / pick), chained Contexts, and how several constraints combine.",
+    description: "Choose which of the wildcards after a constraint it covers: the first, the next few, all of them, or ones you pick, even across chained Contexts and inside nested wildcards.",
+    learn: "Target reach (first / next N / all / pick), chained Contexts, nested wildcards, and how several constraints combine.",
   },
   async (t) => {
     const page = t.page;
@@ -22,14 +25,15 @@ tutorial(
       return page.getByRole("dialog").last();
     };
 
+
     const nodes = await t.h.step("Two settings", async () => {
       await t.go("/");
-      await t.say("A story in two places. The first Context picks the hero and the Hero fits the place constraint.");
+      await t.say("A story in two places. The first Context picks the role and the Role fits the place constraint.");
       const c1 = await t.addNode("WP Context", { x: 340, y: 170 });
-      await t.pickModules(c1, ["Hero", "Hero fits the place"]);
-      await t.say("For a clear test, keep only the street thief on this node. City folk are never sent to a castle.");
-      let modal = await editItem(c1, "Hero");
-      for (const who of ["a knight", "a court mage", "a forest ranger", "a desert nomad", "an inventor"]) {
+      await t.pickModules(c1, ["Role", "Role fits the place"]);
+      await t.say("For a clear test, keep only the clockwork inventor on this node. Inventors are never sent to the forest.");
+      let modal = await editItem(c1, "Role");
+      for (const who of ["a knight", "a battle mage", "a forest ranger"]) {
         await t.click(modal.getByLabel(`Use option ${who}`));
         await t.beat(200);
       }
@@ -43,6 +47,8 @@ tutorial(
       const c3 = await t.addNode("WP Context", { x: 1000, y: 560 });
       await t.wire(c2, "context", c3, "upstream");
       await t.pickModules(c3, ["Setting"]);
+      await t.waitVoice();
+      await t.say("Edit the third one's Setting, and change its variable to later, so the two settings don't overwrite each other.");
       modal = await editItem(c3, "Setting");
       const binding = modal.getByLabel("Variable binding");
       await t.fill(binding, "later", { cps: 12 });
@@ -53,7 +59,7 @@ tutorial(
       const asm = await t.addNode("WP Prompt Assembler", { x: 1560, y: 170 });
       await t.wire(c3, "context", asm, "context");
       await t.click(t.node(asm).locator("textarea, [contenteditable='true']").first());
-      await t.type("$hero in $setting, later in $later", { cps: 16 });
+      await t.type("A painting of $role $setting, and later $later", { cps: 16 });
       await t.beat(600);
       await t.waitVoice();
       await t.say("Each Context has its own seed. To roll the whole chain at once, add an Int node and wire it into all three seeds.");
@@ -77,49 +83,58 @@ tutorial(
     };
 
     await t.h.step("All", async () => {
-      await t.say("Reach is all by default: the constraint covers every Setting after it, in this Context or in the ones it feeds. Neither place is ever a castle.");
-      await t.callout("prev", prev, "City or wilds, both times", 6);
+      await t.say("Reach is all by default: the constraint covers every Setting after it, in this Context or in the ones it feeds. Neither place is ever a forest.");
+      await t.callout("prev", prev, "Castle or city, both times", 6);
       await roll(4);
       await t.waitVoice();
       await t.uncallout("prev");
     });
 
     await t.h.step("First", async () => {
-      await t.say("Edit the constraint on this node and set its reach to first.");
-      const modal = await editItem(nodes.c1, "Hero fits the place");
+      await t.say("Edit the constraint on this node.");
+      const modal = await editItem(nodes.c1, "Role fits the place");
       const section = modal.locator('[data-test="reach-section"]');
       await t.scrollTo(section, { at: 0.5 });
+      await t.callout("reach", section, "Reach: which Settings it changes", 6);
+      await t.say("Reach says which Settings it changes. Set it to first.");
+      await t.waitVoice();
       await t.click(modal.locator('[data-test="reach-mode-first"]'));
+      await t.uncallout("reach");
       await t.beat(600);
       await t.callout("hint", modal.locator('[data-test="reach-hint"]'), "Only the next Setting", 6);
       await t.waitVoice();
       await t.uncallout("hint");
-      await t.say("Next N covers the next few, by a count.");
       await t.click(modal.locator('[data-test="reach-mode-next"]'));
-      await t.beat(700);
+      await t.beat(500);
+      await t.callout("next", section, "Next N: a count", 6);
+      await t.say("Next N covers the next few, by a count.");
+      await t.waitVoice();
+      await t.beat(600);
+      await t.uncallout("next");
       await t.click(modal.locator('[data-test="reach-mode-first"]'));
       await t.beat(400);
       await t.waitVoice();
       await t.click(modal.locator('[data-test="cnm-save"]'));
       await t.beat(700);
-      await t.say("Now only the first place follows the rule. The later one rolls freely, castles included.");
-      await roll(14, /later in (a torch-lit throne room|castle ramparts)/);
-      if (!/later in (a torch-lit throne room|castle ramparts)/.test((await prev.textContent()) ?? "")) {
-        throw new Error("The preview never put the later place in a castle with reach first");
+      await t.say("Now only the first place follows the rule. Change the seed until the later one lands somewhere new.");
+      await roll(14, /later in a (misty pine forest|mossy clearing)/);
+      if (!/later in a (misty pine forest|mossy clearing)/.test((await prev.textContent()) ?? "")) {
+        throw new Error("The preview never put the later place in a forest with reach first");
       }
-      await t.callout("prev", prev, "The later place can be a castle", 6);
+      await t.callout("prev", prev, "The later place can be a forest", 6);
+      await t.say("The later one rolls freely, forests included.");
       await t.waitVoice();
       await t.uncallout("prev");
     });
 
     await t.h.step("Pick", async () => {
-      await t.say("Pick lists every Setting the constraint can reach, with its node, so you tick exactly the ones it covers.");
-      const modal = await editItem(nodes.c1, "Hero fits the place");
+      const modal = await editItem(nodes.c1, "Role fits the place");
       await t.scrollTo(modal.locator('[data-test="reach-section"]'), { at: 0.5 });
       await t.click(modal.locator('[data-test="reach-mode-pick"]'));
       await t.beat(700);
       const list = modal.locator('[data-test="reach-picklist"]');
       await t.callout("list", list, "Each Setting, on its node", 6);
+      await t.say("Pick lists every Setting the constraint can reach, with its node, so you tick exactly the ones it covers.");
       const boxes = list.getByRole("checkbox");
       await t.click(boxes.last());
       await t.beat(600);
@@ -132,13 +147,47 @@ tutorial(
       await t.waitVoice();
     });
 
+    await t.h.step("Inside nested wildcards", async () => {
+      // Checked against the engine: with reach all, a Setting read through @{} in another wildcard's
+      // option is re-weighted like a direct one (the inventor never dreams of a forest).
+      await t.say("Reach also goes inside nested wildcards. Daydream reads Setting through an at reference. Add it to the third Context.");
+      await t.pickModules(nodes.c3, ["Daydream"]);
+      await t.click(t.node(nodes.asm).locator("textarea, [contenteditable='true']").first());
+      await t.press("End");
+      await t.type(", $daydream", { cps: 14 });
+      await t.beat(600);
+      await t.waitVoice();
+      const modal = await editItem(nodes.c1, "Role fits the place");
+      await t.scrollTo(modal.locator('[data-test="reach-section"]'), { at: 0.5 });
+      const nested = modal.locator('[data-test="reach-picklist"] .rh-pick__row').filter({ has: page.locator(".rh-pick__tag--nested") }).first();
+      await t.callout("nested", nested, "Setting, inside Daydream", 6);
+      await t.say("The list now shows the Setting inside Daydream too, marked nested: a pick can tick it like any other.");
+      await t.waitVoice();
+      await t.uncallout("nested");
+      await t.say("Set reach back to all.");
+      await t.click(modal.locator('[data-test="reach-mode-all"]'));
+      await t.beat(600);
+      await t.click(modal.locator('[data-test="cnm-save"]'));
+      await t.beat(700);
+      await t.waitVoice();
+      await t.say("Now every Setting follows the rule, the ones on the nodes and the one inside Daydream. The inventor never even dreams of a forest.");
+      await t.callout("prev", prev, "No forest, not even in the dream", 6);
+      for (let i = 0; i < 5; i++) {
+        await t.click(plus);
+        await t.beat(800);
+        if (/forest/.test((await prev.textContent()) ?? "")) throw new StepError("A forest got through with reach all.");
+      }
+      await t.waitVoice();
+      await t.uncallout("prev");
+    });
+
     await t.h.step("Several constraints", async () => {
       await t.say("When several constraints cover the same wildcard, they all apply: their factors multiply, and an exclude always wins.");
       await t.waitVoice();
     });
 
     await t.h.step("Outro", async () => {
-      await t.say("First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain. Next: negatives.");
+      await t.say("First, next N, all or pick: reach decides which wildcards after a constraint it changes, across a whole chain and inside nested ones. Next: negatives.");
     });
   },
 );

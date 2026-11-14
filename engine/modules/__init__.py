@@ -76,6 +76,20 @@ class _RuntimeResolveContext:
     # The run's negatives table (`ctx["__wp_negatives__"]`), by reference so
     # a `$name.neg` read sees negatives filed earlier in the same module.
     _negs: dict[str, Any] | None = None
+    # WP Toggles' on/off per variable (`ctx["__wp_toggle_bools__"]`), what
+    # `$name.bool` reads.
+    _bools: dict[str, Any] | None = None
+
+    def get_bool(self, name: str) -> str | None:
+        """`$name.bool`: "true" / "false" from WP Toggles' table, else the
+        variable's own value when it already is one, else None."""
+        got = self._bools.get(name) if isinstance(self._bools, dict) else None
+        if isinstance(got, bool):
+            return "true" if got else "false"
+        own = self._vars.get(name)
+        if isinstance(own, str) and own.strip().lower() in ("true", "false"):
+            return own.strip().lower()
+        return None
 
     def get_negative(self, name: str, index: int | None) -> str | None:
         """`name`'s negatives as one line (tag-deduped), or None when it has
@@ -237,6 +251,7 @@ def build_resolve_ctx(
     hits = ctx.setdefault("__wp_constraint_hits__", {})
     ref_log = ctx.get("__wp_ref_log__")
     negs = ctx.get("__wp_negatives__")
+    bools = ctx.get("__wp_toggle_bools__")
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -265,6 +280,7 @@ def build_resolve_ctx(
         _ref_log=ref_log if isinstance(ref_log, list) else None,
         _ref_owner=ctx.get("__wp_current_module_uid__"),
         _negs=negs if isinstance(negs, dict) else None,
+        _bools=bools if isinstance(bools, dict) else None,
         stream_key=stream,
     )
 

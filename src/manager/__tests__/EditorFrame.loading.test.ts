@@ -49,11 +49,14 @@ describe("EditorFrame loading", () => {
       props: { ...base, loading: true, loadingLabel: "Loading thing" },
       slots: { default: '<p data-test="body">No options yet.</p>' },
       global: { plugins: [makeRouter()] },
+      // jsdom only computes `display` for connected elements.
+      attachTo: document.body,
     });
     expect(w.find('[data-test="editor-skeleton"]').exists()).toBe(true);
     expect(w.find('[role="status"]').text()).toContain("Loading thing");
     expect(w.find('[data-test="body"]').isVisible()).toBe(false);
     expect(w.find('[data-test="save-btn"]').attributes("disabled")).toBeDefined();
+    w.unmount();
   });
 
   it("shows the body once loaded", async () => {

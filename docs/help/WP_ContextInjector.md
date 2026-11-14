@@ -2,6 +2,10 @@
 
 Turns any ComfyUI output (text, a LoRA name, a number) into a `$variable` the rest of the pipeline can use.
 
+<!-- video:start -->
+▶ **Video:** [WP Context Injector in depth](https://youtu.be/5pnV2ExnfQk) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 
@@ -12,7 +16,7 @@ Turns any ComfyUI output (text, a LoRA name, a number) into a `$variable` the re
 ## Row options
 
 - **Name**: The $variable the value becomes. Letters, digits and underscores, starting with a letter.
-- **Template**: Optional. Wrap the value in text, e.g. wearing $input_0. Leave empty to use the value as it is. $$ prints a dollar sign.
+- **Template**: Optional. Wrap the value in text, e.g. wearing $input_0. Leave empty to use the value as it is. $$ prints a dollar sign. Inline {a|b} picks need a seed, so they print as written (the editor warns).
 - **Negative**: Optional negative words for this variable (it can use $input_0 too, so another node can write it). Only reaches an Assembler that prints the variable. Rows with one show a NEG badge.
 - **Hide from prompt (globe)**: The variable still reaches combines and derivations, but prints nothing in the prompt.
 <!-- fields:end -->

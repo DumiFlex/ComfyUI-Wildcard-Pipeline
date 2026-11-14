@@ -13,6 +13,7 @@
 import { parse, readsAs, type Ast } from "../parsing/subcatFilter";
 
 function mapTags(n: Ast, fn: (t: string) => string | null): Ast | null {
+  if ("var" in n) return n;
   if ("tag" in n) {
     const v = fn(n.tag);
     return v === null ? null : { tag: v };
@@ -43,6 +44,7 @@ export function collectTags(expr: string): string[] {
   if (!ast) return [];
   const out = new Set<string>();
   const walk = (n: Ast): void => {
+    if ("var" in n) return;
     if ("tag" in n) {
       out.add(n.tag);
       return;

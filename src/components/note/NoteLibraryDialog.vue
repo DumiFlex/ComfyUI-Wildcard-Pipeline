@@ -7,7 +7,7 @@
  */
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import { kindIcon } from "../shared/kind-icons";
 import { choicesFor, countLabel, type Choice, type LibraryPlan, type PlanItem } from "./note-library-plan";
@@ -51,12 +51,14 @@ function close(result: Record<string, Choice> | null): void {
 </script>
 
 <template>
-  <ModalShell :visible="visible" labelledby="wp-note-lib-title" @close="close(null)">
-    <div class="wp-note-lib" data-test="note-library-dialog">
-      <header class="wp-note-lib__head">
-        <span id="wp-note-lib-title" class="wp-note-lib__title">Add to your library</span>
+  <Modal :open="visible" size="md" flush @update:open="(v: boolean) => { if (!v) close(null); }">
+    <template #header="{ titleId }">
+      <div class="wp-note-lib__head">
+        <span :id="titleId" class="wp-note-lib__title">Add to your library</span>
         <span class="wp-note-lib__sub">From {{ scope }}</span>
-      </header>
+      </div>
+    </template>
+    <div class="wp-note-lib" data-test="note-library-dialog">
       <div class="wp-note-lib__body">
         <section v-if="fresh.length" class="wp-note-lib__group">
           <h3 class="wp-note-lib__label">New: {{ countLabel(fresh) }}</h3>
@@ -95,51 +97,27 @@ function close(result: Record<string, Choice> | null): void {
         </p>
         <p class="wp-note-lib__hint">One step: Undo on the message afterwards takes it all back out.</p>
       </div>
-      <footer class="wp-note-lib__foot">
-        <Button size="sm" data-test="note-library-cancel" @click="close(null)">Cancel</Button>
-        <Button
-          size="sm"
-          variant="primary"
-          icon="pi-download"
-          :disabled="going.length === 0"
-          data-test="note-library-add"
-          @click="close(choices)"
-        >{{ going.length ? `Add ${countLabel(going)}` : "Nothing to add" }}</Button>
-      </footer>
     </div>
-  </ModalShell>
+    <template #footer>
+      <Button size="sm" data-test="note-library-cancel" @click="close(null)">Cancel</Button>
+      <Button
+        size="sm"
+        variant="primary"
+        icon="pi-download"
+        :disabled="going.length === 0"
+        data-test="note-library-add"
+        @click="close(choices)"
+      >{{ going.length ? `Add ${countLabel(going)}` : "Nothing to add" }}</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-note-lib {
-  width: 480px;
-  max-width: 90vw;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: min(8px, var(--wp-radius-cap, 999px));
-  color: var(--wp-text);
-  font-size: 13px;
-}
-.wp-note-lib__head {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--wp-border);
-}
+.wp-note-lib { color: var(--wp-text); font-size: 13px; }
+.wp-note-lib__head { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
 .wp-note-lib__title { font-size: 14px; font-weight: 600; }
 .wp-note-lib__sub { font-size: 12px; color: var(--wp-text-muted); }
-.wp-note-lib__body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px 16px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
+.wp-note-lib__body { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px; }
 .wp-note-lib__group { display: flex; flex-direction: column; gap: 6px; }
 .wp-note-lib__label {
   margin: 0;
@@ -176,11 +154,4 @@ function close(result: Record<string, Choice> | null): void {
 }
 .wp-note-lib__note { margin: 0; font-size: 12px; color: var(--wp-text-muted); }
 .wp-note-lib__hint { margin: 0; font-size: 11px; color: var(--wp-text-dim); }
-.wp-note-lib__foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  padding: 10px 16px 12px;
-  border-top: 1px solid var(--wp-border);
-}
 </style>

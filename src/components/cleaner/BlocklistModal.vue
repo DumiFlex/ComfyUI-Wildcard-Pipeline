@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Body-teleported modal for the cleaner's blocklist. Mode toggle:
+ * Kit Modal for the cleaner's blocklist. Mode toggle:
  *   - "list"  — comma- or newline-separated, exact tag match (case-insensitive)
  *   - "regex" — one regex per line, case-insensitive
  *
@@ -8,7 +8,7 @@
  * Cancel discards. Parent gates visibility via `visible`.
  */
 import { ref, watch, computed } from "vue";
-import ModalShell from "@/kit/ModalShell.vue";
+import Modal from "@/kit/Modal.vue";
 import Textarea from "@/kit/Textarea.vue";
 import type { BlocklistKind } from "./types";
 import Button from "@/kit/Button.vue";
@@ -60,11 +60,8 @@ function onCancel(): void {
 </script>
 
 <template>
-  <ModalShell :visible="visible" @close="onCancel">
+  <Modal :open="visible" title="Blocklist" size="md" flush @update:open="(v: boolean) => { if (!v) onCancel(); }">
     <div class="wp-blocklist">
-      <header class="wp-blocklist__head">
-        <span class="wp-blocklist__title">Blocklist</span>
-      </header>
       <div class="wp-blocklist__mode-row">
         <span class="wp-blocklist__label">MODE</span>
         <WpSegmented
@@ -93,28 +90,15 @@ function onCancel(): void {
           </span>
         </div>
       </div>
-      <footer class="wp-blocklist__foot">
-        <Button size="sm" data-test="blocklist-cancel" @click="onCancel">Cancel</Button>
-        <Button size="sm" variant="primary" data-test="blocklist-save" @click="onSave">Save</Button>
-      </footer>
     </div>
-  </ModalShell>
+    <template #footer>
+      <Button size="sm" data-test="blocklist-cancel" @click="onCancel">Cancel</Button>
+      <Button size="sm" variant="primary" data-test="blocklist-save" @click="onSave">Save</Button>
+    </template>
+  </Modal>
 </template>
 
 <style scoped>
-.wp-blocklist {
-  width: 480px;
-  max-width: 90vw;
-  background: var(--wp-bg);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-radius, 6px);
-  color: var(--wp-text);
-}
-.wp-blocklist__head {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--wp-border);
-}
-.wp-blocklist__title { font-size: 14px; font-weight: 600; }
 .wp-blocklist__mode-row {
   padding: 10px 16px;
   border-bottom: 1px solid var(--wp-border);
@@ -150,12 +134,5 @@ function onCancel(): void {
   margin-top: 6px;
   display: flex;
   gap: 6px;
-}
-.wp-blocklist__foot {
-  padding: 10px 16px 12px;
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-  border-top: 1px solid var(--wp-border);
 }
 </style>

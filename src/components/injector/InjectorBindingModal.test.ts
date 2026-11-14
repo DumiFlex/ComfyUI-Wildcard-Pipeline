@@ -432,3 +432,12 @@ describe("InjectorBindingModal — Negative field (send-to-negative)", () => {
     expect(internal.find('[data-test="ibm-neg-note"]').text()).toContain("won't reach any prompt");
   });
 });
+
+describe("InjectorBindingModal — inline picks", () => {
+  it("warns that {a|b} prints as written", async () => {
+    const w = mountModal(InjectorBindingModal, { props: { row: makeRow({ template: "$input_0" }) } });
+    expect(w.find('[data-test="ibm-inline-picks"]').exists()).toBe(false);
+    await typeTemplate(w, "{a|b|c}");
+    expect(w.find('[data-test="ibm-inline-picks"]').text()).toContain("print as written");
+  });
+});

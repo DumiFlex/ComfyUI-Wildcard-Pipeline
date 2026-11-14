@@ -25,7 +25,7 @@ const syntax = [
   { term: "[Get the pack](wp:community/owner/pack)", desc: "Opens that published pack in the manager's Community tab, where it installs." },
   { term: ":pi-heart:  :pi-heart:{#rrggbb}", desc: "An icon, optionally in a colour: a hex code like the custom colour field shows." },
   { term: "![What it shows](wp:image/1a2b3c4d)", desc: "A picture saved in the note: the bar's Pictures panel, a paste or a drop writes it and its id." },
-  { term: "![The ? button](wp:asset/toolbar-help)", desc: "A picture the extension ships." },
+  { term: "![The ? button](wp:asset/toolbar-help)", desc: "A picture the extension ships: the toolbar one, or any docs screenshot, named by its file." },
   { term: "![What it shows](wp:image/1a2b3c4d){width=60%}", desc: "The picture as wide as 60% of the note (10 to 100). Without it, its own size, never wider than the note." },
 ];
 </script>
@@ -74,7 +74,18 @@ const syntax = [
         Unpin a note to drag it like any node. A Card or Sticky resizes from its corner: the width is yours
         and the height follows the text. A Label sizes itself to its title. Double-click a note, press the
         indigo pencil in ComfyUI's selection toolbar while it is selected, or press <b>Edit</b> on a label's hover card to open the editor; <b>Done</b> goes back to
-        reading.
+        reading. The editor on the node holds the note's settings: tone, look, colour, title and the
+        bookmark settings. Drag the editor's background (anywhere that isn't a control) to move the note
+        while it is open.
+      </p>
+      <p>
+        The text has its own window: press <b>Edit text</b> (<b>Write text</b> on an empty note). The
+        Markdown editor is on the left and the note as it will read on the right, following what you type:
+        the node's own card, with its look, tone, colour, title and width. A label shows its tag and, under
+        it, the card that opens when you point at it.
+        <b>Done</b> (or Ctrl+Enter) puts the text on the note; <b>Cancel</b>, Escape or × leaves the note
+        as it was, and asks first when you changed something. The node shows the text's first line and how
+        long it is.
       </p>
       <DocFields node="WP_Note" group="edit" />
       <Banner tone="info" note>
@@ -83,11 +94,11 @@ const syntax = [
       </Banner>
     </DocSection>
 
-    <DocSection title="The formatting bar">
+    <DocSection title="The text window and its formatting bar">
       <DocImage
         src="images/docs/wp-note-editor.png"
         ratio="1720 / 860"
-        caption="The editor with the link panel open: a docs page found by typing, one of its sections, and a button with an icon."
+        caption="The text window: the Markdown on the left with the link panel open (a docs page found by typing), the note as it will read on the right."
       />
       <DocFields node="WP_Note" group="bar" />
     </DocSection>
@@ -102,21 +113,24 @@ const syntax = [
 
     <DocSection title="Pictures">
       <p>
-        A note can show pictures: a screenshot of the step it explains, or the picture the extension ships of
-        the node toolbar with its <b>?</b> button, which opens any node's help page. Open <b>Pictures</b> in
-        the bar and press <b>Add a picture…</b>, or paste or drop a picture straight into the text. Each one
-        goes on a line of its own where the caret is, named by what you type in the box (or the file's name).
+        A note can show pictures: a screenshot of the step it explains, or one the extension ships, such as
+        the node toolbar with its <b>?</b> button or any screenshot from these docs. Open <b>Pictures</b> in
+        the bar and press <b>Add a picture…</b>, paste or drop a picture straight into the text, or pick one
+        under <b>From the extension</b>: type part of its name in the search box and click it in the grid that
+        shows up. Each one goes on a line of its own
+        where the caret is, named by what you type in the box (or the picture's name). The panel stays open
+        after you add one, so you can set its width right away.
       </p>
       <DocImage
         src="images/docs/wp-note-pictures.png"
         ratio="1720 / 860"
-        caption="A note with the shipped toolbar picture, and its editor with the Pictures panel: the note's pictures, each with a Width slider."
+        caption="The text window with the Pictures panel: the pictures the extension ships, the note's own pictures with a Width slider, and the preview showing it."
       />
       <p>
         A picture is never wider than the note. Its width is a share of the note's, so it grows and shrinks
         with the note and never makes the note bigger; set it with the panel's <b>Width</b> slider, or
         <b>Own size</b> for its own width up to the note's. <b>Remove</b> takes it out (Undo brings it back
-        while the editor is open).
+        while the text window is open).
       </p>
       <Banner tone="info" note>
         A pasted or dropped picture is saved in the workflow, so a shared workflow shows it too. It is made
@@ -169,7 +183,7 @@ const syntax = [
       <DocImage
         src="images/docs/wp-note-bookmark.png"
         ratio="1720 / 860"
-        caption="A note open in its editor with Also a bookmark on, a note card with its bookmark mark, and the dock listing both next to a WP Bookmark."
+        caption="A note open in its editor on the node with Also a bookmark on, a note card with its bookmark mark, and the dock listing both."
       />
       <Banner tone="info" note>
         Unlike a WP Bookmark, a note can't be hidden on the canvas (it is there to be read), and muting

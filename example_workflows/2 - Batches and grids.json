@@ -528,10 +528,10 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
+        "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also has its own switch: **Var → Bool** reads `$quick_preview.bool` (on or off; `$quick_preview` itself holds the value) and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
       ],
       "widgets_values_named": {
-        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also writes its own true / false: **Var → Bool** reads `$quick_preview` and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
+        "wp_note": "{\"version\": 1, \"tone\": \"step\", \"look\": \"card\", \"step\": 3, \"icon\": \"info-circle\", \"text\": \"**WP Toggles** in *Pick one* mode: pick **Quick** for a fast, rough pass of the whole grid, **Full** for the real thing.\\n\\n- The pick's value goes to `$steps`; **Var → Int** hands it to the sampler.\\n- Each choice also has its own switch: **Var → Bool** reads `$quick_preview.bool` (on or off; `$quick_preview` itself holds the value) and the **If/Else Switch** picks the smaller latent.\\n\\n[WP Toggles](docs:wp-toggles){button pi-sliders-h} [Var → Bool](docs:wp-var-to-bool){button pi-check-square}\", \"color\": \"warning\", \"bookmark\": {\"anchor\": \"custom\", \"view\": {\"x\": 3440, \"y\": 640}, \"zoomMode\": \"fixed\", \"zoom\": 0.6, \"shortcut\": \"3\", \"order\": 3}}"
       },
       "id": 11,
       "pos": [
@@ -697,16 +697,16 @@
         }
       ],
       "properties": {
-        "var_name": "$quick_preview",
+        "var_name": "$quick_preview.bool",
         "Node name for S&R": "WP_VarToBool"
       },
       "widgets_values": [
-        "$quick_preview",
+        "$quick_preview.bool",
         0,
         false
       ],
       "widgets_values_named": {
-        "wp_var_name": "$quick_preview",
+        "wp_var_name": "$quick_preview.bool",
         "index": 0,
         "default": false
       },

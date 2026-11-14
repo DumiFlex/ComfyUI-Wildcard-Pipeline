@@ -14,8 +14,13 @@ export const LABEL_GRID_NODE = "WP_LabelGrid";
 /** The node's one widget: label + grid settings as JSON. */
 export const CONFIG_WIDGET = "wp_label_grid";
 
-export type LabelPosition = "top" | "bottom" | "left" | "right" | "over_top" | "over_bottom" | "none";
+export type LabelPosition =
+  | "top" | "bottom" | "left" | "right"
+  | "over_top" | "over_bottom" | "over_left" | "over_right" | "none";
 export type LabelAlign = "center" | "left" | "right";
+/** Left / right labels: across, or turned along the edge (upwards on the
+ *  left, downwards on the right). */
+export type LabelOrientation = "horizontal" | "vertical";
 export type GridArrange = "auto" | "rows" | "columns" | "fill" | "strip" | "stack";
 /** `none` / `typed` / `part:N` (N from 1, `part:-1` = the last part). */
 export type HeaderSource = string;
@@ -24,6 +29,7 @@ export interface LabelGridConfig {
   label: string;
   position: LabelPosition;
   align: LabelAlign;
+  orientation: LabelOrientation;
   font: string;
   /** 0 = automatic (a share of the image width). */
   font_size: number;
@@ -46,8 +52,11 @@ export interface LabelGridConfig {
   cell_width: number;
 }
 
-export const POSITIONS: readonly LabelPosition[] = ["top", "bottom", "left", "right", "over_top", "over_bottom", "none"];
+export const POSITIONS: readonly LabelPosition[] = [
+  "top", "bottom", "left", "right", "over_top", "over_bottom", "over_left", "over_right", "none",
+];
 export const ALIGNS: readonly LabelAlign[] = ["center", "left", "right"];
+export const ORIENTATIONS: readonly LabelOrientation[] = ["horizontal", "vertical"];
 export const ARRANGES: readonly GridArrange[] = ["auto", "rows", "columns", "fill", "strip", "stack"];
 const HEADER_FROM = /^(none|typed|part:-?[1-9]\d?)$/;
 
@@ -56,6 +65,7 @@ export const DEFAULT_LABEL_GRID_CONFIG: Readonly<LabelGridConfig> = {
   label: "{label}",
   position: "top",
   align: "center",
+  orientation: "horizontal",
   font: "default",
   font_size: 0,
   text_color: "#ffffff",
@@ -105,6 +115,7 @@ export function parseLabelGridConfig(raw: unknown): LabelGridConfig {
   const r = obj as Record<string, unknown>;
   if (oneOf(r.position, POSITIONS)) out.position = r.position;
   if (oneOf(r.align, ALIGNS)) out.align = r.align;
+  if (oneOf(r.orientation, ORIENTATIONS)) out.orientation = r.orientation;
   if (oneOf(r.arrange, ARRANGES)) out.arrange = r.arrange;
   for (const key of ["rows_from", "columns_from"] as const) {
     const v = r[key];
@@ -151,6 +162,15 @@ export interface LabelGridRun {
   auto: GridArrange;
   /** The grid's [width, height], or null when no grid was made. */
   grid: [number, number] | null;
+  /** Images the label lines left without one. */
+  missing: number;
+  /** Label lines no image took. */
+  extra: number;
+  /** Typed row / column headers vs the grid's rows / columns, when they differ. */
+  rows: [number, number] | null;
+  columns: [number, number] | null;
+  /** Images an XY plot put under "(no label)". */
+  noLabel: number;
 }
 
 export function parseLabelGridRun(raw: unknown): LabelGridRun | null {
@@ -167,7 +187,9 @@ export function parseLabelGridRun(raw: unknown): LabelGridRun | null {
       return [{ values, count: num(q.count) || values.length }];
     })
     : [];
-  const grid = Array.isArray(r.grid) && r.grid.length === 2 ? [num(r.grid[0]), num(r.grid[1])] as [number, number] : null;
+  const pair = (v: unknown): [number, number] | null =>
+    Array.isArray(v) && v.length === 2 ? [num(v[0]), num(v[1])] : null;
+  const grid = pair(r.grid);
   return {
     items: num(r.items) || sizes.length,
     batchSizes: sizes,
@@ -176,5 +198,29 @@ export function parseLabelGridRun(raw: unknown): LabelGridRun | null {
     parts,
     auto: oneOf(r.auto, ARRANGES) ? r.auto : "auto",
     grid,
+    missing: num(r.missing),
+    extra: num(r.extra),
+    rows: pair(r.rows),
+    columns: pair(r.columns),
+    noLabel: num(r.no_label),
   };
+}
+
+/** What doesn't match on the last run, in words ("" when it all fits):
+ *  label lines vs images, typed headers vs rows / columns. */
+export function runMismatch(run: LabelGridRun): string[] {
+  const out: string[] = [];
+  const n = (k: number, one: string, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+  if (run.missing) out.push(`${n(run.missing, "image")} without a label line`);
+  if (run.extra) out.push(`${n(run.extra, "label line")} left over`);
+  if (run.noLabel) out.push(`${n(run.noLabel, "image")} under "(no label)"`);
+  for (const [key, word] of [["rows", "row"], ["columns", "column"]] as const) {
+    const fit = run[key];
+    if (!fit) continue;
+    const [have, need] = fit;
+    out.push(have < need
+      ? `${n(have, `${word} header`)} for ${n(need, word)}`
+      : `${n(have - need, `${word} header`)} left over`);
+  }
+  return out;
 }

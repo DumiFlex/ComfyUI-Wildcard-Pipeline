@@ -22,15 +22,28 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 PART_SEP = " · "
 
-POSITIONS = ("top", "bottom", "left", "right", "over_top", "over_bottom", "none")
+POSITIONS = (
+    "top",
+    "bottom",
+    "left",
+    "right",
+    "over_top",
+    "over_bottom",
+    "over_left",
+    "over_right",
+    "none",
+)
 ALIGNS = ("center", "left", "right")
+#: Text on a left / right label: across, or turned to run along the edge
+#: (reading upwards on the left, downwards on the right, like book spines).
+ORIENTATIONS = ("horizontal", "vertical")
 #: auto = fit the run's shape (see ``auto_arrange``), rows = one row per input
 #: item (its batch across), columns = turned around, fill = every image in
 #: turn, ``columns`` per row (0 = near square), strip = one row, stack = one
@@ -60,32 +73,56 @@ def item_labels(labels: list[Any] | None, batch_sizes: list[int]) -> list[list[s
 
     ``labels[item]`` splits on newlines for the item's batch. One line covers
     every image of the item; with fewer lines than images the rest get none.
-    A single entry for several items whose lines match the total image count
-    is spread over all of them (typed text, one line per image), and a single
-    one-line entry labels every image of every item.
+    A single entry for several items is spread over their images in order
+    (typed text, one line per image), and a single one-line entry labels every
+    image of every item.
     """
+    return _fit_labels(labels, batch_sizes)[0]
+
+
+def label_fit(labels: list[Any] | None, batch_sizes: list[int]) -> tuple[int, int]:
+    """``(missing, extra)``: images the label lines left without one, and
+    lines no image took. Both 0 when nothing is wired, or a line covers a
+    whole item."""
+    _out, missing, extra = _fit_labels(labels, batch_sizes)
+    return missing, extra
+
+
+def _lines(raw: Any) -> list[str]:
+    text = raw if isinstance(raw, str) else ("" if raw is None else str(raw))
+    return [ln.strip() for ln in text.splitlines()] if text.strip() else []
+
+
+def _fit_labels(
+    labels: list[Any] | None, batch_sizes: list[int]
+) -> tuple[list[list[str]], int, int]:
+    if labels is None or not any(_lines(raw) for raw in labels):
+        return [[""] * size for size in batch_sizes], 0, 0
     out: list[list[str]] = []
-    if labels is not None and len(labels) == 1 and len(batch_sizes) > 1:
-        # One text for several items (a typed list, one line per image): when
-        # its lines match the image count, spread them over every image.
-        only = labels[0] if isinstance(labels[0], str) else ""
-        lines = [ln.strip() for ln in only.splitlines()]
-        if len(lines) == 1 and lines[0]:
-            return [[lines[0]] * size for size in batch_sizes]
-        if len(lines) == sum(batch_sizes):
-            for size in batch_sizes:
-                out.append(lines[:size])
-                lines = lines[size:]
-            return out
+    if len(labels) == 1 and len(batch_sizes) > 1:
+        # One text for several items (a typed list, one line per image):
+        # spread its lines over every image in order.
+        lines = _lines(labels[0])
+        if len(lines) == 1:
+            return [[lines[0]] * size for size in batch_sizes], 0, 0
+        total = sum(batch_sizes)
+        for size in batch_sizes:
+            out.append([*lines[:size], *([""] * max(0, size - len(lines)))])
+            lines = lines[size:]
+        taken = sum(1 for item in out for lab in item if lab)
+        return out, max(0, total - len(_lines(labels[0]))), len(lines) if taken else 0
+    missing = extra = 0
     for i, size in enumerate(batch_sizes):
-        raw = labels[i] if labels is not None and i < len(labels) else None
-        text = raw if isinstance(raw, str) else ("" if raw is None else str(raw))
-        lines = [ln.strip() for ln in text.splitlines()] if text.strip() else []
+        lines = _lines(labels[i]) if i < len(labels) else []
         if len(lines) == 1:
             out.append([lines[0]] * size)
-        else:
-            out.append([lines[j] if j < len(lines) else "" for j in range(size)])
-    return out
+            continue
+        out.append([lines[j] if j < len(lines) else "" for j in range(size)])
+        missing += max(0, size - len(lines))
+        extra += max(0, len(lines) - size)
+    for raw in labels[len(batch_sizes) :]:
+        extra += len(_lines(raw))
+    return out, missing, extra
 
 
 def apply_template(
@@ -142,6 +179,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "label": "{label}",
     "position": "top",
     "align": "center",
+    "orientation": "horizontal",
     "font": "default",
     "font_size": 0,
     "text_color": "#ffffff",
@@ -187,7 +225,12 @@ def parse_config(raw: Any) -> dict[str, Any]:
             raw = {}
     if not isinstance(raw, dict):
         return out
-    for key, allowed in (("position", POSITIONS), ("align", ALIGNS), ("arrange", ARRANGE)):
+    for key, allowed in (
+        ("position", POSITIONS),
+        ("align", ALIGNS),
+        ("orientation", ORIENTATIONS),
+        ("arrange", ARRANGE),
+    ):
         if raw.get(key) in allowed:
             out[key] = raw[key]
     for key in ("rows_from", "columns_from"):
@@ -442,6 +485,8 @@ def draw_lines(
 class Style:
     position: str = "top"
     align: str = "center"
+    #: Left / right labels only: ``horizontal`` or ``vertical`` (turned).
+    orientation: str = "horizontal"
     font: str = DEFAULT_FONT
     #: 0 = automatic (a share of the image width).
     font_size: int = 0
@@ -453,6 +498,19 @@ class Style:
     margin: int = 0
     #: 0 = keep each image's size; otherwise every cell is scaled to this width.
     cell_width: int = 0
+
+    @property
+    def edge(self) -> str:
+        """The side the label sits on, over the image or beside it."""
+        return self.position[5:] if self.position.startswith("over_") else self.position
+
+    @property
+    def over(self) -> bool:
+        return self.position.startswith("over_")
+
+    @property
+    def vertical(self) -> bool:
+        return self.orientation == "vertical" and self.edge in ("left", "right")
 
     def auto_size(self, width: int) -> int:
         if self.font_size > 0:
@@ -480,64 +538,90 @@ def _padding(size: int) -> int:
     return max(4, size // 3)
 
 
+def _panel(
+    text: str,
+    length: int,
+    thickness: int,
+    style: Style,
+    font: Any,
+    pad: int,
+    fill: tuple[int, int, int, int],
+    across: bool,
+) -> Image.Image:
+    """The label's text on a ``length`` × ``thickness`` RGBA panel. ``across``
+    lays it out for a left / right strip (lines as wide as the strip, centred
+    top to bottom); otherwise it runs along the panel like a top strip."""
+    fg = parse_color(style.text_color, (255, 255, 255, 255))
+    if across:
+        size = (thickness, length)
+        lines = wrap(text, font, thickness - 2 * pad, MAX_LABEL_LINES * 3)
+        box = (pad, pad, thickness - pad, length - pad)
+    else:
+        size = (length, thickness)
+        lines = wrap(text, font, length - 2 * pad, MAX_LABEL_LINES)
+        box = (pad, 0, length - pad, thickness)
+    panel = Image.new("RGBA", size, fill)
+    if text:
+        draw_lines(ImageDraw.Draw(panel), lines, font, box, fg, style.align)
+    return panel
+
+
 def label_image(img: Image.Image, text: str, style: Style, strip: int | None = None) -> Image.Image:
     """``img`` with ``text`` drawn on a strip beside it (top / bottom / left /
-    right) or on a band over it. ``strip`` forces the strip's size so a batch
-    keeps one shape; ``None`` fits the text. No text and no forced strip → the
-    image unchanged."""
+    right) or on a band over one of its edges. Left / right labels can run
+    turned along the edge (``style.orientation = vertical``: upwards on the
+    left, downwards on the right). ``strip`` forces the strip's size so a
+    batch keeps one shape; ``None`` fits the text. No text and no forced strip
+    → the image unchanged."""
     if style.position == "none" or (not text and not strip):
+        return img
+    if style.over and not text:
         return img
     w, h = img.size
     size = style.auto_size(w)
     font = load_font(style.font, size)
     pad = _padding(size)
-    fg = parse_color(style.text_color, (255, 255, 255, 255))
     bg = parse_color(style.label_color, (0, 0, 0, 255))
-    pos = style.position
-    if pos in ("left", "right"):
-        side = strip or label_strip_size(text, w, h, style)
-        out = Image.new("RGB", (w + side, h), _rgb(bg, style.background))
-        out.paste(img, (side if pos == "left" else 0, 0))
-        lines = wrap(text, font, side - 2 * pad, MAX_LABEL_LINES * 3)
-        x0 = 0 if pos == "left" else w
-        draw_lines(
-            ImageDraw.Draw(out),
-            lines,
-            font,
-            (x0 + pad, pad, x0 + side - pad, h - pad),
-            fg,
-            style.align,
-        )
-        return out
-    lines = wrap(text, font, w - 2 * pad, MAX_LABEL_LINES)
+    edge = style.edge
+    side = edge in ("left", "right")
     band = strip or label_strip_size(text, w, h, style)
-    if pos in ("top", "bottom"):
-        out = Image.new("RGB", (w, h + band), _rgb(bg, style.background))
-        out.paste(img, (0, band if pos == "top" else 0))
-        y0 = 0 if pos == "top" else h
-        draw_lines(ImageDraw.Draw(out), lines, font, (pad, y0, w - pad, y0 + band), fg, style.align)
+    fill = bg if style.over else (*_rgb(bg, style.background), 255)
+    if side and style.vertical:
+        panel = _panel(text, h, band, style, font, pad, fill, across=False)
+        # Turned so the text reads upwards on the left, downwards on the right.
+        panel = panel.rotate(90 if edge == "left" else -90, expand=True)
+    else:
+        panel = _panel(text, h if side else w, band, style, font, pad, fill, across=side)
+    if style.over:
+        out = img.convert("RGBA")
+        x = w - panel.width if edge == "right" else 0
+        y = h - panel.height if edge == "bottom" else 0
+        overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
+        overlay.paste(panel, (x, y))
+        return Image.alpha_composite(out, overlay).convert("RGB")
+    if side:
+        out = Image.new("RGB", (w + panel.width, h))
+        out.paste(img, (panel.width if edge == "left" else 0, 0))
+        out.paste(panel.convert("RGB"), (0 if edge == "left" else w, 0))
         return out
-    # Over the image: a (possibly translucent) band.
-    out = img.convert("RGBA")
-    if not text:
-        return img
-    overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    y0 = 0 if pos == "over_top" else h - band
-    draw.rectangle((0, y0, w, y0 + band), fill=bg)
-    draw_lines(draw, lines, font, (pad, y0, w - pad, y0 + band), fg, style.align)
-    return Image.alpha_composite(out, overlay).convert("RGB")
+    out = Image.new("RGB", (w, h + panel.height))
+    out.paste(img, (0, panel.height if edge == "top" else 0))
+    out.paste(panel.convert("RGB"), (0, 0 if edge == "top" else h))
+    return out
 
 
 def label_strip_size(text: str, w: int, h: int, style: Style) -> int:
-    """The strip a label needs: its height (top / bottom / over) or width
-    (left / right)."""
+    """The strip a label needs: its height (top / bottom), its width (left /
+    right) or its thickness when turned."""
     if style.position == "none" or not text:
         return 0
     size = style.auto_size(w)
     font = load_font(style.font, size)
     pad = _padding(size)
-    if style.position in ("left", "right"):
+    if style.vertical:
+        lines = wrap(text, font, h - 2 * pad, MAX_LABEL_LINES)
+        return text_block_height(lines, font) + 2 * pad
+    if style.edge in ("left", "right"):
         longest = max((_text_width(font, ln) for ln in text.split("\n")), default=0)
         return int(min(longest + 2 * pad + 1, max(w * 0.6, 4 * size)))
     lines = wrap(text, font, w - 2 * pad, MAX_LABEL_LINES)
@@ -587,30 +671,47 @@ def _scale(img: Image.Image, width: int) -> Image.Image:
 Grid = list[list["Cell | None"]]
 
 
+#: The header of the row / column that gathers images whose label lacks the
+#: part an XY plot sorts by (fewer label lines than images, a typo).
+NO_LABEL = "(no label)"
+
+
 def arrange(cells: list[Cell], spec: GridSpec) -> tuple[Grid, list[str], list[str]]:
     """Place the cells: ``rows[r][c]``, plus the column and row headers.
 
     With a label part as a header, rows / columns are that part's distinct
     values in first-seen order (an XY plot); otherwise the arrange mode and the
-    typed headers apply.
+    typed headers apply. An image whose label lacks the part goes to a last
+    row / column headed ``NO_LABEL``; one lacking both parts of an XY plot goes
+    to ``NO_LABEL`` rows at the bottom, filling the columns from the left.
     """
+
+    def key(cell: Cell, index: int) -> str:
+        return part(cell.label, index) if index else ""
+
     col_vals: list[str] = []
     row_vals: list[str] = []
-    if spec.column_part or spec.row_part:
-        for cell in cells:
-            if spec.column_part:
-                v = part(cell.label, spec.column_part)
-                if v not in col_vals:
-                    col_vals.append(v)
-            if spec.row_part:
-                v = part(cell.label, spec.row_part)
-                if v not in row_vals:
-                    row_vals.append(v)
-    if spec.column_part and spec.row_part:
+    for cell in cells:
+        if spec.column_part:
+            v = key(cell, spec.column_part)
+            if v and v not in col_vals:
+                col_vals.append(v)
+        if spec.row_part:
+            v = key(cell, spec.row_part)
+            if v and v not in row_vals:
+                row_vals.append(v)
+    if spec.column_part and spec.row_part and (row_vals or col_vals):
+        loose = [c for c in cells if not key(c, spec.row_part) and not key(c, spec.column_part)]
+        gone = {id(c) for c in loose}
+        placed = [c for c in cells if id(c) not in gone]
+        if any(not key(c, spec.column_part) for c in placed) or not col_vals:
+            col_vals.append(NO_LABEL)
+        if any(not key(c, spec.row_part) for c in placed):
+            row_vals.append(NO_LABEL)
         spots: dict[tuple[int, int], list[Cell]] = {}
-        for cell in cells:
-            r = row_vals.index(part(cell.label, spec.row_part))
-            c = col_vals.index(part(cell.label, spec.column_part))
+        for cell in placed:
+            r = row_vals.index(key(cell, spec.row_part) or NO_LABEL)
+            c = col_vals.index(key(cell, spec.column_part) or NO_LABEL)
             spots.setdefault((r, c), []).append(cell)
         # Several cells on one spot (same options, another seed): the row
         # repeats, once per extra cell, under the same header.
@@ -626,12 +727,23 @@ def arrange(cells: list[Cell], spec: GridSpec) -> tuple[Grid, list[str], list[st
                     ]
                 )
                 heads.append(value)
+        width = len(col_vals)
+        for i in range(0, len(loose), width):
+            row: list[Cell | None] = list(loose[i : i + width])
+            grid.append([*row, *([None] * (width - len(row)))])
+            heads.append(NO_LABEL)
         return grid, col_vals, heads
-    if spec.column_part:
-        grid = _group(cells, col_vals, lambda c: part(c.label, spec.column_part), by_column=True)
+    if spec.column_part and col_vals and not spec.row_part:
+        if any(not key(c, spec.column_part) for c in cells):
+            col_vals.append(NO_LABEL)
+        grid = _group(
+            cells, col_vals, lambda c: key(c, spec.column_part) or NO_LABEL, by_column=True
+        )
         return grid, col_vals, list(spec.row_headers)
-    if spec.row_part:
-        grid = _group(cells, row_vals, lambda c: part(c.label, spec.row_part), by_column=False)
+    if spec.row_part and row_vals and not spec.column_part:
+        if any(not key(c, spec.row_part) for c in cells):
+            row_vals.append(NO_LABEL)
+        grid = _group(cells, row_vals, lambda c: key(c, spec.row_part) or NO_LABEL, by_column=False)
         return grid, list(spec.column_headers), row_vals
 
     items = sorted({c.item for c in cells})
@@ -683,6 +795,33 @@ def _auto_columns(n: int) -> int:
     while cols * cols < n:
         cols += 1
     return cols
+
+
+def grid_fit(cells: list[Cell], spec: GridSpec) -> dict[str, Any]:
+    """How the run fits the grid's headers, for the node's warning line:
+    ``rows`` / ``columns`` = ``[headers typed, lanes]`` when typed headers are
+    used and their count differs, ``no_label`` = images an XY plot could not
+    sort by their label."""
+    grid, col_heads, row_heads = arrange(cells, spec)
+    out: dict[str, Any] = {}
+    rows, cols = len(grid), max((len(r) for r in grid), default=0)
+    if spec.row_headers and not spec.row_part and len(spec.row_headers) != rows:
+        out["rows"] = [len(spec.row_headers), rows]
+    if spec.column_headers and not spec.column_part and len(spec.column_headers) != cols:
+        out["columns"] = [len(spec.column_headers), cols]
+    if spec.row_part or spec.column_part:
+        lost = 0
+        for r, row in enumerate(grid):
+            for c, cell in enumerate(row):
+                if cell is None:
+                    continue
+                if (spec.row_part and r < len(row_heads) and row_heads[r] == NO_LABEL) or (
+                    spec.column_part and c < len(col_heads) and col_heads[c] == NO_LABEL
+                ):
+                    lost += 1
+        if lost:
+            out["no_label"] = lost
+    return out
 
 
 def build_grid(cells: list[Cell], style: Style, spec: GridSpec) -> Image.Image:
@@ -743,9 +882,11 @@ def build_grid(cells: list[Cell], style: Style, spec: GridSpec) -> Image.Image:
             draw,
             lines,
             hfont,
-            (x + hpad, m + title_h, x + cell_w - hpad, y_body),
+            (x + hpad, m + title_h, x + cell_w - hpad, y_body - hpad),
             hc,
-            valign="center",
+            # Sat on the cells, so a header that wraps to two lines still
+            # lines up with its one-line neighbours.
+            valign="bottom",
         )
     for r, lines in enumerate(row_lines):
         y = y_body + r * (cell_h + gap)
@@ -757,7 +898,11 @@ def build_grid(cells: list[Cell], style: Style, spec: GridSpec) -> Image.Image:
             img = cell.image
             framed = Image.new("RGB", (cw, ch), fill)
             framed.paste(img, ((cw - img.width) // 2, (ch - img.height) // 2))
-            tile = label_image(framed, labels[id(cell)], style, strip or None) if strip else framed
+            text = labels[id(cell)]
+            # A cell with no label keeps the strip (one cell shape) in the
+            # grid's background, not as an empty label box.
+            blank = replace(style, label_color=style.background) if not text else style
+            tile = label_image(framed, text, blank, strip or None) if strip else framed
             out.paste(tile, (x_body + c * (cell_w + gap), y_body + r * (cell_h + gap)))
     longest_side = max(out.size)
     if longest_side > MAX_GRID_SIDE:

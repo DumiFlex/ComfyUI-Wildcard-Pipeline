@@ -179,14 +179,48 @@ describe("CleanerWidget — neg column (send-to-negative)", () => {
     });
     expect(w.find('[data-test="cleaner-neg-count"]').text()).toBe("negative 11");
     expect(w.find('[data-test="cleaner-last-run"]').text()).toContain("prompt: 2 duplicates, 1 blocklisted");
-    expect(w.find('[data-test="cleaner-last-run-neg"]').text()).toBe(
-      'negative: 3 duplicates · 1 tag also in prompt: "red"',
-    );
+    expect(w.find('[data-test="cleaner-last-run-neg"]').text()).toBe("negative: 3 duplicates");
+    // Tags in both prompt and negative get their own amber line.
+    const overlap = w.find('[data-test="cleaner-last-run-overlap"]');
+    expect(overlap.text()).toBe('⚠ 1 tag also in prompt: "red"');
+    expect(overlap.classes()).toContain("wp-cleaner__lastrun-line--overlap");
   });
 
-  it("no negative report = no last-run block and no negative count", () => {
+  it("an overlap the toggle dropped is a plain line, not a warning", () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({}, {
+        lastRunReport: { dedupe_exact: { dropped: [] } },
+        negativeReport: { dedupe_exact: { dropped: [] }, prompt_overlap: { tags: ["red"], dropped: true } },
+      }),
+    });
+    const overlap = w.find('[data-test="cleaner-last-run-overlap"]');
+    expect(overlap.text()).toBe('1 tag also in prompt (dropped): "red"');
+    expect(overlap.classes()).toContain("wp-cleaner__lastrun-line--dropped");
+  });
+
+  it("no run yet = no last-run strip and no negative count", () => {
     const w = mount(CleanerWidget, { props: makeProps() });
     expect(w.find('[data-test="cleaner-last-run"]').exists()).toBe(false);
     expect(w.find('[data-test="cleaner-neg-count"]').exists()).toBe(false);
+  });
+
+  it("a run without a negative still shows the strip, without the negative line", () => {
+    const w = mount(CleanerWidget, {
+      props: makeProps({}, {
+        lastRunReport: { dedupe_exact: { dropped: ["a"] } },
+        lastRunTrace: {
+          input: "a, a, b", output: "a, b", mode: "tags",
+          steps: [{ rule: "whitespace" }, { rule: "dedupe_exact", text: "a, b" }],
+        },
+      }),
+    });
+    expect(w.find('[data-test="cleaner-last-run"]').text()).toContain("prompt: 1 rule changed it · 1 duplicate");
+    expect(w.find('[data-test="cleaner-last-run-neg"]').exists()).toBe(false);
+  });
+
+  it("clicking the last-run strip asks to open the Last run window", async () => {
+    const w = mount(CleanerWidget, { props: makeProps({}, { lastRunReport: {} }) });
+    await w.find('[data-test="cleaner-last-run"]').trigger("click");
+    expect(w.emitted("open-last-run")).toHaveLength(1);
   });
 });

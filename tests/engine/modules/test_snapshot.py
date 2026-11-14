@@ -191,3 +191,17 @@ def test_coerce_legacy_module_preserves_user_instance_overrides():
     # Defaults still present for keys the user didn't override.
     assert coerced["instance"]["variable_binding"] is None
     assert coerced["instance"]["category_filter"] is None
+
+
+def test_coerce_legacy_entries_keep_their_negative():
+    """The Toggles preview step sends each variable's negative on its entry."""
+    coerced = coerce_legacy_module({
+        "id": "0de1f0fe",
+        "type": "fixed_values",
+        "entries": [
+            {"variable_name": "rain", "value": "in the rain", "negative": "sunny sky"},
+            {"variable_name": "fog", "value": "fog", "negative": "  "},
+        ],
+    })
+    assert coerced["payload"]["values"][0]["negative"] == "sunny sky"
+    assert "negative" not in coerced["payload"]["values"][1]

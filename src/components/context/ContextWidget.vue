@@ -15,6 +15,8 @@ import ModulePickerModal from "./ModulePickerModal.vue";
 import BundlePickerModal from "./BundlePickerModal.vue";
 import BundleFrame from "./bundles/BundleFrame.vue";
 import { BundleFrameCtxKey, type BundleFrameCtx } from "./bundles/bundle-frame-ctx";
+import { bundleAlerts, bundleDescendants, collapsedAround, isHiddenInCollapsedBundle } from "./bundles/bundle-alerts";
+import { revealTarget } from "../../widgets/flash-target";
 import ModuleRow from "./ModuleRow.vue";
 import { ModuleRowCtxKey, type ModuleRowCtx } from "./module-row-ctx";
 import {
@@ -25,7 +27,6 @@ import {
 import { LockSeedKey } from "./lock-seed-ctx";
 import { reconcileBundleRanges } from "./bundles/drag";
 import { bundleSnapshotModified, ensureBundleFingerprints } from "./bundles/bundle-fingerprint";
-import BundleDropBar from "./bundles/BundleDropBar.vue";
 import { createBundleOps } from "./bundles/bundle-ops";
 import { createBundleMasterToggles } from "./bundles/master-toggles";
 import { useBundleEdit } from "./bundles/bundle-edit";
@@ -33,7 +34,6 @@ import { buildTopLevelItems } from "./bundles/top-level-items";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import type { BundleInstance } from "../../widgets/_shared";
 import ModuleEditModal from "./ModuleEditModal.vue";
-import ModalShell from "@/kit/ModalShell.vue";
 // Lazy: bundle edit modal pulls in its own IdentitySection +
 // RuntimeSection + color-preset markup. Keeping it out of the
 // ContextWidget entry chunk preserves the size budget — the modal
@@ -601,9 +601,16 @@ const {
 // Base 380 covers the footer's two "+ Add module" / "+ Add Bundle"
 // buttons side-by-side, which is the widest mandatory element. Per-
 // badge bumps give the name room to breathe.
-const hasAnyConflict = computed(() => Object.keys(conflictsByModule.value).length > 0);
+// Only rows in sight count: a row inside a collapsed bundle hides its chips,
+// so they must not widen the node (the collapsed header shows a dot instead).
+const visibleModules = computed(() =>
+  value.value.modules.filter((m) => !isHiddenInCollapsedBundle(m, value.value.bundles)),
+);
+const hasAnyConflict = computed(() =>
+  visibleModules.value.some((m) => (conflictsByModule.value[m._uid ?? m.id]?.length ?? 0) > 0),
+);
 const hasAnyStateBadge = computed(() =>
-  value.value.modules.some((m) => isModified(m) || isDrifted(m) || isMissingFromLibrary(m)),
+  visibleModules.value.some((m) => isModified(m) || isDrifted(m) || isMissingFromLibrary(m)),
 );
 
 const requiredMinWidth = computed(() => {
@@ -709,19 +716,42 @@ const bundleFrameCtx: BundleFrameCtx = {
   // have diverged from, so MOD would be diffing against a ghost.
   isBundleSnapshotModified: (b: BundleInstance) =>
     !isBundleUnlinked(b) && bundleSnapshotModified(b, value.value.modules),
+  bundleAlerts: (b: BundleInstance) => bundleAlerts(
+    bundleDescendants(b, value.value.modules, value.value.bundles),
+    {
+      severityFor: conflictRowCtx.severityFor,
+      conflictLabel: conflictRowCtx.conflictBadgeText,
+      isMissingFromLibrary,
+      isTypeConflict,
+    },
+  ),
   ...bundleOpsFrameCtx,
   openBundleContextMenu,
   ...dragFrameCtx,
 };
 provide(BundleFrameCtxKey, bundleFrameCtx);
+
+/** WP Debug "Show node": unfold the bundles that hide the module it names. */
+function onReveal(ev: Event): void {
+  const uid = revealTarget(ev)?.uid;
+  if (!uid) return;
+  const open = new Set(collapsedAround(uid, value.value.modules, value.value.bundles));
+  if (!open.size) return;
+  value.value = {
+    ...value.value,
+    bundles: (value.value.bundles ?? []).map((b) => (open.has(b._uid) ? { ...b, collapsed: false } : b)),
+  };
+}
 </script>
 
 <template>
   <div
     class="wp-context"
+    data-wp-reveal
     :class="{ 'wp-context--muted': isMuted }"
     :data-mode-label="isMuted ? muteLabel : undefined"
     @dragleave="onContainerLeave($event)"
+    @wp-reveal="onReveal"
   >
     <!-- Node identity strip. A fixed, read-only CODENAME naming THIS
          WP_Context node — a stable `adjective-noun` derived from the
@@ -729,7 +759,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
          the canvas, NOT editable. Cross-node UI (constraint reach pick-list,
          pair popovers) shows the same codename to say WHICH node a target
          lives in. Sits above the toolbar/hero so it shows in every state. -->
-    <div class="wp-node-id">
+    <div class="wp-node-id" data-wp-part="codename" data-wp-part-label="Node name">
       <span class="wp-node-id__tag">node</span>
       <span
         class="wp-node-id__chip wp-node-id__chip--fixed"
@@ -764,6 +794,8 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
       >
         <!-- Toolbar: module count + bulk-drift refresh + collapse/expand/toggle-all. -->
         <ContextToolbar
+          data-wp-part="toolbar"
+          data-wp-part-label="Toolbar"
           :enabled-count="enabledCount"
           :total-count="totalCount"
           :drifted-count="driftedCount"
@@ -781,19 +813,21 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
           class="wp-modules"
           :data-suppress-move="suppressMove ? 'true' : null"
         >
-        <!-- Floating drop indicator for top-level scope. Hidden when
-             the resolved zone targets a nested bundle container — that
-             container renders its own BundleDropBar. -->
-        <BundleDropBar :container-uid="null" />
       <template v-for="item in topLevelItems" :key="item.key">
         <BundleFrame
           v-if="item.kind === 'bundle'"
+          :data-wp-part="`bundle:${item.key}`"
+          :data-wp-part-label="`${item.bundle!.name ?? 'Bundle'} (bundle)`"
+          data-wp-part-section="Modules"
           :bundle="item.bundle!"
           :children="item.children!"
           :nested="false"
         />
         <ModuleRow
           v-else
+          :data-wp-part="`module:${item.module!._uid}`"
+          :data-wp-part-label="item.module!.meta.name || 'Module'"
+          data-wp-part-section="Modules"
           :module="item.module!"
           :idx="item.idx!"
           :data-uid="item.module!._uid"
@@ -808,7 +842,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
              reusable scaffolds users typically wanted that button for.
              SPA library still reachable via the right-click context
              menu on any module. -->
-        <ContextAddActions class="wp-w-footer" @module="openPicker" @bundle="openBundlePicker" />
+        <ContextAddActions data-wp-part="add" data-wp-part-label="Add module / bundle" class="wp-w-footer" @module="openPicker" @bundle="openBundlePicker" />
       </div>
 
       <!-- Empty-state hero — shown when modules is empty and there's no
@@ -835,7 +869,7 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
           Add a wildcard, fixed values pack, combine, derivation or constraint to start
           building this context.
         </div>
-        <ContextAddActions class="wp-empty-hero-actions" @module="openPicker" @bundle="openBundlePicker" />
+        <ContextAddActions data-wp-part="add" data-wp-part-label="Add module / bundle" class="wp-empty-hero-actions" @module="openPicker" @bundle="openBundlePicker" />
       </div>
     </Transition>
 
@@ -884,7 +918,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
          bundle drives `lockState` / `internalState` (not the draft)
          since those toggles cascade onto children, mirroring the
          BundleHeader buttons. -->
-    <ModalShell :visible="bundleDraft !== null" @close="cancelBundleEdit">
       <BundleInstanceModal
         v-if="bundleDraft !== null && editingBundleEntry"
         :bundle="bundleDraft"
@@ -903,7 +936,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
         @reset-to-library="onBundleEditResetToLibrary"
         @open-spa="cancelBundleEdit"
       />
-    </ModalShell>
 
     <!-- Standalone push-to-library entry point — fires from the
          right-click menu without going through the edit modal first.
@@ -967,5 +999,6 @@ provide(BundleFrameCtxKey, bundleFrameCtx);
 <style>
 /* Unscoped widget styles live in context-widget.css — same cascade as the
  * inline block they came from (NOT layered; see the note at its top). */
+@import "@/kit/row-drag.css";
 @import "./context-widget.css";
 </style>

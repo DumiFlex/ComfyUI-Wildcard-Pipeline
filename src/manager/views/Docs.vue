@@ -6,6 +6,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRe
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { DOC_GROUPS, pagesByGroup, findPage, searchPages, toneVar, type DocGroupId, type DocPageMeta } from "../docs/registry";
 import { DOC_OUTLINE, createOutline, type DocOutlineEntry } from "../docs/outline";
+import { DOC_PAGE_ID } from "../docs/videos";
 import DocSearchResults from "../components/docs/DocSearchResults.vue";
 import { GITHUB_WIKI } from "../config/links";
 import { useAiConfig } from "../composables/useAiConfig";
@@ -92,6 +93,7 @@ const groupLabel = (p: DocPageMeta): string => DOC_GROUPS.find((g) => g.id === p
 // up, beside the page when the content pane is wide enough.
 const sections = shallowRef<DocOutlineEntry[]>([]);
 provide(DOC_OUTLINE, createOutline((e) => { sections.value = e; }));
+provide(DOC_PAGE_ID, computed(() => activeMeta.value?.id));
 const activeSection = ref("");
 const wide = ref(false);
 const OUTLINE_MIN_WIDTH = 1120;

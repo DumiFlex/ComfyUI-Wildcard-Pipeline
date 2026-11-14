@@ -12,5 +12,10 @@
   {"expr": "warm or banana", "valid": false, "error": "unknown"},
   {"expr": "!warm", "valid": true, "reads_as": "not warm", "matches": {"warm": false, "cold": true}},
   {"expr": "cold and !blue", "valid": true, "reads_as": "cold and not blue", "matches": {"cold": true, "blue,cold": false, "warm": false}},
-  {"expr": "!(warm or red)", "valid": true, "reads_as": "not (warm or red)", "matches": {"cold": true, "red": false}}
+  {"expr": "!(warm or red)", "valid": true, "reads_as": "not (warm or red)", "matches": {"cold": true, "red": false}},
+  {"expr": "$model_variant", "valid": true, "reads_as": "$model_variant", "matches": {"warm": true, "": true}},
+  {"expr": "$season and not cold", "valid": true, "reads_as": "$season and not cold", "matches": {"warm": true, "cold": false}},
+  {"expr": "not $season", "valid": true, "reads_as": "not $season", "matches": {"warm": true}},
+  {"expr": "red or $season", "valid": true, "reads_as": "red or $season", "matches": {"red": true, "warm": false}},
+  {"expr": "$1st", "valid": false, "error": "unexpected character"}
 ]

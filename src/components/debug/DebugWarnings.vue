@@ -7,7 +7,7 @@
 import Button from "@/kit/Button.vue";
 import { computed } from "vue";
 import RichTextPreview from "../../manager/components/RichTextPreview.vue";
-import type { TraceStep, WarningRow } from "./debug-model";
+import { KIND_ICONS, kindColor, type TraceStep, type WarningRow } from "./debug-model";
 
 const props = defineProps<{
   rows: WarningRow[];
@@ -53,9 +53,10 @@ function ownerLabel(key: string | null): string {
             data-test="dbg-warning-owner"
             @click="emit('goto-step', w.stepKey)"
           >
-            <span
-              class="wp-dbg-kind-dot"
-              :style="{ background: `var(--wp-kind-${stepsByKey.get(w.stepKey)?.kind})` }"
+            <i
+              :class="['wp-dbg-warn__kind', KIND_ICONS[stepsByKey.get(w.stepKey)?.kind ?? 'unknown']]"
+              :style="{ color: kindColor(stepsByKey.get(w.stepKey)?.kind) }"
+              aria-hidden="true"
             />
             {{ ownerLabel(w.stepKey) }}
           </Button>
@@ -110,7 +111,7 @@ function ownerLabel(key: string | null): string {
 }
 .wp-dbg-warn__owner.wp-btn:hover { color: var(--wp-text); }
 .wp-dbg-warn__msg { font-size: 11px; color: var(--wp-text-muted); word-break: break-word; }
-.wp-dbg-kind-dot { width: 7px; height: 7px; border-radius: min(2px, var(--wp-radius-cap, 999px)); flex: none; }
+.wp-dbg-warn__kind { font-size: 9px; flex: none; }
 .wp-dbg-warn__owner.wp-btn :deep(.wp-btn__label) { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .wp-dbg-warn__owner.wp-btn :deep(.wp-btn__label) { line-height: inherit; }
 </style>

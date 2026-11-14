@@ -166,6 +166,10 @@ def coerce_legacy_module(raw: dict[str, Any]) -> dict[str, Any]:
                         "id": f"val_{i:04x}",
                         "name": e.get("variable_name", ""),
                         "value": e.get("value", ""),
+                        # The Toggles preview step sends each variable's
+                        # negative here (send-to-negative).
+                        **({"negative": e["negative"]}
+                           if isinstance(e.get("negative"), str) and e["negative"].strip() else {}),
                     }
                     for i, e in enumerate(legacy_entries)
                 ],

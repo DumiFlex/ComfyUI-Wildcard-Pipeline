@@ -155,6 +155,20 @@ describe("AssemblerHelper resolvedMap (#12 — boundary-disambiguation fix)", ()
     expect(varSpans[1].classes()).toContain(varColorClass("mood"));
   });
 
+  it("prints $$ as one $, like the engine (a literal dollar)", () => {
+    const wrapper = mount(AssemblerHelper, {
+      props: {
+        upstreamVars: ["role"],
+        templateVars: ["role"],
+        template: "A $role on a $$5 coin, $$role",
+        resolvedMap: { role: "ranger" },
+      },
+    });
+    const preview = wrapper.find('[data-test="asm-preview"]');
+    expect(preview.text()).toBe("A ranger on a $5 coin, $role");
+    expect(preview.findAll("span.res").length).toBe(1);
+  });
+
   it("renders unresolved vars as `$name` when not in the map", () => {
     const wrapper = mount(AssemblerHelper, {
       props: {
@@ -202,6 +216,20 @@ describe("AssemblerHelper resolvedMap (SP2a — list-valued vars + .K accessor)"
     // No stranded `.0` / `.1` accessor leaked into the literal spans.
     expect(preview.text()).not.toContain(".0");
     expect(preview.text()).not.toContain(".1");
+  });
+
+  it("reads $name.bool from the toggle's switch, not from the words it writes", () => {
+    const props = {
+      upstreamVars: ["lantern", "rain"],
+      templateVars: ["lantern", "rain"],
+      template: "$lantern [$lantern.bool] [$rain.bool] [$fog.bool]",
+      resolvedMap: { lantern: "with empty hands", rain: "true" },
+    };
+    const off = mount(AssemblerHelper, { props: { ...props, varBools: { lantern: false } } });
+    // Off with an Off value: the words are there, the switch still reads false.
+    expect(off.find('[data-test="asm-preview"]').text()).toBe("with empty hands [false] [true] []");
+    const on = mount(AssemblerHelper, { props: { ...props, resolvedMap: { ...props.resolvedMap, lantern: "holding a lantern" }, varBools: { lantern: true } } });
+    expect(on.find('[data-test="asm-preview"]').text()).toBe("holding a lantern [true] [true] []");
   });
 
   it("renders an out-of-range $mood.5 as empty, not a leaked accessor", () => {
@@ -336,6 +364,24 @@ describe("AssemblerHelper var-color rendering", () => {
     });
     const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-clear-template-icon"]');
     expect(btn.element.disabled).toBe(false);
+  });
+
+  it("mark-unused button fires and is off when both boxes use every variable", async () => {
+    const onMarkUnused = vi.fn();
+    const wrapper = mount(AssemblerHelper, {
+      props: { upstreamVars: ["mood", "hero"], template: "$mood", onMarkUnused },
+    });
+    const btn = wrapper.find<HTMLButtonElement>('[data-test="asm-mark-unused"]');
+    expect(btn.element.disabled).toBe(false);
+    await btn.trigger("click");
+    expect(onMarkUnused).toHaveBeenCalledTimes(1);
+    await wrapper.setProps({ negativeTemplate: "$negatives, $hero.neg" });
+    expect(btn.element.disabled).toBe(true);
+  });
+
+  it("mark-unused button is absent without a handler", () => {
+    const wrapper = mount(AssemblerHelper, { props: { upstreamVars: ["mood"], template: "" } });
+    expect(wrapper.find('[data-test="asm-mark-unused"]').exists()).toBe(false);
   });
 
   it("preview area shows empty-state ghost when template is empty", () => {
@@ -540,5 +586,85 @@ describe("AssemblerHelper negative preview", () => {
       props: { ...base, template: "$hair, $mood", negativeTemplate: "" },
     });
     expect(w.find('[data-test="asm-neg-preview"]').exists()).toBe(false);
+  });
+});
+
+describe("AssemblerHelper.vue with no Context", () => {
+  it("calls a template with no $names plain text and says why the variables row is empty", () => {
+    const w = mount(AssemblerHelper, {
+      props: { upstreamVars: [], templateVars: [], template: "1girl blue hair", resolved: "1girl blue hair" },
+    });
+    expect(w.find('[data-test="asm-preview-status"]').text()).toBe("plain text");
+    expect(w.find('[data-test="asm-vars-none"]').exists()).toBe(true);
+  });
+
+  it("counts unresolved $names when nothing sets them", () => {
+    const w = mount(AssemblerHelper, {
+      props: { upstreamVars: [], templateVars: ["hair"], template: "a $hair girl", resolved: "" },
+    });
+    expect(w.find('[data-test="asm-preview-status"]').text()).toBe("1 unresolved");
+    expect(w.find('[data-test="asm-vars-none"]').exists()).toBe(false);
+  });
+
+  it("drops the placeholder once a variable comes in", () => {
+    const w = mount(AssemblerHelper, {
+      props: { upstreamVars: ["hair"], templateVars: [], template: "x", resolved: "x" },
+    });
+    expect(w.find('[data-test="asm-vars-none"]').exists()).toBe(false);
+  });
+
+  describe("loop frames", () => {
+    const loopProps = (frame: number) => ({
+      upstreamVars: frame === 3 ? ["role", "companion"] : ["role"],
+      templateVars: ["role", "companion"],
+      template: "$role with $companion",
+      resolvedMap: (frame === 3 ? { role: "a knight", companion: "a fox" } : { role: "a knight" }) as Record<string, string>,
+      loopFrames: { frame, count: 4, partial: { companion: [3] } },
+    });
+
+    it("shows a name set on other frames as 'on some frames', not missing", () => {
+      const w = mount(AssemblerHelper, { props: loopProps(0) });
+      expect(w.text()).not.toContain("missing");
+      expect(w.find('[data-test="asm-some-frames"]').text()).toBe("1 on some frames");
+      const chip = w.find('[data-test="asm-chip-companion"]');
+      expect(chip.classes()).toContain("wp-asm-var--off-frame");
+      expect(chip.classes()).not.toContain("wp-asm-var--missing");
+      expect(w.find('[data-test="asm-frames-companion"]').text()).toBe("#4");
+      expect(w.find('[data-test="asm-preview-status"]').text()).toBe("1 empty");
+      expect(w.find('[data-test="asm-preview-off"]').text()).toBe("$companion");
+    });
+
+    it("on the frame that sets it, the chip is a normal chip with its frame tag", () => {
+      const w = mount(AssemblerHelper, { props: loopProps(3) });
+      const chip = w.find('[data-test="asm-chip-companion"]');
+      expect(chip.classes()).not.toContain("wp-asm-var--off-frame");
+      expect(w.find('[data-test="asm-frames-companion"]').text()).toBe("#4");
+      expect(w.find('[data-test="asm-preview-status"]').text()).toBe("resolved");
+      expect(w.find('[data-test="asm-preview"]').text()).toContain("a fox");
+    });
+
+    it("still warns about a name no frame sets", () => {
+      const w = mount(AssemblerHelper, {
+        props: { ...loopProps(0), templateVars: ["role", "companion", "nope"], template: "$role $companion $nope" },
+      });
+      expect(w.text()).toContain("1 missing");
+      expect(w.find('[data-test="asm-preview-status"]').text()).toBe("1 unresolved");
+    });
+
+    it("steps frames through onPickFrame, within the loop", async () => {
+      const picked: number[] = [];
+      const w = mount(AssemblerHelper, { props: { ...loopProps(0), onPickFrame: (k: number) => picked.push(k) } });
+      expect(w.find('[data-test="asm-frame-label"]').text()).toBe("1/4");
+      expect(w.find('[data-test="asm-frame-prev"]').attributes("disabled")).toBeDefined();
+      await w.find('[data-test="asm-frame-next"]').trigger("click");
+      expect(picked).toEqual([1]);
+    });
+
+    it("has no stepper without a loop", () => {
+      const w = mount(AssemblerHelper, {
+        props: { upstreamVars: ["role"], templateVars: ["role"], template: "$role", resolvedMap: { role: "x" } },
+      });
+      expect(w.find('[data-test="asm-frame-step"]').exists()).toBe(false);
+    });
   });
 });

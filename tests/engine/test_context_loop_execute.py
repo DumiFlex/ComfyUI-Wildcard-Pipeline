@@ -263,3 +263,34 @@ def test_wired_values_cap_at_the_frame_limit():
         seed=0, count=1, wp_context_loop_config="{}", values="\n".join(map(str, range(1200))),
     )
     assert len(out.values[0]) == 999
+
+
+def test_frames_carry_debug_trace_rows():
+    """WP Debug names the Loop as the writer of its variables and shows the
+    frame each payload is, with its seed when the Loop drives seeds."""
+    payloads = _execute(7, 4, {
+        "override_seed": True, "bypass_frames": [1], "iteration_internal": True,
+        "total_internal": False,
+    })
+    assert [p.internals["__wp_loop_index__"] for p in payloads] == [0, 2, 3]
+    rows = payloads[1].debug["__wp_trace__"]
+    assert [(r["binding"], r["value"], r["internal"]) for r in rows] == [
+        ("iteration", "3", True), ("iteration_total", "4", False),
+    ]
+    assert all(r["node"] == "WP_ContextLoop" for r in rows)
+    detail = rows[0]["detail"]
+    assert detail["frame"] == 3 and detail["of"] == 4
+    assert detail["seed"] == payloads[1].internals["__wp_seed_override__"]
+
+
+def test_trace_rows_note_the_value_line():
+    out = WPContextLoop.execute(
+        seed=0, count=1, wp_context_loop_config="{}", values=["a\nb"],
+    )
+    payloads = out.values[0]
+    rows = payloads[1].debug["__wp_trace__"]
+    value_row = next(r for r in rows if r["binding"] == "iteration_value")
+    assert value_row["value"] == "b"
+    assert value_row["detail"]["value_line"] == 2
+    assert value_row["detail"]["values"] == 2
+    assert "seed" not in value_row["detail"]

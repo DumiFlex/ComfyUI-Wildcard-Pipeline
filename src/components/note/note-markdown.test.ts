@@ -63,6 +63,11 @@ describe("note pictures", () => {
     expect(w.get('[data-test="note-image"]').attributes("src")).toMatch(/\/wp\/images\/note\/toolbar-help\.png$/);
   });
 
+  it("draws a docs screenshot too, named by its file", () => {
+    const w = draw("![Context](wp:asset/wp-context-loop-grid)");
+    expect(w.get('[data-test="note-image"]').attributes("src")).toMatch(/\/wp\/images\/docs\/wp-context-loop-grid\.png$/);
+  });
+
   it("never loads a web address, an unknown asset or a missing picture", () => {
     const w = draw("![a](https://example.com/x.png) ![b](wp:asset/nope) ![c](wp:image/00000000) ![d](data:image/png;base64,AAAA)");
     expect(w.find("img").exists()).toBe(false);

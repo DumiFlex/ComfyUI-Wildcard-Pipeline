@@ -27,6 +27,7 @@
  * (a plain `<textarea>` inside, so tests still query it with
  * `wrap.find("textarea")`).
  */
+import Banner from "@/kit/Banner.vue";
 import Textarea from "@/kit/Textarea.vue";
 import { computed, ref } from "vue";
 import Button from "@/kit/Button.vue";
@@ -280,11 +281,12 @@ function handleParse(raw: string, source: "file" | "paste"): void {
           @click="onReplaceFile"
         >Replace file…</Button>
       </div>
-      <div
+      <Banner
         v-if="migrationNote"
-        class="wp-import-tab__note"
+        tone="warn"
+        size="sm"
         data-test="import-tab-migration-note"
-      >{{ migrationNote }}</div>
+      >{{ migrationNote }}</Banner>
     </template>
 
     <!-- Default (full) UI — pick / paste affordances, paste pane,
@@ -371,18 +373,20 @@ function handleParse(raw: string, source: "file" | "paste"): void {
         </div>
       </div>
 
-      <div
+      <Banner
         v-if="errorMsg"
+        tone="danger"
+        size="sm"
         class="wp-import-tab__error"
-        role="alert"
         data-test="import-tab-error"
-      >Invalid payload — {{ errorMsg }}</div>
+      >Invalid payload — {{ errorMsg }}</Banner>
 
-      <div
+      <Banner
         v-if="migrationNote"
-        class="wp-import-tab__note"
+        tone="warn"
+        size="sm"
         data-test="import-tab-migration-note"
-      >{{ migrationNote }}</div>
+      >{{ migrationNote }}</Banner>
     </template>
   </div>
 </template>
@@ -539,21 +543,5 @@ function handleParse(raw: string, source: "file" | "paste"): void {
   gap: var(--wp-space-4);
 }
 
-.wp-import-tab__error {
-  padding: var(--wp-space-4) var(--wp-space-5);
-  border-radius: var(--wp-radius-sm);
-  background: color-mix(in oklab, var(--wp-danger) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-danger) 36%, transparent);
-  color: var(--wp-danger);
-  font-size: var(--wp-text-sm);
-}
 
-.wp-import-tab__note {
-  padding: var(--wp-space-4) var(--wp-space-5);
-  border-radius: var(--wp-radius-sm);
-  background: color-mix(in oklab, var(--wp-warn) 12%, transparent);
-  border: 1px solid color-mix(in oklab, var(--wp-warn) 36%, transparent);
-  color: var(--wp-warn);
-  font-size: var(--wp-text-sm);
-}
 </style>

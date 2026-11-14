@@ -74,6 +74,65 @@ def _explain_pool(detail: dict[str, Any], options: list[dict[str, Any]]) -> None
     detail["live"] = sum(1 for o in options if _weight(o) > 0)
 
 
+#: Options listed in WP Debug's options table; the rest are only counted.
+OPTIONS_SHOWN = 40
+_TEXT_SHOWN = 120
+
+
+def _explain_options(
+    detail: dict[str, Any],
+    library: list[dict[str, Any]],
+    after_filter: set[Any],
+    after_toggles: set[Any],
+    before_constraints: dict[Any, float],
+    final: list[dict[str, Any]],
+) -> None:
+    """Every option of this use with its library weight, its final weight and
+    why it can't be drawn (``filter`` / ``toggle`` / ``constraint`` /
+    ``weight``), so WP Debug can say why an option never comes up. Also the
+    pool size after each step (library → filter → toggles → drawable)."""
+    final_w = {o.get("id"): _weight(o) for o in final}
+    rows: list[dict[str, Any]] = []
+    for o in library:
+        oid = o.get("id")
+        lib_w = _weight(o)
+        if oid not in after_filter:
+            cut, weight = "filter", None
+        elif oid not in after_toggles:
+            cut, weight = "toggle", None
+        else:
+            weight = final_w.get(oid, 0.0)
+            pre = before_constraints.get(oid, lib_w)
+            cut = None
+            if weight <= 0:
+                cut = "constraint" if pre > 0 else "weight"
+        row: dict[str, Any] = {
+            "id": oid,
+            "value": str(o.get("value", ""))[:_TEXT_SHOWN],
+            "base": lib_w,
+            "weight": weight,
+        }
+        if cut:
+            row["cut"] = cut
+        pre = before_constraints.get(oid)
+        if pre is not None and pre != lib_w:
+            row["override"] = pre
+        if o.get("is_null"):
+            row["null"] = True
+        if o.get("fallback"):
+            row["fallback"] = True
+        rows.append(row)
+    detail["steps"] = {
+        "library": len(library),
+        "filter": len(after_filter),
+        "toggles": len(after_toggles),
+        "live": sum(1 for o in final if _weight(o) > 0),
+    }
+    detail["options"] = rows[:OPTIONS_SHOWN]
+    if len(rows) > OPTIONS_SHOWN:
+        detail["options_more"] = len(rows) - OPTIONS_SHOWN
+
+
 def _explain_constraints(
     detail: dict[str, Any], applied: list[tuple[dict[str, Any], dict[str, Any]]],
 ) -> None:
@@ -666,6 +725,7 @@ class WildcardHandler(ModuleHandler):
         expr: str,
         *,
         exclude_null: bool,
+        bound: tuple[dict[str, Any] | None] | None = None,
     ) -> list[dict[str, Any]]:
         """Narrow an option pool by a boolean sub-category expression.
 
@@ -673,9 +733,13 @@ class WildcardHandler(ModuleHandler):
         against each non-null option's tag set (`sub_categories`). Empty
         / whitespace `expr` ⇒ no tag filtering. The null option
         (`is_null`) is governed solely by `exclude_null`; the expression
-        never applies to it (spec §3.4).
+        never applies to it (spec §3.4). `bound` holds an already-bound
+        expression (schema v11 `$name` terms, `bind_for_wildcard`).
         """
-        ast = _parse_subcat(expr) if isinstance(expr, str) else None
+        if bound is not None:
+            ast = bound[0]
+        else:
+            ast = _parse_subcat(expr) if isinstance(expr, str) else None
         out: list[dict[str, Any]] = []
         for o in options:
             if o.get("is_null"):
@@ -924,16 +988,42 @@ class WildcardHandler(ModuleHandler):
         category_filter = instance.get("category_filter")
         exclude_null = bool(instance.get("exclude_null", False))
         pool = options
+        filter_vars: dict[str, Any] = {}
         if (isinstance(category_filter, str) and category_filter.strip()) or exclude_null:
+            # Schema v11: `$name` terms read this run's variables, so one
+            # tagged wildcard narrows per model ($model_variant) and the
+            # constraints below still apply to what is left.
+            from engine.syntax.subcat_filter import (
+                bind_for_wildcard,
+                filter_variable_warning,
+                variables,
+            )
+            bound_ast, notes = bind_for_wildcard(
+                category_filter if isinstance(category_filter, str) else "",
+                lambda n: ctx.get(n),
+                payload,
+            )
+            if isinstance(category_filter, str) and "$" in category_filter:
+                parsed = _parse_subcat(category_filter)
+                for name in variables(parsed):
+                    raw = ctx.get(name)
+                    filter_vars[name] = "" if raw is None else str(raw)
+            if notes and isinstance(ctx.get("__wp_warnings__"), list):
+                mid = str(ctx.get("__wp_current_module_id__") or "")
+                for note in notes:
+                    ctx["__wp_warnings__"].append(filter_variable_warning(note, module_id=mid))
             pool = cls._apply_pool_filter(
                 pool,
                 category_filter if isinstance(category_filter, str) else "",
                 exclude_null=exclude_null,
+                bound=(bound_ast,),
             )
+        ids_after_filter = {o.get("id") for o in pool}
         enabled = instance.get("enabled_options")
         if enabled is not None:
             allowed = set(enabled)
             pool = [o for o in pool if o.get("id") in allowed]
+        ids_after_toggles = {o.get("id") for o in pool}
 
         # `pinned` mode short-circuits the RNG: always pick the option
         # whose id matches `pinned_option_id`. Falls through to random
@@ -978,8 +1068,18 @@ class WildcardHandler(ModuleHandler):
             detail = module_detail(ctx)
             if detail is not None:
                 detail.update({"mode": pin_mode, "option_id": pinned.get("id")})
+                # A Context Loop sweep pins through this same mode; say so.
+                sweep_pins = ctx.get("__wp_pin_overrides__")
+                if (
+                    pin_mode == "pinned"
+                    and isinstance(sweep_pins, dict)
+                    and ctx.get("__wp_current_module_uid__") in sweep_pins
+                ):
+                    detail["swept"] = True
                 if pin_mode != "pinned":
                     detail["match_variable"] = match_var.strip()
+                    raw_match = ctx.get(match_var.strip())
+                    detail["match_value"] = "" if raw_match is None else str(raw_match)
             value = str(pinned.get("value", ""))
             resolve_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
                 int(ctx.get("__wp_node_seed__", 0) or 0),
@@ -1020,10 +1120,16 @@ class WildcardHandler(ModuleHandler):
         if detail is not None:
             if isinstance(category_filter, str) and category_filter.strip():
                 detail["filter"] = category_filter.strip()
+                if filter_vars:
+                    detail["filter_vars"] = filter_vars
             if exclude_null:
                 detail["exclude_null"] = True
             if not options:
                 detail.update({"pool": 0, "live": 0})
+                _explain_options(
+                    detail, list(payload.get("options", [])),
+                    ids_after_filter, ids_after_toggles, {}, [],
+                )
 
         if not options:
             return {binding: ""}
@@ -1057,6 +1163,7 @@ class WildcardHandler(ModuleHandler):
             apply_constraints_for_target,
             warn_excludes_all,
         )
+        weights_before_constraints = {o.get("id"): _weight(o) for o in options}
         my_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
         any_constraint_applied = False
         # (constraint, source_pick) pairs that actually re-weighted this target.
@@ -1100,6 +1207,13 @@ class WildcardHandler(ModuleHandler):
         if detail is not None:
             _explain_pool(detail, options)
             _explain_constraints(detail, applied_constraints)
+            _explain_options(
+                detail, list(payload.get("options", [])),
+                ids_after_filter, ids_after_toggles,
+                weights_before_constraints, options,
+            )
+            if instance.get("locked_seed") is not None:
+                detail["locked_seed"] = True
         use_fallback = fallback is not None and pool_is_dead(options)
         if use_fallback:
             assert fallback is not None
@@ -1230,6 +1344,7 @@ class WildcardHandler(ModuleHandler):
             if detail is not None:
                 detail["option_ids"] = [o.get("id") for o in picks]
                 detail["range"] = [lo, hi]
+                detail["separator"] = sep
                 if independent:
                     detail["independent"] = True
             _record_axes(ctx, binding, rolled_list, payload)

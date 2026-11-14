@@ -32,8 +32,8 @@ describe("DisplayPlaygroundModal", () => {
     await open();
     const dialog = document.body.querySelector('[role="dialog"]');
     expect(dialog?.getAttribute("aria-modal")).toBe("true");
-    expect(dialog?.getAttribute("aria-labelledby")).toBe("wp-pg-title");
-    expect(document.getElementById("wp-pg-title")?.textContent).toBe("Display Playground");
+    const titleId = dialog?.getAttribute("aria-labelledby") ?? "";
+    expect(document.getElementById(titleId)?.textContent).toBe("Display Playground");
     expect(document.body.querySelector('[data-test="playground-controls"]')).not.toBeNull();
     expect(document.body.querySelector('[data-test="playground-preview"]')).not.toBeNull();
   });
@@ -73,7 +73,7 @@ describe("DisplayPlaygroundModal", () => {
 
   it("Done closes it and focus goes back to what opened it", async () => {
     const trigger = await open();
-    expect(document.body.querySelector(".wp-pg")?.contains(document.activeElement)).toBe(true);
+    expect(document.body.querySelector('[role="dialog"]')?.contains(document.activeElement)).toBe(true);
     const done = [...document.body.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Done");
     done?.click();
     await nextTick();

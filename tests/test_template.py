@@ -57,7 +57,7 @@ class TestResolveVariables:
 
     def test_non_string_value_casts_to_str(self):
         assert resolve_variables("$n", _ctx(n=42)) == "42"
-        assert resolve_variables("$b", _ctx(b=True)) == "True"
+        assert resolve_variables("$b", _ctx(b=True)) == "true"
 
     def test_word_boundary_stops_at_non_identifier(self):
         assert resolve_variables("$name.", _ctx(name="A")) == "A."

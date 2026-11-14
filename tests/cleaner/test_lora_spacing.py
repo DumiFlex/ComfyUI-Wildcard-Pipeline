@@ -34,3 +34,11 @@ def test_ignores_other_angle_text():
 def test_counts_tags_changed():
     out = apply("a<lora:x:1>, <lora:y:1>, < lora:z:1>", "tags", {})
     assert out["stats"] == {"tidied": 2}
+
+
+def test_no_space_between_a_tag_and_closing_punctuation():
+    from engine.cleaner.rules.lora import apply as lora_apply
+
+    assert lora_apply("a girl <lora:x:1>. Then<lora:y:1>smile", mode="text", config={})["text"] == (
+        "a girl <lora:x:1>. Then <lora:y:1> smile"
+    )

@@ -3,8 +3,9 @@ import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
 import { reactiveFromGraph } from "../extension/reactive";
-import { findRootGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
+import { findRootGraph, showGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
 import { baseCodename } from "../extension/node-codename";
+import { flashInNode, type FlashTarget } from "./flash-target";
 
 const DebugViewer = defineAsyncComponent(() => import("../components/debug/DebugViewer.vue"));
 
@@ -59,8 +60,9 @@ function nodeInfo(id: string): { title: string; codename: string } {
 
 /** Select + centre the node. A node in another graph than the one on screen
  *  (inside a subgraph, or back out at the root) opens that graph first, the
- *  same way the breadcrumb does. */
-export function focusNode(id: string): void {
+ *  same way the breadcrumb does. With a `target`, the row it names (a module,
+ *  or the field that writes a variable) blinks once the node is in view. */
+export function focusNode(id: string, target?: FlashTarget): void {
   const hit = findExecNode(id);
   const canvas = (app as unknown as { canvas?: CanvasLike }).canvas;
   if (!hit || !canvas) return;
@@ -71,16 +73,9 @@ export function focusNode(id: string): void {
     canvas.selectNode?.(node);
     canvas.centerOnNode?.(node);
     canvas.setDirty?.(true, true);
+    if (target) flashInNode(node, target);
   };
-  if (canvas.graph === hit.graph) {
-    show();
-    return;
-  }
-  if (typeof canvas.setGraph !== "function") return;
-  canvas.setGraph(hit.graph);
-  // Opening a graph restores the viewport ComfyUI last saved for it, a tick
-  // later; centre after that or the restore pans straight back.
-  setTimeout(show, 50);
+  showGraph(canvas, hit.graph, show);
 }
 
 export function create(node: DebugNode, inputName: string) {
@@ -139,9 +134,16 @@ export function create(node: DebugNode, inputName: string) {
     minWidth: () => dynamicMinWidth,
   });
   host.onCleanup(attachThemeDetector(host.widget.element, app));
+  // A copy shown on a subgraph node chains the node's hook too, and stops
+  // listening once it is hidden.
+  let live = true;
+  host.onCleanup(() => {
+    live = false;
+  });
   const orig = node.onExecuted;
   node.onExecuted = function (output) {
     orig?.call(this, output);
+    if (!live) return;
     const snap = output?.wp_debug_snapshot;
     if (!Array.isArray(snap)) return;
     const next = snap.filter((s): s is string => typeof s === "string");

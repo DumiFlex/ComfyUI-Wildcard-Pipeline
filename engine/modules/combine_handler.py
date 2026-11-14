@@ -19,9 +19,13 @@ from typing import Any
 
 from engine import negatives
 from engine.modules import build_resolve_ctx
+from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
+
+#: `$name` (not `$$`) in a template, for WP Debug's list of what it read.
+_TEMPLATE_VAR_RE = re.compile(r"(?<!\$)\$([A-Za-z_][A-Za-z0-9_]*)")
 
 _IDENT_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 _MAX_IDENT_LEN = 64
@@ -112,6 +116,9 @@ class CombineHandler(ModuleHandler):
             # frozen across the whole run, nested refs included.
             _hb = ctx.get("__wp_hold_base_ctx__")
             if isinstance(_hb, dict) and output_var in _hb:
+                held_detail = module_detail(ctx)
+                if held_detail is not None:
+                    held_detail["held"] = True
                 negatives.copy_from(ctx, _hb, [output_var])
                 return {output_var: _hb[output_var]}
             chain_seed = int(ctx.get("__wp_node_seed_hold__", ctx.get("__wp_node_seed__", 0)) or 0)
@@ -147,4 +154,22 @@ class CombineHandler(ModuleHandler):
             pick=None, source=output_var,
         )
         negatives.set_entries(ctx, output_var, entries)
+        detail = module_detail(ctx)
+        if detail is not None:
+            # WP Debug: the template it filled and what each `$var` read.
+            detail["template"] = template[:400]
+            detail["template_source"] = "override" if isinstance(override, str) else "library"
+            reads: dict[str, str | None] = {}
+            names = [name for name, _index in col.reads]
+            # A `$var` nothing set records no read; list it from the template.
+            names += _TEMPLATE_VAR_RE.findall(template)
+            for name in names:
+                if name in reads or name.startswith("__"):
+                    continue
+                val = ctx.get(name)
+                reads[name] = None if val is None else str(val)[:160]
+            if reads:
+                detail["reads"] = reads
+            if instance.get("locked_seed") is not None:
+                detail["locked_seed"] = True
         return {output_var: result}

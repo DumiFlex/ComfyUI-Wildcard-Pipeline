@@ -181,7 +181,7 @@ function toggleOverrideStrategy(): void {
       'wp-seedlist--bypassed': isBypassed,
     }"
   >
-    <div class="wp-seedlist__section">
+    <div data-wp-part="strategy" data-wp-part-label="Strategy" class="wp-seedlist__section">
       <div class="wp-seedlist__label">strategy</div>
       <WpSegmented
         v-tooltip="strategyLocked ? STRATEGY_LOCKED_TOOLTIP : null"
@@ -197,7 +197,7 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <Button
+    <Button data-wp-part="seeds-button" data-wp-part-label="Per-iteration seeds button"
       size="sm"
       block
       icon="pi-list"
@@ -205,7 +205,7 @@ function toggleOverrideStrategy(): void {
       data-test="seedlist-seeds-btn"
       @click="seedsOpen = true"
     >
-      Per-iteration seeds
+      <span class="wp-seedlist__seedbtn-text">Per-iteration seeds</span>
       <span class="wp-seedlist__seedbtn-fill" />
       <span v-if="lockedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-badge">{{ lockedCount }} locked</span>
       <span v-if="bypassedCount" class="wp-seedlist__seedbtn-badge" data-test="seedlist-seeds-bypass-badge">{{ bypassedCount }} bypassed</span>
@@ -215,7 +215,7 @@ function toggleOverrideStrategy(): void {
     <!-- Directly under the seeds button it belongs to: the chips are the
          inline view of what that modal lists, so they read as its expansion
          rather than as another unrelated section. -->
-    <FrameChips
+    <FrameChips data-wp-part="frames" data-wp-part-label="Seeds per frame"
       v-model:collapsed="chipsCollapsed"
       label="seeds"
       test-id="seedlist-frame"
@@ -226,7 +226,7 @@ function toggleOverrideStrategy(): void {
       @toggle-lock="toggleFrameLock"
     />
 
-    <div v-tooltip="OVERRIDE_SEED_TOOLTIP" v-toggle-row class="wp-seedlist__row">
+    <div data-wp-part="override-seed" data-wp-part-label="Override base seed" data-wp-part-section="From the loop" v-tooltip="OVERRIDE_SEED_TOOLTIP" v-toggle-row class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override base seed from loop</span>
       <WpSwitch
         data-test="seedlist-override-seed-toggle"
@@ -236,7 +236,7 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <div v-tooltip="OVERRIDE_COUNT_TOOLTIP" v-toggle-row class="wp-seedlist__row">
+    <div data-wp-part="override-count" data-wp-part-label="Override count" data-wp-part-section="From the loop" v-tooltip="OVERRIDE_COUNT_TOOLTIP" v-toggle-row class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override count from loop</span>
       <WpSwitch
         data-test="seedlist-override-count-toggle"
@@ -246,7 +246,7 @@ function toggleOverrideStrategy(): void {
       />
     </div>
 
-    <div v-tooltip="OVERRIDE_STRATEGY_TOOLTIP" v-toggle-row class="wp-seedlist__row">
+    <div data-wp-part="override-strategy" data-wp-part-label="Override strategy" data-wp-part-section="From the loop" v-tooltip="OVERRIDE_STRATEGY_TOOLTIP" v-toggle-row class="wp-seedlist__row">
       <span class="wp-seedlist__row-label">Override strategy from loop</span>
       <WpSwitch
         data-test="seedlist-override-strategy-toggle"
@@ -298,7 +298,18 @@ function toggleOverrideStrategy(): void {
 .wp-seedlist--muted { opacity: 0.45; pointer-events: none; }
 .wp-seedlist--bypassed { opacity: 0.65; }
 
+/* The kit Button wraps the slot in an inline label box, so the fill span
+ * can't push the badges and chevron right and the chevron rides the
+ * text's baseline. Make the label the flex row instead; the text keeps
+ * the kit's cap-height trim so it stays level with the icons. */
+.wp-seedlist__seedbtn :deep(.wp-btn__label) { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; text-box: normal; }
+/* Room for g, p, q and y: the line is trimmed to the baseline and the
+   clip (for the ellipsis) would cut them. */
+.wp-seedlist__seedbtn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-block: 0.3em; margin-block: -0.3em; }
+@supports (text-box: trim-both cap alphabetic) {
+  .wp-seedlist__seedbtn-text { text-box: trim-both cap alphabetic; }
+}
 .wp-seedlist__seedbtn-fill { flex: 1; }
 .wp-seedlist__seedbtn-badge { font: 600 8px var(--wp-font-sans); text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-accent-text, var(--wp-text)); background: rgba(99,102,241,.14); border: 1px solid color-mix(in srgb, var(--wp-accent) 40%, transparent); }
-.wp-seedlist__seedbtn-chev { color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-seedlist__seedbtn-chev { flex: none; color: var(--wp-text-dim, var(--wp-text3)); }
 </style>

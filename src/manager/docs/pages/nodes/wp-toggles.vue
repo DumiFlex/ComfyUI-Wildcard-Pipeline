@@ -25,7 +25,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <b>WP Toggles</b> replaces a stack of Boolean nodes. Each toggle writes
         <VarToken>$its_variable</VarToken> as <code>true</code> or <code>false</code>, so a derivation
         can branch on it without a Context Injector, and can show a BOOLEAN output at the right of its
-        row for a switch node.
+        row for a switch node (off for a new toggle: turn on <b>BOOLEAN output</b> in its window).
       </p>
       <DocAnnotated
         src="images/docs/wp-toggles.png"
@@ -53,9 +53,49 @@ import VarToken from "../../../components/docs/VarToken.vue";
     <DocSection title="Editing a toggle">
       <DocFields node="WP_Toggles" group="edit" />
       <Banner tone="info" note>
-        Drag the grip to reorder. A label moves with its toggles. Moving a row never re-points a wire:
-        each output stays with its toggle.
+        Drag the grip to reorder: the row you drop beside opens a gap with a line. An indented
+        line in a group's colour puts the toggle in that group (a folded one opens); a
+        full-width line, just above a label or below the last row, puts it below the group, in no
+        group. A label moves with its toggles and lands only between groups. Moving a row never
+        re-points a wire: each output stays with its toggle.
       </Banner>
+    </DocSection>
+
+    <DocSection title="Icons and colours">
+      <p>
+        Give a toggle an icon and its own colours under <b>Looks</b> in its window: one for the
+        icon, one for the name and one for the control itself, so Day can glow yellow and Night blue.
+        On Buttons the colour lights up the On side while it's picked, and clicking the lit side
+        flips the toggle too.
+        A label's icon and colour buttons do the same for the group, and its toggles wear that
+        colour on their left edge. The row at the top of the toggle's window shows each change
+        before you press Done.
+      </p>
+    </DocSection>
+
+    <DocSection title="Use a toggle in the prompt">
+      <p>
+        A toggle's variable is internal by default: rules read it, but the Assembler doesn't offer
+        it, since <code>true</code> or <code>false</code> rarely belongs in a prompt. To print it, open
+        the edit view and turn off the globe on its row. In Pick one, <b>Show in Assembler</b> does the
+        same for the picked variable, so <VarToken>$time</VarToken> can print the picked toggle's
+        <b>Value</b>.
+      </p>
+      <p>
+        Give a toggle a <b>Value</b> and its variable holds that text while it is on and nothing
+        while it is off: a Rain toggle with the Value "heavy rain" makes
+        <VarToken>$rain</VarToken> print "heavy rain" or nothing. The switch itself is still there as
+        <VarToken>$rain.bool</VarToken>, <code>true</code> or <code>false</code>, for rules and
+        conditions. Its <b>Negative</b> goes with the variable while it is on, so an Assembler that
+        prints <VarToken>$rain</VarToken> also sends "sunny, dry" to its negative output. A Value
+        that reads a <VarToken>$variable</VarToken> brings that variable's negatives along too.
+      </p>
+      <p>
+        In Any on a toggle can also say what to write while it is <b>off</b>: its <b>Off value</b>
+        and <b>Off negative</b>. A Buttons toggle Anime / Real with the Value "anime style" and the
+        Off value "photorealistic" writes one or the other, and each side's negative keeps the other
+        look out. Leave them empty and off prints nothing, as before.
+      </p>
     </DocSection>
 
     <DocSection title="Mute or bypass nodes">
@@ -85,7 +125,30 @@ import VarToken from "../../../components/docs/VarToken.vue";
         One toggle is on. Which one, first match wins: the toggle the upstream picked variable
         names (with <b>Upstream can pick</b>), then the first toggle upstream set to a yes word,
         then the first one you switched on. The picked variable gets the toggle's
-        <b>Value</b>, or its name; it is internal unless <b>Show in prompt</b> is on.
+        <b>Value</b>, or its name; it is internal unless <b>Show in Assembler</b> is on. A toggle's
+        <b>Negative</b>, under its Value, goes with the picked variable: an Assembler that prints it
+        sends those words to its negative output. All rows share one look here:
+        the <b>Style</b> next to those boxes picks Radio (the default), Chip, Switch or Check, so a
+        toggle's own Style and Needs are hidden.
+      </p>
+      <p>
+        By default you can also switch the picked toggle off, so none is on. Tick
+        <b>Always one on</b> to make the group work like radio buttons: one toggle is always on,
+        clicking it again does nothing, and you switch by picking another. With none on (or when you
+        tick it), the first toggle is picked.
+      </p>
+    </DocSection>
+
+    <DocSection title="Rows or a grid">
+      <p>
+        The <b>Layout</b> switch in the edit bar draws the node as Rows (one row per toggle, the
+        default) or as a Grid: each toggle in a tile, the tiles wrapping to the node's width, in
+        both modes and every style. Each label has a grid button for its own group, so one group
+        can be a grid while another stays rows. Under a grid's tiles, thin lines carry the dots:
+        mute/bypass dots stack on the left with their toggle's name and BOOLEAN outputs on the
+        right with theirs, each side packed on its own, so one line can hold two toggles. The arrow on the first line merges the group's lines into one that carries
+        every dot and says how many go in and out (the names on hover), like the Context Injector's merged wires. Rows keep their dots on the row, and
+        the edit view always shows rows so you can reorder them.
       </p>
     </DocSection>
 

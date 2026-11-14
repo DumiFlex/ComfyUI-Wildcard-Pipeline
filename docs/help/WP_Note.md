@@ -2,9 +2,13 @@
 
 A note that explains a workflow. It looks like a panel, not a node: no title bar, no frame, no sockets, in both the classic renderer and Nodes 2.0. The selection outline hugs the panel. It never runs and is left out of the prompt; its text is saved with the workflow.
 
+<!-- video:start -->
+▶ **Video:** [WP Note in depth](https://youtu.be/9ljZ5XU7o7A) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 ## Using it
 
-- **Add** it from the node search (`WP Note`). A new note opens in its editor and starts pinned.
+- **Add** it from the node search (`WP Note`). A new note opens in its editor, unpinned.
 - **Edit** by double-clicking the note or with the indigo pencil in the selection toolbar while it is selected. **Done** goes back to reading.
 - **Move** it by dragging like any node (unpin it first).
 - **Resize** a Card or Sticky note from its corner: the width is yours, the height follows the text. A Label sizes itself to its title.
@@ -18,20 +22,19 @@ A note that explains a workflow. It looks like a panel, not a node: no title bar
 - **Tone**: Step (a numbered circle), Icon (pick any icon from the list next to it) or Plain (no badge).
 - **Colour**: Presets that follow the theme (Accent, Tip, Info, Warning, Danger, Teal, Violet, Neutral), or any colour from the picker.
 - **Look**: Card, Sticky or Label (above).
-- **Pinned**: ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start pinned.
+- **Pinned**: ComfyUI's own pin: a pinned note can't be moved or resized by accident. New notes start unpinned; a saved workflow keeps each note's pin.
 - **Title**: Shown in bold at the top, or on the pill of a Label.
-- **Text**: Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks.
+- **Text**: Its first line and length on the node; Edit text opens the text window, with the editor beside a live preview. Done (Ctrl+Enter) puts it on the note, Cancel or Escape leaves the note as it was. Markdown, with the formatting bar below over it: headings (# to ####), bold, italic, strikethrough, code, bulleted, numbered and nested lists, task lists (- [x] / - [ ]), quotes and callouts (> [!TIP], > [!WARNING]), tables with column alignment (:--, :-:, --:), rules (---) and code blocks.
 
 ## The formatting bar
 
-- **Undo and redo** (Ctrl+Z / Ctrl+Y): Step back or forward through your changes, typing and the bar's own edits alike (Ctrl+Shift+Z and the right-click Undo and Redo work too). Typing counts as one step until you pause, move the caret or start a new line. The steps last while the editor is open.
+- **Undo and redo** (Ctrl+Z / Ctrl+Y): Step back or forward through your changes, typing and the bar's own edits alike (Ctrl+Shift+Z and the right-click Undo and Redo work too). Typing counts as one step until you pause, move the caret or start a new line. The steps last while the text window is open.
 - **Bold, italic, strikethrough** (Ctrl+B / Ctrl+I): Wraps the selection in **, * or ~~.
 - **Code**: Wraps it in backticks, for a $variable.
 - **Lists and quote**: Puts - , 1. or > before each selected line (press again to take it off).
 - **Link** (Ctrl+K): A Docs page (type to find any page of these docs, then pick a section or the whole page), a Web address, a Library button (below) or a Community pack (owner/pack, or paste the pack's address), drawn as a Button with an icon or as a Text link, in its own colour or the note's. The selected text becomes the link's text. It goes where the caret is when you press Insert link, so you can click in the text after opening the panel.
 - **Icon**: Any PrimeIcons icon, searchable, in a colour or the text's own, inserted where the caret is.
-- **Pictures**: Add a picture from a file, or paste or drop one into the text; it goes on a line of its own where the caret is. Or pick one the extension ships (the node toolbar with its ? help button). The panel lists the note's pictures with a Width slider (a share of the note), Own size and Remove.
-- **Preview (eye)**: Shows the note as it will read.
+- **Pictures**: Add a picture from a file, or paste or drop one into the text; it goes on a line of its own where the caret is. Or pick one the extension ships (the node toolbar with its ? help button, or any docs screenshot), with a search box to find it. The panel stays open after adding and lists the note's pictures with a Width slider (a share of the note), Own size and Remove.
 <!-- fields:end -->
 
 Keys you type in the editor stay in the editor: Delete, Ctrl+Z and the other ComfyUI shortcuts don't reach the canvas.

@@ -1,5 +1,6 @@
 import type { InjectionKey, Ref } from "vue";
 import type { BundleInstance } from "../../../widgets/_shared";
+import type { BundleAlerts } from "./bundle-alerts";
 
 /** Shared state + handlers ContextWidget provides for any BundleFrame
  *  descendant to inject. Keeps the recursive frame component free of
@@ -24,9 +25,15 @@ export interface BundleFrameCtx {
   bundleLockState: (b: BundleInstance) => "all" | "none" | "partial" | null;
   /** Returns "before"/"after" when this bundle is the indicator anchor
    *  for the current slot zone, null otherwise. Drives the
-   *  `wp-gap-before`/`wp-gap-after` margin class so a gap opens for the
-   *  drop-bar. */
+   *  kit's `wp-rowdrag--before`/`--after` class (row-drag.css): a gap
+   *  opens with the drop line in it. */
   bundleHeaderGap: (uid: string) => "before" | "after" | null;
+  /** The drop line's colour variable when this frame anchors the drop. */
+  bundleLineStyle: (uid: string) => Record<string, string> | undefined;
+  /** True when the drop goes into this CLOSED bundle (opens on drop). */
+  isBundleDropInto: (uid: string) => boolean;
+  /** `_uid` of the bundle being dragged by its header (its frame dims). */
+  draggingBundleUid: Ref<string | null>;
   /** True when the current drag's resolved slot zone targets THIS
    *  bundle's body — i.e. the drop will land inside this bundle. Drives
    *  a frame-level highlight (ring + tinted background) so users get a
@@ -40,6 +47,9 @@ export interface BundleFrameCtx {
    *  per-module MOD dot, but at bundle scope. False when no
    *  fingerprint is stored yet (backfill case). */
   isBundleSnapshotModified: (b: BundleInstance) => boolean;
+  /** Worst conflict + library state among the rows the bundle holds. A
+   *  collapsed header shows them as dots, so trouble inside stays visible. */
+  bundleAlerts: (b: BundleInstance) => BundleAlerts;
   recentDropUids: Ref<Set<string>>;
   pulseDelayFor: (uid: string | null | undefined) => string;
   toggleBundleCollapsed: (uid: string) => void;
@@ -50,12 +60,6 @@ export interface BundleFrameCtx {
   openBundleContextMenu: (ev: MouseEvent, uid: string) => void;
   onBundleDragStart: (ev: DragEvent, uid: string) => void;
   onDragEnd: () => void;
-  /** Returns the drop-indicator position for a given container scope.
-   *  `containerUid = null` means the top-level list. Returns null when
-   *  the resolved zone doesn't target this container — caller hides the
-   *  bar. ContextWidget owns the dragOver ref + DOM rect math; this
-   *  ctx surfaces the per-container slice. */
-  dropBarFor: (containerUid: string | null) => { top: number } | null;
 }
 
 export const BundleFrameCtxKey: InjectionKey<BundleFrameCtx> = Symbol("bundleFrameCtx");

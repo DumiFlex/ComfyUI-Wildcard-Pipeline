@@ -1,6 +1,9 @@
 import { mount as vtuMount } from "@vue/test-utils";
 import { describe, it, expect } from "vitest";
 import PoolSection from "../sections/PoolSection.vue";
+import Combobox from "@/kit/Combobox.vue";
+import type { VarProducerLike } from "@/manager/components/RefChip.vue";
+import type { Component } from "vue";
 
 /**
  * The tag-pill grid ships COLLAPSED (a well-tagged wildcard's 40-odd pills
@@ -213,6 +216,36 @@ describe("PoolSection collapse", () => {
     await w.get('[data-test="cat-chip-feline"]').trigger("click");
     await w.get('[data-test="pool-collapse"]').trigger("click");
     expect(w.get('[data-test="pool-collapsed-count"]').text()).toContain("1 selected");
+  });
+});
+
+describe("PoolSection with no tags", () => {
+  const untagged = {
+    payload: { options: [{ id: "a", value: "dawn", weight: 1 }, { id: "b", value: "night", weight: 1 }] },
+    instance: {},
+  } as unknown as ModuleEntry;
+
+  it("explains why the pool is empty instead of showing an empty strip", () => {
+    const w = mount(PoolSection, { props: { module: untagged } });
+    expect(w.get('[data-test="pool-empty"]').text()).toContain("No tags to filter by");
+    expect(w.find(".pool__groups").exists()).toBe(false);
+  });
+
+  it("does not show the placeholder while collapsed, nor when tags exist", () => {
+    expect(vtuMount(PoolSection, { props: { module: untagged } }).find('[data-test="pool-empty"]').exists()).toBe(false);
+    expect(mount(PoolSection, { props: { module } }).find('[data-test="pool-empty"]').exists()).toBe(false);
+  });
+
+  it("does not accent the collapse control when there is nothing to open", () => {
+    const w = vtuMount(PoolSection, { props: { module: untagged } });
+    expect(w.get('[data-test="pool-collapse"]').classes()).not.toContain("pool__collapse--nudge");
+  });
+
+  it("Advanced says a filter has nothing to match", async () => {
+    const w = mount(PoolSection, { props: { module: untagged } });
+    await w.get('[data-test="pool-advanced"]').trigger("click");
+    expect(w.find('[data-test="pool-empty-advanced"]').exists()).toBe(true);
+    expect(w.find('[data-test="pool-palette"]').exists()).toBe(false);
   });
 });
 
@@ -436,5 +469,52 @@ describe("PoolSection option rows", () => {
       props: { module: makeModule({ instance: { enabled_options: ["a", "b"] } }) },
     });
     expect(w.find('[data-test="pool-summary"]').text()).toContain("2 of 3");
+  });
+});
+
+describe("PoolSection filter by variable (schema v11)", () => {
+  const producers = new Map<string, VarProducerLike>([
+    ["model_variant", { kind: "model", shadowed: 0 }],
+    ["season", { kind: "wildcard", shadowed: 0 }],
+  ]);
+
+  it("offers upstream variables and adds a picked one as its own AND clause", async () => {
+    const w = mount(PoolSection, { props: { module, varProducers: producers } });
+    await w.get('[data-test="cat-chip-feline"]').trigger("click");
+    const combo = w.getComponent(Combobox as unknown as Component);
+    expect(((combo.props() as { options: Array<{ label: string }> }).options).map((o) => o.label))
+      .toEqual(["$model_variant", "$season"]);
+    combo.vm.$emit("update:modelValue", ["model_variant"]);
+    await w.vm.$nextTick();
+    expect(lastPatch(w).instance?.category_filter).toBe("feline and $model_variant");
+  });
+
+  it("keeps the variables when a pill is toggled, and says what they do", async () => {
+    const withVar = {
+      ...module,
+      instance: { category_filter: "warm and $model_variant" },
+    } as unknown as ModuleEntry;
+    const w = mount(PoolSection, { props: { module: withVar, varProducers: producers } });
+    expect(w.get('[data-test="pool-vars-hint"]').text()).toContain("$model_variant");
+    await w.get('[data-test="cat-chip-feline"]').trigger("click");
+    expect(lastPatch(w).instance?.category_filter).toBe("feline and warm and $model_variant");
+  });
+
+  it("counts a variable among the collapsed selections", () => {
+    const withVar = { ...module, instance: { category_filter: "$season" } } as unknown as ModuleEntry;
+    const w = vtuMount(PoolSection, { props: { module: withVar } });
+    expect(w.get('[data-test="pool-collapsed-count"]').text()).toContain("1 selected");
+  });
+
+  it("Advanced accepts a $term, counts what the tags narrow, and offers variable chips", async () => {
+    const w = mount(PoolSection, { props: { module, varProducers: producers } });
+    await w.get('[data-test="pool-advanced"]').trigger("click");
+    await w.get('[data-test="pool-ins-var-season"]').trigger("click");
+    expect(lastPatch(w).instance?.category_filter).toBe("$season");
+    const input = w.get('[data-test="expr-input"]');
+    await input.setValue("feline and $season");
+    await input.trigger("input");
+    expect(w.find('[data-test="expr-error"]').exists()).toBe(false);
+    expect(w.get('[data-test="expr-match-count"]').text()).toMatch(/1 of 2 match\s+before \$season/);
   });
 });

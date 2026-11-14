@@ -11,14 +11,14 @@ import ThemeChoices from "../ThemeChoices.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import { useUiStore, type DensityMode, type MotionMode, type StartPage, type ThemeMode } from "../../../stores/uiStore";
 import { computed } from "vue";
-import { ACCENT_LABELS, ACCENT_OPTIONS, PALETTE_OPTIONS, SWATCH_PREVIEW, useTweaksStore, type AccentName } from "../../../stores/tweaksStore";
+import { ACCENT_LABELS, ACCENT_OPTIONS, SWATCH_PREVIEW, useTweaksStore, type AccentName } from "../../../stores/tweaksStore";
 
 const ui = useUiStore();
 const tweaks = useTweaksStore();
 /** "Theme's own" first, then the presets, then Custom. */
 const SWATCHES: AccentName[] = ["theme", ...ACCENT_OPTIONS, "custom"];
 /** The colour theme's own accent, for the "Theme's own" swatch. */
-const ownAccent = computed(() => PALETTE_OPTIONS.find((p) => p.id === tweaks.palette)?.swatch[ui.resolvedTheme][2]);
+const ownAccent = computed(() => tweaks.swatchFor(tweaks.palette, ui.resolvedTheme)?.[2]);
 
 /** Theme's own: half its accent; Custom: the picked colour once chosen
  *  (the colour wheel until then); presets: their 500 stop. */
@@ -79,9 +79,16 @@ function setSidebar(v: SidebarChoice): void {
     >
       <ThemeChoices kind="look" />
     </SettingRow>
-    <SettingRow label="Mode" hint="Dark, light, or follow the system." setting-key="theme">
+    <SettingRow
+      label="Mode"
+      :hint="ui.schemeOverride
+        ? 'Your ComfyUI palette decides dark or light while it is the colour theme.'
+        : 'Dark, light, or follow the system.'"
+      setting-key="theme"
+    >
       <WpSegmented
         :model-value="ui.themeMode"
+        :disabled="ui.schemeOverride !== null"
         :options="THEMES"
         aria-label="Theme"
         test-prefix="settings-theme"

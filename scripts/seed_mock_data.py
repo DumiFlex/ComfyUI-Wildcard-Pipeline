@@ -42,8 +42,8 @@ from engine.db.repositories import (  # noqa: E402
 
 
 CATEGORIES = [
-    {"name": "Subjects", "color": "#a78bfa", "icon": "pi-user", "sort_order": 0},
-    {"name": "Style", "color": "#f472b6", "icon": "pi-palette", "sort_order": 1},
+    {"name": "Subjects", "color": "#a78bfa", "icon": "user", "sort_order": 0},
+    {"name": "Style", "color": "#f472b6", "icon": "palette", "sort_order": 1},
     {"name": "Composition", "color": "#34d399", "icon": "pi-objects-column", "sort_order": 2},
     {"name": "Edge cases", "color": "#fb7185", "icon": "pi-exclamation-triangle", "sort_order": 3},
     {"name": "Quality", "color": "#fbbf24", "icon": "pi-sparkles", "sort_order": 4},

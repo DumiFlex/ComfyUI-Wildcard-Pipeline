@@ -8,6 +8,7 @@
  * flagged because the children after the gap would run earlier.
  */
 import { computed, ref, watch } from "vue";
+import Banner from "@/kit/Banner.vue";
 import Button from "@/kit/Button.vue";
 import Input from "@/kit/Input.vue";
 import Modal from "@/kit/Modal.vue";
@@ -143,7 +144,7 @@ function apply(): void {
         />
         <Button size="sm" icon="pi-microchip-ai" :loading="loading" data-test="split-suggest" @click="suggest">Suggest with AI</Button>
       </div>
-      <p v-if="error" class="wp-split__error" role="alert">{{ error }}</p>
+      <Banner v-if="error" tone="danger" size="sm" class="wp-split__error">{{ error }}</Banner>
       <ol class="wp-split__list" data-test="split-list">
         <li v-for="(c, n) in children" :key="n" :data-bundle="c.type === 'bundle' ? 'true' : undefined">
           <span class="wp-split__name">{{ childName(c) }}</span>
@@ -186,7 +187,7 @@ function apply(): void {
 .wp-split__note { margin: 0 0 10px; font-size: 13px; color: var(--wp-text-muted); }
 .wp-split__ai { display: flex; gap: 6px; margin-bottom: 10px; }
 .wp-split__ai input { flex: 1; min-width: 0; }
-.wp-split__error { margin: 0 0 8px; font-size: 12px; color: var(--wp-danger); }
+.wp-split__error { margin: 0 0 8px; }
 .wp-split__list { margin: 0; padding: 0 0 0 22px; display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
 .wp-split__list li { display: flex; gap: 8px; align-items: center; font-size: 13px; min-width: 0; }
 .wp-split__list li[data-bundle] { color: var(--wp-text-muted); }
