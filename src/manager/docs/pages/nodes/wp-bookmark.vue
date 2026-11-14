@@ -104,7 +104,9 @@ const clashes = [
         of the side panel, the bottom panel, the minimap and the zoom controls, and moves when they
         open or close. What pops up on its own (the job progress panel while a workflow runs, the
         error card, toasts, menus, tooltips) never moves it or where bookmarks land; it floats over
-        them. It is see-through until you point at it (more so when folded).
+        them. It is see-through until you point at it (more so when folded). The grid button in its
+        header shows the bookmarks as icon tiles instead of rows, and the list button goes back; the
+        dock remembers which you picked.
       </p>
       <DocImage
         src="images/docs/wp-bookmark-dock.png"

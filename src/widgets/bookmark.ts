@@ -570,6 +570,27 @@ function nodeRect(node: BookmarkNode): [number, number, number, number] {
   return [x, y - TITLE_H, w, h + TITLE_H];
 }
 
+/** Where a jump to `node` puts the view (its offset) at `scale`: its spot of
+ *  the free screen, clear of the minimap, zoom controls and (switch on) the
+ *  dock. */
+function landingOffset(c: CanvasLike, node: BookmarkNode, config: BookmarkConfig, scale: number): [number, number] {
+  const cr = c.canvas?.getBoundingClientRect();
+  const area = freeArea(c.canvas);
+  const rel = (b: ScreenBox): ScreenBox => [b[0] - (cr?.left ?? 0), b[1] - (cr?.top ?? 0), b[2] - (cr?.left ?? 0), b[3] - (cr?.top ?? 0)];
+  const [vw, vh] = viewportSize(c);
+  const free = rel(area.free);
+  return jumpOffset({
+    rect: nodeRect(node),
+    viewport: [vw, vh],
+    anchor: config.anchor,
+    scale,
+    margin: BOOKMARK_MARGIN,
+    inset: [free[0], free[1], Math.max(0, vw - free[2]), Math.max(0, vh - free[3])],
+    avoid: [...area.avoid.map(rel), ...(readDockPrefs().clearDock ? dockBoxes(c) : [])],
+    view: config.view,
+  });
+}
+
 /** Jump to a bookmark: open its graph, then move it to its anchor at its
  *  zoom. The view before the jump goes on the Back stack. */
 export function jumpTo(node: BookmarkNode): void {
@@ -582,21 +603,7 @@ export function jumpTo(node: BookmarkNode): void {
     if (!c.ds) return;
     const config = readConfig(node);
     const scale = jumpScale(config, c.ds.scale);
-    const cr = c.canvas?.getBoundingClientRect();
-    const area = freeArea(c.canvas);
-    const rel = (b: ScreenBox): ScreenBox => [b[0] - (cr?.left ?? 0), b[1] - (cr?.top ?? 0), b[2] - (cr?.left ?? 0), b[3] - (cr?.top ?? 0)];
-    const [vw, vh] = viewportSize(c);
-    const free = rel(area.free);
-    const offset = jumpOffset({
-      rect: nodeRect(node),
-      viewport: viewportSize(c),
-      anchor: config.anchor,
-      scale,
-      margin: BOOKMARK_MARGIN,
-      inset: [free[0], free[1], Math.max(0, vw - free[2]), Math.max(0, vh - free[3])],
-      avoid: [...area.avoid.map(rel), ...(readDockPrefs().clearDock ? dockBoxes(c) : [])],
-      view: config.view,
-    });
+    const offset = landingOffset(c, node, config, scale);
     animateView(c, offset, scale);
   });
   notify();
@@ -816,11 +823,12 @@ function freshConfig(node: BookmarkNode, scale?: number): BookmarkConfig {
 }
 
 /**
- * Bookmark the current view: a new bookmark at the top-left of the screen
- * with today's zoom, so jumping to it brings this exact view back. With
- * `at` (a right-click on the canvas) it goes there instead.
+ * Bookmark the current view: a new bookmark at the zoom you're at, put on
+ * screen where a jump to it will put it (the dock's chosen spot, `spot`,
+ * clear of the dock), so jumping to it brings this exact view back. With
+ * `at` (a right-click on the canvas) it goes there instead, top left.
  */
-export function addBookmarkHere(at?: readonly number[]): void {
+export function addBookmarkHere(at?: readonly number[], spot?: DockSpot): void {
   const c = canvasOf();
   const graph = c?.graph as (LiteGraphLike & { add?: (n: unknown) => void }) | undefined;
   const node = liteGraph()?.createNode?.(BOOKMARK_NODE_TYPE);
@@ -830,8 +838,31 @@ export function addBookmarkHere(at?: readonly number[]): void {
   const y = at?.[1] ?? -(c.ds.offset[1] ?? 0) + BOOKMARK_MARGIN / s + TITLE_H;
   node.pos = [Math.round(x), Math.round(y)];
   graph.add(node);
-  writeConfig(node, freshConfig(node, s));
+  const config: BookmarkConfig = { ...freshConfig(node, s), anchor: at ? "tl" : spot ?? readDockPrefs().newSpot, zoomMode: "fixed" };
+  writeConfig(node, config);
+  if (!at) {
+    settleAtLanding(c, node, config);
+    // The pill sizes itself once its widget mounts: settle again then.
+    if (typeof requestAnimationFrame !== "undefined") {
+      requestAnimationFrame(() => requestAnimationFrame(() => { settleAtLanding(c, node, config); c.setDirty?.(true, true); }));
+    }
+  }
   c.setDirty?.(true, true);
+}
+
+/** Moves a bookmark to where a jump to it would put it in the view on screen
+ *  now, so the jump leaves the view as it is. The jump's offset moves by
+ *  exactly as much as the node does, apart from clearing the dock; a second
+ *  pass takes that in. */
+function settleAtLanding(c: CanvasLike, node: BookmarkNode, config: BookmarkConfig): void {
+  if (!c.ds) return;
+  for (let i = 0; i < 2; i++) {
+    const [ox, oy] = landingOffset(c, node, config, c.ds.scale);
+    const dx = ox - (c.ds.offset[0] ?? 0);
+    const dy = oy - (c.ds.offset[1] ?? 0);
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
+    node.pos = [Math.round((node.pos[0] ?? 0) + dx), Math.round((node.pos[1] ?? 0) + dy)];
+  }
 }
 
 // ── the widget ────────────────────────────────────────────────────────
@@ -1066,13 +1097,21 @@ export interface DockPrefs {
   /** Jumps keep bookmarks out from under the open dock (on), or land where
    *  they would without it, behind the dock (off). */
   clearDock: boolean;
+  /** Bookmarks as rows (list) or as icon tiles (grid). Edit mode is always
+   *  the list: the grips and eyes need the row. */
+  layout: DockLayout;
+  /** Where Bookmark this view puts the new bookmark on screen, which is also
+   *  where it lands. */
+  newSpot: DockSpot;
 }
+
+export type DockLayout = "list" | "grid";
 
 const DOCK_KEY = "wp.bookmarkDock";
 
 /** Per-viewer convenience, so browser storage (and fine when it's gone). */
 export function readDockPrefs(): DockPrefs {
-  const base: DockPrefs = { open: null, collapsed: false, spot: "tl", clearDock: true };
+  const base: DockPrefs = { open: null, collapsed: false, spot: "tl", clearDock: true, layout: "list", newSpot: "tl" };
   try {
     const raw = JSON.parse(localStorage.getItem(DOCK_KEY) ?? "null") as (Partial<DockPrefs> & { side?: unknown }) | null;
     if (!raw || typeof raw !== "object") return base;
@@ -1083,6 +1122,8 @@ export function readDockPrefs(): DockPrefs {
       collapsed: raw.collapsed === true,
       spot,
       clearDock: raw.clearDock !== false,
+      layout: raw.layout === "grid" ? "grid" : "list",
+      newSpot: BOOKMARK_ANCHORS.find((a) => a.id === raw.newSpot)?.id ?? "tl",
     };
   } catch {
     return base;

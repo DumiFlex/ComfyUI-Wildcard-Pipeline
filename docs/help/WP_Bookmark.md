@@ -29,9 +29,10 @@ A bookmark has no node frame and can't be resized: it is a small pill with its i
 ## The Bookmarks dock
 
 - **Row**: Click to jump. Number (a Step note's in its circle), icon, name and shortcut; a mark for one hidden on the canvas or inside a subgraph, OFF for a muted one.
+- **Grid / List**: Shows the bookmarks as icon tiles (number, icon in its colour, name, shortcut) that wrap three to a line, or as rows. The dock remembers your choice; edit mode always shows rows.
 - **Back**: Return to where you were before the last jump.
 - **↑ / ↓**: Step through the bookmarks that are on, in dock order.
-- **Pencil**: Edit mode: drag the dock by its header and it snaps to the nearest spot of a 3×3 grid on the free canvas (a dashed outline shows where); drag the grips to reorder, the eye shows or hides a bookmark on the canvas, and Bookmark this view adds one. Land clear of the dock (on by default) moves a jump out from under the dock; off, bookmarks land where they would without it, behind the see-through dock. Done goes back. The dock follows the layout (side panels, the bottom panel, the top bar, the minimap and zoom controls, a floating run bar) and stays put when the job progress panel, the error card, a toast or a menu pops up; those float over it.
+- **Pencil**: Edit mode: drag the dock by its header and it snaps to the nearest spot of a 3×3 grid on the free canvas (a dashed outline shows where); drag the grips to reorder, the eye shows or hides a bookmark on the canvas, and Bookmark this view adds one at the zoom you're at: the small 3×3 grid beside it picks where on screen the new bookmark sits, and it lands there, so jumping to it brings back that exact view. Land clear of the dock (on by default) moves a jump out from under the dock; off, bookmarks land where they would without it, behind the see-through dock. Done goes back. The dock follows the layout (side panels, the bottom panel, the top bar, the minimap and zoom controls, a floating run bar) and stays put when the job progress panel, the error card, a toast or a menu pops up; those float over it.
 <!-- fields:end -->
 
 ## Shortcut clashes
