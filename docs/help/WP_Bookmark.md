@@ -5,7 +5,7 @@ Marks a spot on the canvas so you can jump back to it with a shortcut or from th
 ## Adding one
 
 - From the node search (`WP Bookmark`), or right-click the empty canvas › **Add WP Bookmark here**.
-- **Bookmark this view** (in the dock's edit mode, or as a command) adds one at the top-left of the screen with the zoom you're at, so jumping to it brings back this exact view.
+- **Bookmark this view** (in the dock's edit mode, or as a command) adds one that stores the view on screen and the zoom you're at, so jumping to it brings back this exact view.
 - A new bookmark gets the first free shortcut (Alt+1, Alt+2…).
 
 A **WP Note** can be a bookmark too: turn on **Also a bookmark** in its editor (see WP Note). It gets the same settings and shows in the dock, but never hides.
@@ -32,7 +32,7 @@ A bookmark has no node frame and can't be resized: it is a small pill with its i
 - **Grid / List**: Shows the bookmarks as small tiles (number, icon in its colour, name, shortcut with Shift as ⇧; the tooltip has the full name and keys) that wrap four to a line, or as rows. The dock remembers your choice; edit mode always shows rows.
 - **Back**: Return to where you were before the last jump.
 - **↑ / ↓**: Step through the bookmarks that are on, in dock order.
-- **Pencil**: Edit mode: drag the dock by its header and it snaps to the nearest spot of a 3×3 grid on the free canvas (a dashed outline shows where); drag the grips to reorder, the eye shows or hides a bookmark on the canvas, and Bookmark this view adds one at the zoom you're at: the small 3×3 grid beside it picks where on screen the new bookmark sits, and it lands there, so jumping to it brings back that exact view. Land clear of the dock (on by default) moves a jump out from under the dock; off, bookmarks land where they would without it, behind the see-through dock. Done goes back. The dock follows the layout (side panels, the bottom panel, the top bar, the minimap and zoom controls, a floating run bar) and stays put when the job progress panel, the error card, a toast or a menu pops up; those float over it.
+- **Pencil**: Edit mode: drag the dock by its header and it snaps to the nearest spot of a 3×3 grid on the free canvas (a dashed outline shows where); drag the grips to reorder, the eye shows or hides a bookmark on the canvas, and Bookmark this view adds one that stores the view on screen and its zoom (Use this view), so jumping to it brings back that exact view wherever the bookmark sits; the small 3×3 grid beside it picks where on screen the new bookmark goes. Land clear of the dock (on by default) moves a jump out from under the dock; off, bookmarks land where they would without it, behind the see-through dock. Done goes back. The dock follows the layout (side panels, the bottom panel, the top bar, the minimap and zoom controls, a floating run bar) and stays put when the job progress panel, the error card, a toast or a menu pops up; those float over it.
 <!-- fields:end -->
 
 ## Shortcut clashes

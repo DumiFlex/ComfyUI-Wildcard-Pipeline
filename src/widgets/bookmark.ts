@@ -565,11 +565,11 @@ function showGraph(c: CanvasLike, graph: LiteGraphLike | null | undefined, then:
   setTimeout(then, 50);
 }
 
-/** The node's box on the canvas. `fresh`: from where it is now, never the
+/** The node's box on the canvas, from where it is now rather than the
  *  `boundingRect` cached at its last draw (a node just added or just moved
  *  has not been drawn there yet; a new one's cache is still [0, 0, …]). */
-function nodeRect(node: BookmarkNode, fresh = false): [number, number, number, number] {
-  const b = fresh ? safeBounding(node) : node.boundingRect;
+function nodeRect(node: BookmarkNode): [number, number, number, number] {
+  const b = safeBounding(node) ?? node.boundingRect;
   if (b && b.length >= 4) return [b[0] ?? 0, b[1] ?? 0, b[2] ?? 0, b[3] ?? 0];
   const [x = 0, y = 0] = node.pos;
   const [w = 0, h = 0] = node.size;
@@ -587,14 +587,14 @@ function safeBounding(node: BookmarkNode): ArrayLike<number> | undefined {
 /** Where a jump to `node` puts the view (its offset) at `scale`: its spot of
  *  the free screen, clear of the minimap, zoom controls and (switch on) the
  *  dock. */
-function landingOffset(c: CanvasLike, node: BookmarkNode, config: BookmarkConfig, scale: number, fresh = false): [number, number] {
+function landingOffset(c: CanvasLike, rect: readonly [number, number, number, number], config: BookmarkConfig, scale: number): [number, number] {
   const cr = c.canvas?.getBoundingClientRect();
   const area = freeArea(c.canvas);
   const rel = (b: ScreenBox): ScreenBox => [b[0] - (cr?.left ?? 0), b[1] - (cr?.top ?? 0), b[2] - (cr?.left ?? 0), b[3] - (cr?.top ?? 0)];
   const [vw, vh] = viewportSize(c);
   const free = rel(area.free);
   return jumpOffset({
-    rect: nodeRect(node, fresh),
+    rect,
     viewport: [vw, vh],
     anchor: config.anchor,
     scale,
@@ -617,7 +617,7 @@ export function jumpTo(node: BookmarkNode): void {
     if (!c.ds) return;
     const config = readConfig(node);
     const scale = jumpScale(config, c.ds.scale);
-    const offset = landingOffset(c, node, config, scale);
+    const offset = landingOffset(c, nodeRect(node), config, scale);
     animateView(c, offset, scale);
   });
   notify();
@@ -837,10 +837,15 @@ function freshConfig(node: BookmarkNode, scale?: number): BookmarkConfig {
 }
 
 /**
- * Bookmark the current view: a new bookmark at the zoom you're at, put on
- * screen where a jump to it will put it (the dock's chosen spot, `spot`,
- * clear of the dock), so jumping to it brings this exact view back. With
- * `at` (a right-click on the canvas) it goes there instead, top left.
+ * Bookmark the current view: a new bookmark that stores this view itself
+ * (its middle point, "Use this view") at the zoom you're at, so a jump to it
+ * brings this exact view back wherever the bookmark sits. It is put at the
+ * dock's chosen spot of the screen (`spot`), clear of the dock. With `at` (a
+ * right-click on the canvas) it goes there instead and lands top left.
+ *
+ * The node is placed before it joins the graph: once added, the Vue node
+ * renderer keeps its own copy of the position and a later write to
+ * `node.pos` doesn't stick, so nothing may depend on moving it after.
  */
 export function addBookmarkHere(at?: readonly number[], spot?: DockSpot): void {
   const c = canvasOf();
@@ -848,40 +853,32 @@ export function addBookmarkHere(at?: readonly number[], spot?: DockSpot): void {
   const node = liteGraph()?.createNode?.(BOOKMARK_NODE_TYPE);
   if (!c?.ds || !graph?.add || !node) return;
   const s = c.ds.scale;
-  const x = at?.[0] ?? -(c.ds.offset[0] ?? 0) + BOOKMARK_MARGIN / s;
-  const y = at?.[1] ?? -(c.ds.offset[1] ?? 0) + BOOKMARK_MARGIN / s + TITLE_H;
-  node.pos = [Math.round(x), Math.round(y)];
-  graph.add(node);
-  const config: BookmarkConfig = { ...freshConfig(node, s), anchor: at ? "tl" : spot ?? readDockPrefs().newSpot, zoomMode: "fixed" };
+  const fresh = freshConfig(node, s);
+  let config: BookmarkConfig;
+  if (at) {
+    node.pos = [Math.round(at[0] ?? 0), Math.round(at[1] ?? 0)];
+    config = { ...fresh, anchor: "tl", zoomMode: "fixed" };
+  } else {
+    const where = spot ?? readDockPrefs().newSpot;
+    // Where a jump to `where` would put a pill-sized box, on the view as it
+    // is now: the jump's offset moves by as much as the box does.
+    const [w = PILL_GUESS[0], h = PILL_GUESS[1]] = node.size;
+    const box: [number, number, number, number] = [0, 0, Math.min(w, PILL_GUESS[0]), Math.min(h, PILL_GUESS[1])];
+    const [ox, oy] = landingOffset(c, box, { ...fresh, anchor: where, view: null }, s);
+    node.pos = [Math.round(ox - (c.ds.offset[0] ?? 0)), Math.round(oy - (c.ds.offset[1] ?? 0))];
+    config = { ...fresh, anchor: "custom", view: currentViewPoint(), zoomMode: "fixed" };
+  }
   // Set up here: the widget must not reset it to a fresh config or open
-  // its editor (a bigger node than the pill this placement sizes for).
+  // its editor.
   if (!at) preset.add(node);
   writeConfig(node, config);
-  if (!at) {
-    settleAtLanding(c, node, config);
-    // The pill sizes itself once its widget mounts: settle again then.
-    if (typeof requestAnimationFrame !== "undefined") {
-      requestAnimationFrame(() => requestAnimationFrame(() => { settleAtLanding(c, node, config); c.setDirty?.(true, true); }));
-    }
-  }
+  graph.add(node);
   c.setDirty?.(true, true);
 }
 
-/** Moves a bookmark to where a jump to it would put it in the view on screen
- *  now, so the jump leaves the view as it is. The jump's offset moves by
- *  exactly as much as the node does, apart from clearing the dock; a second
- *  pass takes that in. */
-function settleAtLanding(c: CanvasLike, node: BookmarkNode, config: BookmarkConfig): void {
-  if (!c.ds) return;
-  for (let i = 0; i < 2; i++) {
-    // At the zoom the jump will use (the stored one, rounded to 0.01).
-    const [ox, oy] = landingOffset(c, node, config, jumpScale(config, c.ds.scale), true);
-    const dx = ox - (c.ds.offset[0] ?? 0);
-    const dy = oy - (c.ds.offset[1] ?? 0);
-    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
-    node.pos = [Math.round((node.pos[0] ?? 0) + dx), Math.round((node.pos[1] ?? 0) + dy)];
-  }
-}
+/** About a new bookmark pill's size, to place it before it has measured
+ *  itself. */
+const PILL_GUESS: readonly [number, number] = [240, 30];
 
 // ── the widget ────────────────────────────────────────────────────────
 

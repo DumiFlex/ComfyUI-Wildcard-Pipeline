@@ -347,32 +347,43 @@ describe("Bookmark this view", () => {
     delete (globalThis as { LiteGraph?: unknown }).LiteGraph;
   });
 
-  it.each(["tl", "c", "br"] as const)("sits where a jump puts it (%s, clear of the dock), so the jump keeps the view", (spot) => {
+  it.each(["tl", "c", "br"] as const)("stores the view itself and sits at the %s spot, clear of the dock", (spot) => {
     canvas.ds.offset = [-500, -200];
     canvas.ds.scale = 1.5;
     addBookmarkHere(undefined, spot);
     const b = listBookmarks()[0];
-    expect(b?.config.anchor).toBe(spot);
+    expect(b?.config.anchor).toBe("custom");
+    expect(b?.config.view).toEqual({ x: Math.round(500 / 1.5 + 500), y: Math.round(400 / 1.5 + 200) });
     expect(b?.config.zoom).toBe(1.5);
     const sx = ((b?.node.pos[0] ?? 0) + ox()) * 1.5;
     const sy = ((b?.node.pos[1] ?? 0) + oy()) * 1.5;
-    // On screen and not under the dock.
+    // On screen, at its spot, and not under the dock.
     expect(sx >= 300 || sy >= 400).toBe(true);
-    // ComfyUI draws it before you can jump, which refreshes its cache.
-    const node = b?.node as (BookmarkNode & { getBounding(): number[] }) | undefined;
-    if (node) {
-      node.boundingRect = node.getBounding();
-      jumpTo(node);
-    }
+    if (spot === "br") expect(sx > 500 && sy > 400).toBe(true);
+    if (spot === "c") expect(Math.abs(sx + 120 * 1.5 - 500)).toBeLessThan(60);
+    // Pan away; the jump brings this exact view back, wherever the node is.
+    canvas.ds.offset = [900, 900];
+    canvas.ds.scale = 0.5;
+    if (b) jumpTo(b.node);
     expect(ox()).toBeCloseTo(-500, 0);
     expect(oy()).toBeCloseTo(-200, 0);
     expect(canvas.ds.scale).toBe(1.5);
   });
 
+  it("places the node before it joins the graph (the Vue renderer ignores later moves)", () => {
+    canvas.ds.offset = [-500, -200];
+    let atAdd: number[] = [];
+    Object.assign(root, { add: (node: { pos: number[] }) => { atAdd = [...node.pos]; root._nodes.push(node); } });
+    addBookmarkHere(undefined, "c");
+    expect(atAdd).toEqual([...(listBookmarks()[0]?.node.pos ?? [])]);
+  });
+
   it("uses the dock's chosen spot", () => {
-    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ newSpot: "tr" }));
+    localStorage.setItem("wp.bookmarkDock", JSON.stringify({ newSpot: "br", clearDock: false }));
     addBookmarkHere();
-    expect(listBookmarks()[0]?.config.anchor).toBe("tr");
+    const n = listBookmarks()[0]?.node;
+    expect((n?.pos[0] ?? 0) + ox()).toBeGreaterThan(500);
+    expect((n?.pos[1] ?? 0) + oy()).toBeGreaterThan(400);
   });
 });
 
