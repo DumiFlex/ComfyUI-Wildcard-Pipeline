@@ -117,7 +117,7 @@ tutorial(
     await t.h.step("The shortcut", async () => {
       const rec = t.node(bm).locator('[data-test="bm-record"]');
       await t.callout("key", rec, "Its shortcut", 4);
-      await t.say("A new bookmark gets the first free Alt shortcut, shown here. Click it and press other keys to record one: Escape cancels, Backspace clears.");
+      await t.say("A new bookmark gets the first free shortcut, shown here. Click it and press other keys to record one: Escape cancels, Backspace clears.");
       await t.waitVoice();
       await t.uncallout("key");
       await t.callout("bolt", t.node(bm).locator('[data-test="bm-suggest"]'), "A free one", 4);
@@ -127,7 +127,7 @@ tutorial(
       await t.say("Every key is checked against ComfyUI's shortcuts, other extensions, and other bookmarks. A clash shows a warning here and on the pill, so you can pick another.");
       await t.waitVoice();
       // Its keys are drawn as separate caps ("Alt 1"): join them the way Playwright names a chord.
-      shortcut = ((await rec.innerText().catch(() => "")) || "").split(/[\s+]+/).filter(Boolean).join("+");
+      shortcut = ((await rec.innerText().catch(() => "")) || "").split(/[\s+]+/).filter(Boolean).map((k) => (k === "Ctrl" ? "Control" : k === "⇧" ? "Shift" : k)).join("+");
     });
 
     await t.h.step("Show on canvas, Pinned, Go and Done", async () => {
