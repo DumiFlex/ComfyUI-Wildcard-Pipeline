@@ -52,6 +52,7 @@ const {
   loadBookmarkDock,
   loadNodeHelp,
   nodeToolbarMod,
+  runErrorsMod,
 } = await import("./boot");
 
 // Singleton toast container — one Vue app mounted to a body-level div renders
@@ -121,6 +122,13 @@ imageFilterMod.installImageFilter(
       createApp(m.default).mount(root);
     });
   },
+);
+
+// A WP node that stops the run shows why on the node and in a toast; some
+// frontends only flash "Job failed" (see extension/run-errors.ts).
+runErrorsMod.installRunErrors(
+  (app as unknown as { api?: Parameters<typeof runErrorsMod.installRunErrors>[0] }).api,
+  (id) => runErrorsMod.nodeForExecutionId((app as unknown as { graph?: Parameters<typeof runErrorsMod.nodeForExecutionId>[0] }).graph, id),
 );
 
 // Global clipboard shield. WP modals Teleport to <body>, so their editable

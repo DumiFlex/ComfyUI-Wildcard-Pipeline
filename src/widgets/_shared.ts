@@ -5,6 +5,53 @@ import { isVueNodes } from "../extension/renderer";
 import { installClipboardShield } from "./clipboard-shield";
 import { registerOverlapClip } from "./dom-clip";
 import { installWheelShield } from "./wheel-shield";
+import { clearRunError, runErrorOf } from "../extension/run-errors";
+
+const Banner = defineAsyncComponent(() => import("@/kit/Banner.vue"));
+
+/**
+ * Wrap a widget's component so it shows the node's run error above itself
+ * (see `extension/run-errors.ts`). Only the node's first widget host shows
+ * it, so a node with two WP widgets gets one strip. A filling widget gets
+ * it laid over its top edge, since its content already fills the box.
+ */
+function withRunError<P>(node: MountTargetNode, host: HTMLElement, inner: Component<P>, overlay: boolean): Component<P> {
+  return defineComponent({
+    inheritAttrs: false,
+    setup(_, { attrs }) {
+      return () => {
+        const err = runErrorOf(node);
+        const first = err ? nodeWidgetHosts.get(node)?.values().next().value === host : false;
+        const strip = err && first
+          ? h(
+              "div",
+              {
+                class: "wp-run-error",
+                style: overlay
+                  ? { position: "absolute", top: "0", left: "0", right: "0", zIndex: "5" }
+                  : { marginBottom: "6px" },
+                "data-test": "wp-run-error", "data-wp-part": "run-error", "data-wp-part-label": "Run error" },
+              [
+                h(
+                  Banner,
+                  {
+                    tone: "danger",
+                    size: "sm",
+                    title: "Stopped the run",
+                    dismissible: true,
+                    dismissLabel: "Hide this error",
+                    onDismiss: () => clearRunError(node),
+                  },
+                  { default: () => err.message },
+                ),
+              ],
+            )
+          : null;
+        return [strip, h(inner as Component, attrs)];
+      };
+    },
+  }) as unknown as Component<P>;
+}
 
 export interface DomWidget {
   element: HTMLElement;
@@ -107,6 +154,12 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
    * Omitted → the host creates its own (`host.scope`).
    */
   scope?: EffectScope;
+  /**
+   * The node shows its own run error (Var → Choice paints its last-execute
+   * row). Otherwise the node's first widget host draws a danger strip above
+   * its content while `runErrorOf(node)` holds a message.
+   */
+  ownRunError?: boolean;
 }
 
 /**
@@ -382,6 +435,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
     inner.style.bottom = "0";
   }
   host.appendChild(inner);
+  if (!mirror && !options.ownRunError) component = withRunError(node, host, component, options.fillHost === true);
 
   // Clipboard-shortcut shield (on-node inputs). Stops Ctrl+A/C/X/V/Z/Y +
   // copy/cut/paste from bubbling out of the widget to ComfyUI's canvas

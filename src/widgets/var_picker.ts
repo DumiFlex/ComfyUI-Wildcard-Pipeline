@@ -29,6 +29,7 @@ import {
 import { reactiveFromGraph } from "../extension/reactive";
 import { describeChoiceTargets, fallbackChoices, findChoiceTargets } from "../extension/choice-targets";
 import { pushToast } from "../components/shared/toast-store";
+import { runErrorOf } from "../extension/run-errors";
 
 const VarPicker = defineAsyncComponent(() => import("../components/var-picker/VarPicker.vue"));
 
@@ -190,6 +191,8 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
           wiredTo: wiredTo?.value ?? "",
           choiceNote: hasExecuted.value ? choiceNote.value : "",
           executed: hasExecuted.value,
+          // Only Var → Choice stops a run; it paints its own row for it.
+          runError: isChoice ? runErrorOf(node)?.message ?? "" : "",
           "onUpdate:modelValue": onUpdate,
         });
     },
@@ -206,6 +209,7 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
       currentVar.value = v;
     },
     minHeight: isChoice ? 106 : 92,
+    ownRunError: isChoice,
     minWidth: 260,
   });
 

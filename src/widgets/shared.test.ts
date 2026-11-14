@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { defineComponent, h } from "vue";
+import { describe, it, expect, vi } from "vitest";
+import { defineComponent, h, nextTick } from "vue";
+import { flushPromises } from "@vue/test-utils";
+import { clearRunError, setRunError } from "../extension/run-errors";
 import type { ModuleEntry, ContextWidgetValue } from "./_shared";
 import { createDomWidgetHost, parseWidgetJson, parseWidgetJsonWithRecovery, serializeWidgetJson } from "./_shared";
 
@@ -16,6 +18,31 @@ describe("createDomWidgetHost", () => {
     expect(element.querySelector(".hi")?.textContent).toBe("ok");
     unmount();
     expect(element.querySelector(".hi")).toBeNull();
+  });
+
+  it("shows the node's run error above its first widget only, and drops it on close", async () => {
+    const Hello = defineComponent({ setup: () => () => h("span", { class: "hi" }, "body") });
+    const fakeNode = { addDOMWidget: (_n: string, _t: string, el: HTMLElement) => ({ element: el }) };
+    const a = createDomWidgetHost(fakeNode, "one", Hello, {});
+    const b = createDomWidgetHost(fakeNode, "two", Hello, {});
+    const own = createDomWidgetHost(fakeNode, "three", Hello, { ownRunError: true });
+    expect(a.element.querySelector('[data-test="wp-run-error"]')).toBeNull();
+    setRunError(fakeNode, "WP Context: Invalid modules JSON");
+    await vi.waitFor(() => expect(a.element.querySelector('[data-test="wp-run-error"]')?.textContent).toContain("Invalid modules JSON"));
+    await flushPromises();
+    const strip = a.element.querySelector('[data-test="wp-run-error"]');
+    expect(strip?.textContent).toContain("Invalid modules JSON");
+    expect(strip?.textContent).not.toContain("WP Context:");
+    expect(a.element.querySelector(".hi")?.textContent).toBe("body");
+    expect(b.element.querySelector('[data-test="wp-run-error"]')).toBeNull();
+    expect(own.element.querySelector('[data-test="wp-run-error"]')).toBeNull();
+    strip?.querySelector<HTMLButtonElement>("button")?.click();
+    await nextTick();
+    expect(a.element.querySelector('[data-test="wp-run-error"]')).toBeNull();
+    clearRunError(fakeNode);
+    a.unmount();
+    b.unmount();
+    own.unmount();
   });
 
   it("stops Ctrl+V / Ctrl+C / Ctrl+X / Ctrl+A from bubbling out when target is editable", () => {

@@ -397,7 +397,9 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // total at ~701.5 KB.
 // RAISED 715 -> 720 KB on 2026-11-14 for the Bookmarks dock grid mode
 // (DockTile), its shared SpotGrid and Bookmark this view's spot choice put
-// the total at ~715.6 KB.
+// the total at ~715.6 KB. Run errors on WP nodes (the execution_error
+// listener, the strip every widget host can draw and the Var → Choice red
+// row, 14/11/2026) put it at ~717.5 KB.
 const TOTAL_LIMIT = 720 * 1024;     // 720 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a

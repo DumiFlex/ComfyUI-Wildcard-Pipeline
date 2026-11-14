@@ -9,7 +9,7 @@ Reads a `$variable` from the upstream Context and sends it into a dropdown input
 - **var_name** `variable`: The $variable to read. The list shows every variable the wired Context has.
 - **match** `COMBO`: How close the text must be to an option: exact, loose (the default) or closest. See below.
 - **fallback** `COMBO`: A dropdown of the options of the input it's wired into, filled when you connect it. Used when nothing matches or the variable is empty. (first option) means the first option in the list.
-- **if_no_match** `COMBO`: use fallback carries on with the fallback and warns you. stop the run stops here and lists some of the options.
+- **if_no_match** `COMBO`: use fallback carries on with the fallback and warns you. stop the run stops here and lists some of the options: the reason shows in red on the node and in a message.
 - **choice (out)** `any`: Wire it into a dropdown input: ckpt_name, sampler_name, scheduler, vae_name, lora_name and so on. The line under the picker names what it feeds and how many options that has.
 <!-- fields:end -->
 
