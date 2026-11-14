@@ -215,7 +215,11 @@ tutorial(
       }
       await t.click(open);
       await t.beat(800);
-      const reasons = win.locator(".wp-cleaner-run__reasons").filter({ visible: true }).first();
+      // The opened rule's own reasons: closed rules keep their clipped lists in the DOM too.
+      const reasons = open
+        .locator("xpath=ancestor::*[.//ul[contains(@class,'wp-cleaner-run__reasons')]][1]")
+        .locator(".wp-cleaner-run__reasons")
+        .first();
       if (!(await reasons.isVisible().catch(() => false))) throw new StepError("The opened rule shows no reasons.");
       {
         await t.callout("why", (await reasons.locator("li").all()).slice(0, 4), "What went, and why", 5);
