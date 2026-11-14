@@ -51,6 +51,9 @@ export interface BookmarkNode extends MountTargetNode {
   graph?: LiteGraphLike | null;
   widgets?: { name?: string; value?: unknown }[];
   boundingRect?: ArrayLike<number>;
+  /** LiteGraph's own bounds, worked out from `pos` and `size` now (title
+   *  included). `boundingRect` is only refreshed when the node is drawn. */
+  getBounding?: (out?: Float32Array, includeExternal?: boolean) => ArrayLike<number>;
   setDirtyCanvas?: (fg: boolean, bg?: boolean) => void;
 }
 
@@ -562,25 +565,36 @@ function showGraph(c: CanvasLike, graph: LiteGraphLike | null | undefined, then:
   setTimeout(then, 50);
 }
 
-function nodeRect(node: BookmarkNode): [number, number, number, number] {
-  const b = node.boundingRect;
+/** The node's box on the canvas. `fresh`: from where it is now, never the
+ *  `boundingRect` cached at its last draw (a node just added or just moved
+ *  has not been drawn there yet; a new one's cache is still [0, 0, …]). */
+function nodeRect(node: BookmarkNode, fresh = false): [number, number, number, number] {
+  const b = fresh ? safeBounding(node) : node.boundingRect;
   if (b && b.length >= 4) return [b[0] ?? 0, b[1] ?? 0, b[2] ?? 0, b[3] ?? 0];
   const [x = 0, y = 0] = node.pos;
   const [w = 0, h = 0] = node.size;
   return [x, y - TITLE_H, w, h + TITLE_H];
 }
 
+function safeBounding(node: BookmarkNode): ArrayLike<number> | undefined {
+  try {
+    return node.getBounding?.(new Float32Array(4));
+  } catch {
+    return undefined;
+  }
+}
+
 /** Where a jump to `node` puts the view (its offset) at `scale`: its spot of
  *  the free screen, clear of the minimap, zoom controls and (switch on) the
  *  dock. */
-function landingOffset(c: CanvasLike, node: BookmarkNode, config: BookmarkConfig, scale: number): [number, number] {
+function landingOffset(c: CanvasLike, node: BookmarkNode, config: BookmarkConfig, scale: number, fresh = false): [number, number] {
   const cr = c.canvas?.getBoundingClientRect();
   const area = freeArea(c.canvas);
   const rel = (b: ScreenBox): ScreenBox => [b[0] - (cr?.left ?? 0), b[1] - (cr?.top ?? 0), b[2] - (cr?.left ?? 0), b[3] - (cr?.top ?? 0)];
   const [vw, vh] = viewportSize(c);
   const free = rel(area.free);
   return jumpOffset({
-    rect: nodeRect(node),
+    rect: nodeRect(node, fresh),
     viewport: [vw, vh],
     anchor: config.anchor,
     scale,
@@ -857,7 +871,8 @@ export function addBookmarkHere(at?: readonly number[], spot?: DockSpot): void {
 function settleAtLanding(c: CanvasLike, node: BookmarkNode, config: BookmarkConfig): void {
   if (!c.ds) return;
   for (let i = 0; i < 2; i++) {
-    const [ox, oy] = landingOffset(c, node, config, c.ds.scale);
+    // At the zoom the jump will use (the stored one, rounded to 0.01).
+    const [ox, oy] = landingOffset(c, node, config, jumpScale(config, c.ds.scale), true);
     const dx = ox - (c.ds.offset[0] ?? 0);
     const dy = oy - (c.ds.offset[1] ?? 0);
     if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
