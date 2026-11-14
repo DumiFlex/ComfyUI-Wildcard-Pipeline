@@ -14,6 +14,7 @@ import WpIconButton from "@/kit/WpIconButton.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import DockRow from "./DockRow.vue";
 import DockTile from "./DockTile.vue";
+import SpotGrid from "./SpotGrid.vue";
 import {
   addBookmarkHere,
   canGoBack,
@@ -33,7 +34,7 @@ import {
   type BookmarkEntry,
   type DockPrefs,
 } from "../../widgets/bookmark";
-import { nearestSpot, spotPosition, type ScreenBox } from "../../extension/bookmarks";
+import { BOOKMARK_ANCHORS, nearestSpot, spotPosition, type BookmarkAnchor, type DockSpot, type ScreenBox } from "../../extension/bookmarks";
 
 const emit = defineEmits<{ (e: "close"): void }>();
 
@@ -144,33 +145,61 @@ watch(() => [prefs.value.collapsed, prefs.value.layout, entries.value.length, ed
 let dragging = false;
 let grab = { dx: 0, dy: 0 };
 const ghost = ref<{ x: number; y: number; w: number; h: number } | null>(null);
+/** The free area and the dock's size, read once when the drag starts: the
+ *  scan walks the screen with `elementsFromPoint`, far too slow for every
+ *  pointer move, and nothing it reads moves during a drag. */
+let dragArea: { free: ScreenBox; avoid: ScreenBox[] } | null = null;
+let dragSize: [number, number] = [300, 40];
+/** The latest pointer, drawn once per frame. */
+let pending: { x: number; y: number } | null = null;
+/** Drawn solid while it moves: the see-through blur repaints the canvas
+ *  under it on every frame. */
+const moving = ref(false);
+let frame = 0;
 function onHeadDown(e: PointerEvent): void {
   if (!editing.value || e.button !== 0) return;
   if ((e.target as HTMLElement).closest("button, input, a")) return;
   dragging = true;
+  dragArea = area();
+  dragSize = size();
+  moving.value = true;
   grab = { dx: e.clientX - box.value.x, dy: e.clientY - box.value.y };
   (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   e.preventDefault();
 }
+function drawDrag(): void {
+  frame = 0;
+  if (!dragging || !pending || !dragArea) return;
+  const [w, h] = dragSize;
+  const x = Math.min(Math.max(0, pending.x - grab.dx), window.innerWidth - w);
+  const y = Math.min(Math.max(0, pending.y - grab.dy), window.innerHeight - Math.min(h, 60));
+  box.value = { x, y };
+  const { free, avoid } = dragArea;
+  const spot = nearestSpot([x, y], free, [w, h], GAP);
+  const [gx, gy] = spotPosition(spot, free, [w, h], avoid, GAP);
+  if (!ghost.value || ghost.value.x !== gx || ghost.value.y !== gy) ghost.value = { x: gx, y: gy, w, h };
+}
 function onHeadMove(e: PointerEvent): void {
   if (!dragging) return;
-  const [w, h] = size();
-  const x = Math.min(Math.max(0, e.clientX - grab.dx), window.innerWidth - w);
-  const y = Math.min(Math.max(0, e.clientY - grab.dy), window.innerHeight - Math.min(h, 60));
-  box.value = { x, y };
-  const { free, avoid } = area();
-  const [gx, gy] = spotPosition(nearestSpot([x, y], free, [w, h], GAP), free, [w, h], avoid, GAP);
-  ghost.value = { x: gx, y: gy, w, h };
+  pending = { x: e.clientX, y: e.clientY };
+  if (!frame) frame = requestAnimationFrame(drawDrag);
 }
 function onHeadUp(): void {
   if (!dragging) return;
+  if (frame) cancelAnimationFrame(frame);
+  frame = 0;
+  drawDrag();
   dragging = false;
+  pending = null;
+  moving.value = false;
   ghost.value = null;
-  const { free } = area();
-  savePrefs({ spot: nearestSpot([box.value.x, box.value.y], free, size(), GAP) });
+  const free = dragArea?.free ?? area().free;
+  dragArea = null;
+  savePrefs({ spot: nearestSpot([box.value.x, box.value.y], free, dragSize, GAP) });
   place();
 }
 
+const spotName = computed(() => BOOKMARK_ANCHORS.find((a) => a.id === prefs.value.newSpot)?.label ?? "Top left");
 const shown = computed(() => entries.value.length);
 const hiddenCount = computed(() => entries.value.filter((b) => b.config.hidden).length);
 
@@ -195,7 +224,7 @@ function close(): void {
   <section
     ref="root"
     class="wp-bmdock"
-    :class="{ 'wp-bmdock--collapsed': prefs.collapsed, 'wp-bmdock--editing': editing }"
+    :class="{ 'wp-bmdock--collapsed': prefs.collapsed, 'wp-bmdock--editing': editing, 'wp-bmdock--moving': moving }"
     :style="style"
     aria-label="Bookmarks"
     data-test="bm-dock"
@@ -283,17 +312,29 @@ function close(): void {
         data-test="bm-dock-clear"
         @update:model-value="savePrefs({ clearDock: $event })"
       />
-      <Button
-        v-if="editing || !shown"
-        variant="add"
-        size="sm"
-        block
-        icon="pi-plus"
-        data-test="bm-dock-add"
-        @click="addBookmarkHere()"
-      >
-        Bookmark this view
-      </Button>
+      <div v-if="editing || !shown" class="wp-bmdock__add">
+        <SpotGrid
+          v-if="editing"
+          :model-value="prefs.newSpot"
+          label="Where Bookmark this view puts the new bookmark on screen"
+          test-prefix="bm-dock-spot"
+          @update:model-value="(a: BookmarkAnchor) => savePrefs({ newSpot: a as DockSpot })"
+        />
+        <div class="wp-bmdock__add-main">
+          <span v-if="editing" class="wp-bmdock__add-note" data-test="bm-dock-spot-name">New bookmark lands at: {{ spotName }}</span>
+          <Button
+            variant="add"
+            size="sm"
+            block
+            icon="pi-plus"
+            :hint="`Bookmarks the view on screen. The new bookmark sits ${spotName.toLowerCase()} and lands there, so the jump brings this view back.`"
+            data-test="bm-dock-add"
+            @click="addBookmarkHere(undefined, prefs.newSpot)"
+          >
+            Bookmark this view
+          </Button>
+        </div>
+      </div>
     </div>
   </section>
   <div
@@ -328,6 +369,7 @@ function close(): void {
 .wp-bmdock:focus-within { background: var(--wp-bg-2); }
 .wp-bmdock--collapsed { width: auto; background: color-mix(in srgb, var(--wp-bg-2) 40%, transparent); }
 .wp-bmdock--collapsed:not(:hover, :focus-within) { opacity: 0.72; }
+.wp-bmdock--moving { backdrop-filter: none; background: var(--wp-bg-2); transition: none; will-change: left, top; }
 .wp-bmdock--editing .wp-bmdock__head { cursor: move; touch-action: none; }
 .wp-bmdock__head {
   display: flex;
@@ -364,6 +406,9 @@ function close(): void {
 /* The same air between rows in edit mode (the kit list's small size packs
    them at 2px). */
 .wp-bmdock__body :deep(.wp-sortable__list) { gap: 5px; }
+.wp-bmdock__add { display: flex; align-items: center; gap: 6px; }
+.wp-bmdock__add-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wp-bmdock__add-note { color: var(--wp-text-dim); font-size: 11px; }
 .wp-bmdock__clear { align-self: flex-start; margin: 2px 2px 0; }
 .wp-bmdock__empty { margin: 4px 2px; color: var(--wp-text-dim); }
 .wp-bmdock-ghost {
