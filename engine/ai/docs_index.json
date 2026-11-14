@@ -70,6 +70,52 @@
    ]
   },
   {
+   "id": "videos",
+   "title": "Video tutorials",
+   "group": "overview",
+   "blurb": "Every feature shown on the real canvas and manager, in six YouTube playlists.",
+   "keywords": [
+    "video",
+    "videos",
+    "tutorial",
+    "tutorials",
+    "youtube",
+    "playlist",
+    "watch",
+    "learn"
+   ],
+   "sections": [
+    {
+     "title": "How to watch",
+     "text": "The videos are on YouTube, one playlist per section. Get started goes from a first look to bundles in about half an hour; the other sections go deeper, one feature or node per video. Each video opens in a new tab, with chapters and English captions.\nMost docs pages show their own videos under the title, after Watch. Every video starts from the same small library: Before you start shows how to import it into an empty library, and each video's description links it.\nThe tutorial library on GitHub\nThe videos were recorded on version 2.22. A screen may look a little different on a later version."
+    },
+    {
+     "title": "Get started",
+     "text": "From a first look around to bundles, themes and autocomplete. Start here.\nPlay all 13\n- T00A first look around Introduction\n- T01Before you start: the tutorial library Quick start\n- T02Your first random prompt Quick start\n- T03Make your own wildcard Wildcard\n- T04Fixed values and combines Fixed Values\n- T05Derivations: rules that set a variable Derivation\n- T06Constraints: keep clashing picks apart Make two picks agree\n- T07Templates: save a prompt and reuse it Templates\n- T08Bundles: a whole set in one click Bundles\n- T09Working in the Context node WP Context\n- T10Make it look your way: themes and display Themes and looks\n- T11Autocomplete in every text box Chips & references\n- T12Where to find help Fix common problems"
+    },
+    {
+     "title": "Advanced",
+     "text": "Tag groups, multi-picks, rules and constraints in depth, negatives, loops, switches and subgraphs.\nPlay all 20\n- A01Tag groups: describe an option or roll one of its tags Wildcard\n- A02Pick several at once Wildcard\n- A03Wildcards inside wildcards Chips & references\n- A03bThe pool and the Advanced switch Wildcard\n- A04Reading a pick's parts Wildcard\n- A05Hold and match Keep something the same\n- A06When nothing fits: empty options and fallbacks Wildcard\n- A07Derivations in depth Derivation\n- A08The constraint matrix in depth Constraints in depth\n- A09How far a constraint reaches Constraints in depth\n- A10Negatives: send words to the negative prompt Negatives\n- A11Chaining Contexts Context chaining\n- A12The Context Injector WP Context Injector\n- A13LoRA trigger words Writing prompts for your model\n- A14Var nodes: rules that set numbers and settings WP Var → Int\n- A15Model-aware prompts Writing prompts for your model\n- A16Loops and seeds: many images in one run Make variations in one click\n- A17Switches: turn parts of a prompt on and off WP Toggles\n- A18Subgraphs: Wildcard Pipeline inside a subgraph Context chaining\n- A19Warnings on the canvas Conflicts & warnings"
+    },
+    {
+     "title": "Library",
+     "text": "The Test Runner, library health, importing packs, sharing, backups and keeping a big library tidy.\nPlay all 6\n- L01The Test Runner: see what your library rolls Test Runner\n- L02Library health: find problems early Library health\n- L03Import wildcard packs from text files Import wildcard packs\n- L04Share and publish your packs Share a pack or workflow\n- L05Backups: never lose your library Share a pack or workflow\n- L06Keep a big library tidy Library health"
+    },
+    {
+     "title": "Nodes",
+     "text": "One video per node: every field, its inputs and outputs, recipes and gotchas.\nPlay all 19\n- N01WP Context in depth WP Context\n- N02WP Prompt Assembler in depth WP Prompt Assembler\n- N03WP Debug in depth WP Debug\n- N04WP Context Injector in depth WP Context Injector\n- N05WP Context Loop in depth Per-iteration overrides\n- N06WP Seed List in depth WP Seed List\n- N07WP Toggles in depth WP Toggles\n- N08WP Node Group in depth: switch many nodes at once WP Node Group\n- N09WP Model Info in depth WP Model Info\n- N10WP Var to Int in depth WP Var → Int\n- N11WP Prompt Cleaner in depth WP Prompt Cleaner\n- N12WP Image Filter in depth: pick, paint and refine WP Image Filter\n- N13WP Label & Grid in depth: XY plots and contact sheets WP Label & Grid\n- N14WP Note in depth WP Note\n- N15WP Bookmark in depth WP Bookmark\n- N16WP Mode Relay in depth WP Mode Relay\n- N17WP Var to Float in depth WP Var → Float\n- N18WP Var to Choice in depth WP Var → Choice\n- N19WP Var to Bool in depth WP Var → Bool"
+    },
+    {
+     "title": "Examples",
+     "text": "The example workflows, built and run step by step.\nPlay all 4\n- E1Example workflow: One image Start from an example\n- E2Example workflow: Batches and grids Start from an example\n- E3Example workflow: Pick and refine Start from an example\n- E4Example workflow: Sets and stories Start from an example"
+    },
+    {
+     "title": "AI assistant",
+     "text": "Set up a model, chat, draft with AI, build packs, search the web and look up tags.\nPlay all 4\n- AI1AI assistant: set up and chat AI assistant\n- AI2AI assistant: draft with AI Draft with AI\n- AI3AI assistant: the pack builder Pack builder\n- AI4AI assistant: web search and tag lookup Web search and tag lookup"
+    }
+   ]
+  },
+  {
    "id": "test-runner",
    "title": "Test Runner",
    "group": "overview",

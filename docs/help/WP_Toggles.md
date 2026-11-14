@@ -2,6 +2,10 @@
 
 Several on/off switches in one node. Each toggle writes `$its_variable` as `true` / `false` (internal unless you turn off its globe) and can have a `BOOLEAN` output.
 
+<!-- video:start -->
+▶ **Video:** [WP Toggles in depth](https://youtu.be/LSRj9uxAOTA) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 

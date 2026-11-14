@@ -2,6 +2,10 @@
 
 A note that explains a workflow. It looks like a panel, not a node: no title bar, no frame, no sockets, in both the classic renderer and Nodes 2.0. The selection outline hugs the panel. It never runs and is left out of the prompt; its text is saved with the workflow.
 
+<!-- video:start -->
+▶ **Video:** [WP Note in depth](https://youtu.be/9ljZ5XU7o7A) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 ## Using it
 
 - **Add** it from the node search (`WP Note`). A new note opens in its editor, unpinned.

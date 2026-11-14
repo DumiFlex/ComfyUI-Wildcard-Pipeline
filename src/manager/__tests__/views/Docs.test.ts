@@ -85,9 +85,26 @@ describe("Docs.vue", () => {
   it("links the previous and next page in nav order", async () => {
     const w = await mountAt("quick-start");
     expect(w.get('[data-test="doc-prev"]').attributes("href")).toBe("/docs/introduction");
-    expect(w.get('[data-test="doc-next"]').attributes("href")).toBe("/docs/test-runner");
+    expect(w.get('[data-test="doc-next"]').attributes("href")).toBe("/docs/videos");
     const first = await mountAt("introduction");
     expect(first.find('[data-test="doc-prev"]').exists()).toBe(false);
+  });
+
+  it("shows a page's videos under its title, and none on a page without", async () => {
+    const w = await mountAt("wp-context");
+    const links = w.findAll('[data-test="doc-video"]');
+    expect(links.map((l) => l.attributes("href"))).toEqual(["https://youtu.be/wkuk_8ytG5s", "https://youtu.be/QKS46LXIZMo"]);
+    expect(links[0]?.attributes("target")).toBe("_blank");
+    expect(w.get('[data-test="doc-video-playlist"]').attributes("href")).toContain("youtube.com/playlist?list=");
+    const plain = await mountAt("glossary");
+    expect(plain.find('[data-test="doc-videos"]').exists()).toBe(false);
+  });
+
+  it("lists every video and playlist on the Video tutorials page", async () => {
+    const w = await mountAt("videos");
+    await vi.waitFor(() => expect(w.find(".wp-doc-page__title").text()).toBe("Video tutorials"));
+    expect(w.findAll('[data-test="doc-video-row"]').length).toBe(66);
+    expect(w.findAll('[data-test^="doc-playlist-"]').length).toBe(6);
   });
 
   it("gives every section an anchor id", async () => {

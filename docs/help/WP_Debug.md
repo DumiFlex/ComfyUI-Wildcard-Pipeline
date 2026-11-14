@@ -2,6 +2,10 @@
 
 See what happened at this point of the chain: every variable, which module set it, and any warnings. It has no output and changes nothing.
 
+<!-- video:start -->
+▶ **Video:** [WP Debug in depth](https://youtu.be/iwPrjMEK6kg) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## Inputs and outputs
 

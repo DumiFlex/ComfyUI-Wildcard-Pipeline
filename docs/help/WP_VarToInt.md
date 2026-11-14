@@ -2,6 +2,10 @@
 
 Reads a `$variable` from the upstream Context and emits an `INT`.
 
+<!-- video:start -->
+▶ **Video:** [WP Var to Int in depth](https://youtu.be/4HQJLkxikkg) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 

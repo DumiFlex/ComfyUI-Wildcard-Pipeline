@@ -2,6 +2,10 @@
 
 Reads a `$variable` from the upstream Context and emits a `BOOLEAN`.
 
+<!-- video:start -->
+▶ **Video:** [WP Var to Bool in depth](https://youtu.be/vVwMWvdM44I) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 

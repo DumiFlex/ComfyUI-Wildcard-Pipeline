@@ -2,6 +2,10 @@
 
 Gathers nodes so one WP Toggles switch mutes or bypasses them all. Frontend only: it never runs and is left out of the prompt.
 
+<!-- video:start -->
+▶ **Video:** [WP Node Group in depth: switch many nodes at once](https://youtu.be/rWgYvOhoT0c) · [All node videos](https://www.youtube.com/playlist?list=PLD9orcFSB7nI)
+<!-- video:end -->
+
 <!-- fields:start -->
 ## On the node
 
