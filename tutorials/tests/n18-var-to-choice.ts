@@ -3,6 +3,7 @@
 // the picker names what it feeds) and a Preview as Text: context, var_name, match (loose finds
 // dpmpp_2m, exact misses → fallback, closest), fallback, if_no_match (use fallback / stop the run),
 // choice (out), a missing variable, how it works, recipes (checkpoint, LoRA, scheduler), gotchas.
+import { StepError } from "watchwright";
 import { tutorial } from "../tutorial.js";
 import { buildVarScene, chooseCombo, pickVar, readOf, runVar, widget } from "../var-scene.js";
 
@@ -87,11 +88,15 @@ tutorial(
       await t.click(t.moduleRow(n.ctx, "Settings per model").locator('[data-test="module-enabled"]'));
       await t.beat(400);
       await t.run();
-      await t.beat(1200);
-      await t.say("The run stops at the Var node and says why. For a checkpoint that beats quietly running the wrong model. Close it, and put things back.");
+      const why = t.node(v).locator('[data-test="var-picker-run-error"]');
+      await why.waitFor({ state: "visible", timeout: 5000 }).catch(() => undefined);
+      if (!(await why.isVisible().catch(() => false))) throw new StepError("The Var node shows no reason after the stopped run.");
+      await t.callout("why", [readOf(t, v), why], "Why it stopped", 7);
+      await t.say("The run stops at the Var node. Its last run turns red and says why: the variable is empty, with some of the sampler names it had. A toast says the same.");
       await t.waitVoice();
-      await t.press("Escape");
-      await t.beat(400);
+      await t.uncallout("why");
+      await t.say("For a checkpoint, that beats quietly running the wrong model. Put things back.");
+      await t.waitVoice();
       await chooseCombo(t, v, "if_no_match", /fallback/);
       await t.click(t.moduleRow(n.ctx, "Settings per model").locator('[data-test="module-enabled"]'));
       await t.beat(400);
