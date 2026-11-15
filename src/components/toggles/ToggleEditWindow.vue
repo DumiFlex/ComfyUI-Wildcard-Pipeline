@@ -78,11 +78,14 @@ const CONTROLS = [
   { value: "bypass", label: "Bypass", hint: "Off also bypasses the nodes wired into the dot in front of the row" },
 ];
 function setControl(v: string): void {
-  patch(v ? { control: v as ToggleControl } : { control: undefined, groups: undefined });
+  patch(v ? { control: v as ToggleControl } : { control: undefined, groups: undefined, hide_dot: undefined });
 }
 function setGroups(v: string[] | string | null): void {
   const list = Array.isArray(v) ? v : [];
-  patch({ groups: list.length ? list : undefined });
+  // The first group picked for a toggle with nothing wired into its dot
+  // hides the dot: a group toggle needs no wire.
+  const first = list.length && !d.value.groups?.length && !props.controlState;
+  patch({ groups: list.length ? list : undefined, ...(first ? { hide_dot: true as const } : {}) });
 }
 
 const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
@@ -373,6 +376,21 @@ function onKey(ev: KeyboardEvent): void {
             @update:model-value="setGroups"
           />
         </div>
+        <span
+          v-if="d.control"
+          v-tooltip="d.hide_dot ? 'Only the groups above are muted or bypassed' : 'Untick for a toggle that drives only canvas groups; a wire in the dot is dropped'"
+          v-toggle-row
+          class="wp-tgr__check"
+        >
+          <Checkbox
+            :model-value="!d.hide_dot"
+            size="sm"
+            aria-label="Wire dot"
+            data-test="tg-dot"
+            @update:model-value="(v: boolean) => patch({ hide_dot: v ? undefined : true })"
+          />
+          <span aria-hidden="true">Wire dot in front of the row</span>
+        </span>
         <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" v-toggle-row class="wp-tgr__check">
           <Checkbox
             :model-value="!!d.upstream"

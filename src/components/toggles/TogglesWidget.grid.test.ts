@@ -59,6 +59,24 @@ describe("TogglesWidget Grid layout", () => {
     w.unmount();
   });
 
+  it("draws no socket line for a group toggle with its dot hidden", () => {
+    const c = cfg("any");
+    c.rows = [
+      row("00000001", "Sliders", false, { control: "bypass", groups: ["Sliders"], hide_dot: true }),
+      row("00000002", "Style", false, { control: "bypass", groups: ["Style"], hide_dot: true }),
+      row("00000003", "Pose", false, { control: "bypass" }),
+    ];
+    const w = mount(TogglesWidget, { props: { modelValue: c } });
+    const lines = w.findAll('[data-test^="tg-sockline-top-"]');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.attributes("data-wp-socket")).toBe(ctlInputName("00000003"));
+    c.rows = c.rows.slice(0, 2);
+    const none = mount(TogglesWidget, { props: { modelValue: c } });
+    expect(none.find('[data-test^="tg-sockline-top-"]').exists()).toBe(false);
+    w.unmount();
+    none.unmount();
+  });
+
   it("merges the socket lines into one that carries every dot, and opens them again", async () => {
     const w = mount(TogglesWidget, { props: { modelValue: cfg("any") } });
     await w.find('[data-test="tg-sock-merge"]').trigger("click");

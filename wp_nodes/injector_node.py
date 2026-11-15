@@ -13,7 +13,7 @@ from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import negatives
 from engine.syntax.types import bool_text
-from wp_nodes.types import InjectorRowsInput, PipelineContext
+from wp_nodes.types import InjectorRowsInput, PipelineContext, carry_frame0
 
 _BINDING_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
 
@@ -91,6 +91,20 @@ class WPContextInjector(io.ComfyNode):
 
     @classmethod
     def execute(
+        cls,
+        wp_rows: str = "",
+        upstream: PipelineContext | None = None,
+        **slot_values: Any,
+    ):
+        out = cls._execute(wp_rows, upstream, **slot_values)
+        carry_frame0(
+            upstream, out.values[0],
+            lambda up: cls._execute(wp_rows, up, **slot_values).values[0],
+        )
+        return out
+
+    @classmethod
+    def _execute(
         cls,
         wp_rows: str = "",
         upstream: PipelineContext | None = None,

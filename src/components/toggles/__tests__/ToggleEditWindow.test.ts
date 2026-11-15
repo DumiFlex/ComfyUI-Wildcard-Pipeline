@@ -31,6 +31,7 @@ describe("ToggleEditWindow", () => {
     ["Show", { hide_var: true }],
     ["Invert: bypass while on", { invert: true }],
     ["Upstream can set it", { upstream: true }],
+    ["Wire dot in front of the row", { hide_dot: true }],
     ["BOOLEAN output", { pin: true }],
   ])("the words %s tick their box", async (words, patch) => {
     const w = open(base);
@@ -55,6 +56,30 @@ describe("ToggleEditWindow", () => {
     const out = done(w);
     expect(out?.[0].name).toBe("Sunrise");
     expect(out?.[1]).toBe("");
+    w.unmount();
+  });
+
+  it("hides the dot when the first group is picked and nothing is wired", async () => {
+    const w = open(base);
+    const win = w.findComponent({ name: "Combobox" });
+    win.vm.$emit("update:modelValue", ["LoRAs"]);
+    await flushPromises();
+    expect(done(w)?.[0]).toMatchObject({ groups: ["LoRAs"], hide_dot: true });
+    w.unmount();
+  });
+
+  it("keeps the dot when something is wired already", async () => {
+    const w = mount(ToggleEditWindow, {
+      attachTo: document.body,
+      props: {
+        t: base, pickOne: false, shownOn: true, effOn: true, parentName: "", blocked: false,
+        needsOptions: [{ value: "", label: "Nothing" }], groupOptions: [], groupId: "", outputsFull: false,
+        controlState: { control: "bypass", active: false, hint: "Bypasses when off: Lora" },
+      },
+    });
+    w.findComponent({ name: "Combobox" }).vm.$emit("update:modelValue", ["LoRAs"]);
+    await flushPromises();
+    expect(done(w)?.[0]).not.toHaveProperty("hide_dot");
     w.unmount();
   });
 

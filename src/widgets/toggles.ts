@@ -26,6 +26,7 @@ import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import {
   effectiveToggles,
   defaultTogglesConfig,
+  hasCtlDot,
   normalizeOuts,
   parseTogglesConfig,
   planOutputs,
@@ -91,7 +92,7 @@ function fitCtlInputs(node: TogglesHostNode, cfg: TogglesConfig, names: string[]
 function wiring(node: TogglesHostNode, cfg: TogglesConfig): Map<string, CtlNode[]> {
   const out = new Map<string, CtlNode[]>();
   for (const t of toggleRows(cfg)) {
-    if (t.control) out.set(t.id, toggleTargets(node as unknown as CtlNode, t.id, t.groups));
+    if (t.control) out.set(t.id, toggleTargets(node as unknown as CtlNode, t.id, t.groups, !t.hide_dot));
   }
   return out;
 }
@@ -110,7 +111,7 @@ function relabel(node: TogglesHostNode, cfg: TogglesConfig): void {
   }
   // A control dot's tooltip says the toggle's name, not its `ctl_<id>`.
   for (const t of toggleRows(cfg)) {
-    const input: { name: string; label?: string; localized_name?: string } | undefined = t.control
+    const input: { name: string; label?: string; localized_name?: string } | undefined = hasCtlDot(t)
       ? node.inputs?.find((i) => i.name === ctlInputName(t.id))
       : undefined;
     if (input) {

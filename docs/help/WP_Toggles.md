@@ -20,7 +20,7 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 - **Layout**: Edit view: Rows (one row per toggle, the default) or Grid (each toggle in a tile, the tiles wrapping to the node's width), in both modes and every style. Each label has a grid button for its own group; setting it back to the node's layout makes the group follow the node again. Under a grid's tiles, thin lines carry the dots: mute/bypass dots stack on the left with their toggle's name, BOOLEAN outputs on the right with theirs, each side packed on its own (so Dawn | Dawn, Sunset | Night). The arrow on the first line merges the group's lines into one that carries every dot and says how many go in and out (the names on hover), and the arrow on the merged line opens them again.
 - **Pencil, globe, trash (row)**: Each row in the edit view has three buttons, like a module on a Context node: the pencil opens the toggle's own settings in a window (name, variable, looks, style, needs, what off mutes or bypasses, group and its output) with the row drawn on top as the node will show it; the globe keeps its variable internal; the trash removes it.
 - **Add toggle / Add label**: A new toggle, or a label that groups the toggles under it. Click a label's arrow to fold it; its icon and colour buttons pick any icon and any colour. Drag a toggle's grip under a label to move it into that group; a dragged label takes its toggles along.
-- **control dots (in)**: A toggle that mutes or bypasses has a dot at the left of its row: wire the nodes it drives into it.
+- **control dots (in)**: A toggle that mutes or bypasses has a dot at the left of its row: wire the nodes it drives into it. A toggle that drives only canvas groups can hide its dot (Wire dot in its window).
 - **context (out)** `context`: The Context with every toggle variable added. Internal ones (the globe) are for rules only; the rest show in the Assembler.
 - **toggle outputs** `BOOLEAN`: One BOOLEAN per toggle that has an output, at the right of its row. Up to 16.
 
@@ -37,6 +37,7 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 - **When off**: Nothing, Mute or Bypass: what happens to the nodes wired into the row's dot (and to the canvas groups you pick) while the toggle is off. On, they run. When several toggles drive one node, off wins: it runs only while all of them let it (Mute beats Bypass).
 - **Invert**: Mute or bypass while the toggle is ON instead, for a node used only as a switchboard.
 - **Canvas groups**: Groups on the canvas whose nodes When off also covers, by title. No wires needed.
+- **Wire dot in front of the row**: Untick it for a toggle that drives only canvas groups: the row, or its line under a grid, loses its dot, so nothing hangs there unwired. Picking the first group for a toggle with nothing wired unticks it for you. Unticking drops a wire that is in the dot.
 - **Upstream can set it**: When the upstream Context holds this toggle's variable as a yes/no word (true, yes, on, 1, false, no, off, 0), that value sets the switch for the run.
 - **Group**: Which label it sits under. You can also drag the toggle's grip under another label, or above the first one.
 - **BOOLEAN output**: Show an output for switch nodes. Off for a new toggle; leave it off for a toggle only rules read.

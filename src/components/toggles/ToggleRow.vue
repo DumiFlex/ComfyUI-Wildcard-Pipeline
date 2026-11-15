@@ -14,7 +14,7 @@ import Checkbox from "@/kit/Checkbox.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
 import { computed } from "vue";
-import type { PickStyle, ToggleRow, ToggleStyle } from "../../extension/toggles";
+import { hasCtlDot, type PickStyle, type ToggleRow, type ToggleStyle } from "../../extension/toggles";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 
@@ -123,7 +123,7 @@ function flipFromLit(e: MouseEvent): void {
       class="wp-tgr__row"
       :class="{ 'is-blocked': blocked, 'is-on': effOn, 'is-chip': look === 'chip', 'is-editing': editing, 'has-icon-color': !!t.icon_color, 'has-text-color': !!t.text_color }"
       :data-wp-out="!tile && t.pin && t.out ? `toggle_${t.out}` : undefined"
-      :data-wp-socket="!tile && t.control ? ctlInputName(t.id) : undefined"
+      :data-wp-socket="!tile && hasCtlDot(t) ? ctlInputName(t.id) : undefined"
       :data-test="`tg-row-${t.id}`"
       :style="looks"
     >
