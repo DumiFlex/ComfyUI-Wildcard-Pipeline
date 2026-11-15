@@ -257,6 +257,7 @@ const countByKey = computed<Record<string, number>>(() => {
         <template v-else-if="item.children?.length">
           <ListRow
             class="wp-nav wp-nav--parent"
+            :data-collapsed="ui.sidebarCollapsed || undefined"
             :data-active="activeId === item.id || undefined"
             :data-nav-id="item.id"
             :data-expanded="isParentExpanded(item) || undefined"
@@ -330,6 +331,7 @@ const countByKey = computed<Record<string, number>>(() => {
           v-else
           class="wp-nav wp-nav--action"
           :data-nav-id="item.id"
+          :data-collapsed="ui.sidebarCollapsed || undefined"
           :title="ui.sidebarCollapsed ? item.label : undefined"
           :style="ui.sidebarCollapsed ? { justifyContent: 'center' } : undefined"
           @click="onItemClick(item)"
@@ -348,6 +350,16 @@ const countByKey = computed<Record<string, number>>(() => {
    .wp-nav__ext are all defined globally in tokens.css. */
 
 .wp-sidebar__spacer { height: 8px; }
+
+/* Rows built on the kit's ListRow (parents, Feedback & support) match the
+ * link rows: same line height (ListRow's 1.35 made them ~1px shorter), and
+ * collapsed, no empty label column beside the icon to push it off centre. */
+.wp-nav.wp-nav--parent,
+.wp-nav.wp-nav--action {
+  min-height: 0;
+  line-height: inherit;
+}
+.wp-nav[data-collapsed] :deep(.wp-list-row__main) { display: none; }
 
 /* Parent expand caret. Rotates 90deg when the submenu is open,
  * matching Sakai-vue / PrimeVue admin template convention. */
