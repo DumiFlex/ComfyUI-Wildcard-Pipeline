@@ -148,7 +148,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
         mute/bypass dots stack on the left with their toggle's name and BOOLEAN outputs on the
         right with theirs, each side packed on its own, so one line can hold two toggles. The arrow on the first line merges the group's lines into one that carries
         every dot and says how many go in and out (the names on hover), like the Context Injector's merged wires. Rows keep their dots on the row, and
-        the edit view always shows rows so you can reorder them.
+        the edit view always shows rows so you can reorder them. A toggle that only bypasses canvas groups needs no dot: untick
+        <b>Wire dot in front of the row</b> in its window and its line goes too.
       </p>
     </DocSection>
 

@@ -42,6 +42,7 @@ import {
   newToggle,
   newToggleId,
   rowsOf,
+  hasCtlDot,
   toggleProblems,
   toggleRows,
   uniqueVar,
@@ -145,7 +146,7 @@ function setGroupLayout(l: LabelRow, v: string): void {
  *  on its own, so a line can carry two different toggles' dots. */
 interface SockLine { left: ToggleRow | undefined; right: ToggleRow | undefined }
 function sockPairs(g: ToggleGroup): SockLine[] {
-  const lefts = g.toggles.filter((t) => t.control);
+  const lefts = g.toggles.filter(hasCtlDot);
   const rights = g.toggles.filter((t) => t.pin && t.out);
   return Array.from({ length: Math.max(lefts.length, rights.length) }, (_, i) => ({ left: lefts[i], right: rights[i] }));
 }
@@ -156,7 +157,7 @@ function isMerged(g: ToggleGroup): boolean {
 /** Merged line: a count per side ("3 in", "4 out"), the names in its
  *  tooltip, so many wires don't crowd the line. */
 function sockSide(g: ToggleGroup, side: "in" | "out"): ToggleRow[] {
-  return g.toggles.filter((t) => (side === "in" ? !!t.control : !!(t.pin && t.out)));
+  return g.toggles.filter((t) => (side === "in" ? hasCtlDot(t) : !!(t.pin && t.out)));
 }
 function sockCount(g: ToggleGroup, side: "in" | "out"): string {
   const n = sockSide(g, side).length;
@@ -172,7 +173,7 @@ function ctlIcon(t: ToggleRow): string {
 /** The toggles that need a socket line under the grid: a control dot on the
  *  left or a BOOLEAN output on the right, each level with its name. */
 function socketLines(g: ToggleGroup): ToggleRow[] {
-  return g.toggles.filter((t) => t.control || (t.pin && t.out));
+  return g.toggles.filter((t) => hasCtlDot(t) || (t.pin && t.out));
 }
 /** Merged: one line carries every wired choice's dots (row-outputs and
  *  field-sockets both read space-separated names), so the wires meet on one
@@ -182,7 +183,7 @@ function mergedOuts(lines: ToggleRow[]): string | undefined {
   return names.length ? names.join(" ") : undefined;
 }
 function mergedSockets(lines: ToggleRow[]): string | undefined {
-  const names = lines.filter((t) => t.control).map((t) => ctlInputName(t.id));
+  const names = lines.filter(hasCtlDot).map((t) => ctlInputName(t.id));
   return names.length ? names.join(" ") : undefined;
 }
 function toggleMerged(g: ToggleGroup): void {
@@ -447,7 +448,7 @@ function onCount(g: ToggleGroup): number {
  *  with the group instead of stacking at the node's top. */
 function foldedSockets(g: ToggleGroup): string | undefined {
   if (!g.label?.collapsed) return undefined;
-  const names = g.toggles.filter((t) => t.control).map((t) => ctlInputName(t.id));
+  const names = g.toggles.filter(hasCtlDot).map((t) => ctlInputName(t.id));
   return names.length ? names.join(" ") : undefined;
 }
 /** Output names a folded label shows the dots of. */
