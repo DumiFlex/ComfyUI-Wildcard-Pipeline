@@ -86,6 +86,16 @@ describe("parseTogglesConfig", () => {
     expect(c.rows[2].id).not.toBe("a");
     expect(c.rows).toHaveLength(3);
   });
+  it("keeps hide_dot only as true", () => {
+    const c = parseTogglesConfig({
+      rows: [
+        { id: "a", kind: "toggle", name: "A", var: "a", control: "bypass", groups: ["LoRAs"], hide_dot: true },
+        { id: "b", kind: "toggle", name: "B", var: "b", control: "bypass", hide_dot: "yes" },
+      ],
+    });
+    expect(c.rows[0]).toMatchObject({ hide_dot: true, groups: ["LoRAs"] });
+    expect(c.rows[1]).not.toHaveProperty("hide_dot");
+  });
 });
 
 describe("names", () => {

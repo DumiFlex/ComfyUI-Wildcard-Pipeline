@@ -16,7 +16,7 @@
  * Modes are written only when a toggle flips or its wiring / control
  * changes, never while a workflow loads (the saved modes are already right).
  */
-import { effectiveToggles, toggleRows, type ToggleControl, type TogglesConfig } from "./toggles";
+import { effectiveToggles, hasCtlDot, toggleRows, type ToggleControl, type TogglesConfig } from "./toggles";
 
 export const CTL_PREFIX = "ctl_";
 export const NODE_GROUP_TYPE = "WP_NodeGroup";
@@ -199,9 +199,10 @@ export function groupTitles(graph: CtlGraph | null | undefined): string[] {
   return [...new Set(all.map((g) => g.title ?? "").filter(Boolean))];
 }
 
-/** Everything one toggle drives (never the toggles node itself). */
-export function toggleTargets(node: CtlNode, toggleId: string, groups: readonly string[] = []): CtlNode[] {
-  const input = node.inputs?.find((i) => i.name === ctlInputName(toggleId));
+/** Everything one toggle drives (never the toggles node itself). `dot`
+ *  false: only its groups, whatever the (going) control input still holds. */
+export function toggleTargets(node: CtlNode, toggleId: string, groups: readonly string[] = [], dot = true): CtlNode[] {
+  const input = dot ? node.inputs?.find((i) => i.name === ctlInputName(toggleId)) : undefined;
   const found = new Set<CtlNode>(expandTargets(originOf(node, input)));
   for (const g of groupsByTitle(node.graph, groups)) for (const n of nodesOfGroup(g)) found.add(n);
   found.delete(node);
@@ -247,7 +248,7 @@ export function applyControl(
   for (const t of toggleRows(cfg)) {
     if (!t.control) continue;
     const mode = drivesOff(!!eff.get(t.id), t.invert) ? offMode(t.control) : MODE_ALWAYS;
-    for (const target of toggleTargets(node, t.id, t.groups)) {
+    for (const target of toggleTargets(node, t.id, t.groups, !t.hide_dot)) {
       wanted.set(target, strongerMode(wanted.get(target), mode));
       if ((!only || only.has(t.id)) && (!onlyNodes || onlyNodes.has(target))) touched.add(target);
     }
@@ -274,7 +275,7 @@ export function releaseTargets(targets: readonly CtlNode[], control: ToggleContr
 
 /** The `ctl_*` inputs `cfg` wants on the node, in row order. */
 export function wantedCtlInputs(cfg: TogglesConfig): string[] {
-  return toggleRows(cfg).filter((t) => t.control).map((t) => ctlInputName(t.id));
+  return toggleRows(cfg).filter(hasCtlDot).map((t) => ctlInputName(t.id));
 }
 
 interface PromptEntry { class_type?: string; inputs?: Record<string, unknown> }

@@ -130,6 +130,21 @@ describe("toggle control", () => {
     expect([a.mode, b.mode]).toEqual([0, 2]);
   });
 
+  it("a toggle with its dot hidden has no input and drives only its groups", () => {
+    const g = makeGraph();
+    const toggles = g.add(1, { type: "WP_Toggles" });
+    const wired = g.add(2);
+    const inGroup = g.add(3);
+    // A wire left over from before the dot was hidden counts for nothing.
+    g.wire(wired, toggles, ctlInputName("a"));
+    g.graph.groups.push({ title: "LoRAs", _children: new Set([inGroup]) });
+    const row = tog("a", { on: false, control: "bypass", groups: ["LoRAs"], hide_dot: true });
+    expect(wantedCtlInputs(cfg([row]))).toEqual([]);
+    expect(toggleTargets(toggles, "a", ["LoRAs"], false)).toEqual([inGroup]);
+    applyControl(toggles, cfg([row]));
+    expect([wired.mode, inGroup.mode]).toEqual([0, 4]);
+  });
+
   it("lists the control inputs and strips them from the prompt", () => {
     expect(wantedCtlInputs(cfg([tog("a", { control: "mute" }), tog("b"), tog("c", { control: "bypass" })])))
       .toEqual(["ctl_a", "ctl_c"]);

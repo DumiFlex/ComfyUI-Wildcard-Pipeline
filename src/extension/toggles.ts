@@ -47,6 +47,9 @@ export interface ToggleRow {
   groups?: string[];
   /** `control` acts while the toggle is ON instead of off. */
   invert?: true;
+  /** No wire dot in front of the row: `control` drives only `groups`
+   *  (`hasCtlDot`). */
+  hide_dot?: true;
   /** Clean view: no `$variable` line under the name. */
   hide_var?: true;
   /** In no group though a label is above it: dropped below a group. Only on
@@ -77,6 +80,8 @@ export interface ToggleRow {
 }
 
 export const TOGGLE_CONTROLS = ["mute", "bypass"] as const;
+/** The toggle has a control dot (`ctl_<id>` input) in front of its row. */
+export const hasCtlDot = (t: Pick<ToggleRow, "control" | "hide_dot">): boolean => !!t.control && !t.hide_dot;
 export type ToggleControl = (typeof TOGGLE_CONTROLS)[number];
 
 export interface LabelRow {
@@ -291,6 +296,7 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (o.upstream === true) t.upstream = true;
     if (TOGGLE_CONTROLS.includes(o.control as ToggleControl)) t.control = o.control as ToggleControl;
     if (o.invert === true) t.invert = true;
+    if (o.hide_dot === true) t.hide_dot = true;
     if (o.hide_var === true) t.hide_var = true;
     if (o.ungrouped === true) t.ungrouped = true;
     if (o.visible === true) t.visible = true;
