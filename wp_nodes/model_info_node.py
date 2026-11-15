@@ -13,7 +13,7 @@ from typing import Any
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import model_info, negatives
-from wp_nodes.types import ModelInfoWidgetInput, PipelineContext
+from wp_nodes.types import ModelInfoWidgetInput, PipelineContext, carry_frame0
 
 
 def _config_class_name(model: Any) -> str:
@@ -104,6 +104,23 @@ class WPModelInfo(io.ComfyNode):
 
     @classmethod
     def execute(
+        cls,
+        upstream: PipelineContext | None = None,
+        model: Any = None,
+        family: str | None = None,
+        variant: str | None = None,
+        name: str | None = None,
+        wp_model_info: str = "",
+    ):
+        def run(up: Any) -> Any:
+            return cls._execute(up, model, family, variant, name, wp_model_info)
+
+        out = run(upstream)
+        carry_frame0(upstream, out.values[0], lambda up: run(up).values[0])
+        return out
+
+    @classmethod
+    def _execute(
         cls,
         upstream: PipelineContext | None = None,
         model: Any = None,

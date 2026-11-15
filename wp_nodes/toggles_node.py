@@ -17,7 +17,7 @@ from typing import Any
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
 from engine import negatives, template, toggles
-from wp_nodes.types import PipelineContext, TogglesWidgetInput
+from wp_nodes.types import PipelineContext, TogglesWidgetInput, carry_frame0
 
 
 def _has_syntax(text: str) -> bool:
@@ -83,6 +83,16 @@ class WPToggles(io.ComfyNode):
 
     @classmethod
     def execute(
+        cls,
+        upstream: PipelineContext | None = None,
+        wp_toggles: str = "",
+    ):
+        out = cls._execute(upstream, wp_toggles)
+        carry_frame0(upstream, out.values[0], lambda up: cls._execute(up, wp_toggles).values[0])
+        return out
+
+    @classmethod
+    def _execute(
         cls,
         upstream: PipelineContext | None = None,
         wp_toggles: str = "",

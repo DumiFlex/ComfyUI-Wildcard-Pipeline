@@ -1,6 +1,7 @@
 """Custom ComfyUI socket type ``PIPELINE_CONTEXT`` and widget-only types."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -549,6 +550,35 @@ def frame0_payload(ctx: dict[str, Any]) -> dict[str, Any]:
             for key in _CROSS_NODE_INTERNAL_KEYS
             if key in ctx and key != FRAME0_KEY
         },
+    }
+
+
+def carry_frame0(
+    upstream: ContextPayload | None,
+    payload: ContextPayload,
+    rerun: Callable[[Any], ContextPayload],
+) -> None:
+    """Keep `__wp_frame0__` true through a node that writes variables
+    (Toggles, Injector, Model Info) between a Context Loop and a Context.
+
+    Such a node copies its upstream internals, so frame 0's payload would
+    reach the next Context WITHOUT this node's writes, and a held module
+    there would resolve its frame-0 value against a ctx that lacks them
+    (no $rating, no model vars): a different pick from the one frame 0
+    printed. ``rerun`` runs the node on frame 0's payload instead; its
+    output becomes the frame-0 payload handed on.
+    """
+    f0 = upstream.internals.get(FRAME0_KEY) if upstream is not None else None
+    if not isinstance(f0, dict):
+        return
+    base = rerun(ContextPayload(
+        context=dict(f0.get("context") or {}),
+        debug={},
+        internals=dict(f0.get("internals") or {}),
+    ))
+    payload.internals[FRAME0_KEY] = {
+        "context": dict(base.context),
+        "internals": {k: v for k, v in base.internals.items() if k != FRAME0_KEY},
     }
 
 
