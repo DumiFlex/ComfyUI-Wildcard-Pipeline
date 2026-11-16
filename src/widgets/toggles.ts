@@ -238,6 +238,7 @@ export function create(node: TogglesHostNode, inputName: string) {
           return g ? collectUpstreamVariables(g, node as unknown as LiteNodeLike) : [];
         },
         stringArrayEqual,
+        { gated: true },
       );
       const varProducers = computed(() => {
         void upstreamVars.value;

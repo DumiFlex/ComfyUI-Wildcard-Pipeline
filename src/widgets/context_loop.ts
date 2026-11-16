@@ -137,6 +137,7 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
     },
     (a, b) =>
       a.length === b.length && a.every((x, i) => x.label === b[i].label && x.raw === b[i].raw),
+    { gated: true },
   );
 
   // A wired `values` input sets the frame count at run time (one frame per

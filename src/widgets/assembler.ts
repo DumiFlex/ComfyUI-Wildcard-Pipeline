@@ -543,8 +543,8 @@ export function mountHelper(node: AssemblerNode) {
           };
         },
         snapshotEqual,
-        undefined,
-        [currentFrame],
+        // Recomputes when the graph revision moves (or the frame pick).
+        { gated: true, triggers: [currentFrame] },
       );
 
       // Litegraph mode tracker — instant updates via property

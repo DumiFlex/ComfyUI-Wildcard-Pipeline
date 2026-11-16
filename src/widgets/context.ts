@@ -211,6 +211,11 @@ function chainModulesEqual(a: ChainModule[], b: ChainModule[]): boolean {
   return true;
 }
 
+/** Chain walkers recompute only when the graph revision moves
+ *  (`reactiveFromGraph` `gated`): ten of them per node, each walking the
+ *  whole chain, were what saturated a long chain's idle canvas. */
+const GATED = { gated: true } as const;
+
 const ContextWidget = defineAsyncComponent(() => import("../components/context/ContextWidget.vue"));
 
 type ContextNode = LiteNodeLike & MountTargetNode;
@@ -268,6 +273,7 @@ export function create(node: ContextNode, inputName: string) {
           return result;
         },
         stringArrayEqual,
+        GATED,
       );
       // Per-module seed reader. For each module we snapshot the
       // seed it ACTUALLY rolled with on the last queue:
@@ -299,6 +305,7 @@ export function create(node: ContextNode, inputName: string) {
           return collectUpstreamWildcardUuids(rootGraph, node);
         },
         stringArrayEqual,
+        GATED,
       );
 
       // WHO writes each upstream `$var` — module + owning node, last-write-wins.
@@ -317,6 +324,7 @@ export function create(node: ContextNode, inputName: string) {
         // Cheap structural compare — the walker rebuilds the object each poll,
         // so identity comparison would re-render on every tick.
         (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b),
+        GATED,
       );
 
       // Same idea, downstream — lets the scanner distinguish
@@ -334,6 +342,7 @@ export function create(node: ContextNode, inputName: string) {
           return collectDownstreamWildcardUuids(rootGraph, node);
         },
         stringArrayEqual,
+        GATED,
       );
 
       // Cross-node nested-reach set — pairs the pair-badge `↪×N` carrier
@@ -350,6 +359,7 @@ export function create(node: ContextNode, inputName: string) {
           return collectDownstreamNestedReachUuids(rootGraph, node);
         },
         stringArrayEqual,
+        GATED,
       );
 
       // Cross-node pairing badges. Flat map keyed by `${nodeId}#${_uid}`
@@ -369,6 +379,7 @@ export function create(node: ContextNode, inputName: string) {
           return collectCrossNodePairingsFull(rootGraph, node);
         },
         pairingMapEqual,
+        GATED,
       );
 
       // Flattened cross-node module chain (upstream + own + downstream
@@ -396,6 +407,7 @@ export function create(node: ContextNode, inputName: string) {
           return collectFullChainModules(rootGraph, node);
         },
         chainModulesEqual,
+        GATED,
       );
 
       // Per-name resolved snapshot — drives the combine modal's
@@ -416,6 +428,7 @@ export function create(node: ContextNode, inputName: string) {
           return collectUpstreamResolved(rootGraph, node);
         },
         stringMapEqual,
+        GATED,
       );
 
       // Litegraph mode poll — when the user mutes (mode 2) or bypasses
@@ -449,6 +462,7 @@ export function create(node: ContextNode, inputName: string) {
           return hasUpstreamLoopOverridingSeed(rootGraph, node);
         },
         Object.is,
+        GATED,
       );
       // Toggle the `seed` stock widget's `disabled` flag in lockstep
       // with the upstream-override state. Using a render-side effect

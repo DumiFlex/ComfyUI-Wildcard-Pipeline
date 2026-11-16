@@ -380,6 +380,7 @@ export function create(node: InjectorNode, inputName: string) {
           return collectUpstreamVariables(rootGraph, node);
         },
         stringArrayEqual,
+        { gated: true },
       );
 
       // Mode tracking for mute (2) / bypass (4) — drives a dim
