@@ -4,6 +4,7 @@ import {
   MAX_OUTPUTS,
   defaultSlidersConfig,
   dropSliderRow,
+  fineStepOf,
   fmtSlider,
   groupsOf,
   internalSliderVars,
@@ -20,6 +21,7 @@ import {
   sliderOutputType,
   sliderProblems,
   sliderRows,
+  sliderRuns,
   slidersPreviewModules,
   staticSliderNegatives,
   uniqueVar,
@@ -193,5 +195,31 @@ describe("output type", () => {
     expect(outputNumber({ value: 6.5, decimals: 1, out_type: "int" })).toBe(7);
     expect(outputNumber({ value: -0.4, decimals: 1, out_type: "int" })).toBe(0);
     expect(parseSlidersConfig(JSON.stringify({ rows: [{ id: "a", kind: "slider", var: "a", out_type: "x" }] })).rows[0]).not.toHaveProperty("out_type");
+  });
+});
+
+describe("styles and snapping", () => {
+  const row = (id: string, style: SliderRow["style"]): SliderRow => ({
+    id, kind: "slider", name: id, var: id, value: 0, min: 0, max: 1, step: 0.05,
+    decimals: 2, mode: "number", pin: false, out: 0, style,
+  });
+
+  it("stands neighbouring faders in one strip", () => {
+    const runs = sliderRuns([row("a", "fader"), row("b", "fader"), row("c", "bar"), row("d", "fader")]);
+    expect(runs.map((r) => (r.kind === "row" ? r.s.id : r.faders.map((f) => f.id).join("+")))).toEqual(["a+b", "c", "d"]);
+  });
+
+  it("drags finer down to one unit of the last decimal", () => {
+    expect(fineStepOf({ step: 0.05, decimals: 2 })).toBe(0.01);
+    expect(fineStepOf({ step: 5, decimals: 0 })).toBe(1);
+    expect(fineStepOf({ step: 1, decimals: 0 })).toBeUndefined();
+    expect(fineStepOf({ step: 0.01, decimals: 2 })).toBeUndefined();
+  });
+
+  it("keeps free and the style through a round trip", () => {
+    const raw = JSON.stringify({ rows: [{ id: "a", kind: "slider", var: "a", style: "fader", free: true }, { id: "b", kind: "slider", var: "b", free: "yes" }] });
+    const rows = parseSlidersConfig(raw).rows as SliderRow[];
+    expect(rows[0]).toMatchObject({ style: "fader", free: true });
+    expect(rows[1]).not.toHaveProperty("free");
   });
 });

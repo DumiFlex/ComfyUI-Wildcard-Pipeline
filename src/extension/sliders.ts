@@ -18,8 +18,9 @@
 export const MAX_OUTPUTS = 16;
 export const SLIDER_MODES = ["number", "text", "words"] as const;
 export type SliderMode = (typeof SLIDER_MODES)[number];
-/** Looks. Only `row` is drawn today; the others wait on their kit pieces
- *  and fall back to `row`. */
+/** Looks: `row` (name, then a thin track), `bar` (the row is a filled bar
+ *  with the name inside), `fader` (an upright track; neighbouring faders
+ *  stand side by side). */
 export const SLIDER_STYLES = ["row", "bar", "fader"] as const;
 export type SliderStyle = (typeof SLIDER_STYLES)[number];
 export const MAX_DECIMALS = 6;
@@ -61,6 +62,9 @@ export interface SliderRow {
   /** The output's type; absent follows the decimals (INT at 0, else FLOAT). */
   out_type?: "int" | "float";
   style: SliderStyle;
+  /** Not snapped to `step`: a drag lands on any value the decimals can
+   *  write (the arrows still move by `step`). */
+  free?: true;
   /** Clean view: no `$variable` line under the name. */
   hide_var?: true;
   /** Tick marks at each Words range end (and the ends of the track). */
@@ -236,6 +240,7 @@ export function parseSlidersConfig(raw: unknown): SlidersConfig {
     if (words.length) s.words = words;
     if (o.internal === true) s.internal = true;
     if (o.out_type === "int" || o.out_type === "float") s.out_type = o.out_type;
+    if (o.free === true) s.free = true;
     if (o.hide_var === true) s.hide_var = true;
     if (o.marks === true) s.marks = true;
     if (iconName(o.icon)) s.icon = iconName(o.icon);
@@ -499,6 +504,27 @@ export function dropSliderRow(
 }
 
 /** Track marks: each Words range end, plus the ends while `marks` is on. */
+/** The finest step a drag can land on: one unit of the last decimal, when
+ *  that is finer than `step` (Shift drags at it; `free` always does). */
+export function fineStepOf(s: Pick<SliderRow, "step" | "decimals">): number | undefined {
+  const unit = Number((0.1 ** s.decimals).toFixed(s.decimals));
+  return unit > 0 && unit < s.step ? unit : undefined;
+}
+
+/** Rows to draw for one group: faders standing next to each other share a
+ *  strip, every other slider is a row of its own. */
+export type SliderRun = { kind: "row"; s: SliderRow } | { kind: "faders"; faders: SliderRow[] };
+export function sliderRuns(sliders: SliderRow[]): SliderRun[] {
+  const out: SliderRun[] = [];
+  for (const s of sliders) {
+    const last = out[out.length - 1];
+    if (s.style !== "fader") out.push({ kind: "row", s });
+    else if (last?.kind === "faders") last.faders.push(s);
+    else out.push({ kind: "faders", faders: [s] });
+  }
+  return out;
+}
+
 export function sliderMarks(s: SliderRow): { value: number; label?: string }[] {
   if (!s.marks) return [];
   const ends = s.mode === "words" ? (s.words ?? []).map((w) => w.upto).filter((u): u is number => u !== undefined) : [];

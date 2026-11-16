@@ -1,7 +1,10 @@
 <script setup lang="ts">
 /**
  * One slider row of WP Slider (its settings open in `SliderEditWindow.vue`).
- * Stateless: the parent (`SlidersWidget.vue`) applies every change this
+ * Its `style` picks the kit Slider's look: `row` (name column, thin track),
+ * `bar` (the name inside a filled bar) or `fader` (an upright track with the
+ * name under it; `SlidersWidget.vue` stands neighbouring faders side by
+ * side, and the edit view draws a fader as a row with `flat`). Stateless: the parent (`SlidersWidget.vue`) applies every change this
  * emits.
  *
  * The row carries `data-wp-out="value_<out>"` while it has an output, so
@@ -15,7 +18,7 @@ import Slider from "@/kit/Slider.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
-import { fmtSlider, sliderMarks, wordFor, type SliderRow } from "../../extension/sliders";
+import { fineStepOf, fmtSlider, sliderMarks, wordFor, type SliderRow } from "../../extension/sliders";
 
 const props = defineProps<{
   s: SliderRow;
@@ -23,6 +26,8 @@ const props = defineProps<{
   editing: boolean;
   /** Edit view: show the pencil, globe and remove buttons. */
   editable: boolean;
+  /** Draw a fader as a row (the edit view's list). */
+  flat?: boolean | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -49,6 +54,11 @@ const holds = computed(() => {
 const marks = computed(() => sliderMarks(props.s));
 const fmt = (v: number): string => fmtSlider({ value: v, decimals: props.s.decimals });
 const broken = computed(() => props.s.max <= props.s.min);
+const variant = computed(() => {
+  if (props.s.style === "bar") return "bar";
+  return props.s.style === "fader" && !props.flat ? "fader" : "line";
+});
+const fine = computed(() => fineStepOf(props.s));
 
 function internalHint(): string {
   const v = `$${props.s.var}`;
@@ -59,15 +69,15 @@ function internalHint(): string {
 </script>
 
 <template>
-  <div class="wp-slr" :data-wp-vars="s.var || undefined">
+  <div class="wp-slr" :class="`wp-slr--${variant}`" :data-wp-vars="s.var || undefined">
     <div
       class="wp-slr__row"
       :class="{ 'is-editing': editing, 'is-editable': editable, 'has-text-color': !!s.text_color }"
-      :data-wp-out="s.pin && s.out ? `value_${s.out}` : undefined"
+      :data-wp-out="s.pin && s.out && variant !== 'fader' ? `value_${s.out}` : undefined"
       :data-test="`sl-row-${s.id}`"
       :style="looks"
     >
-      <span class="wp-slr__head">
+      <span v-if="variant === 'line'" class="wp-slr__head">
       <i v-if="s.icon" class="pi wp-slr__icon" :class="`pi-${s.icon}`" aria-hidden="true" />
       <span class="wp-slr__name">
         <b>{{ s.name }}</b>
@@ -85,15 +95,28 @@ function internalHint(): string {
           :min="s.min"
           :max="broken ? s.min + 1 : s.max"
           :step="s.step"
-          :marks="marks.length ? marks : undefined"
+          :fine-step="fine"
+          :free="!!s.free && !!fine"
+          :marks="marks.length && variant !== 'fader' ? marks : undefined"
           :format="fmt"
           :disabled="broken"
+          :variant="variant"
           size="sm"
-          with-input
+          :with-input="variant !== 'fader'"
+          :show-value="variant === 'fader'"
           :aria-label="s.name"
           :data-test="`sl-ctl-${s.id}`"
           @update:model-value="(v: number) => emit('set-value', v)"
-        />
+        >
+          <template v-if="variant !== 'line'" #label>
+            <span class="wp-slr__in">
+              <i v-if="s.icon" class="pi wp-slr__icon" :class="`pi-${s.icon}`" aria-hidden="true" />
+              <span class="wp-slr__in-name">{{ s.name }}</span>
+              <span v-if="variant === 'bar' && !s.hide_var && s.var" class="wp-slr__in-var" :class="varColorClass(s.var)">${{ s.var }}</span>
+              <span v-if="variant === 'bar' && holds" class="wp-slr__holds">{{ holds }}</span>
+            </span>
+          </template>
+        </Slider>
       </span>
       <i
         v-if="problem"
@@ -173,6 +196,18 @@ function internalHint(): string {
 .wp-slr__holds { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-slr__ctl { display: flex; flex: 1 1 0; min-width: 0; }
 .wp-slr__ctl > * { flex: 1 1 auto; min-width: 0; }
+/* Bar and fader: the name sits in the kit Slider's label slot. */
+.wp-slr__in { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.wp-slr__in-name { font-weight: 600; font-size: 11.5px; color: var(--wp-sl-text, inherit); overflow: hidden; text-overflow: ellipsis; }
+.wp-slr__in-var { font: 10.5px var(--wp-font-mono, monospace); overflow: hidden; text-overflow: ellipsis; }
+.wp-slr__row.has-text-color .wp-slr__in-var { color: var(--wp-sl-text); }
+.wp-slr--bar .wp-slr__row { padding-left: 4px; }
+/* A fader: one upright column, no row box (the strip draws it). */
+.wp-slr--fader .wp-slr__row { flex-direction: column; min-height: 0; padding: 4px 2px; background: transparent; }
+.wp-slr--fader .wp-slr__ctl { --wp-slider-len: 104px; justify-content: center; }
+.wp-slr--fader .wp-slr__ctl > * { flex: none; }
+.wp-slr--fader .wp-slr__in { flex-direction: column; gap: 1px; max-width: 64px; }
+.wp-slr--fader .wp-slr__in-name { font-size: 10.5px; text-align: center; }
 .wp-slr__warn { flex: none; font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-slr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 </style>
