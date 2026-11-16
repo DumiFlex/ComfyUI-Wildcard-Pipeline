@@ -227,6 +227,12 @@ def extract_at_uuid_refs(payload: dict[str, Any]) -> set[str]:
 
     def _scan(value: Any) -> None:
         if isinstance(value, str):
+            # A REF token needs a literal `@{`, so a string without one can
+            # hold no ref: skip the char-by-char tokenizer for it. Most
+            # leaves (ids, tags, plain option text) take this exit, and this
+            # walk runs over every payload on every Context run.
+            if "@{" not in value:
+                return
             for tok in tokenize_text(value):
                 if tok.kind == TokenKind.REF:
                     uid = (tok.meta or {}).get("uuid")
