@@ -294,8 +294,134 @@ def uses_sp2b_grammar(node: Any) -> bool:
     return _SP2B_MARKER_RE.search(text) is not None
 
 
+def _scan_text(text: str, found: set[int], *, dict_value: bool) -> None:
+    """The text markers in one string. ``$name.neg`` only counts as a dict
+    value, as in ``uses_negatives``; the other three count anywhere."""
+    if "$" in text:
+        if dict_value and _NEG_ACCESSOR_RE.search(text) is not None:
+            found.add(NEGATIVES_SCHEMA_VERSION)
+        if _BOOL_ACCESSOR_RE.search(text) is not None:
+            found.add(BOOL_ACCESSOR_SCHEMA_VERSION)
+        if "@{" in text and _REF_FILTER_VAR_RE.search(text) is not None:
+            found.add(FILTER_VARIABLES_SCHEMA_VERSION)
+        if "{" in text and _SP2B_MARKER_RE.search(text) is not None:
+            found.add(SP2B_SCHEMA_VERSION)
+
+
+def _scan_dict(node: dict[str, Any], found: set[int]) -> None:
+    """The per-dict checks of every ``uses_*`` scan, in one go."""
+    from engine.syntax.subcat_filter import expr_variables
+
+    var = node.get("var")
+    if isinstance(var, str) and _BOOL_VAR_RE.match(var.strip()):
+        found.add(BOOL_ACCESSOR_SCHEMA_VERSION)
+    if expr_variables(node.get("category_filter")):
+        found.add(FILTER_VARIABLES_SCHEMA_VERSION)
+    if node.get("op") in _V10_CONDITION_OPS and "var" in node:
+        found.add(NEGATED_TESTS_SCHEMA_VERSION)
+    if node.get("fallback") is True and "value" in node:
+        found.add(FALLBACK_SCHEMA_VERSION)
+    if NEGATIVES_SCHEMA_VERSION not in found:
+        for key in ("negative", "negative_override"):
+            neg = node.get(key)
+            if isinstance(neg, str) and neg.strip():
+                found.add(NEGATIVES_SCHEMA_VERSION)
+        if node.get("mode") in ("negative", "negative_replace") and "target_var" in node:
+            found.add(NEGATIVES_SCHEMA_VERSION)
+        extra = node.get("extra_actions")
+        if isinstance(extra, list) and extra:
+            found.add(NEGATIVES_SCHEMA_VERSION)
+    branches = node.get("branches")
+    if isinstance(branches, list) and any(
+        isinstance(b, dict) and _is_v7_condition(b.get("condition")) for b in branches
+    ):
+        found.add(DERIVATION_CONDITIONS_SCHEMA_VERSION)
+    if CONSTRAINT_ONLY_SCHEMA_VERSION not in found:
+        if _matrix_uses_only(node.get("matrix")):
+            found.add(CONSTRAINT_ONLY_SCHEMA_VERSION)
+        for key in _EXCEPTION_LIST_KEYS:
+            excs = node.get(key)
+            if isinstance(excs, list) and any(
+                isinstance(e, dict) and e.get("mode") == "only" for e in excs
+            ):
+                found.add(CONSTRAINT_ONLY_SCHEMA_VERSION)
+        for key in _MODE_OVERRIDE_KEYS:
+            overrides = node.get(key)
+            if isinstance(overrides, dict) and any(m == "only" for m in overrides.values()):
+                found.add(CONSTRAINT_ONLY_SCHEMA_VERSION)
+    kinds = node.get("tag_group_kinds")
+    if isinstance(kinds, dict) and any(k == "accepts" for k in kinds.values()):
+        found.add(TAG_AXES_SCHEMA_VERSION)
+    if _is_non_default_target_select(node.get("target_select")):
+        found.add(SP3_REACH_SCHEMA_VERSION)
+
+
+def _scan(node: Any, found: set[int]) -> None:
+    """One walk over ``node`` adding every feature version it uses to
+    ``found``. Visits exactly the dicts and strings the ``uses_*`` scans
+    above visit (dict values and list items; a tuple or other object is only
+    seen by ``uses_sp2b_grammar``'s ``json.dumps``), so the result is the same
+    as running each of them."""
+    stack: list[Any] = [node]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            _scan_dict(item, found)
+            for key, value in item.items():
+                # json.dumps writes the keys too, so the SP2b marker can sit
+                # in one (a non-str key is a number/bool/None: never a match).
+                if isinstance(key, str) and "{" in key and _SP2B_MARKER_RE.search(key):
+                    found.add(SP2B_SCHEMA_VERSION)
+                if isinstance(value, str):
+                    _scan_text(value, found, dict_value=True)
+                elif isinstance(value, (dict, list)):
+                    stack.append(value)
+                elif value is not None and not isinstance(value, (bool, int, float)):
+                    _scan_other(value, found)
+        elif isinstance(item, list):
+            for child in item:
+                if isinstance(child, str):
+                    _scan_text(child, found, dict_value=False)
+                elif isinstance(child, (dict, list)):
+                    stack.append(child)
+                elif child is not None and not isinstance(child, (bool, int, float)):
+                    _scan_other(child, found)
+        elif isinstance(item, str):
+            _scan_text(item, found, dict_value=False)
+        elif item is not None and not isinstance(item, (bool, int, float)):
+            _scan_other(item, found)
+
+
+def _scan_other(value: Any, found: set[int]) -> None:
+    """A value JSON has no type for (a tuple, a set …): only the serialised
+    SP2b check reaches inside it, as ``json.dumps(default=str)`` writes it."""
+    text = json.dumps(value, ensure_ascii=False, default=str)
+    if _SP2B_MARKER_RE.search(text) is not None:
+        found.add(SP2B_SCHEMA_VERSION)
+
+
+def schema_versions_used(payload: Any) -> set[int]:
+    """Every feature version ``payload`` uses (the versions above
+    ``CURRENT_SCHEMA_VERSION`` whose ``uses_*`` scan is true), in one walk."""
+    found: set[int] = set()
+    _scan(payload, found)
+    return found
+
+
 def schema_version_for_payload(payload: Any) -> int:
-    """The lowest catalog version that covers every feature in ``payload``."""
+    """The lowest catalog version that covers every feature in ``payload``.
+
+    One structural walk collecting every feature (``schema_versions_used``)
+    rather than one walk per feature: an export of a whole library walked it
+    ten times plus a ``json.dumps``. Same answer as ``_schema_version_per_scan``.
+    """
+    found = schema_versions_used(payload)
+    return max(found) if found else CURRENT_SCHEMA_VERSION
+
+
+def _schema_version_per_scan(payload: Any) -> int:
+    """The answer one ``uses_*`` scan at a time, highest version first: the
+    reference ``schema_version_for_payload`` is tested against."""
     if uses_bool_accessor(payload):
         return BOOL_ACCESSOR_SCHEMA_VERSION
     if uses_filter_variables(payload):
