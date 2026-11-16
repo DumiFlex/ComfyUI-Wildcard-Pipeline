@@ -27,9 +27,6 @@ vi.mock("../utils/ai-context", async (orig) => ({
 
 import { api } from "../api/client";
 import { _resetOpenEditorForTests, currentPageNote } from "../composables/useOpenEditor";
-import { useModuleStore } from "../stores/moduleStore";
-import { useBundleStore } from "../stores/bundleStore";
-import type { BundleRow, ModuleRow } from "../api/types";
 import Categories from "../views/Categories.vue";
 import Tags from "../views/Tags.vue";
 import ImportExport from "../views/ImportExport.vue";
@@ -165,11 +162,13 @@ describe("Import / Export page note", () => {
 
 describe("Dashboard page note", () => {
   it("gives the counts, the warnings with their items and the open tab's rows", async () => {
-    m.modules.list.mockResolvedValue({ items: MODULES.slice(0, 1), total: 2 });
-    m.bundles.list.mockResolvedValue({ items: [], total: 1 });
+    // The counts come from the catalogs (two of each kind, one bundle).
+    const more = ["fixed_values", "combine", "derivation", "constraint"].flatMap((type, k) =>
+      [1, 2].map((n) => ({ id: `dddd00${k}${n}`, type, name: `${type} ${n}`, category_id: null, tags: [],
+        payload: {}, updated_at: "2026-09-01T00:00:00Z" })));
+    m.modules.list.mockResolvedValue({ items: [...MODULES, ...more], total: 10 });
+    m.bundles.list.mockResolvedValue({ items: [{ id: "bbbb0001", name: "Kit", children: [] }], total: 1 });
     const w = mount(Dashboard, { global: { plugins: [router()] } });
-    useModuleStore().catalog = MODULES as unknown as ModuleRow[];
-    useBundleStore().catalog = [{ id: "bbbb0001", name: "Kit", children: [] }] as unknown as BundleRow[];
     await flushPromises();
     await flushPromises();
     const note = currentPageNote();
@@ -177,7 +176,7 @@ describe("Dashboard page note", () => {
     expect(note).toContain("Library health: 1 problem, 0 warnings, 0 to tidy up (first: Blank: It has no options.)");
     expect(note).toContain("Recently opened tab: empty");
     await w.find('[data-test="dashboard-tab-recent"]').trigger("click");
-    expect(currentPageNote()).toContain("Recent edits tab: Outfit (wildcard, aaaa0001)");
+    expect(currentPageNote()).toContain("Recent edits tab: Blank (wildcard, aaaa0002), Outfit (wildcard, aaaa0001)");
     expect(anchors(w)).toEqual(expect.arrayContaining(["counts", "quick-create", "health", "recent", "new-module"]));
   });
 });
