@@ -89,3 +89,91 @@ def effective_chain_seed(
     digest = hashlib.sha256(f"loop:{loop_index}".encode()).digest()
     shift = int.from_bytes(digest[:8], "big")
     return (base ^ shift) & MAX_SAFE_SEED
+
+
+#: Cross-node internal from WP_ContextLoop, set on every frame whether or not
+#: the Loop overrides Context seeds: ``{"seed": this frame, "frame0": frame 0}``
+#: of its derived series. A Context set to "Seed from: Loop" reads it.
+LOOP_SEED_KEY = "__wp_loop_seed__"
+#: Cross-node internal from WP_Seeds (mirrors ``engine.seeds.ROWS_KEY``).
+ROWS_KEY = "__wp_seed_rows__"
+SEED_FROM_AUTO = "auto"
+SEED_FROM_LOOP = "loop"
+SEED_FROM_OWN = "own"
+SEED_FROM_ROW = "row:"
+
+
+def _row_key(name: str) -> str:
+    return " ".join(str(name).split()).casefold()
+
+
+def _seed_pair(entry: object) -> tuple[int, int] | None:
+    if not isinstance(entry, dict):
+        return None
+    seed, frame0 = entry.get("seed"), entry.get("frame0")
+    if isinstance(seed, bool) or isinstance(frame0, bool):
+        return None
+    if not isinstance(seed, int) or not isinstance(frame0, int):
+        return None
+    return seed & MAX_SAFE_SEED, frame0 & MAX_SAFE_SEED
+
+
+def resolve_context_seed(
+    *,
+    widget_seed: int,
+    seed_from: str | None,
+    internals: dict,
+) -> tuple[int, int, str]:
+    """The (chain seed, hold seed, source) a WP_Context runs with.
+
+    ``seed_from`` is the Context's own choice, so a wired seed never wins by
+    itself (it is only where "own" gets its value):
+
+    * ``auto`` (or missing): today's rule. The Loop's per-frame seed when the
+      Loop overrides Context seeds, else the node's own seed shifted per frame.
+    * ``loop``: the Loop's per-frame seed, override or not.
+    * ``own``: the node's own seed (widget or wire), even when the Loop
+      overrides, shifted per frame like ``auto`` without an override.
+    * ``row:<name>``: that WP Seeds row's seed for this frame.
+
+    A choice whose source isn't upstream falls back to ``auto``; ``source``
+    then says ``"auto"`` so the caller can warn. The hold seed is frame 0's
+    seed of the same source.
+    """
+    loop_index = int(internals.get("__wp_loop_index__", 0) or 0)
+    choice = (seed_from or SEED_FROM_AUTO).strip()
+
+    def own() -> tuple[int, int]:
+        return (
+            effective_chain_seed(
+                widget_seed=int(widget_seed), seed_override=None, loop_index=loop_index,
+            ),
+            effective_chain_seed(widget_seed=int(widget_seed), seed_override=None, loop_index=0),
+        )
+
+    if choice.startswith(SEED_FROM_ROW):
+        rows = internals.get(ROWS_KEY)
+        row_key = _row_key(choice[len(SEED_FROM_ROW):])
+        pair = _seed_pair(rows.get(row_key)) if isinstance(rows, dict) else None
+        if pair is not None:
+            return pair[0], pair[1], choice
+    elif choice == SEED_FROM_LOOP:
+        pair = _seed_pair(internals.get(LOOP_SEED_KEY))
+        if pair is not None:
+            return pair[0], pair[1], SEED_FROM_LOOP
+    elif choice == SEED_FROM_OWN:
+        chain, hold = own()
+        return chain, hold, SEED_FROM_OWN
+
+    # auto: the pre-existing behaviour.
+    chain = effective_chain_seed(
+        widget_seed=int(widget_seed),
+        seed_override=internals.get("__wp_seed_override__"),
+        loop_index=loop_index,
+    )
+    loop_seeds = internals.get("__wp_loop_seeds__")
+    if isinstance(loop_seeds, list) and loop_seeds:
+        hold = int(loop_seeds[0])
+    else:
+        hold = own()[1]
+    return chain, hold, SEED_FROM_AUTO

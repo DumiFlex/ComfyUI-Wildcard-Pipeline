@@ -70,6 +70,7 @@ export const NODE_FIELDS = {
     ports: [
       { term: "upstream (in)", sockets: ["in:upstream"], desc: "Optional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them." },
       { term: "seed", sockets: ["in:seed"], desc: "Decides every random pick in this node. See Seeds & loops." },
+      { term: "Seed from", pin: "css:[data-test=seed-from]", desc: "Shows once a Context Loop or a WP Seeds node is upstream. Auto (the default): the Loop's frame seed while Override Context seed is on, else this node's seed. Loop: always the Loop's frame seed. Own seed: the seed widget, or whatever is wired into it, even while the Loop overrides. A WP Seeds row: that row's seed for each frame. A wired seed is only used on Own seed and Auto. When the picked source isn't upstream, the node runs as Auto and WP Debug says so." },
       { term: "context (out)", sockets: ["out:context"], desc: "The variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context." },
     ],
     markers: [
@@ -247,6 +248,23 @@ export const NODE_FIELDS = {
       { term: "Override … from loop", pin: "css:[data-test=seedlist-override-seed-toggle]", desc: "Three switches: take the base seed, the count and the strategy from the wired loop. Count and strategy switch on by themselves when you connect loop_config; base seed stays yours unless you switch it on." },
       { term: "loop_config (in)", sockets: ["in:loop_config"], desc: "Optional. A WP Context Loop's loop_config output, so the seeds follow its frames." },
       { term: "seed (out)", sockets: ["out:seed"], desc: "The list of seeds, one per frame. ComfyUI runs the node after it once per seed: wire it into a KSampler's seed." },
+    ],
+  },
+  WP_Seeds: {
+    controls: [
+      { term: "upstream (in)", sockets: ["in:upstream"], desc: "Optional. A Context or a Context Loop. Put it after the Loop to get a seed per frame; Contexts after it can read its rows." },
+      { term: "base_seed", sockets: ["in:base_seed"], desc: "The seed every Follow row is made from, like the Loop's and Seed List's base seed. Reroll (above the rows inside a Loop, or in the edit view) or control after generate moves all of them at once; locked frames stay." },
+      { term: "From Loop", pin: "css:[data-test=seeds-from-loop]", desc: "Shown with a Context Loop upstream. On, the rows follow the Loop's seed instead of base_seed (which greys out), like Seed List's base seed from loop: change the Loop's seed and every Follow row moves. Off (the default), the node keeps its own." },
+      { term: "Rows", desc: "One row per named seed, under labels that group and fold them. A row shows its name, the seed it gives the frame shown (in the row's colour) and its mode, then three buttons: mode, last run and lock." },
+      { term: "Mode button (row)", desc: "Cycles the row Follow → Random → Fixed without opening anything. Leaving Follow keeps the seed the row has, so nothing jumps until you reroll." },
+      { term: "Last run (row)", desc: "Puts the row back on the seed it started from last run and sets it to Fixed: the way back after a Random row rolled on, or to keep a result you liked. Greyed out before the first run and when the row is already on it." },
+      { term: "Pencil (toolbar)", pin: "page:.wp-tb-icon--edit", desc: "Select the node and the pencil in ComfyUI's selection toolbar opens the edit view: grips to reorder, label names, each row's pencil (its window) and bin, Add seed, Add label and Reroll. Done goes back to the clean view." },
+      { term: "Follow / Random / Fixed", desc: "Follow: made from the base seed and the row's name, so renaming a row changes its seed. Random: its own seed, rolled again after every queue. Fixed: its own seed, never changes." },
+      { term: "Per frame", desc: "New (the default): every frame of a Context Loop gets its own seed, frame 1 being the row's seed. Same: every frame uses the row's seed." },
+      { term: "Lock (row)", desc: "Pins the shown frame's seed: the one it used last run if there was one, else the one it will use. The Frame box picks which frame the rows show." },
+      { term: "Seed window", desc: "A row's pencil opens its window: name, mode, seed (New rolls one, Last run puts back last run's), New each frame or Same every frame, its INT output, and Frames: the row's seed on every frame of the Loop, each one a lock. Lock last run pins what the last run used; Unlock all clears them. Changes land when you press Done." },
+      { term: "context (out)", sockets: ["out:context"], desc: "The Context, carrying the rows. A Context after it picks a row with its Seed from chip." },
+      { term: "seed outputs", sockets: ["out:seed_*"], desc: "One INT per row with its output dot on, at the right of its row: wire it into a KSampler's seed or any INT input. After a Loop it gives one seed per frame. Up to 16." },
     ],
   },
   WP_Toggles: {

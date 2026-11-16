@@ -14,7 +14,7 @@ from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
-from engine.seed_derive import apply_seed_locks, derive_loop_seeds
+from engine.seed_derive import LOOP_SEED_KEY, MAX_SAFE_SEED, apply_seed_locks, derive_loop_seeds
 from engine.sweep import HOLD_KEY, PIN_KEY, parse_sweep, sweep_frames, sweep_total
 from wp_nodes.types import (
     FRAME0_KEY,
@@ -254,13 +254,14 @@ class WPContextLoop(io.ComfyNode):
             if not kept:
                 kept = list(range(configured_count))
             total_count = configured_count
-        derived = (
-            apply_seed_locks(
-                derive_loop_seeds(int(seed), total_count, strategy),
-                seed_locks,
-            )
-            if has_override else None
+        # The series is derived whether or not the Loop overrides Context
+        # seeds: a Context set to "Seed from: Loop" reads it either way
+        # (`__wp_loop_seed__`); only the override stamps it on every Context.
+        series = apply_seed_locks(
+            derive_loop_seeds(int(seed), total_count, strategy),
+            seed_locks,
         )
+        derived = series if has_override else None
         # Build the loop_config payload once so the same dict drives both
         # the per-iteration internals AND the side output. `count` is the
         # configured/effective total (so WP_SeedList + the seed modal
@@ -320,6 +321,12 @@ class WPContextLoop(io.ComfyNode):
             internals: dict[str, object] = {
                 "__wp_loop_index__": idx,
                 "__wp_seed_override__": (derived[idx] if has_override else None),
+                LOOP_SEED_KEY: {
+                    "seed": series[idx],
+                    "frame0": series[0],
+                    # The Loop's own seed, for WP Seeds' "From Loop".
+                    "base": int(seed) & MAX_SAFE_SEED,
+                },
             }
             # Only stamp the derived series when override is active —
             # otherwise the values would be meaningless (downstream uses

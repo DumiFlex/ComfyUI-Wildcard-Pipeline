@@ -18,6 +18,7 @@ import {
   findWildcardHomesElsewhere,
   hasUpstreamLoopOverridingSeed,
   resolveUpstreamLoopSeed,
+  upstreamChainOf,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
@@ -25,7 +26,8 @@ import { collectCrossNodePairingsFull, collectFullChainModules } from "../extens
 import { deriveLoopSeeds, applySeedLocks, effectiveChainSeed } from "../components/shared/seed-derive";
 import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
-import { nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds } from "../extension/_stashes";
+import { nodeFrameSeeds, nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds, nodeSeedSource } from "../extension/_stashes";
+import { parseSeedsConfig, seedRows, SEED_FROM_AUTO, SEED_FROM_OWN } from "../extension/seeds";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 import { inputLinkId } from "../extension/slot-links";
 
@@ -213,6 +215,10 @@ const ContextWidget = defineAsyncComponent(() => import("../components/context/C
 type ContextNode = LiteNodeLike & MountTargetNode;
 
 export function create(node: ContextNode, inputName: string) {
+  /** The value's `seed_from` (ContextWidget reports it). */
+  const seedFrom = ref<string>(SEED_FROM_AUTO);
+  /** The seed the last run used and where it came from. */
+  const lastSeed = ref<{ seed: number; source: string } | null>(null);
   const initial = serializeWidgetJson(parseWidgetJson<ContextWidgetValue>("", emptyContextValue()));
   // Reactive `initialJson` prop — workflow load races (setValue can fire
   // before the async SFC chunk mounts) are handled by the SFC's watch on this
@@ -447,6 +453,32 @@ export function create(node: ContextNode, inputName: string) {
         },
         Object.is,
       );
+      // What this node's "Seed from" can pick: a Loop upstream, and the rows
+      // of every WP Seeds node upstream (muted / bypassed ones left out).
+      const seedSources = reactiveFromGraph(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => {
+          const startGraph =
+            (node as unknown as { graph?: LiteGraphLike }).graph
+            ?? (app.graph as unknown as LiteGraphLike);
+          const chain = upstreamChainOf(findRootGraph(startGraph), node as unknown as LiteNodeLike);
+          const live = chain.filter((n) => {
+            const mode = (n as { mode?: number }).mode;
+            return mode !== 2 && mode !== 4;
+          });
+          const rows: string[] = [];
+          for (const n of live) {
+            if (n.type !== "WP_Seeds") continue;
+            const raw = (n as { widgets?: Array<{ name?: string; value?: unknown }> }).widgets
+              ?.find((w) => w.name === "wp_seeds")?.value;
+            for (const r of seedRows(parseSeedsConfig(raw))) {
+              if (r.name.trim() && !rows.some((x) => x.toLowerCase() === r.name.trim().toLowerCase())) rows.push(r.name.trim());
+            }
+          }
+          return { loop: live.some((n) => n.type === "WP_ContextLoop"), rows };
+        },
+        (a, b) => a.loop === b.loop && stringArrayEqual(a.rows, b.rows),
+      );
       // Toggle the `seed` stock widget's `disabled` flag in lockstep
       // with the upstream-override state. Using a render-side effect
       // (call inside the render thunk) keeps the lock cheap — no
@@ -499,6 +531,10 @@ export function create(node: ContextNode, inputName: string) {
       // frame out of range — caller then falls back to the stored seed.
       function frameSeedReader(frame: number): number | null {
         if (!Number.isInteger(frame) || frame < 0) return null;
+        // What this node itself ran with on that frame last run (any Seed
+        // from source: Loop, own, a WP Seeds row).
+        const ran = nodeFrameSeeds.get(node)?.get(frame);
+        if (typeof ran === "number") return ran;
         // Prefer the seed THIS frame ACTUALLY rolled last run — captured from
         // the Loop's derived series in the run's UI payload (see onExecuted).
         // This is the PREVIOUS run's value, which is what "lock to reproduce"
@@ -555,7 +591,10 @@ export function create(node: ContextNode, inputName: string) {
         // no-op when the value hasn't changed, so this is safe to
         // call on every render. Doing it here keeps the lock tied
         // to the SFC lifecycle — no separate watch/dispose to leak.
-        syncSeedWidgetGate(upstreamLoopOverrides.value);
+        // The seed widget is greyed out while something else picks the seed:
+        // the Loop's override on Auto, or a Loop / WP Seeds row picked.
+        const from = seedFrom.value;
+        syncSeedWidgetGate(from === SEED_FROM_AUTO ? upstreamLoopOverrides.value : from !== SEED_FROM_OWN);
         return h(ContextWidget, {
           nodeId: node.id,
           initialJson: currentJson.value,
@@ -572,6 +611,11 @@ export function create(node: ContextNode, inputName: string) {
           nodeMode: nodeMode.value,
           lastUsedSeedReader,
           frameSeedReader,
+          seedSources: seedSources.value,
+          lastSeed: lastSeed.value,
+          onSeedFrom: (v: string) => {
+            seedFrom.value = v;
+          },
           onChange: (json: string) => host.setValue(json),
           onRequestMinWidth: (w: number) => {
             if (w === dynamicMinWidth) return;
@@ -681,6 +725,21 @@ export function create(node: ContextNode, inputName: string) {
         .filter((n) => Number.isFinite(n));
       if (series.length) nodeLoopSeeds.set(node, series);
       else nodeLoopSeeds.delete(node);
+    }
+    const rawFrames = out.frame_seeds;
+    if (Array.isArray(rawFrames)) {
+      const frames = new Map<number, number>();
+      for (const f of rawFrames) {
+        const { frame, seed } = (f ?? {}) as { frame?: unknown; seed?: unknown };
+        if (typeof frame === "number" && typeof seed === "number") frames.set(frame, seed);
+      }
+      nodeFrameSeeds.set(node, frames);
+    }
+    const rawSource = pickArrayValue(out, "seed_source");
+    const rawUsed = pickArrayValue(out, "seed_used");
+    if (typeof rawSource === "string" && typeof rawUsed === "number") {
+      nodeSeedSource.set(node, rawSource);
+      lastSeed.value = { seed: rawUsed, source: rawSource };
     }
     // No fallback when `module_seeds` is missing — the chain-level
     // `nodeLastUsedSeed` already updated above gives the
