@@ -24,7 +24,7 @@ import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
 import SliderRowView from "./SliderRow.vue";
 import { varColorClass } from "../shared/var-color";
-import { MAX_DECIMALS, sliderOutputType, wordFor, type SliderMode, type SliderRow, type SliderWord } from "../../extension/sliders";
+import { MAX_DECIMALS, fineStepOf, sliderOutputType, wordFor, type SliderMode, type SliderStyle, type SliderRow, type SliderWord } from "../../extension/sliders";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
 
@@ -66,6 +66,11 @@ const OUT_TYPES: { value: OutPick; label: string; hint: string }[] = [
   { value: "auto", label: "Auto", hint: "INT at 0 decimals, else FLOAT" },
   { value: "int", label: "INT", hint: "A whole number, rounded (steps, seeds, sizes)" },
   { value: "float", label: "FLOAT", hint: "The number at the slider's decimals (cfg, LoRA strength)" },
+];
+const STYLES: { value: SliderStyle; label: string; hint: string }[] = [
+  { value: "row", label: "Row", hint: "The name, then a thin track" },
+  { value: "bar", label: "Bar", hint: "The whole row is the track, the name inside it" },
+  { value: "fader", label: "Fader", hint: "An upright track; faders next to each other stand side by side" },
 ];
 const MODES: { value: SliderMode; label: string; hint: string }[] = [
   { value: "number", label: "Number", hint: "The variable gets the number, e.g. 0.45" },
@@ -140,6 +145,7 @@ const headStyle = computed(() => {
   if (d.value.text_color) st["--wp-slw-text"] = d.value.text_color;
   return st;
 });
+const fineUnit = computed(() => fineStepOf(d.value));
 const numHint = computed(() => `$${d.value.var || "name"}.num`);
 const outType = computed(() => sliderOutputType(d.value));
 
@@ -214,6 +220,14 @@ function onKey(ev: KeyboardEvent): void {
           <label class="wp-slw__num"><span>Step</span><WpNumber :model-value="d.step" :min="0" :step="d.decimals ? Number((0.1 ** d.decimals).toFixed(d.decimals)) : 1" size="sm" aria-label="Step" data-test="sl-step" @update:model-value="(v: number | null) => setRange({ step: v })" /></label>
           <label class="wp-slw__num"><span>Decimals</span><WpNumber :model-value="d.decimals" :min="0" :max="MAX_DECIMALS" :step="1" size="sm" aria-label="Decimals" data-test="sl-decimals" @update:model-value="(v: number | null) => setRange({ decimals: v })" /></label>
         </span>
+        <span
+          v-tooltip="fineUnit ? `Off: a drag lands on any value to ${fineUnit} (the arrows still move by the step). On: hold Shift while dragging for that` : 'The decimals can\'t write anything finer than the step'"
+          v-toggle-row
+          class="wp-slw__check"
+        >
+          <Checkbox :model-value="!d.free" size="sm" :disabled="!fineUnit" aria-label="Snap to step" data-test="sl-snap" @update:model-value="(v: boolean) => patch({ free: v ? undefined : true })" />
+          <span aria-hidden="true">Snap to step</span>
+        </span>
       </div>
       <div class="wp-slw__field">
         <span>Value <em>what ${{ d.var || 'name' }} holds</em></span>
@@ -265,6 +279,10 @@ function onKey(ev: KeyboardEvent): void {
       </div>
       <Banner v-if="missingVars.length" tone="warn" size="sm" data-test="sl-missing-vars">{{ missingVars.map((v) => '$' + v).join(', ') }}: nothing upstream sets {{ missingVars.length > 1 ? 'these' : 'this' }}, so it prints nothing</Banner>
       <Banner v-if="d.mode === 'text' && hasInlinePicks(d.text ?? '')" tone="warn" size="sm">{{ INLINE_PICKS_NOTE }}</Banner>
+      <div class="wp-slw__field">
+        <span>Style <em>how the slider is drawn on the node</em></span>
+        <WpSegmented :model-value="d.style" :options="STYLES" size="sm" block aria-label="Style" test-prefix="sl-style" @update:model-value="(v: SliderStyle) => patch({ style: v })" />
+      </div>
       <div class="wp-slw__field">
         <span>Looks <em>icon and colours; None keeps the theme's</em></span>
         <span class="wp-slw__looks">
@@ -358,6 +376,7 @@ function onKey(ev: KeyboardEvent): void {
 .wp-slw__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .wp-slw__var-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-slw__var-row .wp-slw__var { flex: 1 1 0; min-width: 80px; }
+.wp-slw__range + .wp-slw__check { align-self: flex-start; margin-top: 4px; }
 .wp-slw__range { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .wp-slw__num { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-slw__word { display: grid; grid-template-columns: 128px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 4px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }

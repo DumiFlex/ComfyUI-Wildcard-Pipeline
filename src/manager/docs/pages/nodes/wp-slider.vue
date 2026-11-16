@@ -75,6 +75,22 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </Banner>
     </DocSection>
 
+    <DocSection title="Row, bar or fader">
+      <p>
+        Each slider picks its <b>Style</b> in its window. <b>Row</b> puts the name in a column and a
+        thin track after it, so every track starts at the same place. <b>Bar</b> makes the whole row
+        the track, with the name inside it, for a LoRA strength you grab anywhere. <b>Fader</b>
+        stands the track up, value on top and name under it; faders next to each other stand side
+        by side like a mixing desk, and their output dots line up beside a list of their names. Mix
+        them freely: a Sampler group of rows above a group of faders.
+      </p>
+      <p>
+        A drag lands on the slider's step. Hold <b>Shift</b> while dragging to land on any value its
+        decimals can write, or turn off <b>Snap to step</b> to drag that finely all the time (the
+        arrow keys still move by the step).
+      </p>
+    </DocSection>
+
     <DocSection title="Works with">
       <CrossLinks
         :links="[

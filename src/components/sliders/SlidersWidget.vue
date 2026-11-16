@@ -29,6 +29,7 @@ import {
   MAX_OUTPUTS,
   dropSliderRow,
   groupsOf,
+  sliderRuns,
   newSlider,
   newSliderLabel,
   sliderProblems,
@@ -245,14 +246,37 @@ function rowProps(s: SliderRow) {
           <span class="wp-sl__count">{{ g.sliders.length }}</span>
         </div>
         <template v-if="!g.label?.collapsed">
-          <SliderRowView
-            v-for="item in g.sliders"
-            :key="item.id"
-            v-bind="rowProps(item)"
-            :data-wp-part="`slider:${item.id}`"
-            :data-wp-part-label="item.name || 'Slider'"
-            @set-value="(v: number) => patchSlider(item.id, { value: v })"
-          />
+          <template v-for="run in sliderRuns(g.sliders)" :key="run.kind === 'row' ? run.s.id : `f-${run.faders[0]?.id}`">
+            <SliderRowView
+              v-if="run.kind === 'row'"
+              v-bind="rowProps(run.s)"
+              :data-wp-part="`slider:${run.s.id}`"
+              :data-wp-part-label="run.s.name || 'Slider'"
+              @set-value="(v: number) => patchSlider(run.s.id, { value: v })"
+            />
+            <!-- Faders side by side; their output dots line up on the list at the right. -->
+            <div v-else class="wp-sl__faders" data-test="sl-faders">
+              <div class="wp-sl__fader-cols">
+                <SliderRowView
+                  v-for="f in run.faders"
+                  :key="f.id"
+                  v-bind="rowProps(f)"
+                  :data-wp-part="`slider:${f.id}`"
+                  :data-wp-part-label="f.name || 'Slider'"
+                  @set-value="(v: number) => patchSlider(f.id, { value: v })"
+                />
+              </div>
+              <div v-if="run.faders.some((f) => f.pin && f.out)" class="wp-sl__fader-outs">
+                <span
+                  v-for="f in run.faders.filter((x) => x.pin && x.out)"
+                  :key="f.id"
+                  class="wp-sl__fader-out"
+                  :data-wp-out="`value_${f.out}`"
+                  :data-test="`sl-fader-out-${f.id}`"
+                >{{ f.name }}</span>
+              </div>
+            </div>
+          </template>
         </template>
       </div>
     </template>
@@ -323,6 +347,7 @@ function rowProps(s: SliderRow) {
           >
             <SliderRowView
               v-bind="rowProps(item)"
+              flat
               @set-value="(v: number) => patchSlider(item.id, { value: v })"
               @patch="(p: Partial<SliderRow>) => patchSlider(item.id, p)"
               @edit="editing = editing === item.id ? null : item.id"
@@ -380,6 +405,10 @@ function rowProps(s: SliderRow) {
 .wp-sl__label-name { flex: 0 1 auto; width: 12ch; min-width: 4ch; }
 .wp-sl__rule { flex: 1; height: 1px; background: currentColor; opacity: 0.25; }
 .wp-sl__count { font: 10.5px var(--wp-font-mono, monospace); color: var(--wp-text-dim, var(--wp-text3)); white-space: nowrap; }
+.wp-sl__faders { display: flex; align-items: stretch; gap: 6px; min-width: 0; padding: 2px 0; background: var(--wp-bg2, var(--wp-bg-1)); border-radius: min(4px, var(--wp-radius-cap, 999px)); }
+.wp-sl__fader-cols { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 2px 4px; flex: 1; min-width: 0; }
+.wp-sl__fader-outs { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding-right: 8px; max-width: 40%; }
+.wp-sl__fader-out { font-size: 10.5px; line-height: 18px; text-align: right; color: var(--wp-text-muted, var(--wp-text2)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wp-sl__ghost { padding: 4px; font-size: 10.5px; font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-sl__adds { display: flex; gap: 6px; }
 .wp-sl__adds > :first-child { flex: 1; }

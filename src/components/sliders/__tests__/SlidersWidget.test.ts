@@ -64,6 +64,46 @@ describe("SliderRow", () => {
   });
 });
 
+describe("SliderRow styles", () => {
+  it("draws a bar with the name inside and drags freely when not snapped", async () => {
+    const s = slider({ id: "a", name: "Detail", style: "bar", free: true });
+    const w = mount(SliderRowView, { props: { s, editing: false, editable: false } });
+    expect(w.find(".wp-slr__head").exists()).toBe(false);
+    expect(w.find(".wp-slider[data-variant=\"bar\"]").exists()).toBe(true);
+    expect(w.find(".wp-slr__in-name").text()).toBe("Detail");
+    w.unmount();
+  });
+
+  it("draws a fader upright, but as a row in the edit view", () => {
+    const s = slider({ id: "a", style: "fader", pin: true, out: 1 });
+    const up = mount(SliderRowView, { props: { s, editing: false, editable: false } });
+    expect(up.find(".wp-slider[data-variant=\"fader\"]").exists()).toBe(true);
+    expect(up.find('[data-test="sl-row-a"]').attributes("data-wp-out")).toBeUndefined();
+    up.unmount();
+    const flat = mount(SliderRowView, { props: { s, editing: false, editable: true, flat: true } });
+    expect(flat.find(".wp-slider[data-variant=\"line\"]").exists()).toBe(true);
+    expect(flat.find('[data-test="sl-row-a"]').attributes("data-wp-out")).toBe("value_1");
+    flat.unmount();
+  });
+
+  it("stands faders side by side with their dots on a list beside them", () => {
+    const faders: SlidersConfig = {
+      version: 1,
+      rows: [
+        slider({ id: "a", style: "fader", pin: true, out: 1 }),
+        slider({ id: "b", style: "fader" }),
+        slider({ id: "c", style: "row" }),
+      ],
+    };
+    const w = mount(SlidersWidget, { props: { modelValue: faders } });
+    const strip = w.find('[data-test="sl-faders"]');
+    expect(strip.findAll(".wp-slr")).toHaveLength(2);
+    expect(w.find('[data-test="sl-fader-out-a"]').attributes("data-wp-out")).toBe("value_1");
+    expect(w.find('[data-test="sl-fader-out-b"]').exists()).toBe(false);
+    w.unmount();
+  });
+});
+
 describe("SlidersWidget", () => {
   it("opens the edit view on request and adds a slider", async () => {
     const w = mount(SlidersWidget, { props: { modelValue: cfg, editRequest: 0 }, attachTo: document.body });
@@ -148,6 +188,18 @@ describe("SliderEditWindow", () => {
     }
     await flushPromises();
     expect(done(w)).toMatchObject({ pin: true, max: 0.5, value: 0.5 });
+    w.unmount();
+  });
+
+  it("picks a style and turns snapping off", async () => {
+    const w = open(slider({ id: "c" }));
+    await flushPromises();
+    q('[data-test="sl-style-fader"]')?.click();
+    await flushPromises();
+    const snapLabel = [...document.body.querySelectorAll<HTMLElement>(".wp-slw__check > span")].find((x) => x.textContent === "Snap to step");
+    snapLabel?.click();
+    await flushPromises();
+    expect(done(w)).toMatchObject({ style: "fader", free: true });
     w.unmount();
   });
 });
