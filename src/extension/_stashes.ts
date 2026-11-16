@@ -118,6 +118,11 @@ export const templateInsertAtCaret: WeakMap<object, (token: string) => void> = n
 export const nodeLastUsedSeed: WeakMap<object, number> = new WeakMap();
 export const nodeLastUsedPerModule: WeakMap<object, Record<string, number>> = new WeakMap();
 export const nodeLoopSeeds: WeakMap<object, number[]> = new WeakMap();
+/** WP_Context: the seed each frame ran with last run (frame index → seed),
+ *  from its `frame_seeds` UI output, whatever its Seed from source. */
+export const nodeFrameSeeds: WeakMap<object, Map<number, number>> = new WeakMap();
+/** WP_Context: the source its last run's seed came from (`seed_source`). */
+export const nodeSeedSource: WeakMap<object, string> = new WeakMap();
 
 /** Previous run's `loop_seeds` series for a Context Loop / Seed List node
  *  (`widgets/_seed-capture.ts`), driving the seed modal's "lock previous".

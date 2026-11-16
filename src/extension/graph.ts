@@ -1840,6 +1840,20 @@ function chainLoopCount(chain: LiteNodeLike[]): number | null {
   return null;
 }
 
+/**
+ * The `seed` widget of the Context Loop upstream of `node` in its context
+ * chain (WP Seeds' "Base seed from Loop" preview), or null with no Loop. A
+ * wired seed reads the widget's last value: the run uses the wire.
+ */
+export function upstreamLoopSeed(rootGraph: LiteGraphLike, node: LiteNodeLike): number | null {
+  for (const n of upstreamChain(rootGraph, node)) {
+    if (n.type !== "WP_ContextLoop" || isSkippedMode(n)) continue;
+    const raw = widgetNumber(n, "seed");
+    return Number.isFinite(raw) && raw >= 0 ? raw : 0;
+  }
+  return null;
+}
+
 /** 0-based frames below `count` on which some Context module in `chain`
  *  differs from its base (an on/off switch or an instance patch). Every
  *  other frame resolves like the base. */

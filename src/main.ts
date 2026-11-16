@@ -17,6 +17,7 @@ const {
   togglesMod,
   slidersMod,
   togglesMergeMod,
+  seedsMod,
   imageFilterWidgetMod,
   labelGridMod,
   noteMod,
@@ -169,6 +170,7 @@ type InjectorCreateNode = Parameters<typeof injMod.create>[0];
 type CleanerCreateNode = Parameters<typeof cleanerMod.create>[0];
 type ModelInfoCreateNode = Parameters<typeof modelInfoMod.create>[0];
 type TogglesCreateNode = Parameters<typeof togglesMod.create>[0];
+type SeedsCreateNode = Parameters<typeof seedsMod.create>[0];
 type SlidersCreateNode = Parameters<typeof slidersMod.create>[0];
 type ImageFilterCreateNode = Parameters<typeof imageFilterWidgetMod.create>[0];
 type LabelGridCreateNode = Parameters<typeof labelGridMod.create>[0];
@@ -414,6 +416,8 @@ app.registerExtension({
         showMod.offerPanel(node, inputName, () => modelInfoMod.create(node, inputName)),
       WP_TOGGLES: (node: TogglesCreateNode, inputName: string) =>
         showMod.offerPanel(node, inputName, () => togglesMod.create(node, inputName)),
+      WP_SEEDS: (node: SeedsCreateNode, inputName: string) =>
+        showMod.offerPanel(node, inputName, () => seedsMod.create(node, inputName)),
       WP_SLIDERS: (node: SlidersCreateNode, inputName: string) =>
         showMod.offerPanel(node, inputName, () => slidersMod.create(node, inputName)),
       WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>

@@ -11,6 +11,7 @@ The heart of the pipeline. Holds a stack of **modules** (wildcards, fixed values
 
 - **upstream (in)** `context`: Optional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them.
 - **seed** `INT`: Decides every random pick in this node. See Seeds & loops.
+- **Seed from**: Shows once a Context Loop or a WP Seeds node is upstream. Auto (the default): the Loop's frame seed while Override Context seed is on, else this node's seed. Loop: always the Loop's frame seed. Own seed: the seed widget, or whatever is wired into it, even while the Loop overrides. A WP Seeds row: that row's seed for each frame. A wired seed is only used on Own seed and Auto. When the picked source isn't upstream, the node runs as Auto and WP Debug says so.
 - **context (out)** `context`: The variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context.
 
 ## Row markers

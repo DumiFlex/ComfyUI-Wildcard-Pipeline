@@ -1361,6 +1361,10 @@
      "text": "Turn on Override Context seed on the loop. The loop then works out every frame's seed from its own seed, so the same loop seed always gives the same batch. The strategy buttons choose how those seeds are spread. It only changes which numbers are used; every strategy gives each frame its own picks.\nhash (default)\nEach frame gets a seed worked out from the base seed. The seeds look random.\nsequential\nSeeds count up: base, base+1, base+2 … Easy to read out and type back in.\nstride\nSeeds take large even jumps from the base.\nWith it off (the default), each WP Context uses its own seed and the loop changes it a little per frame."
     },
     {
+     "title": "Pick the seed per node",
+     "text": "WP Seeds holds named seeds, each with its own value for every frame. Put it after the loop and every WP Context gets a Seed from chip: Auto, Loop, Own seed or one of the WP Seeds rows. Nothing takes over on its own, so a wired seed or the loop's override is only used where the chip says so."
+    },
+    {
      "title": "Keep the frames you liked",
      "text": "Per-iteration seeds (on the loop and on WP Seed List) lists the seed each frame will use. Lock a frame's seed to keep it while the rest keep changing. Lock all, Copy and Paste (as #N: seed lines) work on the whole list.\nAfter a run you liked, use Prev. The list shows the seeds for the next run, and with randomize on those have already moved. Prev locks the seed the frame used last time. On the loop it needs Override Context seed on."
     },
@@ -1370,7 +1374,7 @@
     },
     {
      "title": "Works with",
-     "text": "WP Context Loop WP Seed List WP Context Per-iteration overrides"
+     "text": "WP Context Loop WP Seed List WP Seeds WP Context Per-iteration overrides"
     }
    ]
   },
@@ -1596,7 +1600,7 @@
     },
     {
      "title": "Inputs and outputs",
-     "text": "upstream (in)\nOptional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them.\nseed\nDecides every random pick in this node. See Seeds & loops.\ncontext (out)\nThe variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context."
+     "text": "upstream (in)\nOptional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them.\nseed\nDecides every random pick in this node. See Seeds & loops.\nSeed from\nShows once a Context Loop or a WP Seeds node is upstream. Auto (the default): the Loop's frame seed while Override Context seed is on, else this node's seed. Loop: always the Loop's frame seed. Own seed: the seed widget, or whatever is wired into it, even while the Loop overrides. A WP Seeds row: that row's seed for each frame. A wired seed is only used on Own seed and Auto. When the picked source isn't upstream, the node runs as Auto and WP Debug says so.\ncontext (out)\nThe variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context."
     },
     {
      "title": "What the row markers mean",
@@ -1686,6 +1690,49 @@
     {
      "title": "Works with",
      "text": "Seeds & loops WP Context Loop Per-iteration overrides WP Context"
+    }
+   ]
+  },
+  {
+   "id": "wp-seeds",
+   "title": "WP Seeds",
+   "group": "nodes",
+   "blurb": "Named seeds per frame: each Context picks the one it runs on, each sampler can take its own.",
+   "keywords": [
+    "seed",
+    "seeds",
+    "rgthree",
+    "global seed",
+    "lock",
+    "frame",
+    "loop",
+    "ksampler",
+    "seed from"
+   ],
+   "sections": [
+    {
+     "title": "What it does",
+     "text": "A Context Loop gives every frame one base seed, and every Context after it follows that seed. WP Seeds lets you name the seeds your workflow needs (Hero, Background, Sampler …) and choose, per node, which one it uses. Each row is a seed of its own, with a value for every frame of the loop, and a lock for any frame you want to keep.\nGood for\n- Keeping the hero the same while the background changes every frame\n- Giving two Contexts or two samplers their own seeds from one place\n- Locking the seed one frame used, for one Context only\nBetter with something else\n- One seed per frame for a single sampler: WP Seed List does just that"
+    },
+    {
+     "title": "Set it up",
+     "text": "Figure: Put WP Seeds after the Loop in the Context chain, then pick a row on each Context's Seed from chip. Steps: WP Context Loop (N frames) → context → WP Seeds (a seed per row) → context → WP Context (Seed from › Hero). Flow diagram of three nodes left to right: WP Context Loop (N frames), an arrow labelled context, WP Seeds (a seed per row), an arrow labelled context, and WP Context (Seed from › Hero). Caption: put WP Seeds after the Loop in the Context chain, then pick a row on each Context's Seed from chip.\n- Wire the Loop's context output into WP Seeds, and WP Seeds' context output into your first WP Context.\n- Select WP Seeds and press the pencil above it. Add seed for each seed you need, and name it in its window.\n- On each WP Context, click the Seed from chip at the top and pick the row.\n- For a sampler, tick INT output in the row's window and wire the dot into the sampler's seed."
+    },
+    {
+     "title": "The controls",
+     "text": "upstream (in)\nOptional. A Context or a Context Loop. Put it after the Loop to get a seed per frame; Contexts after it can read its rows.\nbase_seed\nThe seed every Follow row is made from, like the Loop's and Seed List's base seed. Reroll (above the rows inside a Loop, or in the edit view) or control after generate moves all of them at once; locked frames stay.\nFrom Loop\nShown with a Context Loop upstream. On, the rows follow the Loop's seed instead of base_seed (which greys out), like Seed List's base seed from loop: change the Loop's seed and every Follow row moves. Off (the default), the node keeps its own.\nRows\nOne row per named seed, under labels that group and fold them. A row shows its name, the seed it gives the frame shown (in the row's colour) and its mode, then three buttons: mode, last run and lock.\nMode button (row)\nCycles the row Follow → Random → Fixed without opening anything. Leaving Follow keeps the seed the row has, so nothing jumps until you reroll.\nLast run (row)\nPuts the row back on the seed it started from last run and sets it to Fixed: the way back after a Random row rolled on, or to keep a result you liked. Greyed out before the first run and when the row is already on it.\nPencil (toolbar)\nSelect the node and the pencil in ComfyUI's selection toolbar opens the edit view: grips to reorder, label names, each row's pencil (its window) and bin, Add seed, Add label and Reroll. Done goes back to the clean view.\nFollow / Random / Fixed\nFollow: made from the base seed and the row's name, so renaming a row changes its seed. Random: its own seed, rolled again after every queue. Fixed: its own seed, never changes.\nPer frame\nNew (the default): every frame of a Context Loop gets its own seed, frame 1 being the row's seed. Same: every frame uses the row's seed.\nLock (row)\nPins the shown frame's seed: the one it used last run if there was one, else the one it will use. The Frame box picks which frame the rows show.\nSeed window\nA row's pencil opens its window: name, mode, seed (New rolls one, Last run puts back last run's), New each frame or Same every frame, its INT output, and Frames: the row's seed on every frame of the Loop, each one a lock. Lock last run pins what the last run used; Unlock all clears them. Changes land when you press Done.\ncontext (out)\nThe Context, carrying the rows. A Context after it picks a row with its Seed from chip.\nseed outputs\nOne INT per row with its output dot on, at the right of its row: wire it into a KSampler's seed or any INT input. After a Loop it gives one seed per frame. Up to 16.\nA Follow row's seed comes from the node's base seed and the row's name. Renaming the row gives it a new seed; switch it to Fixed first (the mode button on the row) to keep the one it has."
+    },
+    {
+     "title": "Seed from on a Context",
+     "text": "Every WP Context with a Loop or a WP Seeds node upstream shows a Seed from chip next to its name. Nothing takes over on its own: a seed wired into the Context is only used on Own seed and Auto, and the Loop's override only applies on Auto and Loop.\nupstream (in)\nOptional. Another WP Context, an Injector, Model Info or a Loop. This node starts with their variables and can add to them or replace them.\nseed\nDecides every random pick in this node. See Seeds & loops.\nSeed from\nShows once a Context Loop or a WP Seeds node is upstream. Auto (the default): the Loop's frame seed while Override Context seed is on, else this node's seed. Loop: always the Loop's frame seed. Own seed: the seed widget, or whatever is wired into it, even while the Loop overrides. A WP Seeds row: that row's seed for each frame. A wired seed is only used on Own seed and Auto. When the picked source isn't upstream, the node runs as Auto and WP Debug says so.\ncontext (out)\nThe variables. Wire it into a WP Prompt Assembler, a WP Debug or another WP Context."
+    },
+    {
+     "title": "Good to know",
+     "text": "- Two rows with the same name: Contexts read the first one, and the second shows a warning.\n- Random rows roll a new seed once the prompt is queued, like a seed set to randomize. The row's Last run button brings back the one it ran with.\n- With From Loop on, the Loop's seed is the base seed: one number drives the Loop and every Follow row. The Loop's override still only changes Contexts on Auto.\n- Without a Loop every row has one seed, and its outputs give one value.\n- Locks are per row and per frame, so one Context can keep frame 3 while the others move on.\n- More on seeds: Seeds & loops."
+    },
+    {
+     "title": "Works with",
+     "text": "Seeds & loops WP Context Loop WP Context WP Seed List"
     }
    ]
   },
