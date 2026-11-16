@@ -51,10 +51,12 @@ async def in_db_thread(request: web.Request, fn: Callable[..., Any], *args: Any,
     the loop: opening one runs PRAGMAs and can wait on a lock.
     """
     injected = request.app.get("wp_db") if hasattr(request, "app") else None
+    if injected is not None:
+        # A connection a test injected belongs to the thread that made it
+        # (sqlite3's default `check_same_thread`): use it right here.
+        return fn(injected, *args, **kwargs)
 
     def work() -> Any:
-        if injected is not None:
-            return fn(injected, *args, **kwargs)
         conn = get_connection()
         try:
             return fn(conn, *args, **kwargs)

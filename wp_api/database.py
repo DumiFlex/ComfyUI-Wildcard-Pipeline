@@ -21,7 +21,7 @@ from engine.db.connection import (
     user_location_path,
 )
 from engine.db.info import analyze, gather_info, integrity_check, run_migrations, vacuum
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import in_db_thread, json_error, json_ok
 
 _OPS = {
     "vacuum": vacuum,
@@ -36,8 +36,7 @@ _VALID_MODES = {"copy", "move"}
 
 async def get_info(request: web.Request) -> web.Response:
     db_path, source = resolve_db_path_with_source()
-    with db_session(request) as conn:
-        info = gather_info(conn, db_path, source=source)
+    info = await in_db_thread(request, gather_info, db_path, source=source)
     return json_ok(info)
 
 
@@ -55,8 +54,9 @@ async def run_maintenance(request: web.Request) -> web.Response:
             status=400,
         )
     handler = _OPS[op]
-    with db_session(request) as conn:
-        result = handler(conn)
+    # VACUUM rewrites the whole file and integrity_check reads all of it:
+    # in a worker, so ComfyUI keeps answering meanwhile.
+    result = await in_db_thread(request, handler)
     # result already includes ok / op / duration_ms (+ op-specific keys)
     return json_ok(result)
 

@@ -7,6 +7,7 @@ themselves the frozen snapshot package, so re-snapshotting at insert
 time is a no-op."""
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 
@@ -17,9 +18,11 @@ from engine.modules.dispatcher import get_handler
 from engine.modules.snapshot import payload_hash
 from wp_api._helpers import (
     db_session,
+    in_db_thread,
     json_error,
     json_ok,
     json_ok_revalidated,
+    json_text,
     make_etag,
     matches_if_none_match,
 )
@@ -342,7 +345,7 @@ async def list_bundles(request: web.Request) -> web.Response:
     if offset < 0:
         return json_error("offset must be non-negative", status=400)
 
-    with db_session(request) as conn:
+    def _list(conn: sqlite3.Connection) -> str:
         repo = BundleRepository(conn)
         items = repo.list(
             category_id=category_id, query=query,
@@ -352,19 +355,22 @@ async def list_bundles(request: web.Request) -> web.Response:
             category_id=category_id, query=query,
             favorites_only=favorites,
         )
-    if contains_module:
-        # Children are stored as JSON; SQLite has no efficient nested-array
-        # contains. Library volumes are dozens of bundles — Python filter
-        # is fast enough and keeps the SQL portable.
-        items = [
-            b for b in items
-            if any(
-                isinstance(c, dict) and c.get("id") == contains_module
-                for c in (b.get("children") or [])
-            )
-        ]
-        total = len(items)
-    return json_ok({"items": items, "total": total})
+        if contains_module:
+            # Children are stored as JSON; SQLite has no efficient nested-array
+            # contains. Library volumes are dozens of bundles — Python filter
+            # is fast enough and keeps the SQL portable.
+            items = [
+                b for b in items
+                if any(
+                    isinstance(c, dict) and c.get("id") == contains_module
+                    for c in (b.get("children") or [])
+                )
+            ]
+            total = len(items)
+        return json.dumps({"items": items, "total": total})
+
+    # Every bundle's children decoded and re-encoded (~700 KB): in a worker.
+    return json_text(await in_db_thread(request, _list))
 
 
 async def create_bundle(request: web.Request) -> web.Response:
@@ -653,12 +659,16 @@ async def list_hashes(request: web.Request) -> web.Response:
     column, so `list_hash_rows` reads two columns and parses nothing; the old
     `list()` call selected every column and parsed each bundle's `tags` and
     `children` for a map that wants neither."""
-    with db_session(request) as conn:
+    def _hashes(conn: sqlite3.Connection) -> tuple[str, list[dict] | None]:
         repo = BundleRepository(conn)
         etag = make_etag("bundles-hashes-v1", repo.library_stamp())
         if matches_if_none_match(request, etag):
-            return json_ok_revalidated(request, None, etag=etag)
-        rows = repo.list_hash_rows()
+            return etag, None
+        return etag, repo.list_hash_rows()
+
+    etag, rows = await in_db_thread(request, _hashes)
+    if rows is None:
+        return json_ok_revalidated(request, None, etag=etag)
     return json_ok_revalidated(request, {
         "hashes": {row["id"]: row["payload_hash"] for row in rows},
     }, etag=etag)

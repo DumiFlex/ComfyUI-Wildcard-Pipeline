@@ -1,6 +1,7 @@
 """/wp/api/modules CRUD + snapshot + match + duplicate + favorite endpoints."""
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 
@@ -11,9 +12,11 @@ from engine.modules.dispatcher import get_handler
 from engine.modules.snapshot import freeze_snapshot, payload_hash
 from wp_api._helpers import (
     db_session,
+    in_db_thread,
     json_error,
     json_ok,
     json_ok_revalidated,
+    json_text,
     make_etag,
     matches_if_none_match,
 )
@@ -190,7 +193,7 @@ async def list_modules(request: web.Request) -> web.Response:
     if offset < 0:
         return json_error("offset must be non-negative", status=400)
 
-    with db_session(request) as conn:
+    def _list(conn: sqlite3.Connection) -> str:
         repo = ModuleRepository(conn)
         items = repo.list(
             type=type_, category_id=category_id, query=query,
@@ -202,7 +205,11 @@ async def list_modules(request: web.Request) -> web.Response:
             type=type_, category_id=category_id, query=query,
             favorites_only=favorites,
         )
-    return json_ok({"items": items, "total": total})
+        return json.dumps({"items": items, "total": total})
+
+    # The whole library is ~700 KB of decoded and re-encoded JSON: read and
+    # serialise it in a worker thread, not on ComfyUI's event loop.
+    return json_text(await in_db_thread(request, _list))
 
 
 _NEW_ID = re.compile(r"[0-9a-f]{8}")
@@ -233,40 +240,46 @@ async def create_module(request: web.Request) -> web.Response:
         if err is not None:
             return json_error(err, status=400)
 
+    def _create(conn: sqlite3.Connection) -> dict | web.Response:
+        if body["type"] == "constraint":
+            _hydrate_constraint_exceptions(conn, body["payload"])
+        err = _validate_payload_for_type(body["type"], body["payload"])
+        if err is not None:
+            return json_error(err, status=400)
+        repo = ModuleRepository(conn)
+        # An optional `id` (8 hex) lets the AI chat pre-assign the id of
+        # a module it proposes, so a constraint or ref proposed in the
+        # same answer can already point at it.
+        given = body.get("id")
+        if given is not None:
+            if not isinstance(given, str) or not _NEW_ID.fullmatch(given):
+                return json_error("id must be 8 lowercase hex characters", status=400)
+            try:
+                repo.get(given)
+                return json_error(f"module {given} already exists", status=409)
+            except ModuleNotFound:
+                pass
+        row = repo.create(
+            id=given,
+            type=body["type"], name=body["name"],
+            description=body.get("description", ""),
+            category_id=body.get("category_id"),
+            tags=body.get("tags", []),
+            payload=body["payload"],
+            is_favorite=bool(body.get("is_favorite", False)),
+            content_rating=body.get("content_rating", "safe"),
+        )
+        if given is not None:
+            # Back at an id it had (Undo on the AI chat's delete card):
+            # the bundles its delete flagged find it again.
+            _unflag_orphaned_in_bundles(conn, given)
+        return row
+
     try:
-        with db_session(request) as conn:
-            if body["type"] == "constraint":
-                _hydrate_constraint_exceptions(conn, body["payload"])
-            err = _validate_payload_for_type(body["type"], body["payload"])
-            if err is not None:
-                return json_error(err, status=400)
-            repo = ModuleRepository(conn)
-            # An optional `id` (8 hex) lets the AI chat pre-assign the id of
-            # a module it proposes, so a constraint or ref proposed in the
-            # same answer can already point at it.
-            given = body.get("id")
-            if given is not None:
-                if not isinstance(given, str) or not _NEW_ID.fullmatch(given):
-                    return json_error("id must be 8 lowercase hex characters", status=400)
-                try:
-                    repo.get(given)
-                    return json_error(f"module {given} already exists", status=409)
-                except ModuleNotFound:
-                    pass
-            row = repo.create(
-                id=given,
-                type=body["type"], name=body["name"],
-                description=body.get("description", ""),
-                category_id=body.get("category_id"),
-                tags=body.get("tags", []),
-                payload=body["payload"],
-                is_favorite=bool(body.get("is_favorite", False)),
-                content_rating=body.get("content_rating", "safe"),
-            )
-            if given is not None:
-                # Back at an id it had (Undo on the AI chat's delete card):
-                # the bundles its delete flagged find it again.
-                _unflag_orphaned_in_bundles(conn, given)
+        # Off the loop: a re-created id rewrites every bundle that held it.
+        row = await in_db_thread(request, _create)
+        if isinstance(row, web.Response):
+            return row
     except ValueError as e:
         return json_error(str(e), status=400)
     except sqlite3.IntegrityError as e:
@@ -424,8 +437,8 @@ async def update_module(request: web.Request) -> web.Response:
         if err is not None:
             return json_error(err, status=400)
 
-    bundles_updated: list[str] = []
-    with db_session(request) as conn:
+    def _update(conn: sqlite3.Connection) -> tuple[dict, list[str]] | web.Response:
+        bundles_updated: list[str] = []
         repo = ModuleRepository(conn)
         if expected_version is not None:
             try:
@@ -474,7 +487,14 @@ async def update_module(request: web.Request) -> web.Response:
         propagatable_keys = {"payload", "name", "description", "tags"}
         if propagate and propagatable_keys & kwargs.keys():
             bundles_updated = _propagate_module_to_bundles(conn, row)
+        return row, bundles_updated
 
+    # Off the loop: a save rewrites every bundle holding the module, and a
+    # rename every ref to it.
+    done = await in_db_thread(request, _update)
+    if isinstance(done, web.Response):
+        return done
+    row, bundles_updated = done
     out = dict(row)
     out["bundles_updated"] = bundles_updated
     return json_ok(out)
@@ -549,16 +569,22 @@ def _unflag_orphaned_in_bundles(conn: sqlite3.Connection, module_id: str) -> lis
 
 async def delete_module(request: web.Request) -> web.Response:
     mid = request.match_info["id"]
-    with db_session(request) as conn:
+
+    def _delete(conn: sqlite3.Connection) -> bool:
         try:
             ModuleRepository(conn).delete(mid)
         except ModuleNotFound:
-            return json_error(f"module not found: {mid}", status=404)
+            return False
         # After the row's gone, flag any bundle children whose snapshot
         # pointed at this id so the SPA can render a "stale snapshot"
         # badge. Same transaction means the bundles never see a window
         # where the module is missing but children aren't flagged.
         _flag_orphaned_in_bundles(conn, mid)
+        return True
+
+    # Off the loop: flagging reads every bundle.
+    if not await in_db_thread(request, _delete):
+        return json_error(f"module not found: {mid}", status=404)
     return web.Response(status=204)
 
 
@@ -689,12 +715,16 @@ async def list_hashes(request: web.Request) -> web.Response:
     which is the case that repeats. The map is only built when the stamp
     moves.
     """
-    with db_session(request) as conn:
+    def _hashes(conn: sqlite3.Connection) -> tuple[str, list[dict] | None]:
         repo = ModuleRepository(conn)
         etag = make_etag("modules-hashes-v1", repo.library_stamp())
         if matches_if_none_match(request, etag):
-            return json_ok_revalidated(request, None, etag=etag)
-        rows = repo.list_hash_rows()
+            return etag, None
+        return etag, repo.list_hash_rows()
+
+    etag, rows = await in_db_thread(request, _hashes)
+    if rows is None:
+        return json_ok_revalidated(request, None, etag=etag)
     # Wire key stays "hashes" (value string -> object) to avoid relabeling
     # consumers. `type` enables cross-kind id-clash detection; `payload_hash`
     # is the existing drift signal the in-graph WP_Context compares against

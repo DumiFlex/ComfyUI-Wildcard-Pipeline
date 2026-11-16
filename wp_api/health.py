@@ -28,7 +28,7 @@ from engine.db.repositories import (
     TemplateRepository,
 )
 from engine.scenario import ScenarioError, resolve_seeds, run_scenario
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import db_session, in_db_thread, json_error, json_ok
 from wp_api.test_runner import _build_catalog, _build_stack
 
 #: Seeds the variety check runs when the body doesn't say.
@@ -79,22 +79,26 @@ async def scan_route(request: web.Request) -> web.Response:
     if canvas is not None and not isinstance(canvas, dict):
         return json_error("canvas must be an object or null", status=400)
 
-    with db_session(request) as conn:
+    kwargs: dict[str, Any] = {}
+    if canvas is not None:
+        kwargs["canvas_ids"] = _str_list(canvas.get("ids")) or []
+        kwargs["canvas_vars"] = _str_list(canvas.get("vars")) or []
+        kwargs["canvas_reads"] = _str_list(canvas.get("reads")) or []
+
+    def _scan(conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], list[str]]:
+        # Loading the four lists decodes every payload: it belongs in the
+        # worker with the scan, not on the event loop.
         modules = ModuleRepository(conn).list()
         bundles = BundleRepository(conn).list()
         templates = TemplateRepository(conn).list()
         categories = CategoryRepository(conn).list()
         newer = _newer_format_ids(conn)
         ignored = _ignored(conn)
+        return health.scan_library(
+            modules, bundles, templates, categories, newer_format_ids=newer, **kwargs,
+        ), ignored
 
-    kwargs: dict[str, Any] = {"newer_format_ids": newer}
-    if canvas is not None:
-        kwargs["canvas_ids"] = _str_list(canvas.get("ids")) or []
-        kwargs["canvas_vars"] = _str_list(canvas.get("vars")) or []
-        kwargs["canvas_reads"] = _str_list(canvas.get("reads")) or []
-    findings = await asyncio.to_thread(
-        health.scan_library, modules, bundles, templates, categories, **kwargs,
-    )
+    findings, ignored = await in_db_thread(request, _scan)
     return json_ok({
         "findings": findings,
         "ignored": ignored,
@@ -194,11 +198,13 @@ async def variety_route(request: web.Request) -> web.Response:
     count = body.get("seeds", VARIETY_SEEDS)
     if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= MAX_VARIETY_SEEDS:
         return json_error(f"seeds must be 1 to {MAX_VARIETY_SEEDS}", status=400)
+    def _stack(conn: sqlite3.Connection):
+        modules, _layout, missing = _build_stack(conn, [{"bundle": body["bundle_id"]}])
+        return modules, missing, _build_catalog(conn, modules)
+
     try:
         seeds = resolve_seeds({"random": True, "count": count})
-        with db_session(request) as conn:
-            modules, _layout, missing = _build_stack(conn, [{"bundle": body["bundle_id"]}])
-            catalog = _build_catalog(conn, modules)
+        modules, missing, catalog = await in_db_thread(request, _stack)
     except ScenarioError as exc:
         return json_error(str(exc), status=400)
     if missing:
