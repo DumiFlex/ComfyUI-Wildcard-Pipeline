@@ -204,6 +204,74 @@ def test_options_table_is_capped():
     assert len(d["options"]) == OPTIONS_SHOWN and d["options_more"] == 5
 
 
+def _explain_options_reference(detail, library, after_filter, after_toggles, before, final):
+    """The pre-cap implementation: a row for EVERY option, then the slice."""
+    from engine.modules.wildcard_handler import OPTIONS_SHOWN, _weight
+
+    final_w = {o.get("id"): _weight(o) for o in final}
+    rows = []
+    for o in library:
+        oid = o.get("id")
+        lib_w = _weight(o)
+        if oid not in after_filter:
+            cut, weight = "filter", None
+        elif oid not in after_toggles:
+            cut, weight = "toggle", None
+        else:
+            weight = final_w.get(oid, 0.0)
+            pre = before.get(oid, lib_w)
+            cut = None
+            if weight <= 0:
+                cut = "constraint" if pre > 0 else "weight"
+        row = {"id": oid, "value": str(o.get("value", ""))[:120], "base": lib_w, "weight": weight}
+        if cut:
+            row["cut"] = cut
+        pre = before.get(oid)
+        if pre is not None and pre != lib_w:
+            row["override"] = pre
+        if o.get("is_null"):
+            row["null"] = True
+        if o.get("fallback"):
+            row["fallback"] = True
+        rows.append(row)
+    detail["steps"] = {
+        "library": len(library), "filter": len(after_filter),
+        "toggles": len(after_toggles), "live": sum(1 for o in final if _weight(o) > 0),
+    }
+    detail["options"] = rows[:OPTIONS_SHOWN]
+    if len(rows) > OPTIONS_SHOWN:
+        detail["options_more"] = len(rows) - OPTIONS_SHOWN
+
+
+def test_options_table_rows_match_building_every_row():
+    """Only the shown rows are built; they must equal what building a row for
+    every option and slicing gave (filter / toggle / constraint / weight cuts,
+    overrides, null, fallback, repeated ids, small and large pools)."""
+    import random
+
+    from engine.modules.wildcard_handler import _explain_options
+
+    rng = random.Random(7)
+    for n in (0, 3, 39, 40, 41, 120):
+        lib = [
+            {"id": f"o{rng.randrange(n + 5)}", "value": "v" * rng.randrange(200),
+             "weight": rng.choice([0, 0.5, 1, 2]), "is_null": rng.random() < 0.05,
+             "fallback": rng.random() < 0.05}
+            for _ in range(n)
+        ]
+        ids = [o["id"] for o in lib]
+        after_filter = {i for i in ids if rng.random() < 0.8}
+        after_toggles = {i for i in after_filter if rng.random() < 0.9}
+        before = {i: rng.choice([0, 1, 3]) for i in after_toggles if rng.random() < 0.7}
+        final = [{"id": i, "weight": rng.choice([0, 0.25, 1, 6])}
+                 for i in ids if i in after_toggles] * 2
+        want: dict = {}
+        got: dict = {}
+        _explain_options_reference(want, lib, after_filter, after_toggles, before, final)
+        _explain_options(got, lib, after_filter, after_toggles, before, final)
+        assert got == want, n
+
+
 def test_multi_pick_reports_its_separator():
     w = _wildcard(
         "w1", "outfit", [("a", 1), ("b", 1), ("c", 1)],
