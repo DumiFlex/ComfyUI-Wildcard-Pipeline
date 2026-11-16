@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from typing import Any
 
 from aiohttp import web
@@ -10,7 +11,7 @@ from engine.exporter import build_export_payload
 from engine.importer import commit_import, get_undo_entry, undo_import
 from engine.modules import get_handler
 from engine.wildcard_export import export_envelope, slug
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import in_db_thread, json_error, json_ok, json_text
 from wp_api._validators import (
     MAX_IMPORT_BODY_BYTES,
     validate_body_size,
@@ -51,19 +52,19 @@ async def _read_export_request(request: web.Request) -> dict[str, Any] | web.Res
     return body
 
 
-def _build(request: web.Request, body: dict[str, Any]) -> dict[str, Any]:
-    with db_session(request) as conn:
-        return build_export_payload(
-            conn,
-            bundle_uuids=body.get("bundle_uuids", []),
-            wildcard_uuids=body.get("wildcard_uuids", []),
-            fixed_values_uuids=body.get("fixed_values_uuids", []),
-            combine_uuids=body.get("combine_uuids", []),
-            derivation_uuids=body.get("derivation_uuids", []),
-            constraint_uuids=body.get("constraint_uuids", []),
-            category_uuids=body.get("category_uuids", []),
-            template_uuids=body.get("template_uuids", []),
-        )
+def _build_payload(conn, body: dict[str, Any]) -> dict[str, Any]:
+    return build_export_payload(
+        conn,
+        bundle_uuids=body.get("bundle_uuids", []),
+        wildcard_uuids=body.get("wildcard_uuids", []),
+        fixed_values_uuids=body.get("fixed_values_uuids", []),
+        combine_uuids=body.get("combine_uuids", []),
+        derivation_uuids=body.get("derivation_uuids", []),
+        constraint_uuids=body.get("constraint_uuids", []),
+        category_uuids=body.get("category_uuids", []),
+        template_uuids=body.get("template_uuids", []),
+    )
+
 
 
 async def export_build(request: web.Request) -> web.Response:
@@ -90,7 +91,11 @@ async def export_build(request: web.Request) -> web.Response:
     body = await _read_export_request(request)
     if isinstance(body, web.Response):
         return body
-    return json_ok(_build(request, body))
+    # Built AND serialised in the worker: a whole-library export is ~1.4 MB.
+    text = await in_db_thread(
+        request, lambda conn: json.dumps(_build_payload(conn, body)),
+    )
+    return json_text(text)
 
 
 async def export_plain(request: web.Request) -> web.Response:
@@ -104,10 +109,13 @@ async def export_plain(request: web.Request) -> web.Response:
         return body
     raw_name = body.get("name")
     name = raw_name.strip()[:80] if isinstance(raw_name, str) and raw_name.strip() else "wildcards"
-    plain = export_envelope(_build(request, body), name)
+    def _plain(conn):
+        plain = export_envelope(_build_payload(conn, body), name)
+        return plain, (plain.to_zip(title=name) if plain.files else b"")
+
+    plain, data = await in_db_thread(request, _plain)
     if not plain.files:
         return json_error("nothing in the selection can be written as wildcard files", status=400)
-    data = plain.to_zip(title=name)
     return json_ok({
         "filename": f"{slug(name, 'wildcards')}-wildcards.zip",
         "data": base64.b64encode(data).decode("ascii"),
@@ -302,11 +310,16 @@ async def import_commit(request: web.Request) -> web.Response:
     if err is not None:
         return json_error(err, status=400)
 
-    with db_session(request) as conn:
+    def _commit(conn) -> tuple[str | None, dict[str, Any]]:
         err = _validate_payload_shapes(body, conn)
         if err is not None:
-            return json_error(err, status=400)
-        result = commit_import(conn, body)
+            return err, {}
+        return None, commit_import(conn, body)
+
+    # Validates and writes every row: off the event loop.
+    err, result = await in_db_thread(request, _commit)
+    if err is not None:
+        return json_error(err, status=400)
     if not result.get("ok"):
         # commit_import returns {"ok": False, "error": str} for both
         # contract violations and wrapped DB errors. 400 covers both.
@@ -348,19 +361,21 @@ async def import_undo(request: web.Request) -> web.Response:
     if not isinstance(undo_entry_id, str):
         return json_error("undo_entry_id must be a string", status=400)
 
-    with db_session(request) as conn:
+    def _undo(conn) -> dict[str, Any] | None:
         # Structural 404: existence check before attempting the undo.
         # Mirrors the typed-exception pattern used by ModuleNotFound /
         # BundleNotFound / CategoryNotFound elsewhere in wp_api — the
         # HTTP status is decided by row presence, not by parsing engine
         # error wording. Same connection drives both reads so we keep a
         # single transaction context.
-        entry = get_undo_entry(conn, undo_entry_id)
-        if entry is None:
-            return json_error(
-                f"undo entry {undo_entry_id!r} not found", status=404,
-            )
-        result = undo_import(conn, undo_entry_id)
+        if get_undo_entry(conn, undo_entry_id) is None:
+            return None
+        return undo_import(conn, undo_entry_id)
+
+    # Restores every replaced row: off the event loop.
+    result = await in_db_thread(request, _undo)
+    if result is None:
+        return json_error(f"undo entry {undo_entry_id!r} not found", status=404)
     if not result.get("ok"):
         # Remaining failures (corrupt undo blob, IntegrityError during
         # restore) are all proper 400s — the 404 path is handled above.
