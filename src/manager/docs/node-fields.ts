@@ -310,6 +310,23 @@ export const NODE_FIELDS = {
       { term: "INT / FLOAT output", desc: "Show an output with the number. Off for a new slider; leave it off for a slider only prompts and rules read. Auto makes it an INT at 0 decimals, else a FLOAT; INT sends the number rounded to a whole number, FLOAT sends it at the slider's decimals." },
     ],
   },
+  WP_Slider2D: {
+    controls: [
+      { term: "upstream (in)", sockets: ["in:upstream"], desc: "Optional Context to extend. Only nodes after this one see the pad's variables." },
+      { term: "Pad", desc: "Drag the point (or click anywhere on the pad) to set both numbers at once: X grows to the right, Y grows upward. Shift while dragging lands on finer values. With the point focused, the arrow keys move it one step (Shift: ten), Home and End put X at its ends." },
+      { term: "X and Y", desc: "Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now." },
+      { term: "Pencil (toolbar)", pin: "page:.wp-tb-icon--edit", desc: "Select the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis, the pad's shape and looks, Swap and Done." },
+      { term: "Shape", desc: "Edit strip. Square, Wide (3:2) or Tall (2:3): the pad's outline, so a Width × Height pad can look like the picture it sets." },
+      { term: "Area, Lines, Dots", desc: "Edit strip. Area shades the box from the bottom-left corner to the point (a picture size); Lines draws lines through the point; Dots sets how many guide dots per side (0 for none)." },
+      { term: "Swap", desc: "Edit strip. Swaps the two axes' settings: X's go up, Y's go across. The outputs stay where they are." },
+      { term: "context (out)", sockets: ["out:context"], desc: "The Context with both axis variables added, and the numbers $name.num reads." },
+      { term: "x / y (out)", sockets: ["out:x", "out:y"], desc: "Each axis's number, named after the axis: an INT or a FLOAT (by default an INT when the axis writes 0 decimals, else a FLOAT; the axis window can pick either), so it wires into width and height, cfg and steps, or any number input." },
+    ],
+    edit: [
+      { term: "Axis window", desc: "An axis's pencil opens the same window as a WP Slider slider, with the axis drawn on top as a slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way." },
+      { term: "Output", desc: "Auto, INT or FLOAT for the axis's output. An axis always has its output." },
+    ],
+  },
   WP_VarToBool: {
     controls: [
       { term: "context (in)", sockets: ["in:context"], desc: "The Context that holds the $variable." },

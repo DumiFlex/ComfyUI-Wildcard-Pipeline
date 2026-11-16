@@ -40,6 +40,7 @@ export * as seedListMod from "./widgets/seed_list";
 export * as modelInfoMod from "./widgets/model_info";
 export * as togglesMod from "./widgets/toggles";
 export * as slidersMod from "./widgets/sliders";
+export * as sliderPadMod from "./widgets/slider-pad";
 export * as togglesMergeMod from "./extension/toggles-merge";
 export * as imageFilterWidgetMod from "./widgets/image_filter";
 export * as labelGridMod from "./widgets/label_grid";

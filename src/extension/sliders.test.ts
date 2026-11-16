@@ -8,7 +8,9 @@ import {
   fmtSlider,
   groupsOf,
   internalSliderVars,
+  isSliderNode,
   newSlider,
+  padConfig,
   normalizeOuts,
   outputNumber,
   outputValues,
@@ -221,5 +223,34 @@ describe("styles and snapping", () => {
     const rows = parseSlidersConfig(raw).rows as SliderRow[];
     expect(rows[0]).toMatchObject({ style: "fader", free: true });
     expect(rows[1]).not.toHaveProperty("free");
+  });
+});
+
+describe("WP Slider 2D pad config", () => {
+  it("keeps two pinned axes, X then Y, and the pad looks", () => {
+    const cfg = padConfig(JSON.stringify({
+      pad: { ratio: 1.5, area: true, grid: 99 },
+      rows: [
+        { id: "L", kind: "label", name: "G" },
+        { id: "a", kind: "slider", name: "Width", var: "width", style: "fader" },
+        { id: "b", kind: "slider", name: "Height", var: "height" },
+        { id: "c", kind: "slider", name: "Extra", var: "extra" },
+      ],
+    }));
+    expect(cfg.pad).toEqual({ ratio: 1.5, area: true });
+    expect((cfg.rows as SliderRow[]).map((s) => [s.id, s.pin, s.out, s.style])).toEqual([["a", true, 1, "row"], ["b", true, 2, "row"]]);
+  });
+
+  it("adds missing axes with free variables", () => {
+    const empty = padConfig("");
+    expect((empty.rows as SliderRow[]).map((s) => [s.name, s.var, s.out])).toEqual([["X", "x", 1], ["Y", "y", 2]]);
+    const one = padConfig({ rows: [{ id: "a", kind: "slider", name: "Y", var: "y" }] });
+    expect((one.rows as SliderRow[]).map((s) => s.var)).toEqual(["y", "y_2"]);
+  });
+
+  it("is read as a slider node by the graph walkers", () => {
+    expect(isSliderNode("WP_Slider2D")).toBe(true);
+    expect(isSliderNode("WP_Slider")).toBe(true);
+    expect(isSliderNode("WP_Toggles")).toBe(false);
   });
 });

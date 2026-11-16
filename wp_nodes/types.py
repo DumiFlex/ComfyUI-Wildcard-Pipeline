@@ -316,6 +316,46 @@ class SlidersWidgetInput:
             )
 
 
+@comfytype(io_type="WP_SLIDER_PAD")
+class SliderPadWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_SLIDER_PAD"]``.
+
+    The same JSON as WP_SLIDERS with exactly two slider rows (X, then Y)
+    plus ``pad`` looks. Parsed by ``engine/sliders.py::parse_config``.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,  # widget_type
+                None,  # force_input
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
 @comfytype(io_type="WP_LABEL_GRID")
 class LabelGridWidgetInput:
     """Widget-only custom type — frontend binds ``getCustomWidgets["WP_LABEL_GRID"]``.

@@ -1889,6 +1889,47 @@
    ]
   },
   {
+   "id": "wp-slider-2d",
+   "title": "WP Slider 2D",
+   "group": "nodes",
+   "blurb": "One XY pad: drag a point to set two numbers at once, each a $variable and an INT / FLOAT output.",
+   "keywords": [
+    "slider",
+    "2d",
+    "xy",
+    "pad",
+    "width",
+    "height",
+    "size",
+    "resolution",
+    "aspect",
+    "num",
+    "mxtoolkit"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Slider 2D is one pad with a point on it. Dragging the point sets two numbers at once: X across, Y up. Each axis is a slider of its own, so it writes $its_variable (the number, your text or a word per range), its number is read by $name.num, and it drives its own output, x or y. Like WP Slider, the pad is part of the node, so it works in the new Vue node mode."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- A picture size: Width across, Height up, wired into an Empty Latent Image, with Area on so the shaded box looks like the picture\n- Two numbers you tune together: cfg and steps, two LoRA strengths\n- A mood map: calm to wild across, dark to bright up, each axis in Words mode\nBetter with something else\n- Numbers you set one at a time: WP Slider\n- A number a random pick should choose: a wildcard and WP Var → Float"
+    },
+    {
+     "title": "Controls",
+     "text": "upstream (in)\nOptional Context to extend. Only nodes after this one see the pad's variables.\nPad\nDrag the point (or click anywhere on the pad) to set both numbers at once: X grows to the right, Y grows upward. Shift while dragging lands on finer values. With the point focused, the arrow keys move it one step (Shift: ten), Home and End put X at its ends.\nX and Y\nAbove the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now.\nPencil (toolbar)\nSelect the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis, the pad's shape and looks, Swap and Done.\nShape\nEdit strip. Square, Wide (3:2) or Tall (2:3): the pad's outline, so a Width × Height pad can look like the picture it sets.\nArea, Lines, Dots\nEdit strip. Area shades the box from the bottom-left corner to the point (a picture size); Lines draws lines through the point; Dots sets how many guide dots per side (0 for none).\nSwap\nEdit strip. Swaps the two axes' settings: X's go up, Y's go across. The outputs stay where they are.\ncontext (out)\nThe Context with both axis variables added, and the numbers $name.num reads.\nx / y (out)\nEach axis's number, named after the axis: an INT or a FLOAT (by default an INT when the axis writes 0 decimals, else a FLOAT; the axis window can pick either), so it wires into width and height, cfg and steps, or any number input."
+    },
+    {
+     "title": "Editing an axis",
+     "text": "Axis window\nAn axis's pencil opens the same window as a WP Slider slider, with the axis drawn on top as a slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way.\nOutput\nAuto, INT or FLOAT for the axis's output. An axis always has its output.\nEach axis's Words, Text and $name.num work exactly as in WP Slider: a Mood axis in Words mode writes calm up to 0.5 and wild past it, and $mood.num still reads the number."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Slider WP Toggles WP Var → Int"
+    }
+   ]
+  },
+  {
    "id": "wp-node-group",
    "title": "WP Node Group",
    "group": "nodes",
