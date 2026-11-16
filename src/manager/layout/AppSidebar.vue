@@ -326,19 +326,25 @@ const countByKey = computed<Record<string, number>>(() => {
             data-test="health-badge"
           >{{ health.badge }}</span>
         </RouterLink>
-        <!-- An in-app action (Feedback & support): a kit row. -->
-        <ListRow
+        <!-- An in-app action (Feedback & support): the same link row as its
+             neighbours (an anchor with no href: it opens a modal, it goes
+             nowhere), so it can never drift from them in size, type or
+             centring. -->
+        <a
           v-else
-          class="wp-nav wp-nav--action"
+          role="button"
+          tabindex="0"
+          class="wp-nav"
           :data-nav-id="item.id"
-          :data-collapsed="ui.sidebarCollapsed || undefined"
           :title="ui.sidebarCollapsed ? item.label : undefined"
           :style="ui.sidebarCollapsed ? { justifyContent: 'center' } : undefined"
           @click="onItemClick(item)"
+          @keydown.enter.prevent="onItemClick(item)"
+          @keydown.space.prevent="onItemClick(item)"
         >
-          <template #start><span class="wp-nav__icon"><Icon :name="item.icon" /></span></template>
+          <span class="wp-nav__icon"><Icon :name="item.icon" /></span>
           <span v-if="!ui.sidebarCollapsed" class="wp-nav__label">{{ item.label }}</span>
-        </ListRow>
+        </a>
       </template>
     </template>
 
@@ -351,11 +357,10 @@ const countByKey = computed<Record<string, number>>(() => {
 
 .wp-sidebar__spacer { height: 8px; }
 
-/* Rows built on the kit's ListRow (parents, Feedback & support) match the
- * link rows: same line height (ListRow's 1.35 made them ~1px shorter), and
- * collapsed, no empty label column beside the icon to push it off centre. */
-.wp-nav.wp-nav--parent,
-.wp-nav.wp-nav--action {
+/* Parent rows are built on the kit's ListRow; they match the link rows: same
+ * line height (ListRow's 1.35 made them ~1px shorter), and collapsed, no
+ * empty label column beside the icon to push it off centre. */
+.wp-nav.wp-nav--parent {
   min-height: 0;
   line-height: inherit;
 }
@@ -433,7 +438,4 @@ const countByKey = computed<Record<string, number>>(() => {
 }
 
 /* Recents section CSS removed — Dashboard owns the recent surface now. */
-/* The action row is the kit ListRow; it keeps the nav rows' spacing and type. */
-.wp-nav--action { width: 100%; min-height: 0; gap: 10px; padding: 7px 10px; font-size: 13px; color: var(--wp-text-muted); border: 1px solid transparent; }
-.wp-nav--action:hover { background: var(--wp-bg-3); color: var(--wp-text); }
 </style>
