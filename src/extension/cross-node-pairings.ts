@@ -35,6 +35,7 @@ import {
   type RowPairings,
 } from "./constraint-pairs";
 import { assignCodenames, baseCodename } from "./node-codename";
+import { inputLinkId } from "./slot-links";
 
 /** Compose a globally-unique row key. Module `_uid` is per-Context-node
  *  unique; prefixing with the litegraph node id makes it graph-wide
@@ -203,7 +204,7 @@ function upstreamContextNodes(
   let cur: LiteNodeLike | null = node;
   while (cur) {
     const inputLink = (cur.inputs ?? []).find((i) => i.type === "PIPELINE_CONTEXT");
-    const linkId = inputLink?.link;
+    const linkId = inputLinkId(inputLink);
     if (linkId === undefined || linkId === null) break;
     const link = rootGraph.links[linkId];
     if (!link) break;

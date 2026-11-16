@@ -16,6 +16,7 @@ import {
   type NegativeRunReport,
   type RunReport,
 } from "../components/cleaner/types";
+import { inputLinkId } from "../extension/slot-links";
 
 const CleanerWidget = defineAsyncComponent(
   () => import("../components/cleaner/CleanerWidget.vue"),
@@ -80,7 +81,7 @@ export function create(node: CleanerHostNode, inputName: string) {
       );
       const blocklistWired = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
-        () => node.inputs?.find((i) => i.name === "blocklist")?.link != null,
+        () => inputLinkId(node.inputs?.find((i) => i.name === "blocklist")) != null,
         Object.is,
       );
       function onUpdate(next: CleanerNodeConfig): void {

@@ -10,6 +10,7 @@ import {
   type LabelGridConfig,
   type LabelGridRun,
 } from "../extension/label-grid";
+import { inputLinkId } from "../extension/slot-links";
 
 const LabelGridWidget = defineAsyncComponent(
   () => import("../components/label-grid/LabelGridWidget.vue"),
@@ -70,7 +71,7 @@ export function create(node: LabelGridHostNode, inputName: string) {
       // "title,row_headers" — a string, so the poll compares by value.
       const wiredKey = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
-        () => WIRABLE.filter((n) => node.inputs?.find((i) => i.name === n)?.link != null).join(","),
+        () => WIRABLE.filter((n) => inputLinkId(node.inputs?.find((i) => i.name === n)) != null).join(","),
         Object.is,
       );
       function onUpdate(next: LabelGridConfig): void {

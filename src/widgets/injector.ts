@@ -25,6 +25,7 @@ import {
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
+import { inputLinkId } from "../extension/slot-links";
 
 const InjectorWidget = defineAsyncComponent(
   () => import("../components/injector/InjectorWidget.vue"),
@@ -106,7 +107,7 @@ export function reindexInjectorSlots(node: ReindexSurface): ReindexResult {
     if (!inp) continue;
     const slot = injectorSlotName(inp);
     if (!slot) continue;
-    dynamic.push({ idx: i, oldName: slot, connected: inp.link != null });
+    dynamic.push({ idx: i, oldName: slot, connected: inputLinkId(inp) != null });
   }
 
   // Names of slots about to be dropped — used by caller to filter
@@ -275,7 +276,7 @@ export function create(node: InjectorNode, inputName: string) {
           if (!inp) continue;
           const slot = injectorSlotName(inp);
           if (!slot) continue;
-          if (inp.link == null) continue;
+          if (inputLinkId(inp) == null) continue;
           out.push(slot);
         }
         return out;
@@ -301,12 +302,13 @@ export function create(node: InjectorNode, inputName: string) {
           if (!inp) continue;
           const slot = injectorSlotName(inp);
           if (!slot) continue;
-          if (inp.link == null) continue;
+          const linkId = inputLinkId(inp);
+          if (linkId == null) continue;
           // Walk the link: input.link → graph.links[id] →
           // origin node → output[origin_slot].type. This is the
           // type ComfyUI actually wired through the connection,
           // not the wildcard-typed Autogrow slot's stored type.
-          const link = graph.links?.[inp.link];
+          const link = graph.links?.[linkId];
           if (!link) continue;
           const origin = graph.getNodeById?.(link.origin_id);
           const sourceOutput = origin?.outputs?.[link.origin_slot];
@@ -343,7 +345,7 @@ export function create(node: InjectorNode, inputName: string) {
           if (!inp) continue;
           const slot = injectorSlotName(inp);
           if (!slot) continue;
-          if (inp.link == null) continue;
+          if (inputLinkId(inp) == null) continue;
           const resolved = (inp as { label?: string }).label;
           // Skip the default mirroring case (label === name) — row
           // already shows slot_name as fallback. Only publish when
@@ -538,7 +540,7 @@ export function create(node: InjectorNode, inputName: string) {
       for (const inp of inputs) {
         if (!inp) continue;
         if (!matchDynamicInput(inp)) continue;
-        if (inp.link == null) continue;
+        if (inputLinkId(inp) == null) continue;
         count++;
       }
       return count > 1 ? `inputs ×${count}` : "inputs";

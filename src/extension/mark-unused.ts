@@ -31,6 +31,7 @@ import {
   type ContextWidgetValue,
   type ModuleEntry,
 } from "../widgets/_shared";
+import { inputLinkId } from "./slot-links";
 
 const ASSEMBLER = "WP_PromptAssembler";
 const SKIP_MODES = new Set<number>([2, 4]);
@@ -85,7 +86,7 @@ function widgetString(n: LiteNodeLike, name: string): string {
 }
 
 function inputWired(n: LiteNodeLike, name: string): boolean {
-  return n.inputs?.find((i) => i.name === name)?.link != null;
+  return inputLinkId(n.inputs?.find((i) => i.name === name)) != null;
 }
 
 function scanNames(text: string, into: Set<string>, reserved?: string): void {

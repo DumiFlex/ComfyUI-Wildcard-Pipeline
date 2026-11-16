@@ -8,6 +8,7 @@
  * server side (`engine/choice.py`).
  */
 import type { LiteGraphLike, LiteNodeLike } from "./graph";
+import { outputLinkIds } from "./slot-links";
 
 interface WidgetWithOptions {
   name: string;
@@ -42,7 +43,7 @@ export function findChoiceTargets(graph: LiteGraphLike | null | undefined, node:
   const out: ChoiceTarget[] = [];
   const seen = new Set<number>();
   const walk = (from: LiteNodeLike, fromSlot: number, depth: number): void => {
-    for (const linkId of from.outputs?.[fromSlot]?.links ?? []) {
+    for (const linkId of outputLinkIds(from.outputs?.[fromSlot])) {
       const link = graph.links[linkId];
       if (!link || seen.has(link.target_id)) continue;
       const target = graph.getNodeById(link.target_id);

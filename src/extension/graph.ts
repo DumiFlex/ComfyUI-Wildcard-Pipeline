@@ -25,6 +25,7 @@ import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
 import type { SeedStrategy } from "../components/shared/seed-derive";
 import { effectiveEnabled, withFrameInstance } from "../components/context/frame-overrides";
+import { inputLinkId, outputLinkIds } from "./slot-links";
 
 // ── Subgraph boundary primer ────────────────────────────────────────────
 // ComfyUI subgraphs are nested LGraph instances attached to a parent node
@@ -193,7 +194,7 @@ function widgetValue(node: LiteNodeLike, name: string): string {
 /** A Context Loop whose `values` text input is wired writes
  *  `$<iteration_var_name>_value` (its line for the frame) too. */
 function loopValuesWired(node: LiteNodeLike): boolean {
-  return node.inputs?.find((i) => i.name === "values")?.link != null;
+  return inputLinkId(node.inputs?.find((i) => i.name === "values")) != null;
 }
 
 /** Numeric widget read — `widgetValue` is string-only (returns "" for Int /
@@ -210,8 +211,9 @@ function widgetNumber(node: LiteNodeLike, name: string): number {
  *  the number widget of the node at the other end. NaN when unreadable. */
 function contextSeed(node: LiteNodeLike, graph: LiteGraphLike): number {
   const slot = node.inputs?.find((x) => x.name === "seed");
-  if (slot?.link != null) {
-    const link = graph.links[slot.link];
+  const linkId = inputLinkId(slot);
+  if (linkId != null) {
+    const link = graph.links[linkId];
     const origin = link ? graph.getNodeById(link.origin_id) : null;
     const w = origin?.widgets?.find((x) => x.name === "value" || x.name === "seed")
       ?? origin?.widgets?.find((x) => typeof x.value === "number");
@@ -381,8 +383,9 @@ function stepOutOfSubgraph(
   if (!innerSlot) return null;
   // Find the parent SubgraphNode's input slot with the same name.
   const outerSlot = parent.node.inputs?.find((s) => s.name === innerSlot.name);
-  if (!outerSlot || outerSlot.link == null) return null;
-  const outerLink = parent.graph.links[outerSlot.link];
+  const outerId = inputLinkId(outerSlot);
+  if (outerId == null) return null;
+  const outerLink = parent.graph.links[outerId];
   if (!outerLink) return null;
   const outer = parent.graph.getNodeById(outerLink.origin_id);
   if (!outer) return null;
@@ -424,8 +427,9 @@ function pipelineUpstreamOf(
   parents: Map<string, SubgraphParent>,
 ): { graph: LiteGraphLike; node: LiteNodeLike } | null {
   for (const slot of node.inputs ?? []) {
-    if (slot.link == null) continue;
-    const link = graph.links[slot.link];
+    const linkId = inputLinkId(slot);
+    if (linkId == null) continue;
+    const link = graph.links[linkId];
     if (!link) continue;
 
     let step: BoundaryStep | null;
@@ -2347,7 +2351,7 @@ export function collectDownstreamWildcardUuids(
     if (!cur) break;
     for (const o of cur.node.outputs ?? []) {
       if (o.type !== "PIPELINE_CONTEXT") continue;
-      for (const linkId of o.links ?? []) {
+      for (const linkId of outputLinkIds(o)) {
         const link = cur.graph.links[linkId];
         if (!link) continue;
         const stepped = downstreamStep(cur.graph, link, parents);
@@ -2408,7 +2412,7 @@ export function collectDownstreamNestedReachUuids(
     if (!cur) break;
     for (const o of cur.node.outputs ?? []) {
       if (o.type !== "PIPELINE_CONTEXT") continue;
-      for (const linkId of o.links ?? []) {
+      for (const linkId of outputLinkIds(o)) {
         const link = cur.graph.links[linkId];
         if (!link) continue;
         const stepped = downstreamStep(cur.graph, link, parents);
@@ -2483,7 +2487,7 @@ export function findDownstreamAssemblers(rootGraph: LiteGraphLike, node: LiteNod
     if (!cur) break;
     for (const o of cur.node.outputs ?? []) {
       if (o.type !== "PIPELINE_CONTEXT") continue;
-      for (const linkId of o.links ?? []) {
+      for (const linkId of outputLinkIds(o)) {
         const link = cur.graph.links[linkId];
         if (!link) continue;
         const stepped = downstreamStep(cur.graph, link, parents);
@@ -2591,7 +2595,7 @@ export function collectDownstreamContextNodes(
     if (!cur) break;
     for (const o of cur.node.outputs ?? []) {
       if (o.type !== "PIPELINE_CONTEXT") continue;
-      for (const linkId of o.links ?? []) {
+      for (const linkId of outputLinkIds(o)) {
         const link = cur.graph.links[linkId];
         if (!link) continue;
         const stepped = downstreamStep(cur.graph, link, parents);

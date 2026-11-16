@@ -16,6 +16,7 @@
  * prompt builder never follows it to a member either.
  */
 import { expandTargets, originOf, setMode, type CtlInput, type CtlNode } from "./toggle-control";
+import { inputLinkId } from "./slot-links";
 
 export { NODE_GROUP_TYPE } from "./toggle-control";
 export const NODE_GROUP_OUTPUT = "WP_NODES";
@@ -44,14 +45,14 @@ export function stabilizeInputs(node: GroupHostNode): boolean {
   const inputs = node.inputs ?? [];
   // Free inputs other than the last go (from the end, so indexes hold).
   for (let i = inputs.length - 2; i >= 0; i--) {
-    if (inputs[i]?.link == null) {
+    if (inputLinkId(inputs[i]) == null) {
       node.removeInput?.(i);
       changed = true;
     }
   }
   const now = node.inputs ?? [];
   const last = now[now.length - 1];
-  if (!last || last.link != null) {
+  if (!last || inputLinkId(last) != null) {
     node.addInput?.(nextInputName(node), "*");
     changed = true;
   }

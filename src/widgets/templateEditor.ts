@@ -51,6 +51,7 @@ import {
   type PromotedValue,
 } from "../extension/subgraph-promote";
 import { frameSentence } from "../components/assembler/loop-frames";
+import { inputLinkId } from "../extension/slot-links";
 
 type EditorNode = LiteNodeLike & MountTargetNode;
 
@@ -232,7 +233,7 @@ function buildEditor(
         () => {
           const inputs = (node as unknown as { inputs?: { name: string; link?: number | null }[] }).inputs;
           const slot = inputs?.find((i) => i.name === inputName);
-          return slot?.link != null;
+          return inputLinkId(slot) != null;
         },
         Object.is,
       );
