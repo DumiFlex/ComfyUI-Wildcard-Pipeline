@@ -23,6 +23,7 @@
  * field-sockets does for inputs, we take the row out of the flow, hide its
  * label and put it level with the element, its right edge on the node's.
  */
+import { place } from "./slot-place";
 import { isVueNodes } from "./renderer";
 
 interface OutSlot {
@@ -219,18 +220,12 @@ function syncVue(entry: Entry): boolean {
       if (release(row)) moved = true;
       return;
     }
-    row.setAttribute(ROW_ATTR, "");
+    if (!row.hasAttribute(ROW_ATTR)) row.setAttribute(ROW_ATTR, "");
     const parent = row.offsetParent as HTMLElement | null;
     if (!parent) return;
     const pRect = parent.getBoundingClientRect();
     const y = y0 - pRect.top / scale;
-    const topPx = `${Math.round((y - row.offsetHeight / 2) * 10) / 10}px`;
-    const leftPx = `${Math.round(((nodeRect.right - pRect.left) / scale - row.offsetWidth) * 10) / 10}px`;
-    if (row.style.top !== topPx || row.style.left !== leftPx) {
-      row.style.top = topPx;
-      row.style.left = leftPx;
-      moved = true;
-    }
+    if (place(row, y - row.offsetHeight / 2, (nodeRect.right - pRect.left) / scale - row.offsetWidth)) moved = true;
   });
   if (moved) remeasure(nodeEl);
   return moved;

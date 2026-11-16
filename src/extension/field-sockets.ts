@@ -28,6 +28,7 @@
  * that have no matching widget.
  */
 import { layoutCentre } from "./row-outputs";
+import { place } from "./slot-place";
 import { isVueNodes } from "./renderer";
 
 interface SocketSlot {
@@ -229,22 +230,20 @@ function syncVue(entry: Entry): void {
       return;
     }
     // Out of the flow first, so `offsetParent` is the one `top` lands in.
-    row.setAttribute(ROW_ATTR, "");
-    row.toggleAttribute(HOT_ATTR, entry.hot.has(slot.name));
+    // Attributes only when they change: each write is a mutation that other
+    // observers on the page (ours and other extensions') wake up for.
+    if (!row.hasAttribute(ROW_ATTR)) row.setAttribute(ROW_ATTR, "");
+    const hot = entry.hot.has(slot.name);
+    if (row.hasAttribute(HOT_ATTR) !== hot) row.toggleAttribute(HOT_ATTR, hot);
     // A widget's own dot sits in a wrapper of the widget row that hides it
     // until the row is hovered.
-    if (row.closest("[data-widget-name]")) row.parentElement?.setAttribute(HOST_ATTR, "");
+    const host = row.closest("[data-widget-name]") ? row.parentElement : null;
+    if (host && !host.hasAttribute(HOST_ATTR)) host.setAttribute(HOST_ATTR, "");
     const parent = row.offsetParent as HTMLElement | null;
     if (!parent) return;
     const pRect = parent.getBoundingClientRect();
     const y = y0 - pRect.top / scale;
-    const top = `${Math.round((y - row.offsetHeight / 2) * 10) / 10}px`;
-    const left = `${Math.round(((nodeRect.left - pRect.left) / scale) * 10) / 10}px`;
-    if (row.style.top !== top || row.style.left !== left) {
-      row.style.top = top;
-      row.style.left = left;
-      moved = true;
-    }
+    if (place(row, y - row.offsetHeight / 2, (nodeRect.left - pRect.left) / scale)) moved = true;
   });
   if (moved) remeasure(nodeEl);
 }

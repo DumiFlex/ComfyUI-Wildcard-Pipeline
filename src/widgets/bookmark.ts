@@ -16,7 +16,8 @@ import {
   BOOKMARK_MARGIN,
   comboFromEvent,
   defaultBookmarkConfig,
-  easeInOutQuad,
+  easeInOutCubic,
+  jumpDuration,
   jumpFields,
   jumpOffset,
   jumpScale,
@@ -37,7 +38,6 @@ export const BOOKMARK_NODE_TYPE = "WP_Bookmark";
 const WIDGET_NAME = "wp_bookmark";
 const DEFAULT_TITLE = "Bookmark";
 const TITLE_H = 30;
-const JUMP_MS = 280;
 const HISTORY_MAX = 30;
 
 export interface BookmarkNode extends MountTargetNode {
@@ -252,6 +252,7 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
   const ds = c.ds;
   if (!ds) return;
   cancelAnimationFrame(animFrame);
+  releasePane?.();
   if (reducedMotion()) {
     ds.offset[0] = offset[0];
     ds.offset[1] = offset[1];
@@ -267,10 +268,18 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
   const fromCy = vh / 2 / from.s - from.y;
   const toCx = vw / 2 / scale - offset[0];
   const toCy = vh / 2 / scale - offset[1];
-  const start = performance.now();
+  // Screen distance the view's centre travels, at the larger of the two
+  // scales (what the eye sees move).
+  const travel = Math.hypot(toCx - fromCx, toCy - fromCy) * Math.max(from.s, scale);
+  const ms = jumpDuration(travel, scale / from.s);
+  const pane = holdTransformLayer();
+  let start = -1;
   const step = (now: number): void => {
-    const t = Math.min(1, (now - start) / JUMP_MS);
-    const e = easeInOutQuad(t);
+    // Time from the first frame, not the key press: a slow first frame
+    // would otherwise eat half the glide.
+    if (start < 0) start = now;
+    const t = Math.min(1, (now - start) / ms);
+    const e = easeInOutCubic(t);
     const s = from.s * Math.pow(scale / from.s, e);
     const cx = fromCx + (toCx - fromCx) * e;
     const cy = fromCy + (toCy - fromCy) * e;
@@ -279,8 +288,29 @@ function animateView(c: CanvasLike, offset: [number, number], scale: number): vo
     ds.offset[1] = vh / 2 / s - cy;
     c.setDirty?.(true, true);
     if (t < 1) animFrame = requestAnimationFrame(step);
+    else pane?.();
   };
   animFrame = requestAnimationFrame(step);
+}
+
+let releasePane: (() => void) | null = null;
+/** Nodes 2.0 draws the nodes on a transform layer that ComfyUI promotes
+ *  (`will-change: transform`) only while the user pans or zooms by hand.
+ *  A tween moves it from code, so without this every frame repaints every
+ *  node at the new scale. Returns the release, run when the tween ends. */
+function holdTransformLayer(): (() => void) | null {
+  releasePane?.();
+  const pane = document.querySelector<HTMLElement>('[data-testid="transform-pane"]');
+  if (!pane) return null;
+  const before = pane.style.willChange;
+  pane.style.willChange = "transform";
+  const release = (): void => {
+    if (releasePane !== release) return;
+    releasePane = null;
+    pane.style.willChange = before;
+  };
+  releasePane = release;
+  return release;
 }
 
 // ── the free part of the canvas ───────────────────────────────────────
@@ -316,6 +346,10 @@ export const TRANSIENT = [
   ".litecontextmenu", ".litesearchbox", ".graphdialog", ".comfy-modal", ".node-tooltip", ".node-title-editor",
 ].join(", ");
 
+/** Our own dock: ignored like graph content, but it floats over the host's
+ *  bars (so do our toasts), so a point under it still needs the whole stack. */
+const DOCK_ROOT = "#wp-bookmark-dock-root, .wp-toast-stack";
+
 /** Never an obstacle: graph content or something that comes and goes. */
 const IGNORED = `${GRAPH_CONTENT}, ${TRANSIENT}`;
 
@@ -323,6 +357,14 @@ const IGNORED = `${GRAPH_CONTENT}, ${TRANSIENT}`;
  *  not transient, not one of `skip`), or null when the canvas shows. */
 function coverAt(canvasEl: Element, x: number, y: number, skip: readonly Element[] = []): Element | null {
   if (typeof document.elementsFromPoint !== "function") return null;
+  // The top element alone settles most points: the canvas, or graph content
+  // (the host's bars always sit above the graph), is free. The whole stack
+  // is a hit test of every node under the point, ~3 ms a call on a big
+  // Nodes 2.0 graph in Chromium, so ask for it only when something
+  // transient (a toast, our dock) is on top and may hide a bar.
+  const top = typeof document.elementFromPoint === "function" ? document.elementFromPoint(x, y) : undefined;
+  if (top === canvasEl || (top && top.closest(GRAPH_CONTENT) && !top.closest(DOCK_ROOT))) return null;
+  if (top && !top.closest(IGNORED) && !skip.some((s) => s.contains(top))) return top;
   for (const el of document.elementsFromPoint(x, y)) {
     if (el === canvasEl) return null;
     if (el.closest(IGNORED)) continue;
@@ -455,12 +497,65 @@ export function freeArea(canvasEl: Element | undefined): FreeArea {
   if (!canvasEl) return { free: [0, 0, 0, 0], avoid: [] };
   const base = paneFrame(canvasEl);
   const overlays = base.pane ? paneOverlays(base.pane) : [];
-  const walked = walkInsets(canvasEl, base, overlays);
+  const walked = cachedWalk(canvasEl, base, overlays);
   const [il, it, ir, ib] = walked.insets;
   return {
     free: [base.left + il, base.top + it, base.right - ir, base.bottom - ib],
-    avoid: [...overlays, ...walked.floating].map(boxOf),
+    avoid: [...overlays.map(boxOf), ...walked.floating],
   };
+}
+
+let lastWalk: { key: string; insets: [number, number, number, number]; floating: ScreenBox[] } | null = null;
+
+/** What the edge walk depends on: the window, the canvas, the pane's frame
+ *  (side, right and bottom panels, the top menu's bars) and its overlays. */
+function walkKey(canvasEl: Element, base: { left: number; top: number; right: number; bottom: number }, overlays: Element[]): string {
+  const r = (b: ScreenBox): string => b.map(Math.round).join(",");
+  return [
+    `${window.innerWidth}x${window.innerHeight}`,
+    r(boxOf(canvasEl)),
+    r([base.left, base.top, base.right, base.bottom]),
+    ...overlays.map((o) => r(boxOf(o))),
+  ].join(";");
+}
+
+/** The edge walk is the slow part of `freeArea` (a few hundred hit tests,
+ *  each a hit test of every node under the point), and what it finds
+ *  (another extension's bar) rarely changes, while the dock places itself
+ *  on every open, close and edit and each jump asks again. So reuse it
+ *  while the layout it depends on (`walkKey`) holds. */
+function cachedWalk(
+  canvasEl: Element,
+  base: { left: number; top: number; right: number; bottom: number },
+  overlays: Element[],
+): { insets: [number, number, number, number]; floating: ScreenBox[] } {
+  const key = walkKey(canvasEl, base, overlays);
+  if (lastWalk?.key === key) return lastWalk;
+  const walked = walkInsets(canvasEl, base, overlays);
+  lastWalk = { key, insets: walked.insets, floating: walked.floating.map(boxOf) };
+  return lastWalk;
+}
+
+/** Run the edge walk ahead of need, when the browser is idle, once the
+ *  layout changed: a jump then starts at once instead of first scanning
+ *  the screen. The dock calls it on its poll. */
+let warming = false;
+export function warmFreeArea(canvasEl: Element | undefined): void {
+  if (!canvasEl || warming) return;
+  const base = paneFrame(canvasEl);
+  if (lastWalk?.key === walkKey(canvasEl, base, base.pane ? paneOverlays(base.pane) : [])) return;
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (!idle) return;
+  warming = true;
+  idle(() => {
+    warming = false;
+    if (canvasEl.isConnected) freeArea(canvasEl);
+  }, { timeout: 2_000 });
+}
+
+/** Forget the cached edge walk (tests, or a layout change the key can't see). */
+export function forgetFreeArea(): void {
+  lastWalk = null;
 }
 
 /**
@@ -517,15 +612,23 @@ function walkInsets(
   // point: bars stack with gaps of bare canvas between them (the tab strip,
   // then a floating toolbar a few px below it). A band with nothing free at
   // all is something filling the canvas, not a bar: count it as 0.
+  // Every probe is a hit test, so probe every 2 STEPs and look at the
+  // point between only past a bar, where the bar's far edge may be.
   const walk = (x0: number, y0: number, dx: number, dy: number, limit: number): number => {
     let deepest = 0;
     let free = false;
-    for (let d = 0; d <= limit; d += STEP) {
+    const barAt = (d: number): boolean => {
       const hit = coverAt(canvasEl, x0 + dx * d, y0 + dy * d, skip);
-      if (!hit) { free = true; continue; }
+      if (!hit) { free = true; return false; }
       const piece = pieceOf(hit, canvasEl, width * height);
-      if (isBar(piece, dy !== 0)) deepest = d + STEP;
-      else floating.add(piece);
+      if (isBar(piece, dy !== 0)) return true;
+      floating.add(piece);
+      return false;
+    };
+    for (let d = 0; d <= limit; d += 2 * STEP) {
+      if (!barAt(d)) continue;
+      deepest = d + STEP;
+      if (d + STEP <= limit && barAt(d + STEP)) deepest = d + 2 * STEP;
     }
     return free ? deepest : 0;
   };

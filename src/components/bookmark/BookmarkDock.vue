@@ -31,6 +31,7 @@ import {
   canvasElement,
   dockLayoutKey,
   freeArea,
+  warmFreeArea,
   type BookmarkEntry,
   type DockPrefs,
 } from "../../widgets/bookmark";
@@ -69,6 +70,8 @@ function refresh(): void {
   }
   current.value = lastJumpedNode();
   back.value = canGoBack();
+  // Keep the screen scan fresh while idle, so a jump never waits for it.
+  warmFreeArea(canvasElement());
   // The side or bottom panel opened, the minimap came or went: move with it.
   const layout = dockLayoutKey();
   if (layout !== lastLayout) {
