@@ -95,6 +95,12 @@ class TestWPDebugExecute:
         snapshot = self._parse_snapshot(out)
         assert snapshot == {"__wp_debug_version__": 2}
 
+    def test_snapshot_is_compact_json(self):
+        # It crosses the websocket every run; the viewer pretty-prints itself.
+        payload = ContextPayload(context={"style": "photo"}, debug={"node_seed": 1})
+        text = WPDebug.execute(context=payload, wp_viewer=None).ui["wp_debug_snapshot"][0]
+        assert "\n" not in text and ", " not in text and '": ' not in text
+
     def test_run_detail_keys_surface(self):
         payload = ContextPayload(
             context={"outfit": ListVar(["a", "b"], " and "), "scratch": "x"},
