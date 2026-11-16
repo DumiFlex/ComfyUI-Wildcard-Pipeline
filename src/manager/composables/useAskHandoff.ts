@@ -1,7 +1,7 @@
 import { watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ASK_PARAM } from "../router/frame-mode";
-import { useAiChat } from "./useAiChat";
+import { useAiChatShell } from "./aiChatShell";
 
 /**
  * A question handed over from the canvas help frame (`?ask=`, see
@@ -12,7 +12,7 @@ import { useAiChat } from "./useAiChat";
 export function useAskHandoff(): void {
   const route = useRoute();
   const router = useRouter();
-  const chat = useAiChat();
+  const chat = useAiChatShell();
   watch(() => route.query[ASK_PARAM], (asked) => {
     if (typeof asked !== "string" || !asked.trim()) return;
     chat.input.value = asked;
