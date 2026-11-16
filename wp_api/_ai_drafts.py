@@ -273,7 +273,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
     self_id = _got if isinstance(_got := wc.get("id"), str) else None
     refs = _ref_index(_wildcards(request), self_id, payload, name)
-    known_tag = _known_tag() if action == "rewrite" and ai_edit.wants_booru(check) \
+    known_tag = await _known_tag() if action == "rewrite" and ai_edit.wants_booru(check) \
         else None
     first = ai_edit.build_edit_prompt(
         action=action, instruction=ai_followup.first_instruction(turns, instruction),
@@ -355,11 +355,11 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
     return json_ok(result)
 
 
-def _known_tag() -> Any:
+async def _known_tag() -> Any:
     """The installed tag list's exact lookup, or None when there is none."""
     from wp_api import tags as _tags
 
-    idx = _tags._get_index()
+    idx = await _tags.get_index()
     return idx.has if idx is not None else None
 
 

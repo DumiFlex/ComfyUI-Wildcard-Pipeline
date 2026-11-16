@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
+import threading
 from pathlib import Path
+from typing import Any
 
 from aiohttp import web
 
@@ -31,8 +34,18 @@ from wp_api._tag_index import CATEGORY_NAMES, TagIndex, load_index
 #: ComfyUI-facing imports), so the constant is duplicated there deliberately.
 TAG_FILE_NAME = "wildcard-pipeline-tags.csv"
 
+#: Beside the list: its row count and whether it has categories, keyed by the
+#: list's size + mtime, so the Settings panel's status check never parses the
+#: file again after the first build (parsing ~290k rows takes ~2 s).
+STATUS_SUFFIX = ".status.json"
+
 _index: TagIndex | None = None
 _resolved_path: Path | None = None
+#: Held while a build runs, so threads asking at once share one build.
+_build_lock = threading.Lock()
+#: The build the event loop is waiting on, shared by every request that
+#: arrives while it runs (single flight: one parse, not one per keystroke).
+_inflight: asyncio.Future | None = None
 
 
 def tag_file_path() -> Path | None:
@@ -41,43 +54,123 @@ def tag_file_path() -> Path | None:
     return (data_dir / TAG_FILE_NAME) if data_dir else None
 
 
+def _fresh(path: Path) -> bool:
+    return _index is not None and _resolved_path == path and not _index.is_stale()
+
+
 def _get_index() -> TagIndex | None:
     """The current index, building or rebuilding it as needed.
 
     Rebuilds when the file's mtime moves, so replacing the list takes effect
-    without restarting ComfyUI.
+    without restarting ComfyUI. Blocking (a build parses the whole file): on
+    the event loop use `get_index`.
     """
     global _index, _resolved_path
     path = tag_file_path()
     if path is None:
         return None
-    if _index is not None and _resolved_path == path and not _index.is_stale():
+    if _fresh(path):
         return _index
-    _index = load_index(path)
-    _resolved_path = path
-    return _index
+    with _build_lock:
+        if _fresh(path):  # built by the thread we waited for
+            return _index
+        index = load_index(path)
+        _index, _resolved_path = index, path
+        _write_status(path, index)
+        return index
+
+
+async def get_index() -> TagIndex | None:
+    """`_get_index` without blocking the event loop: a build runs in a worker
+    thread, and requests that arrive during it wait for that same build."""
+    global _inflight
+    path = tag_file_path()
+    if path is None:
+        return None
+    if _fresh(path):
+        return _index
+    loop = asyncio.get_running_loop()
+    if _inflight is None or _inflight.done() or _inflight.get_loop() is not loop:
+        _inflight = asyncio.ensure_future(asyncio.to_thread(_get_index))
+    # Shielded: one caller going away must not cancel the others' build.
+    return await asyncio.shield(_inflight)
+
+
+def _status_path(path: Path) -> Path:
+    return path.with_name(path.name + STATUS_SUFFIX)
+
+
+def _stat_key(path: Path) -> list[int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return [st.st_size, st.st_mtime_ns]
+
+
+def _write_status(path: Path, index: TagIndex | None) -> None:
+    """Remember what a build found, for `_cached_status`. Best effort."""
+    key = _stat_key(path)
+    if key is None:
+        return
+    data = {"key": key, "tag_count": len(index) if index else 0,
+            "has_categories": index.has_categories if index else False}
+    try:
+        _status_path(path).write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _cached_status(path: Path) -> dict[str, Any] | None:
+    """What the last build of this exact file found, or None."""
+    key = _stat_key(path)
+    if key is None:
+        return {"tag_count": 0, "has_categories": False}  # no file: nothing to parse
+    try:
+        data = json.loads(_status_path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("key") != key:
+        return None
+    count, cats = data.get("tag_count"), data.get("has_categories")
+    if not isinstance(count, int) or not isinstance(cats, bool):
+        return None
+    return {"tag_count": count, "has_categories": cats}
 
 
 def reset_cache() -> None:
     """Drop the cached index. For tests, and after a fresh download."""
-    global _index, _resolved_path
+    global _index, _resolved_path, _inflight
     _index = None
     _resolved_path = None
+    _inflight = None
 
 
 async def get_status(request: web.Request) -> web.Response:
     """Whether autocomplete can work, and what it would use.
 
     Drives the Settings panel: the toggle is meaningless without a file, so the
-    UI needs to distinguish "off" from "impossible".
+    UI needs to distinguish "off" from "impossible". Answers from the built
+    index or the status file beside the list; only a list never built before
+    is parsed (in a worker thread).
     """
     path = tag_file_path()
-    index = _get_index()
+    if path is None:
+        return json_ok({"available": False, "path": None, "tag_count": 0,
+                        "has_categories": False})
+    if _fresh(path):
+        status = {"tag_count": len(_index) if _index else 0,
+                  "has_categories": _index.has_categories if _index else False}
+    else:
+        status = await asyncio.to_thread(_cached_status, path)
+        if status is None:
+            index = await get_index()
+            status = {"tag_count": len(index) if index else 0,
+                      "has_categories": index.has_categories if index else False}
     return json_ok({
-        "available": index is not None,
-        "path": str(path) if path else None,
-        "tag_count": len(index) if index else 0,
-        "has_categories": index.has_categories if index else False,
+        "available": status["tag_count"] > 0,
+        "path": str(path),
+        **status,
     })
 
 
@@ -96,7 +189,7 @@ async def suggest(request: web.Request) -> web.Response:
     except ValueError:
         return json_error("limit must be an integer", status=400)
 
-    index = _get_index()
+    index = await get_index()
     if index is None:
         # Not an error: the feature is optional and the client asks the status
         # endpoint when it wants to explain why nothing appears.
@@ -145,7 +238,7 @@ async def download(request: web.Request) -> web.Response:
 
     # Force a rebuild so the new list is live without a restart.
     reset_cache()
-    index = _get_index()
+    index = await get_index()
     return json_ok({
         "path": str(result.path),
         "bytes": result.bytes_written,
@@ -175,6 +268,12 @@ async def remove(request: web.Request) -> web.Response:
         path.unlink(missing_ok=True)
     except OSError as err:
         return json_error(f"could not delete the tag list: {err}", status=500)
+    status_file = _status_path(path)
+    if not status_file.is_symlink():
+        try:
+            status_file.unlink(missing_ok=True)
+        except OSError:
+            pass  # keyed by the list's size + mtime, so a leftover is never read
     reset_cache()
     return json_ok({"removed": existed, "path": str(path)})
 
