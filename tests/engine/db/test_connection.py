@@ -88,3 +88,40 @@ def test_resolve_db_path_falls_back_to_home_when_no_comfyui_root(monkeypatch):
     monkeypatch.setattr(conn_mod, "_load_sidecar", lambda: {})
     result = resolve_db_path()
     assert result == Path.home() / ".comfyui" / "wildcard-pipeline.db"
+
+
+def test_get_connection_sets_synchronous_normal_and_memory_temp(tmp_path):
+    conn = get_connection(tmp_path / "p.db")
+    assert conn.execute("PRAGMA synchronous;").fetchone()[0] == 1  # NORMAL
+    assert conn.execute("PRAGMA temp_store;").fetchone()[0] == 2  # MEMORY
+    conn.close()
+
+
+def test_resolved_path_is_cached_until_the_sidecar_changes(monkeypatch, tmp_path):
+    import json
+
+    from engine.db import config as db_config
+    from engine.db import connection as conn_mod
+
+    monkeypatch.delenv("WP_DB_PATH", raising=False)
+    monkeypatch.delenv("COMFYUI_USER_DIR", raising=False)
+    sidecar = tmp_path / "db-config.json"
+    monkeypatch.setattr(db_config, "SIDECAR_PATH", sidecar)
+    monkeypatch.setattr(conn_mod, "_comfyui_user_dir_from_api", lambda: tmp_path / "user")
+    reads: list[int] = []
+    real = conn_mod._load_sidecar
+
+    def counting():
+        reads.append(1)
+        return real()
+
+    monkeypatch.setattr(conn_mod, "_load_sidecar", counting)
+    conn_mod.reset_db_path_cache()
+    first = conn_mod.resolve_db_path_with_source()
+    assert conn_mod.resolve_db_path_with_source() == first and len(reads) == 1
+    db_config.save({"preference": "global"})
+    assert conn_mod.resolve_db_path_with_source()[1] == "global" and len(reads) == 2
+    # A hand edit is seen too (size/mtime of the file).
+    sidecar.write_text(json.dumps({"preference": "user"}) + "   ")
+    assert conn_mod.resolve_db_path_with_source()[1] == "user"
+    conn_mod.reset_db_path_cache()
