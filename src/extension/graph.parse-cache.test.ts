@@ -15,11 +15,13 @@ import {
   collectUpstreamProducers,
   collectUpstreamVariables,
   collectUpstreamWildcardUuids,
+  parseNodeWidget,
   _setParseCacheFreezeForTests,
   _clearParseCacheForTests,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
+import { collectCrossNodePairingsFull, collectFullChainModules } from "./cross-node-pairings";
 
 function contextNode(id: number, upstreamLink?: number): LiteNodeLike {
   const modules = Array.from({ length: 4 }, (_, m) => ({
@@ -103,6 +105,12 @@ describe("graph walkers — parsed widget data is read-only", () => {
     expect(() => collectUpstreamWildcardUuids(graph, leaf)).not.toThrow();
   });
 
+  it("the cross-node chain + pairings do not write to parsed data", () => {
+    const { graph, leaf } = buildGraph();
+    expect(() => collectFullChainModules(graph, leaf)).not.toThrow();
+    expect(() => collectCrossNodePairingsFull(graph, leaf)).not.toThrow();
+  });
+
   it("still returns the same answers with the cache warm", () => {
     const { graph, leaf } = buildGraph();
     const first = collectUpstreamVariables(graph, leaf);
@@ -142,5 +150,32 @@ describe("parse cache invalidation", () => {
     const after = collectUpstreamVariables(graph, leaf);
     expect(after).toContain("renamed_var");
     expect(after).not.toContain("var_2_0");
+  });
+});
+
+describe("parseNodeWidget — one parse per node and widget", () => {
+  beforeEach(() => { _clearParseCacheForTests(); });
+
+  it("hands back the same object while the string is unchanged, even past the string cache size", () => {
+    // More distinct bodies than the 24-entry string cache holds: read in a
+    // cycle, a FIFO keyed on the string alone evicts every entry before its
+    // next read. The per-node slot keeps each one.
+    const nodes = Array.from({ length: 40 }, (_, i) => contextNode(i + 1));
+    const first = nodes.map((n) => parseNodeWidget(n, "wp_modules", { version: 1, modules: [] }));
+    const again = nodes.map((n) => parseNodeWidget(n, "wp_modules", { version: 1, modules: [] }));
+    again.forEach((v, i) => expect(v).toBe(first[i]));
+  });
+
+  it("re-parses when the widget string changes, and falls back on empty", () => {
+    const n = contextNode(7);
+    const fb = { version: 1, modules: [] as unknown[] };
+    const a = parseNodeWidget(n, "wp_modules", fb);
+    const w = n.widgets?.find((x) => x.name === "wp_modules");
+    if (w) w.value = JSON.stringify({ version: 1, modules: [] });
+    const b = parseNodeWidget(n, "wp_modules", fb);
+    expect(b).not.toBe(a);
+    expect((b as { modules: unknown[] }).modules).toEqual([]);
+    if (w) w.value = "";
+    expect(parseNodeWidget(n, "wp_modules", fb)).toBe(fb);
   });
 });

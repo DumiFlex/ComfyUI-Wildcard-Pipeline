@@ -19,11 +19,11 @@
 import {
   collectUpstreamChain,
   collectDownstreamContextNodes,
+  parseNodeWidget,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
 import {
-  parseWidgetJson,
   type ContextWidgetValue,
   type ModuleEntry,
 } from "../widgets/_shared";
@@ -44,14 +44,6 @@ export function rowKey(nodeId: number | string, m: ModuleEntry): string {
   return `${nodeId}#${m._uid ?? m.id}`;
 }
 
-function widgetValue(node: LiteNodeLike, name: string): unknown {
-  // Litegraph stores widget state on the node; the name match matches
-  // ContextWidget's exported widget name. Mirror the helper in graph.ts.
-  const widgets = (node as { widgets?: { name: string; value: unknown }[] }).widgets ?? [];
-  const w = widgets.find((x) => x.name === name);
-  return w?.value;
-}
-
 function extractModules(node: LiteNodeLike): ModuleEntry[] {
   // Widget was renamed to `wp_modules` during the `wp_`-prefix sweep
   // (CLAUDE.md "Custom widget types"). Reading the legacy name returns
@@ -59,11 +51,9 @@ function extractModules(node: LiteNodeLike): ModuleEntry[] {
   // an empty map, and every PairBadge `v-if` skips → no badges anywhere
   // even when the constraint + target wildcard are both present. Keep
   // this in sync with the schema literal in `wp_nodes/context_node.py`.
-  const raw = widgetValue(node, "wp_modules");
-  const v = parseWidgetJson<ContextWidgetValue>(
-    typeof raw === "string" ? raw : "",
-    { version: 1, modules: [] },
-  );
+  // Cached per node: every Context polls the whole chain, so an uncached
+  // parse re-read each 27 KB+ body once per reader per tick.
+  const v = parseNodeWidget<ContextWidgetValue>(node, "wp_modules", { version: 1, modules: [] });
   // Pairings account for disabled modules positionally — the runtime
   // engine doesn't claim disabled targets, but the badge still helps
   // the user see WHY their disabled chain misbehaves. Keep all modules

@@ -1,8 +1,8 @@
-import { walkAllNodes, collectUpstreamVariables, collectUpstreamVariablesAnyFrame, findRootGraph, type LiteGraphLike, type LiteNodeLike } from "./graph";
+import { walkAllNodes, collectUpstreamVariables, collectUpstreamVariablesAnyFrame, findRootGraph, parseNodeWidget, type LiteGraphLike, type LiteNodeLike } from "./graph";
 import { startAdaptivePoll } from "./reactive";
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { filterByValidation } from "./settings";
-import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
+import type { ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
 import { nodeBadge, nodeBadgeCleanup, nodeBadgePulseToken, nodeBadgeSeverity } from "./_stashes";
 import { bumpBadgeRevision, ensureBadgeSlot, hasBadgeSlot, removeBadgeSlot } from "./badge-slot";
@@ -192,7 +192,7 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
       // returns "", the subgraph badge then never sees any inner WP_Context
       // modules, and the badge stays mute even when the subgraph contains
       // a missing variable / orphan constraint that should surface.
-      const v = parseWidgetJson<ContextWidgetValue>(widgetValue(node, "wp_modules"), { version: 1, modules: [] });
+      const v = parseNodeWidget<ContextWidgetValue>(node, "wp_modules", { version: 1, modules: [] });
       const upstream = collectUpstreamVariables(rootGraph, node);
       // scanConflicts internally gates via isModuleEffectivelyEnabled
       // (covers both child.enabled=false AND bundle.enabled=false). Pre-

@@ -159,16 +159,46 @@ let freezeParsed = false;
 export function _setParseCacheFreezeForTests(on: boolean): void {
   freezeParsed = on;
   parseCache.clear();
+  nodeParse = new WeakMap();
 }
 
 /** @internal test hook */
 export function _clearParseCacheForTests(): void {
   parseCache.clear();
+  nodeParse = new WeakMap();
 }
 
 /**
  * `parseWidgetJson`, memoised on the raw string. Read-only callers only.
  */
+export function parseWidgetJsonCached<T>(raw: string, fallback: T): T {
+  return parseCached(raw, fallback);
+}
+
+/** Last parse per node + widget name. The string-keyed cache above is a
+ *  FIFO of 24, so a graph with more distinct Context bodies than that cycled
+ *  every entry out between two reads of the same node and re-parsed all of
+ *  them on every poll. This slot holds exactly one parse per live widget and
+ *  goes with its node. */
+let nodeParse = new WeakMap<object, Map<string, { raw: string; parsed: unknown }>>();
+
+/** The parsed JSON of `node`'s widget `name`, cached on the node. Read-only. */
+export function parseNodeWidget<T>(node: LiteNodeLike, name: string, fallback: T): T {
+  const raw = widgetValue(node, name);
+  if (!raw) return fallback;
+  let byName = nodeParse.get(node);
+  const hit = byName?.get(name);
+  if (hit && hit.raw === raw) return hit.parsed as T;
+  const parsed = parseCached(raw, fallback);
+  if (parsed === fallback) return parsed;
+  if (!byName) {
+    byName = new Map();
+    nodeParse.set(node, byName);
+  }
+  byName.set(name, { raw, parsed });
+  return parsed;
+}
+
 function parseCached<T>(raw: string, fallback: T): T {
   if (!raw) return fallback;
   const hit = parseCache.get(raw);
@@ -523,10 +553,7 @@ export function collectLocalResolvedForModule(
   // about-to-be-emitted binding would surface stale state.
   if (isSkippedMode(node)) return ctx;
 
-  const v = parseCached<ContextWidgetValue>(
-    widgetValue(node, "wp_modules"),
-    { version: 1, modules: [] },
-  );
+  const v = parseNodeWidget<ContextWidgetValue>(node, "wp_modules", { version: 1, modules: [] });
 
   // Build a wildcard catalog over THIS node so refs in option values
   // (`@{uuid}`) resolve when wildcard siblings get simulated. Mirrors
@@ -847,10 +874,7 @@ export function collectUpstreamWildcardUuids(
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -915,10 +939,7 @@ export function collectUpstreamChain(
     }
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const seed = contextSeed(n, graphOf(n, rootGraph));
     opts.seeds?.push(Number.isSafeInteger(seed) ? seed : null);
     // Apply the bundle gate before posting to `/wp/api/preview/resolve`.
@@ -1058,10 +1079,7 @@ export function collectUpstreamKinds(
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const entry of v.modules) {
       const m = frame != null ? frameModule(entry, frame) : entry;
@@ -1328,10 +1346,7 @@ export function collectUpstreamProducers(
     }
 
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -1575,10 +1590,7 @@ function resolveChainStatic(
   const catalog = new Map<string, MinimalWildcard>();
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     for (const m of v.modules) {
       if (m.type !== "wildcard" || !m.payload) continue;
       catalog.set(m.id, m.payload as MinimalWildcard);
@@ -1712,10 +1724,7 @@ function resolveChainStatic(
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const entry of v.modules) {
       // A loop frame turns modules on or off and patches their instance
@@ -1800,7 +1809,7 @@ function overrideFrames(chain: LiteNodeLike[], count: number): number[] {
   };
   for (const n of chain) {
     if (n.type !== "WP_Context" || isSkippedMode(n)) continue;
-    const v = parseCached<ContextWidgetValue>(widgetValue(n, "wp_modules"), { version: 1, modules: [] });
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     for (const m of v.modules) {
       for (const k of Object.keys(m.frame_enabled ?? {})) add(Number(k));
       for (const k of m.disabled_frames ?? []) add(k);
@@ -2362,10 +2371,7 @@ export function collectDownstreamWildcardUuids(
         // Harvest wildcard uuids when the downstream node is a
         // WP_Context and not muted/bypassed.
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseCached<ContextWidgetValue>(
-            widgetValue(stepped.node, "wp_modules"),
-            { version: 1, modules: [] },
-          );
+          const v = parseNodeWidget<ContextWidgetValue>(stepped.node, "wp_modules", { version: 1, modules: [] });
           const bundleEnabled = buildBundleEnabledMap(v.bundles);
           for (const m of v.modules) {
             if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -2421,10 +2427,7 @@ export function collectDownstreamNestedReachUuids(
         if (seen.has(key)) continue;
         seen.add(key);
         if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseCached<ContextWidgetValue>(
-            widgetValue(stepped.node, "wp_modules"),
-            { version: 1, modules: [] },
-          );
+          const v = parseNodeWidget<ContextWidgetValue>(stepped.node, "wp_modules", { version: 1, modules: [] });
           const bundleEnabled = buildBundleEnabledMap(v.bundles);
           for (const m of v.modules) {
             if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -2664,10 +2667,7 @@ export function findWildcardHomesElsewhere(
     if (n.type !== "WP_Context") continue;
     contextIds.push(String(n.id));
     if (String(n.id) === String(selfNode.id)) continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     // Disabled modules count: the engine still catalogs them, so a user
     // looking at a greyed-out row is looking at a real pool.
     if (v.modules.some((m) => m.type === "wildcard" && m.id === uuid)) {
