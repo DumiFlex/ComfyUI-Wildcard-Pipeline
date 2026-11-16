@@ -1,3 +1,4 @@
+import { inputLinkId } from "./slot-links";
 /**
  * WP_ModelInfo on the canvas — the static side of `engine/model_info.py`.
  *
@@ -168,8 +169,9 @@ export function loaderFileName(node: NodeLike, graph: GraphLike | undefined): st
   const seen = new Set<number>();
   while (cur) {
     const slot = cur.inputs?.find((i) => i.name === "model" || i.name === "MODEL");
-    if (slot?.link == null) return "";
-    const link = g.links[slot.link];
+    const linkId = inputLinkId(slot);
+    if (linkId == null) return "";
+    const link = g.links[linkId];
     if (!link || link.origin_id < 0 || seen.has(link.origin_id) || seen.size > 64) return "";
     seen.add(link.origin_id);
     const origin = g.getNodeById(link.origin_id);

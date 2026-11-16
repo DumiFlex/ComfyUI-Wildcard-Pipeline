@@ -8,6 +8,7 @@
  * new node's matching output. One undo step.
  */
 import { MAX_OUTPUTS, newToggleId, uniqueVar, varFromName, type ToggleRow, type TogglesConfig } from "./toggles";
+import { inputLinkId, outputLinkIds } from "./slot-links";
 
 interface MergeWidget { name: string; type?: string; value?: unknown }
 interface MergeLink { target_id: number | string; target_slot: number }
@@ -40,7 +41,7 @@ export function isMergeable(node: MergeNode): boolean {
   if (node.type === "WP_Toggles") return false;
   const outs = node.outputs ?? [];
   if (outs.length !== 1 || outs[0].type !== "BOOLEAN") return false;
-  if ((node.inputs ?? []).some((i) => i.link != null)) return false;
+  if ((node.inputs ?? []).some((i) => inputLinkId(i) != null)) return false;
   return boolWidgets(node).length === 1;
 }
 
@@ -94,7 +95,7 @@ export function mergeIntoToggles(
     const value = node.widgets?.find((w) => w.name === "wp_toggles");
     if (value) value.value = JSON.stringify(mergedConfig(take));
     take.forEach((old, i) => {
-      const targets = (old.outputs?.[0]?.links ?? [])
+      const targets = outputLinkIds(old.outputs?.[0])
         .map((id) => linkOf(graph, id))
         .filter((l): l is MergeLink => !!l)
         .map((l) => [graph.getNodeById(l.target_id), l.target_slot] as const);

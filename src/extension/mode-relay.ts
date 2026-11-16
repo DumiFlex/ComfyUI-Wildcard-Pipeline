@@ -12,6 +12,7 @@
  */
 import { members, modeName, type GroupHostNode, type MemberMode } from "./node-group";
 import { MODE_ALWAYS, MODE_BYPASS, MODE_NEVER, NODE_GROUP_TYPE, originOf, setMode, type CtlNode } from "./toggle-control";
+import { outputLinkIds } from "./slot-links";
 
 export const MODE_RELAY_TYPE = "WP_ModeRelay";
 export const RELAY_PROP = "wp_relay";
@@ -57,7 +58,7 @@ export function relayTargets(node: RelayNode): CtlNode[] {
   if (!graph) return [];
   const out = new Set<CtlNode>();
   for (const output of node.outputs ?? []) {
-    for (const id of output.links ?? []) {
+    for (const id of outputLinkIds(output)) {
       const links = graph.links;
       const link = links instanceof Map ? links.get(id) : links?.[id];
       const target = (link as { target_id?: number | string } | undefined)?.target_id;

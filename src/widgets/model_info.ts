@@ -13,6 +13,7 @@ import {
   type ModelInfoRun,
 } from "../extension/model-info";
 import type { LiteGraphLike } from "../extension/graph";
+import { inputLinkId } from "../extension/slot-links";
 
 const ModelInfoWidget = defineAsyncComponent(
   () => import("../components/model-info/ModelInfoWidget.vue"),
@@ -57,13 +58,13 @@ export function create(node: ModelInfoHostNode, inputName: string) {
       );
       const modelWired = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
-        () => node.inputs?.find((i) => i.name === "model")?.link != null,
+        () => inputLinkId(node.inputs?.find((i) => i.name === "model")) != null,
         Object.is,
       );
       // "family,name" — a string, so the poll compares by value.
       const wiredKey = reactiveFromGraph(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
-        () => WIRABLE.filter((n) => node.inputs?.find((i) => i.name === n)?.link != null).join(","),
+        () => WIRABLE.filter((n) => inputLinkId(node.inputs?.find((i) => i.name === n)) != null).join(","),
         Object.is,
       );
       function onUpdate(next: ModelInfoConfig): void {

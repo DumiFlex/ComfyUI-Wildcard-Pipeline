@@ -32,6 +32,7 @@ import {
   type LiteGraphLike,
   type LiteNodeLike,
 } from "../extension/graph";
+import { inputLinkId } from "../extension/slot-links";
 
 const ContextLoopWidget = defineAsyncComponent(
   () => import("../components/context-loop/ContextLoopWidget.vue"),
@@ -143,7 +144,7 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
   // so the count follows the last run's `loop_values` payload.
   const valuesWired = reactiveFromGraph(
     node,
-    () => node.inputs?.find((i) => i.name === "values")?.link != null,
+    () => inputLinkId(node.inputs?.find((i) => i.name === "values")) != null,
     Object.is,
   );
   const valuesRun = ref<{ count: number; frames: number } | null>(null);

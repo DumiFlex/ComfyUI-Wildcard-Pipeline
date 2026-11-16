@@ -27,6 +27,7 @@ import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../ex
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
 import { nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds } from "../extension/_stashes";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
+import { inputLinkId } from "../extension/slot-links";
 
 /** Shallow-equal map comparator for `reactiveFromGraph` so the
  *  upstream-resolved snapshot only triggers a re-render when its
@@ -257,7 +258,7 @@ export function create(node: ContextNode, inputName: string) {
               nodeGraphId: startGraph?.id ?? "root",
               appGraphId: (app.graph as unknown as { id?: string })?.id ?? "root",
               rootGraphId: rootGraph?.id ?? "root",
-              firstInputLink: node.inputs?.[0]?.link ?? null,
+              firstInputLink: inputLinkId(node.inputs?.[0]),
               upstreamVars: result,
             });
           }

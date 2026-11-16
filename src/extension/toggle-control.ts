@@ -17,6 +17,7 @@
  * changes, never while a workflow loads (the saved modes are already right).
  */
 import { effectiveToggles, hasCtlDot, toggleRows, type ToggleControl, type TogglesConfig } from "./toggles";
+import { inputLinkId } from "./slot-links";
 
 export const CTL_PREFIX = "ctl_";
 export const NODE_GROUP_TYPE = "WP_NodeGroup";
@@ -71,8 +72,9 @@ function linkById(graph: CtlGraph, id: number): CtlLink | undefined {
 /** The node wired into `input`, or null. */
 export function originOf(node: CtlNode, input: CtlInput | undefined): CtlNode | null {
   const graph = node.graph;
-  if (!graph || input?.link == null) return null;
-  const link = linkById(graph, input.link);
+  const linkId = inputLinkId(input);
+  if (!graph || linkId == null) return null;
+  const link = linkById(graph, linkId);
   if (!link) return null;
   return graph.getNodeById?.(link.origin_id) ?? null;
 }

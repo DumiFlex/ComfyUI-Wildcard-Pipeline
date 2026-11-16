@@ -22,6 +22,7 @@ import {
 import { resolveSeedListPreview, type SeriesParams } from "../components/seed-list/preview";
 import { parseContextLoopConfig } from "../components/context-loop/types";
 import type { LiteNodeLike, LiteGraphLike } from "../extension/graph";
+import { inputLinkId } from "../extension/slot-links";
 
 const SeedListWidget = defineAsyncComponent(
   () => import("../components/seed-list/SeedListWidget.vue"),
@@ -114,10 +115,11 @@ function build(node: SeedListHostNode, inputName: string, scope: EffectScope): D
     const inputs = (node as { inputs?: Array<{ name?: string; link?: number | null }> }).inputs;
     if (!inputs) return null;
     const slot = inputs.find((i) => i.name === "loop_config");
-    if (!slot || slot.link == null) return null;
+    const linkId = inputLinkId(slot);
+    if (linkId == null) return null;
     const graph = node.graph;
     if (!graph) return null;
-    const link = graph.links[slot.link];
+    const link = graph.links[linkId];
     if (!link) return null;
     const origin = graph.getNodeById(link.origin_id);
     if (!origin) return null;
@@ -257,7 +259,7 @@ function build(node: SeedListHostNode, inputName: string, scope: EffectScope): D
       const inputs = (node as { inputs?: Array<{ name?: string; link?: number | null }> }).inputs;
       if (!inputs) return false;
       const slot = inputs.find((i) => i.name === "loop_config");
-      return slot != null && slot.link != null;
+      return inputLinkId(slot) != null;
     },
     Object.is,
   );
