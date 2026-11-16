@@ -24,7 +24,7 @@ import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
 import SliderRowView from "./SliderRow.vue";
 import { varColorClass } from "../shared/var-color";
-import { MAX_DECIMALS, wordFor, type SliderMode, type SliderRow, type SliderWord } from "../../extension/sliders";
+import { MAX_DECIMALS, sliderOutputType, wordFor, type SliderMode, type SliderRow, type SliderWord } from "../../extension/sliders";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
 
@@ -61,6 +61,12 @@ function value(ev: Event): string {
   return (ev.target as HTMLInputElement).value.trim();
 }
 
+type OutPick = "auto" | "int" | "float";
+const OUT_TYPES: { value: OutPick; label: string; hint: string }[] = [
+  { value: "auto", label: "Auto", hint: "INT at 0 decimals, else FLOAT" },
+  { value: "int", label: "INT", hint: "A whole number, rounded (steps, seeds, sizes)" },
+  { value: "float", label: "FLOAT", hint: "The number at the slider's decimals (cfg, LoRA strength)" },
+];
 const MODES: { value: SliderMode; label: string; hint: string }[] = [
   { value: "number", label: "Number", hint: "The variable gets the number, e.g. 0.45" },
   { value: "text", label: "Text", hint: "The variable gets your text, which can read the number as $name.num" },
@@ -135,7 +141,7 @@ const headStyle = computed(() => {
   return st;
 });
 const numHint = computed(() => `$${d.value.var || "name"}.num`);
-const outType = computed(() => (d.value.decimals === 0 ? "INT" : "FLOAT"));
+const outType = computed(() => sliderOutputType(d.value));
 
 const asking = ref(false);
 function cancel(): void {
@@ -276,10 +282,21 @@ function onKey(ev: KeyboardEvent): void {
         <span>Group</span>
         <WpSelect :model-value="draftGroup" :options="groupOptions" aria-label="Group" data-test="sl-group" @update:model-value="(v: string) => (draftGroup = v)" />
       </div>
-      <span v-tooltip="!d.pin && outputsFull ? 'All 16 outputs are in use' : `Show an ${outType} output with the number, for a sampler, LoRA strength or any number input`" v-toggle-row class="wp-slw__check">
-        <Checkbox :model-value="d.pin" size="sm" :disabled="!d.pin && outputsFull" :aria-label="`${outType} output`" data-test="sl-pin" @update:model-value="(v: boolean) => patch({ pin: v })" />
-        <span aria-hidden="true">{{ outType }} output</span>
-      </span>
+      <div class="wp-slw__out">
+        <span v-tooltip="!d.pin && outputsFull ? 'All 16 outputs are in use' : `Show an ${outType} output with the number, for a sampler, LoRA strength or any number input`" v-toggle-row class="wp-slw__check">
+          <Checkbox :model-value="d.pin" size="sm" :disabled="!d.pin && outputsFull" :aria-label="`${outType} output`" data-test="sl-pin" @update:model-value="(v: boolean) => patch({ pin: v })" />
+          <span aria-hidden="true">{{ outType }} output</span>
+        </span>
+        <WpSegmented
+          v-if="d.pin"
+          :model-value="d.out_type ?? 'auto'"
+          :options="OUT_TYPES"
+          size="sm"
+          aria-label="Output type"
+          test-prefix="sl-out-type"
+          @update:model-value="(v: OutPick) => patch({ out_type: v === 'auto' ? undefined : v })"
+        />
+      </div>
     </div>
     <template #footer>
       <span class="wp-slw__hint"><Kbd keys="Mod+Enter" size="sm" /> Done · Changes save with the node when you press Done.</span>
@@ -337,6 +354,7 @@ function onKey(ev: KeyboardEvent): void {
 .wp-slw__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wp-slw__field > span:first-child { font-size: 10.5px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-slw__field em { font-style: normal; font-weight: 400; color: var(--wp-text-dim, var(--wp-text3)); margin-left: 4px; }
+.wp-slw__out { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .wp-slw__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }
 .wp-slw__var-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-slw__var-row .wp-slw__var { flex: 1 1 0; min-width: 80px; }

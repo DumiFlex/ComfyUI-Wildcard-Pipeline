@@ -89,10 +89,17 @@ class Slider:
     pin: bool = False
     out: int = 0
     internal: bool = False
+    #: ``"int"`` / ``"float"`` picks the output's type; empty follows the
+    #: decimals (INT at 0, else FLOAT).
+    out_type: str = ""
 
     @property
     def is_int(self) -> bool:
         return self.decimals == 0
+
+    @property
+    def outputs_int(self) -> bool:
+        return self.out_type == "int" or (self.out_type != "float" and self.is_int)
 
 
 @dataclass
@@ -157,6 +164,7 @@ def parse_config(raw: Any) -> Config:
         text = row.get("text")
         negative = row.get("negative")
         step = _num(row.get("step"), 0.01)
+        out_type = row.get("out_type")
         sliders.append(Slider(
             id=sid,
             name=_str(row.get("name")) or sid,
@@ -173,6 +181,7 @@ def parse_config(raw: Any) -> Config:
             pin=row.get("pin") is True,
             out=out if isinstance(out, int) and not isinstance(out, bool) else 0,
             internal=row.get("internal") is True,
+            out_type=out_type if out_type in ("int", "float") else "",
         ))
     return Config(sliders=sliders)
 
@@ -191,6 +200,15 @@ def number(s: Slider) -> int | float:
     """The slider's value rounded to its decimals (an int at 0 decimals)."""
     text = fmt(s)
     return int(text) if s.is_int else float(text)
+
+
+def output_number(s: Slider) -> int | float:
+    """What the slider's output sends: a whole number (rounded half away from
+    zero, like ``toFixed(0)``) when it outputs an INT, else the number at its
+    decimals as a float."""
+    if s.outputs_int:
+        return int(Decimal(s.value).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    return float(fmt(s))
 
 
 def word_for(s: Slider) -> Word | None:
@@ -290,7 +308,7 @@ def output_slots(cfg: Config) -> list[Slider]:
 
 def output_values(cfg: Config) -> list[int | float]:
     """The 16 number outputs: pinned sliders first, then ``0`` padding."""
-    vals: list[int | float] = [number(s) for s in output_slots(cfg)]
+    vals: list[int | float] = [output_number(s) for s in output_slots(cfg)]
     return vals + [0] * (MAX_OUTPUTS - len(vals))
 
 

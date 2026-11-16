@@ -7,7 +7,7 @@
  *
  * Outputs: the node declares the context plus {@link MAX_OUTPUTS} `*`
  * outputs (ComfyUI V3 has no dynamic outputs and fixed types) and the
- * canvas shows only the pinned ones, typed INT at 0 decimals, else FLOAT.
+ * canvas shows only the pinned ones, typed INT or FLOAT (`out_type`, else INT at 0 decimals).
  * Each pinned slider's `out` is its output slot (1-based; slot 0 is the
  * context). Slots never follow row order: a reorder moves the dot with its
  * row, so no link has to be re-pointed. Unpinning removes the slot and
@@ -58,6 +58,8 @@ export interface SliderRow {
   out: number;
   /** Keeps the variable out of the prompt and the Assembler's listing. */
   internal?: true;
+  /** The output's type; absent follows the decimals (INT at 0, else FLOAT). */
+  out_type?: "int" | "float";
   style: SliderStyle;
   /** Clean view: no `$variable` line under the name. */
   hide_var?: true;
@@ -233,6 +235,7 @@ export function parseSlidersConfig(raw: unknown): SlidersConfig {
     const words = parseWords(o.words);
     if (words.length) s.words = words;
     if (o.internal === true) s.internal = true;
+    if (o.out_type === "int" || o.out_type === "float") s.out_type = o.out_type;
     if (o.hide_var === true) s.hide_var = true;
     if (o.marks === true) s.marks = true;
     if (iconName(o.icon)) s.icon = iconName(o.icon);
@@ -350,13 +353,22 @@ export function outputSlots(cfg: SlidersConfig): SliderRow[] {
 }
 
 /** The node's 16 number outputs (pinned sliders, then 0). */
+/** What a slider's output sends: a whole number for an INT (rounded half away
+ *  from zero, like engine `output_number`), else the number at its decimals. */
+export function outputNumber(s: Pick<SliderRow, "value" | "decimals" | "out_type">): number {
+  return sliderOutputType(s) === "INT" ? Number(s.value.toFixed(0)) || 0 : sliderNumber(s);
+}
+
 export function outputValues(cfg: SlidersConfig): number[] {
-  const vals = outputSlots(cfg).map(sliderNumber);
+  const vals = outputSlots(cfg).map(outputNumber);
   return [...vals, ...Array<number>(MAX_OUTPUTS - vals.length).fill(0)];
 }
 
 /** The output type a slider's dot shows. */
-export const sliderOutputType = (s: Pick<SliderRow, "decimals">): "INT" | "FLOAT" => (s.decimals === 0 ? "INT" : "FLOAT");
+export function sliderOutputType(s: Pick<SliderRow, "decimals" | "out_type">): "INT" | "FLOAT" {
+  if (s.out_type) return s.out_type === "int" ? "INT" : "FLOAT";
+  return s.decimals === 0 ? "INT" : "FLOAT";
+}
 
 /** Same config with every pinned `out` in 1..N (pins past 16 dropped) and
  *  unpinned `out` 0. Keeps valid slots as they are. */

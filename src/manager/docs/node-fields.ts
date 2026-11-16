@@ -292,12 +292,12 @@ export const NODE_FIELDS = {
       { term: "Pencil, globe, trash (row)", desc: "Edit view only. The pencil opens the slider's own settings in a window with the row drawn on top as the node will show it; the globe keeps its variable internal (for rules only, never printed); the trash removes it. A new slider's variable shows in the Assembler." },
       { term: "Add slider / Add label", desc: "A new slider (0 to 1, step 0.05), or a label that groups the sliders under it. Click a label's arrow to fold it; a folded label carries its sliders' output dots. Drag a slider's grip under a label to move it into that group; a dragged label takes its sliders along." },
       { term: "context (out)", sockets: ["out:context"], desc: "The Context with every slider variable added, and the numbers $name.num reads." },
-      { term: "number outputs", sockets: ["out:value_*"], desc: "One output per slider that has one, at the right of its row: an INT when the slider writes 0 decimals, else a FLOAT, so it wires into a sampler's steps or cfg, a LoRA strength or any number input. Up to 16." },
+      { term: "number outputs", sockets: ["out:value_*"], desc: "One output per slider that has one, at the right of its row: an INT or a FLOAT (by default an INT when the slider writes 0 decimals, else a FLOAT; the slider's window can pick either), so it wires into a sampler's steps or cfg, a LoRA strength or any number input. Up to 16." },
     ],
     edit: [
       { term: "Name", desc: "Shown on the row and on its output." },
       { term: "Variable", desc: "What the slider writes. It follows the name until you change it. Show puts it under the name, with the picked word in Words mode." },
-      { term: "Range", desc: "Min, Max and Step of the track, and how many decimals the number is written with (0 writes a whole number and makes the output an INT). The value is rounded to those decimals." },
+      { term: "Range", desc: "Min, Max and Step of the track, and how many decimals the number is written with (0 writes a whole number, and an Auto output is then an INT). The value is rounded to those decimals." },
       { term: "Value: Number", desc: "The variable gets the number as text, e.g. 0.45 or 28." },
       { term: "Value: Text", desc: "The variable gets your text, which can read the slider's own number as $name.num and any other $variable: (intricate details:$detail.num) prints (intricate details:1.2). A text box like the Assembler's, with $ suggestions." },
       { term: "Value: Words", desc: "Ranges, each with a word and an optional negative: the variable gets the word of the first range whose up to is at least the number; the last range catches the rest. 0 to 0.3 close-up, to 0.7 medium shot, the rest wide shot. The window marks the range the number is in now." },
@@ -305,7 +305,7 @@ export const NODE_FIELDS = {
       { term: "Negative", desc: "Words to keep out of the image, carried by the slider's variable to an Assembler that prints it. In Words mode a word's own negative wins over this one." },
       { term: "Looks", desc: "An icon before the name and colours for the icon, the name and the track. Marks puts ticks at the ends of the track and at each Words range." },
       { term: "Group", desc: "Which label it sits under. You can also drag the slider's grip under another label, or above the first one." },
-      { term: "INT / FLOAT output", desc: "Show an output with the number. Off for a new slider; leave it off for a slider only prompts and rules read." },
+      { term: "INT / FLOAT output", desc: "Show an output with the number. Off for a new slider; leave it off for a slider only prompts and rules read. Auto makes it an INT at 0 decimals, else a FLOAT; INT sends the number rounded to a whole number, FLOAT sends it at the slider's decimals." },
     ],
   },
   WP_VarToBool: {

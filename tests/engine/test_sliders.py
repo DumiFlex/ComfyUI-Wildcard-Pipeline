@@ -81,3 +81,19 @@ def test_canvas_vars_take_slider_rows():
     got = canvas_vars([{"name": "detail", "source": "slider", "about": "slider, now 1.2"}])
     assert got == [{"name": "detail", "source": "slider", "about": "slider, now 1.2"}]
     assert "a WP Slider" in canvas_note(got)
+
+
+def test_output_type_overrides_the_decimals():
+    def row(sid, value, decimals, out, out_type):
+        return {"id": sid, "var": sid, "value": value, "decimals": decimals,
+                "pin": True, "out": out, "out_type": out_type}
+
+    cfg = sliders.parse_config({"rows": [
+        row("a", 6.5, 1, 1, "int"), row("b", 28, 0, 2, "float"), row("c", 3, 0, 3, "bogus"),
+    ]})
+    a, b, c = cfg.sliders
+    assert a.outputs_int and not b.outputs_int and c.outputs_int
+    assert c.out_type == ""
+    vals = sliders.output_values(cfg)
+    assert vals[:3] == [7, 28.0, 3]
+    assert isinstance(vals[0], int) and isinstance(vals[1], float) and isinstance(vals[2], int)

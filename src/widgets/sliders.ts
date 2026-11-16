@@ -56,7 +56,7 @@ function fitOutputs(node: SlidersHostNode, cfg: SlidersConfig): void {
   relabel(node, cfg);
 }
 
-/** Name, label and type (INT at 0 decimals, else FLOAT) of each pinned
+/** Name, label and type (INT or FLOAT, `sliderOutputType`) of each pinned
  *  slider's output. The schema says `*`, so any number input takes it. */
 function relabel(node: SlidersHostNode, cfg: SlidersConfig): void {
   const outs = node.outputs ?? [];
