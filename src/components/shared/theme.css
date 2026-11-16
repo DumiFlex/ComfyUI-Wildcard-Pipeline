@@ -128,11 +128,12 @@
    * without clashing with any module kind. */
   --wp-kind-injector:    #60a5fa;
   /* The other context-chain nodes WP Debug traces: Context Loop
-   * (orange: frames), Model Info (lime: the checkpoint) and Toggles
-   * (indigo: switches). Picked to stay apart from the module kinds. */
+   * (orange: frames), Model Info (lime: the checkpoint), Toggles
+   * (indigo: switches) and Slider (fuchsia: numbers). Picked to stay apart from the module kinds. */
   --wp-kind-loop:        #fb923c;
   --wp-kind-model:       #a3e635;
   --wp-kind-toggle:      #818cf8;
+  --wp-kind-slider:      #f0abfc;
 
   /* Type + spacing scale, mirrored from the SPA's tokens.css.
    *
@@ -403,6 +404,7 @@
   --wp-kind-loop:        #9a3412;  /* orange-800  */
   --wp-kind-model:       #3f6212;  /* lime-800    */
   --wp-kind-toggle:      #4338ca;  /* indigo-700  */
+  --wp-kind-slider:      #86198f;  /* fuchsia-800 */
 
   /* Constraint source/target — darker shades for legibility on light. */
   --wp-constraint-source:      #7c3aed;  /* violet-600  — chip 6.16:1 on white */
@@ -481,6 +483,7 @@
 .wp-kind-chip--loop       { background: color-mix(in oklab, var(--wp-kind-loop)       22%, transparent); color: var(--wp-kind-loop);       }
 .wp-kind-chip--model      { background: color-mix(in oklab, var(--wp-kind-model)      22%, transparent); color: var(--wp-kind-model);      }
 .wp-kind-chip--toggle     { background: color-mix(in oklab, var(--wp-kind-toggle)     22%, transparent); color: var(--wp-kind-toggle);     }
+.wp-kind-chip--slider     { background: color-mix(in oklab, var(--wp-kind-slider)     22%, transparent); color: var(--wp-kind-slider);     }
 
 /* Pairing badge — appears when multiple constraints share a target
  * wildcard. Each constraint module and its claimed downstream target

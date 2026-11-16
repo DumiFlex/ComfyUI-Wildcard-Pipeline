@@ -22,6 +22,7 @@ import { findDownstreamAssemblers, upstreamChainOf, type LiteGraphLike, type Lit
 import { derivationTargets } from "./derivation-conditions";
 import { MODEL_INFO_NODE, MODEL_INFO_KEYS, CONFIG_WIDGET as MODEL_WIDGET } from "./model-info";
 import { TOGGLES_NODE, nodeTogglesConfig, internalToggleVars, toggleRows } from "./toggles";
+import { SLIDER_NODE, nodeSlidersConfig, internalSliderVars, sliderRows } from "./sliders";
 import { NEGATIVES_VAR } from "./assembler-vars";
 import {
   buildBundleEnabledMap,
@@ -174,6 +175,12 @@ function unitsOf(n: LiteNodeLike): Unit[] {
     if (cfg.mode === "one" && cfg.group_var) names.add(cfg.group_var);
     return [...names].map((v) => ({ node: n, ref: `toggle:${v}`, names: [v], internal: hidden.has(v), flippable: true }));
   }
+  if (n.type === SLIDER_NODE) {
+    const cfg = nodeSlidersConfig(n as Parameters<typeof nodeSlidersConfig>[0]);
+    const hidden = internalSliderVars(cfg);
+    const names = new Set<string>(sliderRows(cfg).map((s) => s.var).filter(Boolean));
+    return [...names].map((v) => ({ node: n, ref: `slider:${v}`, names: [v], internal: hidden.has(v), flippable: true }));
+  }
   if (n.type === "WP_ContextLoop") {
     const c = loopConfig(n);
     const out: Unit[] = [
@@ -311,6 +318,12 @@ function flipped(n: LiteNodeLike, refs: Set<string>): { widget: string; value: s
     });
     if (typeof d.group_var === "string" && refs.has(`toggle:${d.group_var}`)) delete d.group_visible;
     return { widget: "wp_toggles", value: JSON.stringify(d) };
+  }
+  if (n.type === SLIDER_NODE) {
+    const d = obj(widgetString(n, "wp_sliders"));
+    const rows = Array.isArray(d.rows) ? (d.rows as Json[]) : [];
+    d.rows = rows.map((r) => (r.kind !== "label" && typeof r.var === "string" && refs.has(`slider:${r.var}`) ? { ...r, internal: true } : r));
+    return { widget: "wp_sliders", value: JSON.stringify(d) };
   }
   if (n.type === "WP_ContextLoop") {
     const d = obj(widgetString(n, "wp_context_loop_config"));

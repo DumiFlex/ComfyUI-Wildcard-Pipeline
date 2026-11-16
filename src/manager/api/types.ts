@@ -2100,7 +2100,7 @@ export interface AiPackLocks {
  *  reports it to the manager (`utils/canvas-facts.ts`). */
 export interface AiCanvasVar {
   name: string;
-  source: "injector" | "loop" | "model" | "toggle";
+  source: "injector" | "loop" | "model" | "toggle" | "slider";
   about?: string;
 }
 

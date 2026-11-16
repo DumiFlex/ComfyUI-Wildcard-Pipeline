@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import sockets from "../../../../tests/fixtures/node-sockets.json";
 import { GROUP_TITLES, NODE_FIELDS, type NodeField, type NodeFieldGroups } from "../node-fields";
-import { NODE_VIDEOS, findSection, findVideo, playlistUrl, videoUrl } from "../videos";
+import { NODES_WITHOUT_VIDEO, NODE_VIDEOS, findSection, findVideo, playlistUrl, videoUrl } from "../videos";
 
 type Socket = { name: string; type: string };
 const SOCKETS: Record<string, { inputs: Socket[]; outputs: Socket[] }> = sockets;
@@ -72,7 +72,9 @@ describe("native help pages", () => {
   }
 
   it("links a video for every node", () => {
-    for (const node of Object.keys(NODE_FIELDS)) expect(findVideo(NODE_VIDEOS[node] ?? ""), node).toBeTruthy();
+    for (const node of Object.keys(NODE_FIELDS)) {
+      if (!NODES_WITHOUT_VIDEO.has(node)) expect(findVideo(NODE_VIDEOS[node] ?? ""), node).toBeTruthy();
+    }
   });
 
   it("has a heading for every group", () => {

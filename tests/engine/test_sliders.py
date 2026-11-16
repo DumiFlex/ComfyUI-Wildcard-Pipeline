@@ -73,3 +73,11 @@ def test_lookup_num():
     assert sliders.lookup_num(None, "nan", "a") is None
     assert sliders.lookup_num(None, "seven", "a") is None
     assert sliders.lookup_num({"a": ""}, None, "a") is None
+
+
+def test_canvas_vars_take_slider_rows():
+    from engine.ai.pack.settings import canvas_note, canvas_vars
+
+    got = canvas_vars([{"name": "detail", "source": "slider", "about": "slider, now 1.2"}])
+    assert got == [{"name": "detail", "source": "slider", "about": "slider, now 1.2"}]
+    assert "a WP Slider" in canvas_note(got)

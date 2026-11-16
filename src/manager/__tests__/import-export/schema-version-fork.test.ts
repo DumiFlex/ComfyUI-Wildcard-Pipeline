@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   CURRENT_SCHEMA_VERSION,
   MAX_KNOWN_SCHEMA_VERSION,
-  BOOL_ACCESSOR_SCHEMA_VERSION,
+  NUM_ACCESSOR_SCHEMA_VERSION,
 } from "@/manager/import-export/migrations";
 import { MAX_KNOWN_SCHEMA_VERSION as MAX_KNOWN_VIA_INSTALL } from "@/manager/import-export/install";
 import { schemaVersionForPayload } from "@/manager/import-export/single-row-publish";
@@ -12,22 +12,22 @@ import { schemaVersionForPayload } from "@/manager/import-export/single-row-publ
  * `docs/superpowers/specs/2026-06-14-schema-gate-max-known-version-design.md`):
  *
  *   - CURRENT_SCHEMA_VERSION = 2  — head of the migration chain (v2→v3
- *     through v11→v12 are no-ops, so the chain genuinely stops at 2).
- *   - MAX_KNOWN_SCHEMA_VERSION = 12 — highest version this runtime can READ +
+ *     through v12→v13 are no-ops, so the chain genuinely stops at 2).
+ *   - MAX_KNOWN_SCHEMA_VERSION = 13 — highest version this runtime can READ +
  *     WRITE; the value advertised to the community publish-gate / boot
  *     catalog-probe.
  *
  * The community gate predicate is `hostSchema < minCompatible` where
  * `minCompatible = max(breaking versions) = 3`. Advertising CURRENT (2)
- * fails the gate (`2 < 3`); advertising MAX_KNOWN (12) clears it.
+ * fails the gate (`2 < 3`); advertising MAX_KNOWN (13) clears it.
  */
 describe("schema-version fork: MAX_KNOWN vs CURRENT", () => {
   it("CURRENT_SCHEMA_VERSION is the migration-chain head (2)", () => {
     expect(CURRENT_SCHEMA_VERSION).toBe(2);
   });
 
-  it("MAX_KNOWN_SCHEMA_VERSION is the support ceiling (12)", () => {
-    expect(MAX_KNOWN_SCHEMA_VERSION).toBe(12);
+  it("MAX_KNOWN_SCHEMA_VERSION is the support ceiling (13)", () => {
+    expect(MAX_KNOWN_SCHEMA_VERSION).toBe(13);
   });
 
   it("the ceiling is strictly above the chain head (the whole point of the fork)", () => {
@@ -40,7 +40,7 @@ describe("schema-version fork: MAX_KNOWN vs CURRENT", () => {
     // whatever install.ts re-exports. Pin that it is MAX_KNOWN, identical to
     // the source-of-truth constant.
     expect(MAX_KNOWN_VIA_INSTALL).toBe(MAX_KNOWN_SCHEMA_VERSION);
-    expect(MAX_KNOWN_VIA_INSTALL).toBe(12);
+    expect(MAX_KNOWN_VIA_INSTALL).toBe(13);
   });
 
   it("a plain v2-content payload still stamps at the chain head (unchanged)", () => {
@@ -57,7 +57,8 @@ describe("schema-version fork: MAX_KNOWN vs CURRENT", () => {
     // next to a derivation with an AND / OR group holding a NOT-toggled
     // "does not contain" test and an "Add to negative" action, plus a
     // wildcard use whose pool filter reads `$model_variant` and a test on
-    // `rain.bool` → stamps BOOL_ACCESSOR_SCHEMA_VERSION (12).
+    // `rain.bool` and a slider number read `shot.num` → stamps
+    // NUM_ACCESSOR_SCHEMA_VERSION (13).
     const highestFeaturePayload = { children: [{
       id: "wc-001abc",
       type: "wildcard",
@@ -76,6 +77,7 @@ describe("schema-version fork: MAX_KNOWN vs CURRENT", () => {
                 { var: "a", op: "equals", value: "1" },
                 { var: "b", op: "not_contains", value: "2" },
                 { var: "rain.bool", op: "equals", value: "true" },
+                { var: "shot.num", op: "equals", value: "0.5" },
               ],
             },
             action: { target_var: "c", mode: "negative", value: "3" },
@@ -84,7 +86,7 @@ describe("schema-version fork: MAX_KNOWN vs CURRENT", () => {
       },
     }] };
     const stamped = schemaVersionForPayload(highestFeaturePayload);
-    expect(stamped).toBe(BOOL_ACCESSOR_SCHEMA_VERSION);
+    expect(stamped).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
 
     // The mechanical maintenance contract from the spec: if someone teaches
     // schemaVersionForPayload a higher stamp without bumping MAX_KNOWN, update

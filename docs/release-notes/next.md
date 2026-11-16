@@ -1,3 +1,8 @@
+### New
+
+- **WP Slider: several number sliders in one node.** Each slider sits on its own row and writes `$its_variable`: the number (with the decimals you pick), a text of your own that can read the number (`(intricate details:$detail.num)`), or the word of the range the number is in (close-up up to 0.3, medium shot up to 0.7, wide shot past that), each word with its own negative. A slider can also show an INT or FLOAT output at the right of its row for steps, cfg or a LoRA strength. The sliders are part of the node, so they work in Nodes 2.0, where canvas-drawn sliders don't. Edit view, labels, icons and colours work as in WP Toggles.
+- **`$name.num` reads a slider's number** whatever its variable holds, in templates, derivations and other texts, like `$name.bool` for a toggle. A pack that uses it is stamped schema 13, so a Wildcard Pipeline that doesn't know it refuses it with a message instead of printing it wrong.
+
 ### Fixes
 
 - **WP Note and WP Bookmark show no node card behind them on ComfyUI frontend 1.58.** Nodes 2.0 on 1.58 moved the card's background and shadow, so a grey frame, a shadow and the "Wildcard-Pipeline" badge showed around the panel and it sat a few pixels low. Both frontends now draw just the panel.

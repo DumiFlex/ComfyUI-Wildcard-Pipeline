@@ -14,6 +14,7 @@ import {
   collectLoopFrames,
   findRootGraph,
   internalVarNames,
+  readSliderNums,
   readToggleBools,
   resolveUpstreamLoopSeed,
   type LiteGraphLike,
@@ -199,6 +200,9 @@ interface UpstreamSnapshot {
   /** Each upstream toggle variable's switch, what `$name.bool` reads (a
    *  toggle with a Value writes the Value, not true / false). */
   varBools: Record<string, boolean>;
+  /** Each upstream slider variable's number, what `$name.num` reads (a
+   *  slider in text or words mode writes text, not the number). */
+  varNums: Record<string, string>;
   /** Bindings contributed by upstream WP_ContextInjector nodes. The
    *  preview API doesn't simulate injectors — these keys must come
    *  from the static fallback even when api results are available,
@@ -223,6 +227,7 @@ function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
   if (JSON.stringify(a.injectorNegatives) !== JSON.stringify(b.injectorNegatives)) return false;
   if (a.chainKey !== b.chainKey) return false;
   if (JSON.stringify(a.varBools) !== JSON.stringify(b.varBools)) return false;
+  if (JSON.stringify(a.varNums) !== JSON.stringify(b.varNums)) return false;
   // Injector bindings live in `fallbackResolved` only — the API
   // resolver only knows WP_Context modules, so `chainKey` misses
   // changes to injector rows. Diff the resolved map keys + values so
@@ -505,6 +510,7 @@ export function mountHelper(node: AssemblerNode) {
             fallbackResolved,
             varAxes,
             varBools: readToggleBools(rawResolved),
+            varNums: readSliderNums(rawResolved),
             injectorKeys: collectUpstreamInjectorBindings(g, node),
             injectorNegatives: collectUpstreamInjectorNegatives(g, node),
             template: templateOf(node),
@@ -728,6 +734,7 @@ export function mountHelper(node: AssemblerNode) {
             resolvedMap: fresh,
             varAxes: snapshot.value.varAxes,
             varBools: snapshot.value.varBools,
+            varNums: snapshot.value.varNums,
             rolledAxes: api ? (apiAxes.value ?? undefined) : undefined,
             kindByVar,
             loopFrames: loop ?? undefined,

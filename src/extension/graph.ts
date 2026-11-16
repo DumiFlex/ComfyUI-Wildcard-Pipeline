@@ -20,6 +20,7 @@ import {
   cacheVersion as previewCacheVersion,
 } from "./preview-resolver";
 import { assignCodenames, baseCodename } from "./node-codename";
+import { SLIDER_NODE, SLIDER_NUMS_KEY, nodeSlidersConfig, resolveSliders, sliderNums, slidersPreviewModules, staticSliderInternals, staticSliderNegatives, staticSliderValues } from "./sliders";
 import { TOGGLES_NODE, TOGGLE_BOOLS_KEY, nodeTogglesConfig, resolveToggles, staticToggleInternals, toggleBools, staticToggleNegatives, staticToggleValues, togglesPreviewModules, type TogglesConfig } from "./toggles";
 import { MODEL_INFO_NODE, MODEL_VARS, internalModelVars, modelInfoPreviewModules, staticModelValues } from "./model-info";
 import { clauseActions, derivationTargets, evalConditionTree, isNegativeMode } from "./derivation-conditions";
@@ -717,6 +718,10 @@ export function collectUpstreamInjectorBindings(
       for (const v of Object.keys(staticToggleValues(n))) out.add(v);
       continue;
     }
+    if (n.type === SLIDER_NODE && !isSkippedMode(n)) {
+      for (const v of Object.keys(staticSliderValues(n))) out.add(v);
+      continue;
+    }
     if (n.type !== "WP_ContextInjector") continue;
     if (isSkippedMode(n)) continue;
     const inj = parseCached<{
@@ -766,6 +771,14 @@ export function collectUpstreamInjectorNegatives(
       // those of the `$vars` its value reads (as the node files them).
       const values = staticToggleValues(n);
       const negs = staticToggleNegatives(n);
+      const before = { ...out };
+      for (const v of Object.keys(negs)) out[v] = inheritNegatives(before, values[v] ?? "", negs[v] ?? "");
+      continue;
+    }
+    if (n.type === SLIDER_NODE && !isSkippedMode(n)) {
+      // As Toggles: a text that reads `$vars` carries theirs, then its own.
+      const values = staticSliderValues(n);
+      const negs = staticSliderNegatives(n);
       const before = { ...out };
       for (const v of Object.keys(negs)) out[v] = inheritNegatives(before, values[v] ?? "", negs[v] ?? "");
       continue;
@@ -909,6 +922,11 @@ export function collectUpstreamChain(
       opts.seeds?.push(null);
       continue;
     }
+    if (opts.modelSteps && n.type === SLIDER_NODE && !isSkippedMode(n)) {
+      out.push(slidersPreviewModules(n));
+      opts.seeds?.push(null);
+      continue;
+    }
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
     const v = parseCached<ContextWidgetValue>(
@@ -1025,6 +1043,14 @@ export function collectUpstreamKinds(
       const hidden = staticToggleInternals(n);
       for (const v of Object.keys(staticToggleValues(n))) {
         kinds[v] = "toggle";
+        flagInternal(v, hidden.has(v));
+      }
+      continue;
+    }
+    if (n.type === SLIDER_NODE) {
+      const hidden = staticSliderInternals(n);
+      for (const v of Object.keys(staticSliderValues(n))) {
+        kinds[v] = "slider";
         flagInternal(v, hidden.has(v));
       }
       continue;
@@ -1219,6 +1245,7 @@ export function collectUpstreamProducers(
     if (title) return title;
     if (n.type === MODEL_INFO_NODE) return "Model Info";
     if (n.type === TOGGLES_NODE) return "Toggles";
+    if (n.type === SLIDER_NODE) return "Slider";
     return n.type === "WP_ContextInjector" ? "Context Injector" : "Context Loop";
   };
 
@@ -1302,6 +1329,12 @@ export function collectUpstreamProducers(
     if (n.type === TOGGLES_NODE) {
       const hidden = staticToggleInternals(n);
       for (const v of Object.keys(staticToggleValues(n))) write(v, { kind: "toggle", nodeId, nodeLabel, internal: hidden.has(v) });
+      continue;
+    }
+
+    if (n.type === SLIDER_NODE) {
+      const hidden = staticSliderInternals(n);
+      for (const v of Object.keys(staticSliderValues(n))) write(v, { kind: "slider", nodeId, nodeLabel, internal: hidden.has(v) });
       continue;
     }
 
@@ -1511,6 +1544,7 @@ function chainParts(chain: LiteNodeLike[]): unknown[] {
       parts.push(JSON.stringify(staticModelValues(n)), [...internalModelVars(n)].join(","));
     }
     if (n.type === TOGGLES_NODE) parts.push(widgetValue(n, "wp_toggles"));
+    if (n.type === SLIDER_NODE) parts.push(widgetValue(n, "wp_sliders"));
     // Wiring the Loop's `values` input adds `$<name>_value` without
     // touching a widget, so the link has to key the memo too.
     if (n.type === "WP_ContextLoop") parts.push(loopValuesWired(n));
@@ -1673,6 +1707,22 @@ function resolveChainStatic(
       ctx[TOGGLE_BOOLS_KEY] = JSON.stringify({ ...readToggleBools(ctx), ...toggleBools(cfg) });
       for (const [k, v] of Object.entries(resolveToggleTexts(cfg, ctx, catalog))) {
         ctx[k] = v;
+        if (hidden.has(k)) internalKeys.add(k);
+        else internalKeys.delete(k);
+      }
+      continue;
+    }
+    if (n.type === SLIDER_NODE) {
+      const cfg = nodeSlidersConfig(n);
+      const hidden = staticSliderInternals(n);
+      // What `$name.num` reads: the number, not the text or word written
+      // (engine `sliders.NUMS_KEY`, carried on across nodes). Set first, as
+      // the node does, so a slider's own text can read its number.
+      ctx[SLIDER_NUMS_KEY] = JSON.stringify({ ...readSliderNums(ctx), ...sliderNums(cfg) });
+      const values = resolveSliders(cfg);
+      const base = { ...ctx, ...values };
+      for (const [k, v] of Object.entries(values)) {
+        ctx[k] = hasTemplateSyntax(v) ? expandValue(v, base, catalog, 0) : v;
         if (hidden.has(k)) internalKeys.add(k);
         else internalKeys.delete(k);
       }
@@ -2221,6 +2271,31 @@ export function readToggleBools(ctx: Record<string, ResolvedValue>): Record<stri
   }
 }
 
+/** The slider numbers carried in a static ctx (`SLIDER_NUMS_KEY`), what
+ *  `$name.num` reads; {} when no Slider node is upstream. */
+export function readSliderNums(ctx: Record<string, ResolvedValue>): Record<string, string> {
+  const raw = ctx[SLIDER_NUMS_KEY];
+  if (typeof raw !== "string") return {};
+  try {
+    const t: unknown = JSON.parse(raw);
+    if (!t || typeof t !== "object" || Array.isArray(t)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(t)) if (typeof v === "string" && v) out[k] = v;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** `$name.num`: the slider's number, else the variable's own value when it
+ *  already is a number, else null (mirror of `sliders.lookup_num`). */
+export function numOf(ctx: Record<string, ResolvedValue>, name: string, own: string | undefined): string | null {
+  const got = readSliderNums(ctx)[name];
+  if (got) return got;
+  const text = (own ?? "").trim();
+  return text && Number.isFinite(Number(text)) ? text : null;
+}
+
 /** A `$var` read (+ optional `.K` / `.AXIS` accessor) with its ctx value;
  *  an unknown name (accessor included) stays as written. ctx values are
  *  strings in this static resolver, so applyVarAccessor treats `$s.0` as
@@ -2251,6 +2326,8 @@ function expandVar(
     const v = base.trim().toLowerCase();
     return v === "true" || v === "false" ? v : v ? "true" : "false";
   }
+  // `$name.num` reads a slider's number whatever the variable holds.
+  if (axis === "num") return numOf(ctx, name, base) ?? full;
   const tag = previewAxisTag(catalog, name, axis);
   return tag ?? full;
 }
@@ -2679,7 +2756,7 @@ export function findWildcardHomesElsewhere(
  *  (`extension/canvas-facts.ts`). */
 export interface CanvasVar {
   name: string;
-  source: "injector" | "loop" | "model" | "toggle";
+  source: "injector" | "loop" | "model" | "toggle" | "slider";
   about: string;
 }
 
@@ -2723,6 +2800,9 @@ export function collectCanvasVars(rootGraph: LiteGraphLike): CanvasVar[] {
       for (const v of MODEL_VARS) add(v, "model", "");
     } else if (n.type === TOGGLES_NODE) {
       for (const [v, val] of Object.entries(staticToggleValues(n))) add(v, "toggle", `toggle, now ${val || "nothing picked"}`);
+    } else if (n.type === SLIDER_NODE) {
+      const nums = sliderNums(nodeSlidersConfig(n));
+      for (const v of Object.keys(staticSliderValues(n))) add(v, "slider", `slider, now ${nums[v] ?? ""}; $${v}.num reads the number`);
     }
   }
   return out.slice(0, 40);

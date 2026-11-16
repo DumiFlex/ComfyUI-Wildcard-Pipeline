@@ -230,7 +230,7 @@ adult; adult body words (petite, slim, curvy) are fine.
     + ai_guide.NODES + "\n" + ai_guide.COHERENCE
 
 
-CANVAS_SOURCES = ("injector", "loop", "model", "toggle")
+CANVAS_SOURCES = ("injector", "loop", "model", "toggle", "slider")
 MAX_CANVAS = 40
 
 
@@ -250,7 +250,8 @@ def canvas_vars(raw: Any) -> list[dict[str, str]]:
 
 
 _CANVAS_LABEL = {"injector": "a WP Context Injector row", "loop": "the WP Context Loop",
-                 "model": "WP Model Info", "toggle": "a WP Toggles switch"}
+                 "model": "WP Model Info", "toggle": "a WP Toggles switch",
+                 "slider": "a WP Slider"}
 
 
 def canvas_note(canvas: list[dict[str, str]]) -> str:

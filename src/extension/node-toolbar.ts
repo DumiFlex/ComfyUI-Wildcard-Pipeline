@@ -30,6 +30,7 @@ export const NODE_DOC_PAGES: Readonly<Record<string, string>> = {
   WP_ContextInjector: "wp-context-injector",
   WP_ModelInfo: "wp-model-info",
   WP_Toggles: "wp-toggles",
+  WP_Slider: "wp-slider",
   WP_NodeGroup: "wp-node-group",
   WP_ModeRelay: "wp-mode-relay",
   WP_Bookmark: "wp-bookmark",
