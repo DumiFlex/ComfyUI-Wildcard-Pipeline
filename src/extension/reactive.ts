@@ -1,4 +1,4 @@
-import { ref, watch, type Ref, type WatchSource, onScopeDispose } from "vue";
+import { shallowRef, watch, type Ref, type WatchSource, onScopeDispose } from "vue";
 import { onGraphLoaded } from "./graph-events";
 
 export { notifyGraphLoaded } from "./graph-events";
@@ -263,7 +263,11 @@ export function reactiveFromGraph<T>(
    *  cursor): a change refreshes at once instead of on the next poll. */
   triggers: WatchSource[] = [],
 ): Ref<T> {
-  const state = ref(compute()) as Ref<T>;
+  // Shallow: a poll result is replaced wholesale, never mutated in place, and
+  // a deep ref wrapped every chain payload in proxies that the equality
+  // checks then had to read through (a third of the poll's time on a long
+  // chain). Consumers get the plain object the walker built.
+  const state = shallowRef(compute()) as Ref<T>;
 
   function refresh() {
     const next = compute();
