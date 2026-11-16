@@ -76,6 +76,18 @@ def _values(cat, uuid):
     return [o["value"] for o in cat[uuid]["payload"]["options"]]
 
 
+def _count_walks(monkeypatch):
+    calls: list[int] = []
+    real = context_node._walk_live
+
+    def counting(*a, **k):
+        calls.append(1)
+        return real(*a, **k)
+
+    monkeypatch.setattr(context_node, "_walk_live", counting)
+    return calls
+
+
 def test_hit_equals_a_fresh_walk(lib):
     w = _widget()
     first = _expand(w)
@@ -156,9 +168,7 @@ def test_node_entry_not_in_the_library_still_hits(lib, monkeypatch):
     repo.delete(NODE)
     w = _widget()
     first = _expand(w)
-    calls = []
-    real = context_node._walk_live
-    monkeypatch.setattr(context_node, "_walk_live", lambda *a, **k: calls.append(1) or real(*a, **k))
+    calls = _count_walks(monkeypatch)
     assert _expand(w) == first
     assert calls == []
 
@@ -169,9 +179,7 @@ def test_unrelated_library_edit_keeps_the_hit(lib, monkeypatch):
     first = _expand(w)
     repo.create(id="0f0f0f0f", type="wildcard", name="Other", description="", category_id=None,
                 tags=[], payload=_pool_payload(["other"]))
-    calls = []
-    real = context_node._walk_live
-    monkeypatch.setattr(context_node, "_walk_live", lambda *a, **k: calls.append(1) or real(*a, **k))
+    calls = _count_walks(monkeypatch)
     assert _expand(w) == first
     assert calls == []
 
