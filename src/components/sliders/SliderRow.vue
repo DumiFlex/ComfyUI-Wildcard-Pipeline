@@ -62,11 +62,12 @@ function internalHint(): string {
   <div class="wp-slr" :data-wp-vars="s.var || undefined">
     <div
       class="wp-slr__row"
-      :class="{ 'is-editing': editing, 'has-text-color': !!s.text_color }"
+      :class="{ 'is-editing': editing, 'is-editable': editable, 'has-text-color': !!s.text_color }"
       :data-wp-out="s.pin && s.out ? `value_${s.out}` : undefined"
       :data-test="`sl-row-${s.id}`"
       :style="looks"
     >
+      <span class="wp-slr__head">
       <i v-if="s.icon" class="pi wp-slr__icon" :class="`pi-${s.icon}`" aria-hidden="true" />
       <span class="wp-slr__name">
         <b>{{ s.name }}</b>
@@ -74,6 +75,7 @@ function internalHint(): string {
           <span :class="s.var ? varColorClass(s.var) : 'is-dim'">{{ s.var ? `$${s.var}` : "no variable" }}</span>
           <span v-if="holds" class="wp-slr__holds" :data-test="`sl-holds-${s.id}`">{{ holds }}</span>
         </span>
+      </span>
       </span>
       <!-- Stops the pointer here so a drag on the track never drags the node. -->
       <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
@@ -143,7 +145,11 @@ function internalHint(): string {
   line-height: 1;
   color: var(--wp-sl-icon, var(--wp-text-muted, var(--wp-text2)));
 }
-.wp-slr__name { display: flex; flex-direction: column; flex: 0 1 34%; min-width: 64px; max-width: 160px; }
+/* Icon + name share one column, so every track starts at the same x. */
+.wp-slr__head { display: flex; align-items: center; gap: 6px; flex: 0 1 36%; min-width: 56px; max-width: 170px; }
+.wp-slr__name { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+/* The row buttons take room in the edit view: the name gives it up first. */
+.wp-slr__row.is-editable .wp-slr__head { flex-basis: 28%; }
 .wp-slr__name b {
   font-weight: 600;
   font-size: 12px;
@@ -165,7 +171,8 @@ function internalHint(): string {
 .wp-slr__row.has-text-color .wp-slr__sub > span:first-child { color: var(--wp-sl-text); }
 .wp-slr__sub .is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-slr__holds { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, var(--wp-text2)); }
-.wp-slr__ctl { display: flex; flex: 1 1 0; min-width: 120px; }
+.wp-slr__ctl { display: flex; flex: 1 1 0; min-width: 0; }
+.wp-slr__ctl > * { flex: 1 1 auto; min-width: 0; }
 .wp-slr__warn { flex: none; font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-slr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 </style>

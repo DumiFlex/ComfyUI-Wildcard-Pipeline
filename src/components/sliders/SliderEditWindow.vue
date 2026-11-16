@@ -342,9 +342,9 @@ function onKey(ev: KeyboardEvent): void {
 .wp-slw__var-row .wp-slw__var { flex: 1 1 0; min-width: 80px; }
 .wp-slw__range { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .wp-slw__num { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-slw__word { display: grid; grid-template-columns: 116px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 4px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
+.wp-slw__word { display: grid; grid-template-columns: 128px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 4px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-slw__word.is-hit { box-shadow: inset 0 0 0 1px var(--wp-accent); }
-.wp-slw__upto { display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-slw__upto { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-slw__upto :deep(.wp-number) { flex: 1; min-width: 0; }
 .wp-slw__rest { font-style: italic; }
 .wp-slw__looks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
