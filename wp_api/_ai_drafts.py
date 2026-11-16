@@ -45,7 +45,7 @@ from wp_api._ai_common import (
     _Web,
     _wildcards,
 )
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import db_session, in_db_thread, json_error, json_ok
 
 
 async def post_wildcard_draft(request: web.Request) -> web.Response:
@@ -108,7 +108,7 @@ async def post_wildcard_draft(request: web.Request) -> web.Response:
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
     self_id = _got if isinstance(_got := wc.get("id"), str) else None
-    refs = _ref_index(_wildcards(request), self_id, payload, name)
+    refs = _ref_index(await _wildcards(request), self_id, payload, name)
     existing_texts = [ai_refs.display_text(t, refs) for t in existing_texts]
     # Each with its tags, so the model tags new options the same way
     # instead of inventing its own scheme (bench W3: three runs, three).
@@ -272,7 +272,7 @@ async def post_wildcard_edit(request: web.Request) -> web.Response:
 
     description, labels = ai_about.clean(wc.get("description"), wc.get("tags"))
     self_id = _got if isinstance(_got := wc.get("id"), str) else None
-    refs = _ref_index(_wildcards(request), self_id, payload, name)
+    refs = _ref_index(await _wildcards(request), self_id, payload, name)
     known_tag = await _known_tag() if action == "rewrite" and ai_edit.wants_booru(check) \
         else None
     first = ai_edit.build_edit_prompt(
@@ -389,9 +389,8 @@ async def post_derivation_draft(request: web.Request) -> web.Response:
     rules = [r for r in drv.get("rules") or [] if isinstance(r, dict)][:200]
     name = _got if isinstance(_got := drv.get("name"), str) else ""
 
-    with db_session(request) as conn:
-        modules = ModuleRepository(conn).list()
-        templates = TemplateRepository(conn).list()
+    modules, templates = await in_db_thread(
+        request, lambda conn: (ModuleRepository(conn).list(), TemplateRepository(conn).list()))
     catalog = library_vars.build_catalog(modules)
     drv_id = _got if isinstance(_got := drv.get("id"), str) else None
     reads = library_vars.read_vars([m for m in modules if m.get("id") != drv_id], templates) \
@@ -544,8 +543,7 @@ async def post_text_draft(request: web.Request) -> web.Response:
         if item.get("negative_template"):
             current += f"\nNegative: {item['negative_template']}"
 
-    with db_session(request) as conn:
-        modules = ModuleRepository(conn).list()
+    modules = await in_db_thread(request, lambda conn: ModuleRepository(conn).list())
     item_id = _got if isinstance(_got := item.get("id"), str) else None
     catalog = library_vars.build_catalog([m for m in modules if m.get("id") != item_id])
     description, labels = ai_about.clean(item.get("description"), item.get("tags"))
@@ -739,9 +737,8 @@ async def post_describe(request: web.Request) -> web.Response:
     if isinstance(turns, web.Response):
         return turns
 
-    with db_session(request) as conn:
-        modules = ModuleRepository(conn).list()
-        bundles = BundleRepository(conn).list()
+    modules, bundles = await in_db_thread(
+        request, lambda conn: (ModuleRepository(conn).list(), BundleRepository(conn).list()))
     names = {m["id"]: m.get("name") or "" for m in modules if isinstance(m.get("id"), str)}
     library = ai_describe.library_tags([*modules, *bundles])
     first = ai_describe.build_prompt(
@@ -802,10 +799,9 @@ async def post_organize(request: web.Request) -> web.Response:
             status=400,
         )
 
-    with db_session(request) as conn:
-        modules = ModuleRepository(conn).list()
-        bundles = BundleRepository(conn).list()
-        cats = CategoryRepository(conn).list()
+    modules, bundles, cats = await in_db_thread(
+        request, lambda conn: (ModuleRepository(conn).list(), BundleRepository(conn).list(),
+                               CategoryRepository(conn).list()))
     by_ref = {("module", m["id"]): m for m in modules}
     by_ref.update({("bundle", b["id"]): b for b in bundles})
     cat_names = {c["id"]: c["name"] for c in cats}
@@ -882,12 +878,14 @@ async def post_library_note(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     current = _got if isinstance(_got := body.get("current"), str) else ""
-    with db_session(request) as conn:
+    def _load(conn: Any) -> tuple[list[dict[str, Any]], ai_chat.Library]:
         modules = ModuleRepository(conn).list()
-        lib = ai_chat.Library(
+        return modules, ai_chat.Library(
             modules, BundleRepository(conn).list(),
             CategoryRepository(conn).list(), TemplateRepository(conn).list(),
         )
+
+    modules, lib = await in_db_thread(request, _load)
     if not lib.modules and not lib.bundles and not lib.templates:
         return json_error("the library is empty, so there is nothing to describe yet",
                           status=400)

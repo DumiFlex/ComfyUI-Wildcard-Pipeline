@@ -46,6 +46,7 @@ registration. The handlers live by feature: `_ai_drafts.py` (editor panels),
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json as _json
 from typing import Any
@@ -53,15 +54,8 @@ from typing import Any
 from aiohttp import web
 
 from engine.ai import budget as ai_budget
-from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from engine.ai import index as ai_index
-from engine.db.repositories import (
-    BundleRepository,
-    CategoryRepository,
-    ModuleRepository,
-    TemplateRepository,
-)
 from wp_api import (
     _ai_chat,
     _ai_client,
@@ -93,6 +87,7 @@ from wp_api._ai_context import (
     _splits,
     _synced_index,
     _window,
+    load_library,
 )
 from wp_api._ai_drafts import (
     post_constraint_draft,
@@ -120,7 +115,7 @@ from wp_api._ai_pack import (
 from wp_api._ai_turn import (
     post_chat,
 )
-from wp_api._helpers import cancel_on_disconnect, db_session, json_error, json_ok
+from wp_api._helpers import cancel_on_disconnect, in_db_thread, json_error, json_ok
 
 
 def listen_exposed() -> str:
@@ -208,11 +203,7 @@ async def _prefix(request: web.Request, cfg: dict[str, Any]) -> dict[str, Any]:
     """What a new chat would send before its first message, opened the way
     `post_chat` opens one (no page): instructions, tools and the library
     summary, in tokens, with the window it was fitted to."""
-    with db_session(request) as conn:
-        lib = ai_chat.Library(
-            ModuleRepository(conn).list(), BundleRepository(conn).list(),
-            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
-        )
+    lib = await in_db_thread(request, load_library)
     prof = ai_budget.profile(cfg)
     fmt = await _ai_chat.pick_format(cfg)
     lazy = bool(prof["slim"] or prof.get("scoped"))
@@ -250,13 +241,10 @@ def _index_status(idx: ai_index.Index | None, cfg: dict[str, Any]) -> dict[str, 
             "filling": _ai_embed.filling(idx), "embed_error": error}
 
 
-def _index_sync(request: web.Request) -> ai_index.Index | None:
-    with db_session(request) as conn:
-        lib = ai_chat.Library(
-            ModuleRepository(conn).list(), BundleRepository(conn).list(),
-            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
-        )
-        return _synced_index(conn, lib)
+async def _index_sync(request: web.Request) -> ai_index.Index | None:
+    """The synced index, in a worker thread. Loads the library only when it
+    changed since the last sync (`_synced_index`)."""
+    return await in_db_thread(request, _synced_index)
 
 
 async def get_index(request: web.Request) -> web.Response:
@@ -265,7 +253,7 @@ async def get_index(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    idx = _index_sync(request)
+    idx = await _index_sync(request)
     if idx is not None:
         _ai_embed.fill_in_background(cfg, idx)
     return json_ok(_index_status(idx, cfg))
@@ -276,15 +264,14 @@ async def post_index_rebuild(request: web.Request) -> web.Response:
     cfg = _enabled_cfg()
     if isinstance(cfg, web.Response):
         return cfg
-    with db_session(request) as conn:
-        idx = _library_index_for(conn)
+    idx = await in_db_thread(request, _library_index_for)
     if idx is None:
         return json_error("this Python's SQLite has no full-text search (FTS5); "
                           "the chat searches without an index", status=409)
     if _ai_embed.filling(idx):
         return json_error("the library is being embedded; try again when it's done", status=409)
-    idx.clear()
-    idx = _index_sync(request)
+    await asyncio.to_thread(idx.clear)
+    idx = await _index_sync(request)
     if idx is not None:
         _ai_embed.retry_now(cfg)
         _ai_embed.fill_in_background(cfg, idx)
