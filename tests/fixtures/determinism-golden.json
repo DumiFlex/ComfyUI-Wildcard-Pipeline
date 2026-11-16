@@ -1,0 +1,28 @@
+{
+  "cases": {
+    "chain/0": "bb656a4f835847946cc50e2ef2ab99599302fa3517e08d2085b5f07291ef484e",
+    "chain/1": "23c755c0fa9b9733e5e4a9057bd0398768e104cd59134d7b77f627e35cc12e14",
+    "chain/1234": "32225dcac05dbe2dcd46ba15af744dc14e59c69302706e94720068be8bc25518",
+    "chain/42": "d15f9baff097b58caffbabc386d87d053c1a991792eda596508943f24c6e0088",
+    "chain/7": "55c7b40e13c6e69d44c78f3d4f9690492b3bf822b113f61b47fd55f05547ce03",
+    "chain/99991": "a125083ec22ccc62d63c6dbcc188c25ac8631553c723a33b92e598310e61eae9",
+    "loop_hold/0": "4b9047a45473e12c1bbbeee6b179cd1f6db30f638465fa6e5f2e20b2a01fdeb6",
+    "loop_hold/1": "8b4b45495e822a4e7037792ae872d3115e4571e31f4b52ef8598342afcfa1603",
+    "loop_hold/7": "05b1a02c0e43fb3b0a1580c12e67506d8fbe278d4708a1807e563ebeb9027caf",
+    "single/0": "b91e89094c782ce2988d8136a5926f1cc24288a35127fb20fa1393312bd2301b",
+    "single/1": "cada54691a3cdc5bac04adae0f7e5395df39c83d92600afbf238cdd0526ef6eb",
+    "single/1234": "a2348c1e4b14396e4c9c45b7ba2e4bc3e7e0b50814e656de93b7392da71ada84",
+    "single/42": "15dd0833a89a06c1099b9687ff423523f475c948411275eed4235faa3d68078c",
+    "single/7": "1a034380e98abf2fa9423f2aa881a4042633c962b9847b9ac81959d874d9bf8f",
+    "single/99991": "dcbfb8d446f6762261661bf8e7a82fd1bd0d0a7fee621719b00903f532be0a47"
+  },
+  "samples": {
+    "loop_hold_frame1": {
+      "prompt": "masterpiece, bright gentle blue red cotton w03, blue cotton pastel w168, misty velvet dark neon tall dark w248, gentle wild plain wild sunny neon w328, leather cotton silk tall w431, soft pastel velvet w738 with leather red bright silk bold leaf23 and wild ornate wild bold leaf121 small, silk blue short short silk w921 medium, silk blue short short silk w921 medium, soft pastel velvet w738 with leather red bright silk bold leaf23 and wild ornate wild bold leaf121 small, misty velvet dark neon tall dark w248, bright gentle blue red cotton w03, a, misty velvet dark neon tall dark w248, soft pastel velvet w738 with leather red bright silk bold leaf23 and wild ornate wild bold leaf121 small, bright gentle blue red cotton w03, pastel red misty bright cotton red w529, blue cotton pastel w168 b, dark pastel, cotton sunny cotton, short bright pastel, {sunny|rainy} day, heels"
+    },
+    "single": {
+      "negative": "gentle silk, wild wild, blurry, tall velvet, neon leather, lowres",
+      "prompt": "masterpiece, cotton ornate w085 with misty short blue ornate red leaf141, plain bright ornate plain plain w127 with silk plain bright sunny ornate silk leaf42, misty velvet dark neon tall dark w248, bright velvet bold sunny silk pastel w323, tall silk w441 medium, gentle bold red short w630 with bold bold leaf412 small, wild tall gentle red bold ornate w710, bright silk w810, soft cotton dark wild soft w914, bright silk w810, soft cotton dark wild soft w914, wild tall gentle red bold ornate w710, misty velvet dark neon tall dark w248, cotton ornate w085 with misty short blue ornate red leaf141, gentle bold red short w630 with bold bold leaf412 small b, misty velvet dark neon tall dark w248, wild tall gentle red bold ornate w710, cotton ornate w085 with misty short blue ornate red leaf141, tall blue velvet short dark velvet w55 with misty plain leaf27, gentle bold red short w630 with bold bold leaf412 small, plain bright ornate plain plain w127 with silk plain bright sunny ornate silk leaf42 a, dark pastel, cotton sunny cotton, short bright pastel, {sunny|rainy} day"
+    }
+  }
+}
