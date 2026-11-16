@@ -619,11 +619,17 @@ class PipelineEngine:
         if loop_index == 0 or not (any_hold or isinstance(frame0_input, dict)):
             return
         hb = int(ctx.get("__wp_node_seed_hold__", 0) or 0)
+        source = frame0_input if isinstance(frame0_input, dict) else ctx
+        # The catalog is read-only during a run (nothing writes to its
+        # entries), so the copy shares it instead of duplicating thousands of
+        # option dicts on every loop frame. Everything else is still copied.
+        memo: dict[int, Any] = {}
+        catalog = source.get("__wp_catalog__")
+        if catalog is not None:
+            memo[id(catalog)] = catalog
         base_ctx = PipelineEngine().run(
             modules,
-            ctx=copy.deepcopy(
-                frame0_input if isinstance(frame0_input, dict) else ctx
-            ),
+            ctx=copy.deepcopy(source, memo),
             seed=hb,
             hold_seed=hb,
             loop_index=0,
