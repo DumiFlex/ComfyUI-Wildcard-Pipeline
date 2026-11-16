@@ -208,10 +208,12 @@ def _apply_constraint_to_options(
         combine fn treats as a no-op.
     These are diagnostic only; they never change the computed weight.
     """
-    from engine.modules._constraint_math import combine_constraint_factor
+    from engine.modules._constraint_math import combine_constraint_factor, exception_index
 
     matrix = constraint.get("matrix") or {}
     exceptions = constraint.get("exceptions") or []
+    # Built once for the whole pool rather than once per option.
+    index = exception_index(exceptions)
 
     # Per-pick source list (SP3). Fall back to a single synthetic pick for
     # legacy callers that pass only the top-level value + sub_categories.
@@ -247,7 +249,7 @@ def _apply_constraint_to_options(
     for opt in options:
         option = {"value": opt.get("value", ""), "tags": opt.get("sub_categories") or []}
         f = combine_constraint_factor(
-            picks, option, matrix, exceptions, axis_kinds, target_axes,
+            picks, option, matrix, exceptions, axis_kinds, target_axes, _index=index,
         )
         # `isinstance(f, float)` rather than `f is not EXCLUDE`: identity
         # against a sentinel does not narrow the union, so the multiply below
@@ -473,34 +475,42 @@ def _restrict_menus_by_constraints(
     """
     if not applied_constraints or not menus:
         return menus
-    from engine.modules._constraint_math import combine_constraint_factor
+    from engine.modules._constraint_math import combine_constraint_factor, exception_index
+    # What each fired constraint folds with depends on the constraint alone,
+    # not on the probed tag: build it once per constraint, not per member.
+    probes: list[tuple[list[dict[str, Any]], dict[str, Any], list[Any], dict[str, str], Any]] = []
+    for c, src_pick in applied_constraints:
+        s_picks = src_pick.get("picks")
+        if not isinstance(s_picks, list):
+            s_picks = [{
+                "value": src_pick.get("value", ""),
+                "tags": list(src_pick.get("sub_categories") or []),
+            }]
+        axis_kinds = {
+            ax: "accepts"
+            for p in s_picks for ax in (p.get("axes") or {})
+        }
+        # The probe is a bare tag with no real value, so a
+        # value-level `only` would shut it out and leave the menu
+        # unrestricted. The option itself already passed that gate
+        # in the pool, so only the tag rules matter here.
+        probe_excs = [
+            e for e in (c.get("exceptions") or [])
+            if not (isinstance(e, dict) and e.get("mode") == "only")
+        ]
+        probes.append((
+            s_picks, c.get("matrix") or {}, probe_excs, axis_kinds,
+            exception_index(probe_excs),
+        ))
     out: dict[str, list[str]] = {}
     for axis, members in menus.items():
         allowed: list[str] = []
         for t in members:
             ok = True
-            for c, src_pick in applied_constraints:
-                s_picks = src_pick.get("picks")
-                if not isinstance(s_picks, list):
-                    s_picks = [{
-                        "value": src_pick.get("value", ""),
-                        "tags": list(src_pick.get("sub_categories") or []),
-                    }]
-                axis_kinds = {
-                    ax: "accepts"
-                    for p in s_picks for ax in (p.get("axes") or {})
-                }
-                # The probe is a bare tag with no real value, so a
-                # value-level `only` would shut it out and leave the menu
-                # unrestricted. The option itself already passed that gate
-                # in the pool, so only the tag rules matter here.
-                probe_excs = [
-                    e for e in (c.get("exceptions") or [])
-                    if not (isinstance(e, dict) and e.get("mode") == "only")
-                ]
+            for s_picks, matrix, probe_excs, axis_kinds, index in probes:
                 f = combine_constraint_factor(
                     s_picks, {"value": "", "tags": [t]},
-                    c.get("matrix") or {}, probe_excs, axis_kinds,
+                    matrix, probe_excs, axis_kinds, _index=index,
                 )
                 if not (isinstance(f, float) and f > 0.0):
                     ok = False
