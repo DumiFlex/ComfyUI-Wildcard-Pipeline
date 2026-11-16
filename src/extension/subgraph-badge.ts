@@ -1,9 +1,13 @@
-import { walkAllNodes, collectUpstreamVariables, collectUpstreamVariablesAnyFrame, findRootGraph, type LiteGraphLike, type LiteNodeLike } from "./graph";
+import { walkAllNodes, collectUpstreamVariables, collectUpstreamVariablesAnyFrame, findRootGraph, parseNodeWidget, type LiteGraphLike, type LiteNodeLike } from "./graph";
 import { startAdaptivePoll } from "./reactive";
 import { scanConflicts, scanTemplateConflicts, labelFor, type Conflict, type Severity } from "./conflicts";
 import { filterByValidation } from "./settings";
-import { parseWidgetJson, type ContextWidgetValue } from "../widgets/_shared";
+import type { ContextWidgetValue } from "../widgets/_shared";
 import { onGraphLoaded } from "./graph-events";
+import { collectFingerprint, sameFingerprint } from "./graph-revision";
+
+/** Unchanged-fingerprint ticks after which a badge rescans anyway. */
+const FORCE_SCAN_EVERY = 10;
 import { nodeBadge, nodeBadgeCleanup, nodeBadgePulseToken, nodeBadgeSeverity } from "./_stashes";
 import { bumpBadgeRevision, ensureBadgeSlot, hasBadgeSlot, removeBadgeSlot } from "./badge-slot";
 
@@ -192,7 +196,7 @@ function collectInnerConflicts(rootGraph: LiteGraphLike, subgraph: LiteGraphLike
       // returns "", the subgraph badge then never sees any inner WP_Context
       // modules, and the badge stays mute even when the subgraph contains
       // a missing variable / orphan constraint that should surface.
-      const v = parseWidgetJson<ContextWidgetValue>(widgetValue(node, "wp_modules"), { version: 1, modules: [] });
+      const v = parseNodeWidget<ContextWidgetValue>(node, "wp_modules", { version: 1, modules: [] });
       const upstream = collectUpstreamVariables(rootGraph, node);
       // scanConflicts internally gates via isModuleEffectivelyEnabled
       // (covers both child.enabled=false AND bundle.enabled=false). Pre-
@@ -351,7 +355,24 @@ export function attachSubgraphBadge(node: SubgraphNodeLike, rootGraph: LiteGraph
   // one scans the whole subgraph on every tick, per SubgraphNode, forever —
   // including on a hidden tab, where nobody can see a badge, and on a still
   // canvas, where nothing can have changed the conflicts it reports.
-  const stopPoll = startAdaptivePoll(800, recompute);
+  //
+  // Gated on the graph fingerprint (`graph-revision.ts`): the scan only runs
+  // when something it could read moved, with a forced scan every few skipped
+  // ticks as a safety net for state outside the fingerprint (the Validation
+  // setting, say).
+  let lastPrint: unknown[] = [];
+  let skipped = 0;
+  const stopPoll = startAdaptivePoll(800, () => {
+    const next: unknown[] = [];
+    collectFingerprint(findRootGraph(node.graph ?? rootGraph), next);
+    if (sameFingerprint(lastPrint, next) && skipped < FORCE_SCAN_EVERY) {
+      skipped += 1;
+      return "quiet";
+    }
+    lastPrint = next;
+    skipped = 0;
+    return recompute();
+  });
 
   // Recompute on connection changes — wires added/removed inside the
   // subgraph or to/from the SubgraphNode itself.

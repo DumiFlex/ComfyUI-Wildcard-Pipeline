@@ -203,6 +203,7 @@ function buildEditor(
           return g ? collectUpstreamRenderableVariables(g, inner) : [];
         },
         stringArrayEqual,
+        { gated: true },
       );
 
       // Names a WP Context Loop upstream sets on some frames only: not
@@ -220,6 +221,7 @@ function buildEditor(
           return out;
         },
         (a, b) => JSON.stringify(a) === JSON.stringify(b),
+        { gated: true },
       );
 
       // A link into the `template` input overrides whatever is typed here at

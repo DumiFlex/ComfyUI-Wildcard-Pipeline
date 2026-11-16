@@ -217,6 +217,7 @@ interface UpstreamSnapshot {
 }
 
 function snapshotEqual(a: UpstreamSnapshot, b: UpstreamSnapshot): boolean {
+  if (a === b) return true;
   if (JSON.stringify(a.loop) !== JSON.stringify(b.loop)) return false;
   if (a.template !== b.template) return false;
   if (a.negativeTemplate !== b.negativeTemplate) return false;
@@ -371,9 +372,36 @@ function shallowEqualResolved(
  *  Length-prefixed to disambiguate `[]` from `[[]]`. Pre-trimmed to
  *  the engine-relevant whitelist so renames/description edits/etc.
  *  never bust the cache. */
-function hashChain(chain: unknown[][]): string {
-  const stripped = relevantChain(chain);
-  const s = JSON.stringify(stripped);
+function hashChain(chain: unknown[][], owner: object): string {
+  // An unedited Context hands back the same parsed module array every poll,
+  // so the last hash holds while every step is the same array; a step's JSON
+  // is cached on its array, so one edited node re-stringifies only itself.
+  // `JSON.stringify([[a], [b]])` is exactly "[" + each step's JSON + "]".
+  const last = hashMemo.get(owner);
+  if (last && last.steps.length === chain.length && last.steps.every((x, i) => x === chain[i])) {
+    return last.hash;
+  }
+  let s = "[";
+  for (let i = 0; i < chain.length; i++) {
+    const step = chain[i];
+    let json = stepJson.get(step);
+    if (json === undefined) {
+      json = JSON.stringify(step.map(relevantModule));
+      stepJson.set(step, json);
+    }
+    s += (i ? "," : "") + json;
+  }
+  s += "]";
+  const hash = fnv(s);
+  hashMemo.set(owner, { steps: [...chain], hash });
+  return hash;
+}
+
+const stepJson = new WeakMap<unknown[], string>();
+/** Last hash per Assembler node. */
+const hashMemo = new WeakMap<object, { steps: unknown[][]; hash: string }>();
+
+function fnv(s: string): string {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -499,7 +527,7 @@ export function mountHelper(node: AssemblerNode) {
             }
           }
           return {
-            chainKey: `${hashChain(chain)}:${stepSeeds.join(",")}`,
+            chainKey: `${hashChain(chain, node)}:${stepSeeds.join(",")}`,
             chain,
             seeds: stepSeeds,
             fallbackResolved,
@@ -515,8 +543,8 @@ export function mountHelper(node: AssemblerNode) {
           };
         },
         snapshotEqual,
-        undefined,
-        [currentFrame],
+        // Recomputes when the graph revision moves (or the frame pick).
+        { gated: true, triggers: [currentFrame] },
       );
 
       // Litegraph mode tracker — instant updates via property

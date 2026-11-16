@@ -1,5 +1,7 @@
-import { ref, watch, type Ref, type WatchSource, onScopeDispose } from "vue";
+import { shallowRef, watch, type Ref, type WatchSource, onScopeDispose } from "vue";
 import { onGraphLoaded } from "./graph-events";
+import { findRootGraph, invalidateWalkCache, withWalkCache, type LiteGraphLike } from "./graph";
+import { collectFingerprint, sameFingerprint } from "./graph-revision";
 
 export { notifyGraphLoaded } from "./graph-events";
 
@@ -254,80 +256,224 @@ const BACKOFF_STEPS = [1, 3, 8];
  *  base that is ~4s of stillness per step, ~12s to the slowest rate. */
 const STEP_AFTER_QUIET = 10;
 
+/* ── Shared poll scheduler + graph revision ──────────────────────────────
+ *
+ * Every `reactiveFromGraph` used to own a 400 ms interval and recompute on
+ * each tick: a Context node installs ten of them and each walked its node's
+ * whole chain, so a 40-Context chain ran 480 timers and kept the main thread
+ * busy (~1 s of script per second, and long tasks for seconds after a load).
+ *
+ * Now ONE adaptive interval drives every default-rate poller, and the chain
+ * walkers opt into `gated`: they recompute only when the graph REVISION moved.
+ * The revision is bumped by events (connection or mode change on a polled
+ * node, workflow load, `bumpGraphRevision` from anything else that edits the
+ * graph) and by a cheap fingerprint taken once per tick (`graph-revision.ts`:
+ * links, node modes/titles/widget values, subgraph boundaries), which catches
+ * the edits no event reports. A gated poller that reads something outside the
+ * fingerprint still updates within a few seconds: while the user is active,
+ * every SWEEP_MS a sweep recomputes every gated poller anyway (memoised walks
+ * make that cheap). Ungated pollers (cheap reads of the node itself) run on
+ * every tick, as before. All of a tick's pollers share one walk cache scope
+ * (`withWalkCache`), so ten readers of one node walk its chain once.
+ */
+interface Poller {
+  node: ConnectableNode;
+  gated: boolean;
+  /** Revision this poller last computed at. */
+  seen: number;
+  /** Recompute; true when the value changed. */
+  refresh: () => boolean;
+}
+
+const pollers = new Set<Poller>();
+let revision = 0;
+let stopSharedTimer: (() => void) | null = null;
+let lastFingerprint: unknown[] = [];
+let lastSweepAt = 0;
+let flushQueued = false;
+/** Extra deferred passes still owed after a workflow load. */
+let loadPasses = 0;
+
+/** How often, at most, an active session re-runs every gated poller even when
+ *  the revision did not move (the safety net for reads the fingerprint
+ *  misses). Never runs while the canvas is still. */
+const SWEEP_MS = 4000;
+
+/** The current graph revision (tests and other gated readers). */
+export function graphRevision(): number {
+  return revision;
+}
+
+/**
+ * Note a graph edit: every gated poller recomputes in the next frame. Call it
+ * from code that changes what a walker reads without going through a node's
+ * `onConnectionsChange` / mode (e.g. a node property a walk reads).
+ */
+export function bumpGraphRevision(): void {
+  revision += 1;
+  invalidateWalkCache();
+  queueFlush();
+}
+
+function queueFlush(): void {
+  if (flushQueued || pollers.size === 0) return;
+  flushQueued = true;
+  const run = (): void => {
+    flushQueued = false;
+    flush(false);
+    if (loadPasses > 0) {
+      // ComfyUI restores widget values through cascading callbacks after
+      // `afterConfigureGraph`; one more pass a frame later catches a late
+      // restore (a no-op when the fingerprint did not move).
+      loadPasses -= 1;
+      queueFlush();
+    }
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+  else setTimeout(run, 16);
+}
+
+function rootOf(node: ConnectableNode): LiteGraphLike | null {
+  const g = (node as { graph?: LiteGraphLike | null }).graph;
+  return g ? findRootGraph(g) : null;
+}
+
+/** Take the fingerprint of every graph a gated poller lives in; bump the
+ *  revision when it moved since the last one. */
+function checkFingerprint(): void {
+  const roots = new Set<LiteGraphLike>();
+  for (const p of pollers) {
+    if (!p.gated) continue;
+    const r = rootOf(p.node);
+    if (r) roots.add(r);
+  }
+  const next: unknown[] = [];
+  for (const r of roots) collectFingerprint(r, next);
+  if (!sameFingerprint(lastFingerprint, next)) {
+    lastFingerprint = next;
+    revision += 1;
+  }
+}
+
+/** Run every poller that is due. `sweep` runs the gated ones regardless. */
+function flush(sweep: boolean): boolean {
+  if (pollers.size === 0) return false;
+  checkFingerprint();
+  let changed = false;
+  withWalkCache(() => {
+    for (const p of [...pollers]) {
+      if (!pollers.has(p)) continue; // disposed by an earlier poller's update
+      if (p.gated && !sweep && p.seen === revision) continue;
+      p.seen = revision;
+      if (p.refresh()) changed = true;
+    }
+  });
+  return changed;
+}
+
+function sharedTick(): "changed" | "quiet" {
+  const now = Date.now();
+  const sweep = now - lastSweepAt >= SWEEP_MS && lastActivityAt > lastSweepAt;
+  if (sweep) lastSweepAt = now;
+  return flush(sweep) ? "changed" : "quiet";
+}
+
+function addPoller(p: Poller): () => void {
+  pollers.add(p);
+  if (!stopSharedTimer) stopSharedTimer = startAdaptivePoll(SHARED_POLL_MS, sharedTick);
+  return () => {
+    pollers.delete(p);
+    if (pollers.size === 0 && stopSharedTimer) {
+      stopSharedTimer();
+      stopSharedTimer = null;
+      lastFingerprint = [];
+    }
+  };
+}
+
+// One bump per workflow load (not one refresh per poller plus two chained
+// rAF refreshes each, which was ~4 full recomputes of every poll right when
+// the load had already blocked the thread for seconds).
+onGraphLoaded(() => {
+  loadPasses = 1;
+  bumpGraphRevision();
+});
+
+/** The shared poll's base period; a poller asking for another rate keeps its
+ *  own timer. */
+const SHARED_POLL_MS = 400;
+
+/** Options for {@link reactiveFromGraph}. */
+export interface GraphPollOptions {
+  /** Base poll period; anything but 400 runs on its own timer. */
+  pollMs?: number;
+  /** Vue sources `compute` reads besides the graph (e.g. the Loop's frame
+   *  cursor): a change refreshes at once instead of on the next poll. */
+  triggers?: WatchSource[];
+  /** Recompute only when the graph revision moved (plus the periodic sweep).
+   *  For computes that walk the graph; they must read only graph state
+   *  (links, modes, titles, widget values, subgraph structure). */
+  gated?: boolean;
+}
+
 export function reactiveFromGraph<T>(
   node: ConnectableNode,
   compute: () => T,
   equals: (a: T, b: T) => boolean = Object.is,
-  pollMs = 400,
-  /** Vue sources `compute` reads besides the graph (e.g. the Loop's frame
-   *  cursor): a change refreshes at once instead of on the next poll. */
-  triggers: WatchSource[] = [],
+  pollMsOrOptions: number | GraphPollOptions = SHARED_POLL_MS,
+  /** Same as `options.triggers` (positional form kept for callers). */
+  triggersArg: WatchSource[] = [],
 ): Ref<T> {
-  const state = ref(compute()) as Ref<T>;
+  const opts: GraphPollOptions = typeof pollMsOrOptions === "number"
+    ? { pollMs: pollMsOrOptions, triggers: triggersArg }
+    : pollMsOrOptions;
+  const pollMs = opts.pollMs ?? SHARED_POLL_MS;
+  const triggers = opts.triggers ?? triggersArg;
+  const gated = opts.gated === true && pollMs === SHARED_POLL_MS;
 
-  function refresh() {
+  // Shallow: a poll result is replaced wholesale, never mutated in place, and
+  // a deep ref wrapped every chain payload in proxies that the equality
+  // checks then had to read through (a third of the poll's time on a long
+  // chain). Consumers get the plain object the walker built.
+  const state = shallowRef(compute()) as Ref<T>;
+
+  function refresh(): boolean {
     const next = compute();
-    if (!equals(state.value, next)) state.value = next;
+    if (equals(state.value, next)) return false;
+    state.value = next;
+    return true;
   }
 
-  const stopTriggers = triggers.length ? watch(triggers, refresh) : () => {};
+  const poller: Poller = { node, gated, seen: revision, refresh };
 
-  const unwatchConnections = watchConnections(node, refresh);
+  // A wire or mode change on this node: cheap pollers re-read at once; the
+  // walkers (and every other node's walkers, whose chain may run through
+  // this node) recompute together in the next frame's flush.
+  const onGraphEdit = (): void => {
+    if (gated) poller.seen = -1;
+    else refresh();
+    bumpGraphRevision();
+  };
+
+  const stopTriggers = triggers.length ? watch(triggers, () => { refresh(); }) : () => {};
+
+  const unwatchConnections = watchConnections(node, onGraphEdit);
 
   // Mode-change intercept — instant detection of mute/bypass toggles
   // (ComfyUI assigns `node.mode = 2|4` directly, no event fires).
-  // Without this, every consumer waits the 400ms poll cycle to dim
-  // its UI / re-walk the chain after the user keys M/Ctrl-M.
-  const unwatchMode = watchNodeMode(node, refresh);
+  const unwatchMode = watchNodeMode(node, onGraphEdit);
 
-  /* Polling fallback for upstream-chain edits that don't fire on this node.
-   *
-   * The naive version — `setInterval(refresh, 400)` — runs forever, per node,
-   * regardless of whether anything could have changed. Measured on an 8-node
-   * Context chain carrying 96 variables: 0.59ms per refresh. That is small
-   * alone and it is not what it costs, because EVERY node walks its whole
-   * upstream chain, so a series chain is quadratic in total work and this is
-   * the shape people build. Nine nodes already produce a visible long task.
-   *
-   * Two gates, both of which cost nothing when the user is actually working:
-   *
-   * 1. A hidden tab skips entirely. Nobody can observe a stale widget on a
-   *    tab they are not looking at, and browsers already throttle background
-   *    intervals — so this is work that was being done specifically at the
-   *    moment it was least useful. A single catch-up refresh runs on the way
-   *    back to visible.
-   * 2. A still canvas backs off. The fallback covers edits that fire no
-   *    event, which cannot happen while nobody is editing, so after ~4s of no
-   *    pointer, key or wheel activity AND no observed change, the period
-   *    lengthens 3x, then 8x. Any real change or any user activity snaps it
-   *    straight back to the base rate.
-   *
-   * The event paths — `onConnectionsChange`, the mode intercept, graph load —
-   * are untouched and still fire instantly. Only the fallback slows, and only
-   * while nothing is happening.
-   */
-  const stopPoll = startAdaptivePoll(pollMs, () => {
-    const before = state.value;
-    refresh();
-    return equals(before, state.value) ? "quiet" : "changed";
-  });
-
-  // Re-sync on workflow load. Several ticks because ComfyUI restores widget
-  // values asynchronously through cascading callbacks; a single refresh can
-  // still catch us mid-cascade. requestAnimationFrame chain settles within
-  // two frames in practice — cheap insurance against a late restore.
-  const unsubscribe = onGraphLoaded(() => {
-    refresh();
-    requestAnimationFrame(() => {
-      refresh();
-      requestAnimationFrame(refresh);
-    });
-  });
+  /* Polling fallback for edits that fire no event on this node. Two gates
+   * (in `startAdaptivePoll`), both free while the user is actually working:
+   * a hidden tab skips (one catch-up on return), and a still canvas backs off
+   * 3x then 8x after ~4 s of no pointer/key/wheel activity and no change. */
+  const stopPoll = pollMs === SHARED_POLL_MS
+    ? addPoller(poller)
+    : startAdaptivePoll(pollMs, () => (refresh() ? "changed" : "quiet"));
 
   onScopeDispose(() => {
     stopTriggers();
     stopPoll();
-    unsubscribe();
     unwatchMode();
     unwatchConnections();
   });

@@ -117,7 +117,7 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
   // Reactive list of available upstream `$vars`. Refreshes on graph
   // events + 400ms poll (handles wildcard-name edits in upstream Context
   // nodes that don't fire connection events on us).
-  const upstreamVars = reactiveFromGraph(node, () => upstreamVarsOf(node), arraysEqual);
+  const upstreamVars = reactiveFromGraph(node, () => upstreamVarsOf(node), arraysEqual, { gated: true });
 
   // Track ComfyUI's litegraph mode (0=ALWAYS, 2=NEVER/mute, 4=BYPASS)
   // so the widget visually dims to mirror node-level mute/bypass.

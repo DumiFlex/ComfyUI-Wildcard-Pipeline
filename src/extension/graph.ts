@@ -159,16 +159,46 @@ let freezeParsed = false;
 export function _setParseCacheFreezeForTests(on: boolean): void {
   freezeParsed = on;
   parseCache.clear();
+  nodeParse = new WeakMap();
 }
 
 /** @internal test hook */
 export function _clearParseCacheForTests(): void {
   parseCache.clear();
+  nodeParse = new WeakMap();
 }
 
 /**
  * `parseWidgetJson`, memoised on the raw string. Read-only callers only.
  */
+export function parseWidgetJsonCached<T>(raw: string, fallback: T): T {
+  return parseCached(raw, fallback);
+}
+
+/** Last parse per node + widget name. The string-keyed cache above is a
+ *  FIFO of 24, so a graph with more distinct Context bodies than that cycled
+ *  every entry out between two reads of the same node and re-parsed all of
+ *  them on every poll. This slot holds exactly one parse per live widget and
+ *  goes with its node. */
+let nodeParse = new WeakMap<object, Map<string, { raw: string; parsed: unknown }>>();
+
+/** The parsed JSON of `node`'s widget `name`, cached on the node. Read-only. */
+export function parseNodeWidget<T>(node: LiteNodeLike, name: string, fallback: T): T {
+  const raw = widgetValue(node, name);
+  if (!raw) return fallback;
+  let byName = nodeParse.get(node);
+  const hit = byName?.get(name);
+  if (hit && hit.raw === raw) return hit.parsed as T;
+  const parsed = parseCached(raw, fallback);
+  if (parsed === fallback) return parsed;
+  if (!byName) {
+    byName = new Map();
+    nodeParse.set(node, byName);
+  }
+  byName.set(name, { raw, parsed });
+  return parsed;
+}
+
 function parseCached<T>(raw: string, fallback: T): T {
   if (!raw) return fallback;
   const hit = parseCache.get(raw);
@@ -313,6 +343,44 @@ export function showGraph(
 
 type SubgraphParent = { node: LiteNodeLike; graph: LiteGraphLike };
 
+/* ── walk cache scope ──────────────────────────────────────────────────
+ *
+ * A Context node runs ~10 collectors per poll and each began with its own
+ * `buildSubgraphParents` and chain walk; forty chained Contexts walked the
+ * same links thousands of times a second. Inside `withWalkCache` the subgraph
+ * parents map and each node's upstream chain / downstream reach are walked
+ * once and shared. The cache lives only for that synchronous call (the shared
+ * poll flush), so a graph edit can never be served a stale walk afterwards;
+ * `invalidateWalkCache` drops it when something rewires mid-flush. Only the
+ * STRUCTURE is cached (which nodes, in which order): modes and widget values
+ * are still read live by every collector.
+ */
+interface WalkScope {
+  parents: Map<LiteGraphLike, Map<string, SubgraphParent>>;
+  up: Map<LiteNodeLike, { root: LiteGraphLike; list: LiteNodeLike[] }>;
+  down: Map<LiteNodeLike, { root: LiteGraphLike; list: LiteNodeLike[] }>;
+}
+let walkScope: WalkScope | null = null;
+function newWalkScope(): WalkScope {
+  return { parents: new Map(), up: new Map(), down: new Map() };
+}
+
+/** Run `fn` with graph walks shared between every collector it calls. */
+export function withWalkCache<T>(fn: () => T): T {
+  if (walkScope) return fn();
+  walkScope = newWalkScope();
+  try {
+    return fn();
+  } finally {
+    walkScope = null;
+  }
+}
+
+/** Forget the walks cached in the current scope (the graph just changed). */
+export function invalidateWalkCache(): void {
+  if (walkScope) walkScope = newWalkScope();
+}
+
 /**
  * Walk root → leaves once and record each subgraph's parent SubgraphNode +
  * the LGraph that contains it. Used to step OUT through SubgraphInputNode
@@ -320,7 +388,11 @@ type SubgraphParent = { node: LiteNodeLike; graph: LiteGraphLike };
  * resume traversal from.
  */
 function buildSubgraphParents(root: LiteGraphLike): Map<string, SubgraphParent> {
+  const scope = walkScope;
+  const hit = scope?.parents.get(root);
+  if (hit) return hit;
   const out = new Map<string, SubgraphParent>();
+  scope?.parents.set(root, out);
   function descend(g: LiteGraphLike) {
     for (const n of g._nodes ?? []) {
       const sg = n.subgraph;
@@ -478,15 +550,7 @@ export function collectUpstreamResolved(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): Record<string, ResolvedValue> {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
+  const chain = upstreamChain(rootGraph, node);
   return resolveChainMemo(chain);
 }
 
@@ -523,10 +587,7 @@ export function collectLocalResolvedForModule(
   // about-to-be-emitted binding would surface stale state.
   if (isSkippedMode(node)) return ctx;
 
-  const v = parseCached<ContextWidgetValue>(
-    widgetValue(node, "wp_modules"),
-    { version: 1, modules: [] },
-  );
+  const v = parseNodeWidget<ContextWidgetValue>(node, "wp_modules", { version: 1, modules: [] });
 
   // Build a wildcard catalog over THIS node so refs in option values
   // (`@{uuid}`) resolve when wildcard siblings get simulated. Mirrors
@@ -615,19 +676,14 @@ export function hasUpstreamLoopOverridingSeed(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): boolean {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    if (cur.node.type === "WP_ContextLoop" && !isSkippedMode(cur.node)) {
+  for (const up of upstreamChain(rootGraph, node)) {
+    if (up.type === "WP_ContextLoop" && !isSkippedMode(up)) {
       // Loop's widget config carries the override toggle. Mute / bypass
       // skips the Loop entirely so its override shouldn't apply.
-      const raw = widgetValue(cur.node, "wp_context_loop_config");
+      const raw = widgetValue(up, "wp_context_loop_config");
       const cfg = parseCached<{ override_seed?: boolean }>(raw, {});
       return cfg.override_seed === true;
     }
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
   }
   return false;
 }
@@ -653,23 +709,19 @@ export function resolveUpstreamLoopSeed(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): UpstreamLoopSeed | null {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    if (cur.node.type === "WP_ContextLoop" && !isSkippedMode(cur.node)) {
+  for (const up of upstreamChain(rootGraph, node)) {
+    if (up.type === "WP_ContextLoop" && !isSkippedMode(up)) {
       const cfg = parseCached<{
         strategy?: string;
         override_seed?: boolean;
         seed_locks?: Record<string, number>;
-      }>(widgetValue(cur.node, "wp_context_loop_config"), {});
+      }>(widgetValue(up, "wp_context_loop_config"), {});
       const strategy: SeedStrategy =
         cfg.strategy === "sequential" || cfg.strategy === "prime_stride"
           ? cfg.strategy
           : "hash_index";
-      const rawSeed = widgetNumber(cur.node, "seed");
-      const rawCount = widgetNumber(cur.node, "count");
+      const rawSeed = widgetNumber(up, "seed");
+      const rawCount = widgetNumber(up, "count");
       const seedLocks: Record<string, number> = {};
       if (cfg.seed_locks && typeof cfg.seed_locks === "object") {
         for (const [k, v] of Object.entries(cfg.seed_locks)) {
@@ -684,7 +736,6 @@ export function resolveUpstreamLoopSeed(
         seedLocks,
       };
     }
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
   }
   return null;
 }
@@ -700,15 +751,7 @@ export function collectUpstreamInjectorBindings(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): string[] {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
+  const chain = upstreamChain(rootGraph, node);
   const out = new Set<string>();
   for (const n of chain) {
     if (n.type === MODEL_INFO_NODE && !isSkippedMode(n)) {
@@ -748,15 +791,7 @@ export function collectUpstreamInjectorNegatives(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): Record<string, string | null> {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
+  const chain = upstreamChain(rootGraph, node);
   const out: Record<string, string | null> = {};
   for (let i = chain.length - 1; i >= 0; i--) {
     const n = chain[i];
@@ -834,23 +869,12 @@ export function collectUpstreamWildcardUuids(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): string[] {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
+  const chain = upstreamChain(rootGraph, node);
   const uuids = new Set<string>();
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -885,15 +909,7 @@ export function collectUpstreamChain(
    *  read), so the preview rolls each step on the seed the run will use. */
   opts: { modelSteps?: boolean; seeds?: (number | null)[]; frame?: number | null } = {},
 ): unknown[][] {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
+  const chain = upstreamChain(rootGraph, node);
   // chain[] is downstream-first (first hop = closest upstream).
   // Reverse so step 0 is the FURTHEST upstream — engine runs each
   // step's pipeline with previous ctx as input, so order matters.
@@ -915,10 +931,7 @@ export function collectUpstreamChain(
     }
     if (n.type !== "WP_Context") continue;
     if (isSkippedMode(n)) continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const seed = contextSeed(n, graphOf(n, rootGraph));
     opts.seeds?.push(Number.isSafeInteger(seed) ? seed : null);
     // Apply the bundle gate before posting to `/wp/api/preview/resolve`.
@@ -953,6 +966,17 @@ export function collectUpstreamChain(
   return out;
 }
 
+/** What {@link collectUpstreamChain} (no options) reads, as a flat list a
+ *  caller can compare by reference to tell whether its answer could have
+ *  changed: each upstream Context, its mode and its raw body. */
+export function upstreamContextParts(rootGraph: LiteGraphLike, node: LiteNodeLike): unknown[] {
+  const parts: unknown[] = [];
+  for (const n of upstreamChain(rootGraph, node)) {
+    if (n.type === "WP_Context") parts.push(n, n.mode, widgetValue(n, "wp_modules"));
+  }
+  return parts;
+}
+
 /** @deprecated — use {@link collectUpstreamResolved}. */
 export const collectUpstreamValues = collectUpstreamResolved;
 
@@ -978,15 +1002,7 @@ export function collectUpstreamKinds(
   /** A loop frame (0-based): modules as that frame runs them. */
   frame: number | null = null,
 ): Record<string, string> {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
+  const chain = upstreamChain(rootGraph, node);
 
   const kinds: Record<string, string> = {};
   const internalKeys = new Set<string>();
@@ -1058,10 +1074,7 @@ export function collectUpstreamKinds(
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const entry of v.modules) {
       const m = frame != null ? frameModule(entry, frame) : entry;
@@ -1199,15 +1212,22 @@ export function collectUpstreamProducers(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): Record<string, VarProducer> {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
+  const chain = upstreamChain(rootGraph, node);
+  // Memo on what the map reads (the chain's bodies + modes, node ids and
+  // titles): a Context polls this and compared each fresh map against the
+  // last by JSON. Same parts → the same (read-only) object.
+  const parts: unknown[] = [node.id, ...chainParts(chain)];
+  for (const n of chain) parts.push(n.id, n.title);
+  const hit = producersMemo.get(node);
+  if (chainMemoEnabled && hit && sameParts(hit.parts, parts)) return hit.value;
+  const value = computeUpstreamProducers(node, chain);
+  producersMemo.set(node, { parts, value });
+  return value;
+}
+
+const producersMemo = new WeakMap<LiteNodeLike, { parts: unknown[]; value: Record<string, VarProducer> }>();
+
+function computeUpstreamProducers(node: LiteNodeLike, chain: LiteNodeLike[]): Record<string, VarProducer> {
 
   // Codenames are a WP_Context concept only — assign across the Context nodes
   // in the chain plus the POV node so a name reads the same from anywhere.
@@ -1328,10 +1348,7 @@ export function collectUpstreamProducers(
     }
 
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const m of v.modules) {
       if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -1575,10 +1592,7 @@ function resolveChainStatic(
   const catalog = new Map<string, MinimalWildcard>();
   for (const n of chain) {
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     for (const m of v.modules) {
       if (m.type !== "wildcard" || !m.payload) continue;
       catalog.set(m.id, m.payload as MinimalWildcard);
@@ -1712,10 +1726,7 @@ function resolveChainStatic(
       continue;
     }
     if (n.type !== "WP_Context") continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     const bundleEnabled = buildBundleEnabledMap(v.bundles);
     for (const entry of v.modules) {
       // A loop frame turns modules on or off and patches their instance
@@ -1763,6 +1774,9 @@ function frameModule<M extends ContextWidgetValue["modules"][number]>(m: M, fram
 /** The upstream chain of `node`, nearest first (the walk every collector
  *  shares). */
 function upstreamChain(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLike[] {
+  const scope = walkScope;
+  const hit = scope?.up.get(node);
+  if (hit && hit.root === rootGraph) return hit.list;
   const parents = buildSubgraphParents(rootGraph);
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
   const chain: LiteNodeLike[] = [];
@@ -1772,6 +1786,7 @@ function upstreamChain(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLi
     chain.push(cur.node);
     cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
   }
+  scope?.up.set(node, { root: rootGraph, list: chain });
   return chain;
 }
 
@@ -1800,7 +1815,7 @@ function overrideFrames(chain: LiteNodeLike[], count: number): number[] {
   };
   for (const n of chain) {
     if (n.type !== "WP_Context" || isSkippedMode(n)) continue;
-    const v = parseCached<ContextWidgetValue>(widgetValue(n, "wp_modules"), { version: 1, modules: [] });
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     for (const m of v.modules) {
       for (const k of Object.keys(m.frame_enabled ?? {})) add(Number(k));
       for (const k of m.disabled_frames ?? []) add(k);
@@ -2333,7 +2348,6 @@ export function collectDownstreamWildcardUuids(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): string[] {
-  const parents = buildSubgraphParents(rootGraph);
   // Per-instance, not deduped. The conflict scanner's count-aware
   // `constraint_orphan_target` check needs the actual number of
   // downstream target instances available to claim — two constraints
@@ -2341,11 +2355,36 @@ export function collectDownstreamWildcardUuids(
   // collapse N siblings to 1, falsely orphaning every constraint past
   // the first when duplicates exist downstream.
   const out: string[] = [];
+  for (const down of downstreamReach(rootGraph, node)) {
+    // Harvest wildcard uuids when the downstream node is a
+    // WP_Context and not muted/bypassed.
+    if (down.type !== "WP_Context" || isSkippedMode(down)) continue;
+    const v = parseNodeWidget<ContextWidgetValue>(down, "wp_modules", { version: 1, modules: [] });
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
+    for (const m of v.modules) {
+      if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
+      if (m.type === "wildcard") out.push(m.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * Every node reachable downstream of `node` along PIPELINE_CONTEXT edges, in
+ * BFS order (subgraph boundaries crossed, `node` itself left out). Muted and
+ * bypassed nodes are kept, since a context passes through them; callers skip
+ * their contributions. Shared inside a {@link withWalkCache} scope.
+ */
+function downstreamReach(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLike[] {
+  const scope = walkScope;
+  const hit = scope?.down.get(node);
+  if (hit && hit.root === rootGraph) return hit.list;
+  const parents = buildSubgraphParents(rootGraph);
+  const out: LiteNodeLike[] = [];
   const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
   const queue: { graph: LiteGraphLike; node: LiteNodeLike }[] = [
     { graph: graphOf(node, rootGraph), node },
   ];
-
   while (queue.length) {
     const cur = queue.shift();
     if (!cur) break;
@@ -2359,23 +2398,12 @@ export function collectDownstreamWildcardUuids(
         const key = locator(stepped.graph, stepped.node);
         if (seen.has(key)) continue;
         seen.add(key);
-        // Harvest wildcard uuids when the downstream node is a
-        // WP_Context and not muted/bypassed.
-        if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseCached<ContextWidgetValue>(
-            widgetValue(stepped.node, "wp_modules"),
-            { version: 1, modules: [] },
-          );
-          const bundleEnabled = buildBundleEnabledMap(v.bundles);
-          for (const m of v.modules) {
-            if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
-            if (m.type === "wildcard") out.push(m.id);
-          }
-        }
+        out.push(stepped.node);
         queue.push({ graph: stepped.graph, node: stepped.node });
       }
     }
   }
+  scope?.down.set(node, { root: rootGraph, list: out });
   return out;
 }
 
@@ -2396,70 +2424,46 @@ export function collectDownstreamNestedReachUuids(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): string[] {
-  const parents = buildSubgraphParents(rootGraph);
   const out: string[] = [];
   const reach = new Set<string>();
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const queue: { graph: LiteGraphLike; node: LiteNodeLike }[] = [
-    { graph: graphOf(node, rootGraph), node },
-  ];
   // Same regex shape used in pair-badge + dep-graph + tokenize. Uuid
   // captured; `#name` and `:subcat` segments non-capturing.
   const REF_RE = /@\{([0-9a-f]{8})(?:#[^#:}@{]*)?(?::[^}]*)?\}/g;
+  const scanValue = (val: unknown): void => {
+    if (typeof val !== "string") return;
+    for (const match of val.matchAll(REF_RE)) {
+      if (!reach.has(match[1])) {
+        reach.add(match[1]);
+        out.push(match[1]);
+      }
+    }
+  };
 
-  while (queue.length) {
-    const cur = queue.shift();
-    if (!cur) break;
-    for (const o of cur.node.outputs ?? []) {
-      if (o.type !== "PIPELINE_CONTEXT") continue;
-      for (const linkId of outputLinkIds(o)) {
-        const link = cur.graph.links[linkId];
-        if (!link) continue;
-        const stepped = downstreamStep(cur.graph, link, parents);
-        if (!stepped) continue;
-        const key = locator(stepped.graph, stepped.node);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          const v = parseCached<ContextWidgetValue>(
-            widgetValue(stepped.node, "wp_modules"),
-            { version: 1, modules: [] },
-          );
-          const bundleEnabled = buildBundleEnabledMap(v.bundles);
-          for (const m of v.modules) {
-            if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
-            const scanValue = (val: unknown): void => {
-              if (typeof val !== "string") return;
-              for (const match of val.matchAll(REF_RE)) {
-                if (!reach.has(match[1])) {
-                  reach.add(match[1]);
-                  out.push(match[1]);
-                }
-              }
-            };
-            if (m.type === "wildcard") {
-              const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
-              for (const opt of payload.options ?? []) scanValue(opt.value);
-            } else if (m.type === "derivation") {
-              // Derivation action values can host @{uuid} refs — scan
-              // branches[].action.value + else.action.value with the
-              // same REF_RE. Mirrors the wildcard option scan above.
-              const dp = (m.payload ?? {}) as {
-                rules?: Array<{
-                  branches?: Array<{ action?: { value?: unknown } }>;
-                  else?: { action?: { value?: unknown } } | null;
-                }>;
-              };
-              for (const r of Array.isArray(dp.rules) ? dp.rules : []) {
-                for (const b of Array.isArray(r?.branches) ? r.branches : []) {
-                  scanValue(b?.action?.value);
-                }
-                scanValue(r?.else?.action?.value);
-              }
-            }
+  for (const down of downstreamReach(rootGraph, node)) {
+    if (down.type !== "WP_Context" || isSkippedMode(down)) continue;
+    const v = parseNodeWidget<ContextWidgetValue>(down, "wp_modules", { version: 1, modules: [] });
+    const bundleEnabled = buildBundleEnabledMap(v.bundles);
+    for (const m of v.modules) {
+      if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
+      if (m.type === "wildcard") {
+        const payload = (m.payload ?? {}) as { options?: Array<{ value?: unknown }> };
+        for (const opt of payload.options ?? []) scanValue(opt.value);
+      } else if (m.type === "derivation") {
+        // Derivation action values can host @{uuid} refs — scan
+        // branches[].action.value + else.action.value with the
+        // same REF_RE. Mirrors the wildcard option scan above.
+        const dp = (m.payload ?? {}) as {
+          rules?: Array<{
+            branches?: Array<{ action?: { value?: unknown } }>;
+            else?: { action?: { value?: unknown } } | null;
+          }>;
+        };
+        for (const r of Array.isArray(dp.rules) ? dp.rules : []) {
+          for (const b of Array.isArray(r?.branches) ? r.branches : []) {
+            scanValue(b?.action?.value);
           }
+          scanValue(r?.else?.action?.value);
         }
-        queue.push({ graph: stepped.graph, node: stepped.node });
       }
     }
   }
@@ -2510,16 +2514,8 @@ export function findDownstreamAssemblers(rootGraph: LiteGraphLike, node: LiteNod
  * Assembler sees. Muted / bypassed nodes are left in; callers skip them.
  */
 export function upstreamChainOf(rootGraph: LiteGraphLike, node: LiteNodeLike): LiteNodeLike[] {
-  const parents = buildSubgraphParents(rootGraph);
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const chain: LiteNodeLike[] = [];
-  let cur = pipelineUpstreamOf(node, graphOf(node, rootGraph), parents);
-  while (cur && !seen.has(locator(cur.graph, cur.node))) {
-    seen.add(locator(cur.graph, cur.node));
-    chain.push(cur.node);
-    cur = pipelineUpstreamOf(cur.node, cur.graph, parents);
-  }
-  return chain;
+  // A copy: the walk may be shared with every other reader in a cache scope.
+  return [...upstreamChain(rootGraph, node)];
 }
 
 /**
@@ -2583,34 +2579,8 @@ export function collectDownstreamContextNodes(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): LiteNodeLike[] {
-  const parents = buildSubgraphParents(rootGraph);
-  const out: LiteNodeLike[] = [];
-  const seen = new Set<string>([locator(graphOf(node, rootGraph), node)]);
-  const queue: { graph: LiteGraphLike; node: LiteNodeLike }[] = [
-    { graph: graphOf(node, rootGraph), node },
-  ];
-
-  while (queue.length) {
-    const cur = queue.shift();
-    if (!cur) break;
-    for (const o of cur.node.outputs ?? []) {
-      if (o.type !== "PIPELINE_CONTEXT") continue;
-      for (const linkId of outputLinkIds(o)) {
-        const link = cur.graph.links[linkId];
-        if (!link) continue;
-        const stepped = downstreamStep(cur.graph, link, parents);
-        if (!stepped) continue;
-        const key = locator(stepped.graph, stepped.node);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (stepped.node.type === "WP_Context" && !isSkippedMode(stepped.node)) {
-          out.push(stepped.node);
-        }
-        queue.push({ graph: stepped.graph, node: stepped.node });
-      }
-    }
-  }
-  return out;
+  return downstreamReach(rootGraph, node)
+    .filter((n) => n.type === "WP_Context" && !isSkippedMode(n));
 }
 
 /**
@@ -2664,10 +2634,7 @@ export function findWildcardHomesElsewhere(
     if (n.type !== "WP_Context") continue;
     contextIds.push(String(n.id));
     if (String(n.id) === String(selfNode.id)) continue;
-    const v = parseCached<ContextWidgetValue>(
-      widgetValue(n, "wp_modules"),
-      { version: 1, modules: [] },
-    );
+    const v = parseNodeWidget<ContextWidgetValue>(n, "wp_modules", { version: 1, modules: [] });
     // Disabled modules count: the engine still catalogs them, so a user
     // looking at a greyed-out row is looking at a real pool.
     if (v.modules.some((m) => m.type === "wildcard" && m.id === uuid)) {

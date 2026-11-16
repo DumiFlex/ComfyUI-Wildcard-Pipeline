@@ -400,7 +400,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // the total at ~715.6 KB. Run errors on WP nodes (the execution_error
 // listener, the strip every widget host can draw and the Var → Choice red
 // row, 14/11/2026) put it at ~717.5 KB.
-const TOTAL_LIMIT = 720 * 1024;     // 720 KB
+// RAISED 720 -> 724 KB on 2026-11-16 for the canvas perf pass (P3): the
+// shared poll scheduler, graph fingerprint and chain memos put boot +1.4 KB
+// and the total at ~720.6 KB.
+const TOTAL_LIMIT = 724 * 1024;     // 724 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A
