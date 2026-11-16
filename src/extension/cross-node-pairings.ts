@@ -20,6 +20,7 @@ import {
   collectUpstreamChain,
   collectDownstreamContextNodes,
   parseNodeWidget,
+  upstreamContextParts,
   type LiteGraphLike,
   type LiteNodeLike,
 } from "./graph";
@@ -96,13 +97,23 @@ export function collectFullChainModules(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): ChainModule[] {
-  const out: ChainModule[] = [];
-
   // Re-walk the upstream Context nodes locally so we have their node refs —
   // collectUpstreamChain returns modules without their owning node.
-  const upstreamMods = collectUpstreamChain(rootGraph, node) as ModuleEntry[][];
   const upstreamNodes = upstreamContextNodes(rootGraph, node);
   const downstreamNodes = collectDownstreamContextNodes(rootGraph, node);
+
+  // Memo: every Context polls this, and on a long chain rebuilding it (and
+  // then comparing it entry by entry against the last one) was most of the
+  // idle cost. The result depends only on which nodes are in the chain, the
+  // upstream Contexts' modes and every chain body's raw string.
+  const parts: unknown[] = [...upstreamContextParts(rootGraph, node), node, rawModules(node)];
+  for (const n of upstreamNodes) parts.push(n);
+  for (const n of downstreamNodes) parts.push(n, rawModules(n));
+  const hit = chainMemo.get(node);
+  if (hit && sameParts(hit.parts, parts)) return hit.chain;
+
+  const out: ChainModule[] = [];
+  const upstreamMods = collectUpstreamChain(rootGraph, node) as ModuleEntry[][];
 
   // Assign a fixed, unique codename to every Context node in the chain,
   // keyed by litegraph node id. POV-independent — `assignCodenames` sorts
@@ -119,53 +130,62 @@ export function collectFullChainModules(
   for (let i = 0; i < Math.min(upstreamMods.length, upstreamNodes.length); i++) {
     const upNode = upstreamNodes[i];
     const nodeLabel = labelOf(upNode);
-    for (const m of upstreamMods[i]) {
-      out.push({
-        id: m.id,
-        rowKey: rowKey(upNode.id, m),
-        type: m.type,
-        payload: effectiveChainPayload(m),
-        displayName: m.meta?.name,
-        nodeLabel,
-        instance: (m.instance ?? null) as Record<string, unknown> | null,
-        enabled: m.enabled !== false,
-      });
-    }
+    for (const m of upstreamMods[i]) out.push(chainModuleOf(upNode.id, m, nodeLabel));
   }
 
   // Own node's modules.
   const ownLabel = labelOf(node);
-  for (const m of extractModules(node)) {
-    out.push({
-      id: m.id,
-      rowKey: rowKey(node.id, m),
-      type: m.type,
-      payload: effectiveChainPayload(m),
-      displayName: m.meta?.name,
-      nodeLabel: ownLabel,
-      instance: (m.instance ?? null) as Record<string, unknown> | null,
-      enabled: m.enabled !== false,
-    });
-  }
+  for (const m of extractModules(node)) out.push(chainModuleOf(node.id, m, ownLabel));
 
   // Downstream chain.
   for (const dn of downstreamNodes) {
     const nodeLabel = labelOf(dn);
-    for (const m of extractModules(dn)) {
-      out.push({
-        id: m.id,
-        rowKey: rowKey(dn.id, m),
-        type: m.type,
-        payload: effectiveChainPayload(m),
-        displayName: m.meta?.name,
-        nodeLabel,
-        instance: (m.instance ?? null) as Record<string, unknown> | null,
-        enabled: m.enabled !== false,
-      });
-    }
+    for (const m of extractModules(dn)) out.push(chainModuleOf(dn.id, m, nodeLabel));
   }
 
+  chainMemo.set(node, { parts, chain: out });
   return out;
+}
+
+const chainMemo = new WeakMap<LiteNodeLike, { parts: unknown[]; chain: ChainModule[] }>();
+
+function sameParts(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function rawModules(node: LiteNodeLike): string {
+  const w = node.widgets?.find((x) => x.name === "wp_modules");
+  return typeof w?.value === "string" ? w.value : "";
+}
+
+/** One `ChainModule` per parsed module, node and label, reused while the
+ *  module's parsed object lives (i.e. while its node's body is unedited), so
+ *  an edit in one node leaves every other node's entries identical and the
+ *  chain comparison skips them by reference. */
+const chainModuleCache = new WeakMap<ModuleEntry, Map<string, ChainModule>>();
+function chainModuleOf(nodeId: number | string, m: ModuleEntry, nodeLabel: string): ChainModule {
+  const key = `${nodeId}|${nodeLabel}`;
+  let byNode = chainModuleCache.get(m);
+  const hit = byNode?.get(key);
+  if (hit) return hit;
+  const cm: ChainModule = {
+    id: m.id,
+    rowKey: rowKey(nodeId, m),
+    type: m.type,
+    payload: effectiveChainPayload(m),
+    displayName: m.meta?.name,
+    nodeLabel,
+    instance: (m.instance ?? null) as Record<string, unknown> | null,
+    enabled: m.enabled !== false,
+  };
+  if (!byNode) {
+    byNode = new Map();
+    chainModuleCache.set(m, byNode);
+  }
+  byNode.set(key, cm);
+  return cm;
 }
 
 /** Walk upstream like `collectUpstreamChain` but return the node refs
@@ -226,5 +246,14 @@ export function collectCrossNodePairingsFull(
   rootGraph: LiteGraphLike,
   node: LiteNodeLike,
 ): Map<string, RowPairings> {
-  return computePairingsFull(collectFullChainModules(rootGraph, node));
+  // Keyed on the memoised chain: same chain, same (shared, read-only) map.
+  const chain = collectFullChainModules(rootGraph, node);
+  let out = pairingsMemo.get(chain);
+  if (!out) {
+    out = computePairingsFull(chain);
+    pairingsMemo.set(chain, out);
+  }
+  return out;
 }
+
+const pairingsMemo = new WeakMap<ChainModule[], Map<string, RowPairings>>();

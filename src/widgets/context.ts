@@ -203,6 +203,9 @@ function chainModulesEqual(a: ChainModule[], b: ChainModule[]): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
+    // Entries are reused while their node's body is unedited
+    // (`collectFullChainModules`), so most compare by reference.
+    if (a[i] === b[i]) continue;
     if (chainModuleSig(a[i]) !== chainModuleSig(b[i])) return false;
   }
   return true;
@@ -313,7 +316,7 @@ export function create(node: ContextNode, inputName: string) {
         },
         // Cheap structural compare — the walker rebuilds the object each poll,
         // so identity comparison would re-render on every tick.
-        (a, b) => JSON.stringify(a) === JSON.stringify(b),
+        (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b),
       );
 
       // Same idea, downstream — lets the scanner distinguish
