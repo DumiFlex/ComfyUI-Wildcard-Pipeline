@@ -116,7 +116,7 @@ class WPModelInfo(io.ComfyNode):
             return cls._execute(up, model, family, variant, name, wp_model_info)
 
         out = run(upstream)
-        carry_frame0(upstream, out.values[0], lambda up: run(up).values[0])
+        carry_frame0(upstream, out.args[0], lambda up: run(up).args[0])
         return out
 
     @classmethod

@@ -45,11 +45,18 @@ class Schema:
 
 
 class NodeOutput:
-    """Structural stub — matches real ``io.NodeOutput`` surface."""
+    """Structural stub of ``io.NodeOutput``: real ComfyUI keeps the outputs
+    on ``args``, so node code must read ``args``. ``values`` is a TEST-ONLY
+    alias (real ComfyUI has none; ``test_node_output_surface`` keeps it out
+    of ``wp_nodes/``)."""
 
-    def __init__(self, *values: Any, ui: dict[str, Any] | None = None):
-        self.values = values
+    def __init__(self, *args: Any, ui: dict[str, Any] | None = None):
+        self.args = args
         self.ui = ui
+
+    @property
+    def values(self) -> tuple[Any, ...]:
+        return self.args
 
 
 # ------------------------------------------------------------- ComfyNode ---

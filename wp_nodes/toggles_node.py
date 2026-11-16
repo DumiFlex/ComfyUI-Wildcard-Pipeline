@@ -88,7 +88,7 @@ class WPToggles(io.ComfyNode):
         wp_toggles: str = "",
     ):
         out = cls._execute(upstream, wp_toggles)
-        carry_frame0(upstream, out.values[0], lambda up: cls._execute(up, wp_toggles).values[0])
+        carry_frame0(upstream, out.args[0], lambda up: cls._execute(up, wp_toggles).args[0])
         return out
 
     @classmethod
