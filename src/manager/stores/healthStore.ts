@@ -107,8 +107,17 @@ export const useHealthStore = defineStore("health", () => {
     }
   }
 
-  /** Scan now. A call while one runs queues one more run after it. */
+  /** The first scan, waiting for the library catalogs (see `ensure`). */
+  let booting: Promise<void> | null = null;
+
+  /** Scan now. A call while one runs queues one more run after it; a call
+   *  while the first scan waits for the catalogs is that scan. */
   function refresh(): Promise<void> {
+    if (booting) return booting;
+    return scanNow();
+  }
+
+  function scanNow(): Promise<void> {
     if (pending) {
       again = true;
       return pending;
@@ -132,18 +141,34 @@ export const useHealthStore = defineStore("health", () => {
   }
 
   /** Start once: first scan plus the library-change watcher. True when
-   *  this call started it (a scan is then already running). */
+   *  this call started it (a scan is then already under way).
+   *
+   *  The first scan waits for the catalogs AppLayout loads at boot, and the
+   *  watcher starts after it from what it scanned: before, the scan ran at
+   *  once and the catalogs landing a moment later read as a library change,
+   *  so every boot scanned twice. */
   function ensure(): boolean {
     if (started) return false;
     started = true;
-    void refresh();
     const signature = () => [
       libraryVersion.value,
       ...[moduleStore.catalog, bundleStore.catalog, templateStore.catalog]
         .map((rows) => rows.map((r) => `${r.id}@${r.updated_at}`).join(",")),
       categoryStore.items.map((c) => c.id).join(","),
     ].join("|");
-    watch(signature, scheduleRefresh);
+    loading.value = true;
+    booting = (async () => {
+      await Promise.allSettled([
+        moduleStore.ensureCatalog(),
+        bundleStore.ensureCatalog(),
+        templateStore.ensureCatalog(),
+        categoryStore.listed ? undefined : categoryStore.fetchAll(),
+      ]);
+      await scanNow();
+    })().finally(() => {
+      booting = null;
+      watch(signature, scheduleRefresh);
+    });
     return true;
   }
 
