@@ -83,5 +83,8 @@ class WPDebug(io.ComfyNode):
         if "node_seed" in debug:
             flat["__wp_node_seed__"] = debug["node_seed"]
 
-        snapshot = json.dumps(flat, default=str, indent=2)
+        # Compact: this crosses the websocket on every run (once per loop
+        # frame). The viewer parses it and pretty-prints its Raw tab and
+        # download itself.
+        snapshot = json.dumps(flat, default=str, separators=(",", ":"))
         return io.NodeOutput(ui={"wp_debug_snapshot": [snapshot]})

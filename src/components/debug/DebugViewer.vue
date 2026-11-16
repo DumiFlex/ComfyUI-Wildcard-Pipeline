@@ -276,7 +276,9 @@ async function clipboardWrite(text: string): Promise<void> {
 }
 function downloadJson(): void {
   if (!raw.value) return;
-  const blob = new Blob([props.snapshot], { type: "application/json" });
+  // The node sends compact JSON (it crosses the websocket on every run);
+  // the downloaded file stays readable.
+  const blob = new Blob([JSON.stringify(raw.value, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

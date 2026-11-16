@@ -3,7 +3,7 @@ import pathlib
 
 import pytest
 
-from engine.modules._constraint_math import EXCLUDE, combine_constraint_factor
+from engine.modules._constraint_math import EXCLUDE, combine_constraint_factor, exception_index
 from engine.modules.derivation_handler import branch_carrier_key
 
 _CORPUS_PATH = pathlib.Path(__file__).parents[3] / "tests/fixtures/constraint-corpus.json"
@@ -21,6 +21,14 @@ def test_corpus(case):
         assert got is EXCLUDE
     else:
         assert got == pytest.approx(case["expect"])
+    # A caller folding a whole pool prebuilds the exception index once; the
+    # result must be exactly (not approximately) the same.
+    prebuilt = combine_constraint_factor(
+        case["picks"], case["option"], case["matrix"], case["exceptions"],
+        axis_kinds=case.get("source_axis_kinds"),
+        target_axes=case.get("target_axes"),
+        _index=exception_index(case["exceptions"]))
+    assert prebuilt is got if got is EXCLUDE else prebuilt == got
 
 
 # Py≡TS branch-key parity: the carrier key the engine stamps for a derivation

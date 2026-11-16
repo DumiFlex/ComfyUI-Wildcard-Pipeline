@@ -140,17 +140,18 @@ def _cell_factor(
     return factor
 
 
-def combine_constraint_factor(
-    source_picks: list[dict[str, Any]] | None,
-    option: dict[str, Any],
-    matrix: dict[str, Any] | None,
-    exceptions: list[Any] | None,
-    axis_kinds: dict[str, str] | None = None,
-    target_axes: dict[str, list[str]] | None = None,
-) -> _Factor:
-    matrix = matrix or {}
-    axis_kinds = axis_kinds or {}
-    target_axes = target_axes or {}
+ExceptionIndex = tuple[dict[tuple[str, str], dict], set[str]]
+
+
+def exception_index(exceptions: list[Any] | None) -> ExceptionIndex:
+    """The exception lookup ``combine_constraint_factor`` folds with:
+    ``(source_value, target_value) -> rule`` (last one wins) and the source
+    values that carry an ``only`` exception.
+
+    It depends on the exceptions alone, so a caller folding many options
+    against one constraint builds it once and passes it as ``_index``
+    instead of paying for it on every option.
+    """
     exc_by_pair: dict[tuple[str, str], dict] = {}
     for e in (exceptions or []):
         if not isinstance(e, dict):
@@ -169,6 +170,30 @@ def combine_constraint_factor(
     only_sources = {
         s for (s, _t), e in exc_by_pair.items() if e.get("mode") == "only"
     }
+    return exc_by_pair, only_sources
+
+
+def combine_constraint_factor(
+    source_picks: list[dict[str, Any]] | None,
+    option: dict[str, Any],
+    matrix: dict[str, Any] | None,
+    exceptions: list[Any] | None,
+    axis_kinds: dict[str, str] | None = None,
+    target_axes: dict[str, list[str]] | None = None,
+    *,
+    _index: ExceptionIndex | None = None,
+) -> _Factor:
+    """The factor one constraint gives one target option.
+
+    ``_index`` (private, Python only) is ``exception_index(exceptions)``
+    prebuilt by a caller that folds many options against the same
+    exceptions; it must be built from the very ``exceptions`` passed here.
+    The fold itself is unchanged, so the result is identical either way.
+    """
+    matrix = matrix or {}
+    axis_kinds = axis_kinds or {}
+    target_axes = target_axes or {}
+    exc_by_pair, only_sources = _index if _index is not None else exception_index(exceptions)
     opt_value = str(option.get("value", ""))
     opt_tags = option.get("tags") or []
     factor = 1.0

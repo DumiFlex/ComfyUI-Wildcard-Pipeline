@@ -1,14 +1,24 @@
 """WP_Context — runs a module list and emits a PipelineContext payload."""
 
 import contextlib
+import hashlib
+import itertools
+import json
+import marshal
+import pickle
+import threading
+from collections import OrderedDict
+from dataclasses import dataclass
+from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
+from engine import prefs
+from engine.db import queries
 from engine.db.connection import get_connection, resolve_db_path
 from engine.db.migrations import migrate
-from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
-from engine.pipeline import FRAME0_CTX_KEY, PipelineEngine
+from engine.pipeline import FRAME0_CTX_KEY, HOLD_BASE_MEMO_KEY, PipelineEngine
 from engine.seed_derive import effective_chain_seed
 from wp_nodes.types import (
     FRAME0_KEY,
@@ -65,7 +75,197 @@ def _input_ctx(upstream_ctx: dict, upstream_internals: dict, catalog: dict) -> d
     return ctx
 
 
-def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> dict:
+@dataclass(frozen=True)
+class _Walked:
+    """One expanded catalog plus every library read that produced it.
+
+    Entries are stored marshalled, so each run gets its own fresh dicts and a
+    run can never change what the next one reads. A `node` entry's payload is
+    left out (stored as None) and filled in from the run's own widget value,
+    which the cache key pins to the same content.
+    """
+
+    order: tuple[str, ...]
+    entries: dict[str, bytes]
+    node: frozenset[str]
+    #: uuid -> the raw row the walk read (None: no such row), for every uuid
+    #: the walk looked up in the library.
+    reads: dict[str, Any]
+    #: uuid -> live option count, for every node entry (pool provenance).
+    counts: dict[str, int | None]
+    #: Unique per walk: names this exact catalog content in other cache keys
+    #: (the hold base pass memo).
+    serial: int
+
+
+#: Expanded catalogs this process already walked, newest last. Key: (DB
+#: path, digest of the node's widget value). See `_expand_catalog_via_live_db`.
+_CATALOG_CACHE: OrderedDict[tuple[str, str], _Walked] = OrderedDict()
+_CATALOG_CACHE_MAX = 8
+_CATALOG_CACHE_LOCK = threading.Lock()
+_WALK_SERIAL = itertools.count(1)
+
+
+def _widget_key(raw: Any) -> str | None:
+    """A digest of the node's widget value, or None when it can't be keyed.
+
+    The expanded catalog is a pure function of the widget (its wildcards and
+    every `@{uuid}` its modules reference) plus the library rows the walk
+    reads, so the widget pins everything but the library side.
+    """
+    try:
+        blob = raw if isinstance(raw, str) else json.dumps(
+            raw, separators=(",", ":"), ensure_ascii=False,
+        )
+        return hashlib.sha256(blob.encode("utf-8", "surrogatepass")).hexdigest()
+    except Exception:
+        return None
+
+
+def _cached_catalog(
+    key: tuple[str, str], catalog: dict, conn,
+) -> tuple[dict, int] | None:
+    """The cached expansion for `key`, rebuilt as fresh dicts, and its walk
+    serial; None when there is none or the library changed under it."""
+    with _CATALOG_CACHE_LOCK:
+        hit = _CATALOG_CACHE.get(key)
+        if hit is not None:
+            _CATALOG_CACHE.move_to_end(key)
+    if hit is None:
+        return None
+    try:
+        # Exactly what the walk read: any library edit that could change the
+        # result (an edited, added or deleted row it looked up, or a node
+        # entry's live option count) misses here; nothing else can change it.
+        rows = queries.module_rows(conn, hit.reads)
+        if any(rows.get(uuid) != raw for uuid, raw in hit.reads.items()):
+            return None
+        live = queries.option_counts(conn, hit.counts)
+        if any(live.get(uuid) != count for uuid, count in hit.counts.items()):
+            return None
+        out: dict = {}
+        for uuid in hit.order:
+            entry = marshal.loads(hit.entries[uuid])
+            if uuid in hit.node:
+                entry["payload"] = catalog[uuid]["payload"]
+            out[uuid] = entry
+        return out, hit.serial
+    except Exception:
+        return None
+
+
+def _store_catalog(
+    key: tuple[str, str], snapshots: dict, embedded: dict,
+    reads: dict, counts: dict,
+) -> int | None:
+    try:
+        node = frozenset(u for u in snapshots if u in embedded)
+        entries = {
+            uuid: marshal.dumps(
+                {k: (None if k == "payload" and uuid in node else v) for k, v in entry.items()}
+            )
+            for uuid, entry in snapshots.items()
+        }
+    except (TypeError, ValueError):
+        return None  # not plain JSON data: don't cache
+    walked = _Walked(
+        order=tuple(snapshots), entries=entries, node=node,
+        reads=dict(reads), counts=dict(counts), serial=next(_WALK_SERIAL),
+    )
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE[key] = walked
+        _CATALOG_CACHE.move_to_end(key)
+        while len(_CATALOG_CACHE) > _CATALOG_CACHE_MAX:
+            _CATALOG_CACHE.popitem(last=False)
+    return walked.serial
+
+
+#: Hold base passes this process already ran, newest last, pickled. Key:
+#: everything the pass reads (see `_hold_base_key`).
+_BASE_CACHE: OrderedDict[tuple, bytes] = OrderedDict()
+_BASE_CACHE_MAX = 8
+#: A base ctx bigger than this pickled is not kept.
+_BASE_CACHE_MAX_BYTES = 16 * 1024 * 1024
+
+
+class _CatalogSlot:
+    """Stands in for the catalog inside a pickled base ctx; the run's own
+    catalog (same content, see the key) goes back in on the way out."""
+
+
+def _hold_base_key(
+    widget_key: str | None, walk_token: Any, hold_seed: int, frame0: dict,
+) -> tuple | None:
+    """Everything the hold base pass reads: the modules (the widget), the
+    catalog (its walk token), the hold seed, the `@{}` depth setting and
+    frame 0's inputs. None when one of them can't be pinned."""
+    if widget_key is None or walk_token is None:
+        return None
+    try:
+        frame0_blob = pickle.dumps(
+            (frame0.get("context") or {}, frame0.get("internals") or {}),
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+    except Exception:
+        return None
+    return (
+        widget_key, walk_token, int(hold_seed), prefs.max_ref_depth(),
+        hashlib.sha256(frame0_blob).hexdigest(),
+    )
+
+
+class _HoldBaseMemo:
+    """`HOLD_BASE_MEMO_KEY` for one Context run: every frame k >= 1 of a
+    Context Loop runs the hold base pass on the same frame-0 inputs, so the
+    first frame's result is kept (pickled, so each frame gets fresh objects
+    and nothing one frame does reaches the next) and handed to the rest."""
+
+    def __init__(self, key: tuple, catalog: dict) -> None:
+        self._key = key
+        self._catalog = catalog
+
+    def get(self) -> dict | None:
+        with _CATALOG_CACHE_LOCK:
+            blob = _BASE_CACHE.get(self._key)
+            if blob is not None:
+                _BASE_CACHE.move_to_end(self._key)
+        if blob is None:
+            return None
+        try:
+            base_ctx = pickle.loads(blob)
+        except Exception:
+            return None
+        if not isinstance(base_ctx, dict) or not isinstance(
+            base_ctx.get("__wp_catalog__"), _CatalogSlot,
+        ):
+            return None
+        base_ctx["__wp_catalog__"] = self._catalog
+        return base_ctx
+
+    def put(self, base_ctx: dict) -> None:
+        catalog = base_ctx.get("__wp_catalog__")
+        if catalog is not self._catalog:
+            return
+        base_ctx["__wp_catalog__"] = _CatalogSlot()
+        try:
+            blob = pickle.dumps(base_ctx, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception:
+            return
+        finally:
+            base_ctx["__wp_catalog__"] = catalog
+        if len(blob) > _BASE_CACHE_MAX_BYTES:
+            return
+        with _CATALOG_CACHE_LOCK:
+            _BASE_CACHE[self._key] = blob
+            _BASE_CACHE.move_to_end(self._key)
+            while len(_BASE_CACHE) > _BASE_CACHE_MAX:
+                _BASE_CACHE.popitem(last=False)
+
+
+def _expand_catalog_via_live_db(
+    catalog: dict, modules: list | None = None, *, widget_key: str | None = None,
+    walk_info: dict | None = None,
+) -> dict:
     """Per-issue-#2: the embed-bundle endpoint no longer walks
     transitive ``@{}`` refs — workflow JSON only carries what the
     user explicitly picked. At graph-run time we fill in any nested
@@ -84,10 +284,34 @@ def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> d
         warnings for unresolved nested refs (existing lenient behavior).
       - Referenced uuid not in DB → walker records ``missing_target``;
         resolver still emits the warning at run time.
+
+    The expansion is cached per (DB path, ``widget_key``) when the caller
+    passes a key (``WPContext.execute`` does): every frame of a Context Loop
+    and every repeat queue runs on the same widget value, so they reuse one
+    walk. A hit is checked against the library first — the rows the walk
+    read and the live option counts provenance stamped must be unchanged —
+    so a library edit that could change the result always re-walks.
+
+    ``walk_info["token"]`` (when given) names the returned catalog's content
+    for other caches: the walk serial, ``"static"`` when the catalog is just
+    the node's own (no ref and nothing to walk), absent when it can't be
+    named (no cache, no library).
     """
-    seeds = ref_seed_uuids(modules)
-    if not catalog and not seeds:
-        return catalog
+    cache_key: tuple[str, str] | None = None
+    if widget_key is not None:
+        try:
+            cache_key = (str(resolve_db_path()), widget_key)
+        except Exception:
+            cache_key = None
+    with _CATALOG_CACHE_LOCK:
+        cached = cache_key is not None and cache_key in _CATALOG_CACHE
+    seeds: set[str] = set()
+    if not cached:
+        seeds = ref_seed_uuids(modules)
+        if not catalog and not seeds:
+            if walk_info is not None and cache_key is not None:
+                walk_info["token"] = "static"
+            return catalog
 
     try:
         conn = get_connection()
@@ -102,11 +326,34 @@ def _expand_catalog_via_live_db(catalog: dict, modules: list | None = None) -> d
             _migrate_once(conn)
         except Exception:
             return catalog
-        return _walk_live(catalog, seeds, ModuleRepository(conn))
+        if cached and cache_key is not None:
+            hit = _cached_catalog(cache_key, catalog, conn)
+            if hit is not None:
+                if walk_info is not None:
+                    walk_info["token"] = hit[1]
+                return hit[0]
+            seeds = ref_seed_uuids(modules)
+        reads: dict = {}
+        counts: dict = {}
+        snapshots, clean = _walk_live(catalog, seeds, conn, reads, counts)
+        if clean and cache_key is not None:
+            serial = _store_catalog(cache_key, snapshots, catalog, reads, counts)
+            if serial is not None and walk_info is not None:
+                walk_info["token"] = serial
+        return snapshots
 
 
-def _walk_live(catalog: dict, seeds, repo: ModuleRepository) -> dict:
-    """The walk itself, on the caller's open repository."""
+def _walk_live(
+    catalog: dict, seeds, conn, reads: dict | None = None, counts: dict | None = None,
+) -> tuple[dict, bool]:
+    """The walk itself, on the caller's open connection.
+
+    Returns ``(snapshots, clean)``. ``reads`` / ``counts`` (when given)
+    collect every library row the walk looked up and every live option count
+    provenance read; ``clean`` is False when a read failed, so the result
+    must not be cached.
+    """
+    state = {"clean": True}
 
     def _fetch(uuid: str) -> dict | None:
         embedded = catalog.get(uuid)
@@ -122,24 +369,34 @@ def _walk_live(catalog: dict, seeds, repo: ModuleRepository) -> dict:
                 "payload_hash": embedded.get("payload_hash", ""),
             }
         try:
-            return repo.get(uuid)
-        except ModuleNotFound:
+            raw = queries.module_row(conn, uuid)
+        except Exception:
+            state["clean"] = False
             return None
+        if reads is not None:
+            reads[uuid] = raw
+        if raw is None:
+            return None
+        try:
+            payload = json.loads(raw[2])
         except Exception:
             return None
+        # No `payload_hash`: the snapshot entry computes it from the payload.
+        return {"id": uuid, "type": raw[0], "name": raw[1], "payload": payload}
 
     # Picked wildcards first so they keep `source: user`; ref-only targets
     # follow and land as deps. `walk_transitive_refs` skips a uuid it has
     # already snapshotted, so the overlap between the two is harmless.
     roots = list(catalog.keys()) + [u for u in sorted(seeds) if u not in catalog]
     walk = walk_transitive_refs(roots, fetch_module=_fetch)
-    _stamp_pool_provenance(walk.snapshots, catalog, repo)
-    return walk.snapshots
+    if not _stamp_pool_provenance(walk.snapshots, catalog, conn, counts):
+        state["clean"] = False
+    return walk.snapshots, state["clean"]
 
 
 def _stamp_pool_provenance(
-    snapshots: dict, embedded: dict, repo: ModuleRepository,
-) -> None:
+    snapshots: dict, embedded: dict, conn, counts: dict | None = None,
+) -> bool:
     """Record, per catalog entry, WHERE its option pool came from.
 
     Runtime-only bookkeeping consumed by ``ref_option_pool`` when a filtered
@@ -158,30 +415,39 @@ def _stamp_pool_provenance(
         agree, so its presence alone means "this node's copy has drifted".
 
     Mutates in place. Never raises: this is diagnostic garnish, and a DB
-    hiccup here must not take a graph run down with it. The extra reads are
-    one per embedded wildcard, at graph-run time, on a connection already open.
+    hiccup here must not take a graph run down with it (returns False when
+    the library could not be read). The live counts come from one query that
+    counts in SQL (`engine/db/queries.py`), not a decode of each row; they
+    land in ``counts`` when given.
 
     The keys ride on the runtime catalog only — `__wp_catalog__` is stripped at
     the socket boundary and the workflow-embedded snapshot is built elsewhere,
     so neither reaches saved JSON.
     """
+    node = [
+        uuid for uuid, entry in snapshots.items()
+        if isinstance(entry, dict) and uuid in embedded
+    ]
+    try:
+        live = queries.option_counts(conn, node) if node else {}
+    except Exception:
+        live = None
     for uuid, entry in snapshots.items():
         if not isinstance(entry, dict):
             continue
-        from_node = uuid in embedded
-        entry["pool_origin"] = "node" if from_node else "library"
-        if not from_node:
+        entry["pool_origin"] = "node" if uuid in embedded else "library"
+    if live is None:
+        return False
+    for uuid in node:
+        count = live.get(uuid)
+        if counts is not None:
+            counts[uuid] = count
+        own_options = (snapshots[uuid].get("payload") or {}).get("options")
+        if count is None or not isinstance(own_options, list):
             continue
-        try:
-            live = repo.get(uuid)
-        except Exception:
-            continue
-        live_options = (live.get("payload") or {}).get("options")
-        own_options = (entry.get("payload") or {}).get("options")
-        if not isinstance(live_options, list) or not isinstance(own_options, list):
-            continue
-        if len(live_options) != len(own_options):
-            entry["library_option_count"] = len(live_options)
+        if count != len(own_options):
+            snapshots[uuid]["library_option_count"] = count
+    return True
 
 
 def _node_id(cls: type) -> str:
@@ -249,7 +515,11 @@ class WPContext(io.ComfyNode):
         # `module_list` (not just the wildcard catalog) so a `@{}` ref written
         # on a derivation action — or in its per-instance override — pulls its
         # target in too. See `ref_seed_uuids`.
-        catalog = _expand_catalog_via_live_db(catalog, module_list)
+        widget_key = _widget_key(wp_modules)
+        walk_info: dict = {}
+        catalog = _expand_catalog_via_live_db(
+            catalog, module_list, widget_key=widget_key, walk_info=walk_info,
+        )
 
         ctx = _input_ctx(upstream_ctx, upstream_internals, catalog)
 
@@ -302,6 +572,12 @@ class WPContext(io.ComfyNode):
             frame0_ctx["__wp_explain__"] = True
             frame0_ctx["__wp_ref_log__"] = []
             ctx[FRAME0_CTX_KEY] = frame0_ctx
+            # Frames 1..N-1 all run the base pass on these same inputs.
+            base_key = _hold_base_key(
+                widget_key, walk_info.get("token"), hold_seed, frame0,
+            )
+            if base_key is not None:
+                ctx[HOLD_BASE_MEMO_KEY] = _HoldBaseMemo(base_key, catalog)
         ctx = PipelineEngine().run(
             module_list,
             ctx=ctx,

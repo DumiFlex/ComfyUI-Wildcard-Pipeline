@@ -44,6 +44,14 @@ logger = logging.getLogger(__name__)
 #: frame 0. The hold base pass runs on it (see ``PipelineEngine.run``).
 FRAME0_CTX_KEY = "__wp_frame0_ctx__"
 
+#: Optional memo a caller sets for the hold base pass (WP_Context sets one per
+#: loop queue): an object with ``get() -> Context | None`` and
+#: ``put(base_ctx) -> None``. ``get`` must hand out a ctx equal to what the
+#: pass would compute (a fresh copy, never a shared one) and ``put`` must
+#: snapshot the ctx right away (the run goes on to read and write it). The
+#: caller keys it on everything the pass reads; the engine only asks.
+HOLD_BASE_MEMO_KEY = "__wp_hold_base_memo__"
+
 #: Per-module markers set while a module resolves, dropped after the run.
 _ACTIVE_MODULE_KEYS = (
     "__wp_current_module_id__",
@@ -615,19 +623,38 @@ class PipelineEngine:
         falls back to this frame's inputs (the old behaviour).
         """
         frame0_input = ctx.pop(FRAME0_CTX_KEY, None)
+        base_memo = ctx.pop(HOLD_BASE_MEMO_KEY, None)
         any_hold = any(_module_seed_scope(m) == "hold" for m in modules)
         if loop_index == 0 or not (any_hold or isinstance(frame0_input, dict)):
             return
         hb = int(ctx.get("__wp_node_seed_hold__", 0) or 0)
+        source = frame0_input if isinstance(frame0_input, dict) else ctx
+        # Every frame k >= 1 of a loop runs this same pass on the same
+        # frame-0 inputs; a caller-keyed memo hands back the first result.
+        if base_memo is not None and isinstance(frame0_input, dict):
+            cached = base_memo.get()
+            if isinstance(cached, dict):
+                ctx["__wp_hold_base_ctx__"] = cached
+                self._carry_held_state(modules, ctx, cached)
+                return
+        else:
+            base_memo = None
+        # The catalog is read-only during a run (nothing writes to its
+        # entries), so the copy shares it instead of duplicating thousands of
+        # option dicts on every loop frame. Everything else is still copied.
+        memo: dict[int, Any] = {}
+        catalog = source.get("__wp_catalog__")
+        if catalog is not None:
+            memo[id(catalog)] = catalog
         base_ctx = PipelineEngine().run(
             modules,
-            ctx=copy.deepcopy(
-                frame0_input if isinstance(frame0_input, dict) else ctx
-            ),
+            ctx=copy.deepcopy(source, memo),
             seed=hb,
             hold_seed=hb,
             loop_index=0,
         )
+        if base_memo is not None:
+            base_memo.put(base_ctx)
         ctx["__wp_hold_base_ctx__"] = base_ctx
         self._carry_held_state(modules, ctx, base_ctx)
 

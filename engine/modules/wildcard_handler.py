@@ -90,10 +90,16 @@ def _explain_options(
     """Every option of this use with its library weight, its final weight and
     why it can't be drawn (``filter`` / ``toggle`` / ``constraint`` /
     ``weight``), so WP Debug can say why an option never comes up. Also the
-    pool size after each step (library → filter → toggles → drawable)."""
-    final_w = {o.get("id"): _weight(o) for o in final}
+    pool size after each step (library → filter → toggles → drawable).
+
+    Only the first ``OPTIONS_SHOWN`` options get a row (the rest are counted
+    in ``options_more``), so a 500-option wildcard builds 40 rows, not 500."""
+    shown = library[:OPTIONS_SHOWN]
+    shown_ids = {o.get("id") for o in shown}
+    # Last one wins on a repeated id, as a dict built over `final` would.
+    final_w = {o.get("id"): _weight(o) for o in final if o.get("id") in shown_ids}
     rows: list[dict[str, Any]] = []
-    for o in library:
+    for o in shown:
         oid = o.get("id")
         lib_w = _weight(o)
         if oid not in after_filter:
@@ -128,9 +134,9 @@ def _explain_options(
         "toggles": len(after_toggles),
         "live": sum(1 for o in final if _weight(o) > 0),
     }
-    detail["options"] = rows[:OPTIONS_SHOWN]
-    if len(rows) > OPTIONS_SHOWN:
-        detail["options_more"] = len(rows) - OPTIONS_SHOWN
+    detail["options"] = rows
+    if len(library) > OPTIONS_SHOWN:
+        detail["options_more"] = len(library) - OPTIONS_SHOWN
 
 
 def _explain_constraints(
@@ -208,10 +214,12 @@ def _apply_constraint_to_options(
         combine fn treats as a no-op.
     These are diagnostic only; they never change the computed weight.
     """
-    from engine.modules._constraint_math import combine_constraint_factor
+    from engine.modules._constraint_math import combine_constraint_factor, exception_index
 
     matrix = constraint.get("matrix") or {}
     exceptions = constraint.get("exceptions") or []
+    # Built once for the whole pool rather than once per option.
+    index = exception_index(exceptions)
 
     # Per-pick source list (SP3). Fall back to a single synthetic pick for
     # legacy callers that pass only the top-level value + sub_categories.
@@ -247,7 +255,7 @@ def _apply_constraint_to_options(
     for opt in options:
         option = {"value": opt.get("value", ""), "tags": opt.get("sub_categories") or []}
         f = combine_constraint_factor(
-            picks, option, matrix, exceptions, axis_kinds, target_axes,
+            picks, option, matrix, exceptions, axis_kinds, target_axes, _index=index,
         )
         # `isinstance(f, float)` rather than `f is not EXCLUDE`: identity
         # against a sentinel does not narrow the union, so the multiply below
@@ -473,34 +481,42 @@ def _restrict_menus_by_constraints(
     """
     if not applied_constraints or not menus:
         return menus
-    from engine.modules._constraint_math import combine_constraint_factor
+    from engine.modules._constraint_math import combine_constraint_factor, exception_index
+    # What each fired constraint folds with depends on the constraint alone,
+    # not on the probed tag: build it once per constraint, not per member.
+    probes: list[tuple[list[dict[str, Any]], dict[str, Any], list[Any], dict[str, str], Any]] = []
+    for c, src_pick in applied_constraints:
+        s_picks = src_pick.get("picks")
+        if not isinstance(s_picks, list):
+            s_picks = [{
+                "value": src_pick.get("value", ""),
+                "tags": list(src_pick.get("sub_categories") or []),
+            }]
+        axis_kinds = {
+            ax: "accepts"
+            for p in s_picks for ax in (p.get("axes") or {})
+        }
+        # The probe is a bare tag with no real value, so a
+        # value-level `only` would shut it out and leave the menu
+        # unrestricted. The option itself already passed that gate
+        # in the pool, so only the tag rules matter here.
+        probe_excs = [
+            e for e in (c.get("exceptions") or [])
+            if not (isinstance(e, dict) and e.get("mode") == "only")
+        ]
+        probes.append((
+            s_picks, c.get("matrix") or {}, probe_excs, axis_kinds,
+            exception_index(probe_excs),
+        ))
     out: dict[str, list[str]] = {}
     for axis, members in menus.items():
         allowed: list[str] = []
         for t in members:
             ok = True
-            for c, src_pick in applied_constraints:
-                s_picks = src_pick.get("picks")
-                if not isinstance(s_picks, list):
-                    s_picks = [{
-                        "value": src_pick.get("value", ""),
-                        "tags": list(src_pick.get("sub_categories") or []),
-                    }]
-                axis_kinds = {
-                    ax: "accepts"
-                    for p in s_picks for ax in (p.get("axes") or {})
-                }
-                # The probe is a bare tag with no real value, so a
-                # value-level `only` would shut it out and leave the menu
-                # unrestricted. The option itself already passed that gate
-                # in the pool, so only the tag rules matter here.
-                probe_excs = [
-                    e for e in (c.get("exceptions") or [])
-                    if not (isinstance(e, dict) and e.get("mode") == "only")
-                ]
+            for s_picks, matrix, probe_excs, axis_kinds, index in probes:
                 f = combine_constraint_factor(
                     s_picks, {"value": "", "tags": [t]},
-                    c.get("matrix") or {}, probe_excs, axis_kinds,
+                    matrix, probe_excs, axis_kinds, _index=index,
                 )
                 if not (isinstance(f, float) and f > 0.0):
                     ok = False
@@ -1163,7 +1179,10 @@ class WildcardHandler(ModuleHandler):
             apply_constraints_for_target,
             warn_excludes_all,
         )
-        weights_before_constraints = {o.get("id"): _weight(o) for o in options}
+        # Read only by the WP Debug explanation below.
+        weights_before_constraints = (
+            {o.get("id"): _weight(o) for o in options} if detail is not None else {}
+        )
         my_id = ctx.get("__wp_current_module_id__") if ctx is not None else None
         any_constraint_applied = False
         # (constraint, source_pick) pairs that actually re-weighted this target.
