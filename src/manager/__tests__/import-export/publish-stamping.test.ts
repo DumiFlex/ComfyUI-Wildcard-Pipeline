@@ -12,6 +12,7 @@ import {
   DERIVATION_CONDITIONS_SCHEMA_VERSION,
   FALLBACK_SCHEMA_VERSION,
   BOOL_ACCESSOR_SCHEMA_VERSION,
+  NUM_ACCESSOR_SCHEMA_VERSION,
   FILTER_VARIABLES_SCHEMA_VERSION,
   NEGATED_TESTS_SCHEMA_VERSION,
   NEGATIVES_SCHEMA_VERSION,
@@ -615,5 +616,21 @@ describe("schemaVersionForPayload: $name.bool (v12)", () => {
   it("leaves look-alikes at the chain head", () => {
     expect(schemaVersionForPayload({ template: "a $rain.boolean b" })).toBe(CURRENT_SCHEMA_VERSION);
     expect(schemaVersionForPayload({ template: "file.bool" })).toBe(CURRENT_SCHEMA_VERSION);
+  });
+});
+
+describe("schemaVersionForPayload: $name.num (v13)", () => {
+  it("stamps NUM_ACCESSOR (13) for a .num read in text or a condition", () => {
+    expect(schemaVersionForPayload({ template: "(details:$detail.num)" })).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ template: "a $shot.0.num b" })).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ template: "$rain.bool $shot.num" })).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({
+      rules: [{ branches: [{ condition: { var: "shot.num", op: "equals", value: "0.5" } }] }],
+    })).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
+  });
+
+  it("leaves look-alikes at the chain head", () => {
+    expect(schemaVersionForPayload({ template: "a $shot.number b" })).toBe(CURRENT_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ template: "file.num" })).toBe(CURRENT_SCHEMA_VERSION);
   });
 });

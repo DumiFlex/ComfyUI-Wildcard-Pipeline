@@ -12,6 +12,7 @@ from engine.migrations import (
     MAX_KNOWN_SCHEMA_VERSION,
     NEGATED_TESTS_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
+    NUM_ACCESSOR_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
     TAG_AXES_SCHEMA_VERSION,
@@ -313,3 +314,21 @@ def test_ref_filter_variables_need_v11(text, expected):
 def test_bool_accessor_needs_v12(node, expected):
     assert schema_version_for_payload(node) == expected
     assert MAX_KNOWN_SCHEMA_VERSION >= BOOL_ACCESSOR_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize("node,expected", [
+    ({"template": "(details:$detail.num)"}, NUM_ACCESSOR_SCHEMA_VERSION),
+    ({"template": "a $shot.0.num b"}, NUM_ACCESSOR_SCHEMA_VERSION),
+    ({"template": "a $shot.number b"}, CURRENT_SCHEMA_VERSION),
+    ({"template": "file.num"}, CURRENT_SCHEMA_VERSION),
+    ({"template": "$rain.bool $shot.num"}, NUM_ACCESSOR_SCHEMA_VERSION),
+    (
+        {"rules": [{"branches": [
+            {"condition": {"var": "shot.num", "op": "equals", "value": "0.5"}},
+        ]}]},
+        NUM_ACCESSOR_SCHEMA_VERSION,
+    ),
+])
+def test_num_accessor_needs_v13(node, expected):
+    assert schema_version_for_payload(node) == expected
+    assert MAX_KNOWN_SCHEMA_VERSION >= NUM_ACCESSOR_SCHEMA_VERSION

@@ -355,6 +355,7 @@ body.wp-color-muted {
   --wp-kind-loop:      oklch(from #fb923c l calc(c * 0.55) h);
   --wp-kind-model:     oklch(from #a3e635 l calc(c * 0.55) h);
   --wp-kind-toggle:    oklch(from #818cf8 l calc(c * 0.55) h);
+  --wp-kind-slider:    oklch(from #f0abfc l calc(c * 0.55) h);
 }
 
 body.wp-color-vivid {
@@ -375,6 +376,7 @@ body.wp-color-vivid {
   --wp-kind-loop:      oklch(from #fb923c l calc(c * 1.30) h);
   --wp-kind-model:     oklch(from #a3e635 l calc(c * 1.30) h);
   --wp-kind-toggle:    oklch(from #818cf8 l calc(c * 1.30) h);
+  --wp-kind-slider:    oklch(from #f0abfc l calc(c * 1.30) h);
 }
 
 /* Light-theme muted/vivid — re-seed the kind-color relative adjustments
@@ -396,6 +398,7 @@ body.wp-color-muted .wp-theme-light {
   --wp-kind-loop:      oklch(from #9a3412 l calc(c * 0.55) h);
   --wp-kind-model:     oklch(from #3f6212 l calc(c * 0.55) h);
   --wp-kind-toggle:    oklch(from #4338ca l calc(c * 0.55) h);
+  --wp-kind-slider:    oklch(from #86198f l calc(c * 0.55) h);
 }
 
 .wp-theme-light body.wp-color-vivid,
@@ -409,5 +412,6 @@ body.wp-color-vivid .wp-theme-light {
   --wp-kind-loop:      oklch(from #9a3412 l calc(c * 1.30) h);
   --wp-kind-model:     oklch(from #3f6212 l calc(c * 1.30) h);
   --wp-kind-toggle:    oklch(from #4338ca l calc(c * 1.30) h);
+  --wp-kind-slider:    oklch(from #86198f l calc(c * 1.30) h);
 }
 }  /* end @layer wp-extension */

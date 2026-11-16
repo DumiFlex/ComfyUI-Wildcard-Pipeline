@@ -5,7 +5,7 @@
  * current state and returns a new value; nothing here mutates its input.
  */
 import { axisHueAt, UNGROUPED_HUE } from "../../../components/shared/axis-color";
-import { BOOL_ACCESSOR, NEG_ACCESSOR } from "../../../widgets/richTokenize";
+import { BOOL_ACCESSOR, NEG_ACCESSOR, NUM_ACCESSOR } from "../../../widgets/richTokenize";
 
 export type TagGroups = Record<string, string[]>;
 export type TagGroupKinds = Record<string, "accepts">;
@@ -126,16 +126,19 @@ export function nextGroupName(tagGroups: TagGroups): string {
 }
 
 /** Why `name` cannot be an `accepts` axis: `"neg"` (a reserved accessor:
- *  `$var.neg` or `$var.bool`), `"ident"` (not an identifier the accessor
+ *  `$var.neg`, `$var.bool` or `$var.num`), `"ident"` (not an identifier the accessor
  *  grammar can parse), or null. */
 export function acceptsNameProblem(name: string): "neg" | "ident" | null {
-  if (name === NEG_ACCESSOR || name === BOOL_ACCESSOR) return "neg";
+  if (name === NEG_ACCESSOR || name === BOOL_ACCESSOR || name === NUM_ACCESSOR) return "neg";
   if (!AXIS_IDENT.test(name)) return "ident";
   return null;
 }
 
 /** Why a reserved accessor can't name an accepts group. */
 function reservedDetail(name: string): string {
+  if (name === NUM_ACCESSOR) {
+    return `$var.${NUM_ACCESSOR} reads a WP Slider variable's number, so an accepts group can't be called "${NUM_ACCESSOR}".`;
+  }
   return name === BOOL_ACCESSOR
     ? `$var.${BOOL_ACCESSOR} reads a WP Toggles variable's on/off, so an accepts group can't be called "${BOOL_ACCESSOR}".`
     : `$var.${NEG_ACCESSOR} reads a variable's negatives, so an accepts group can't be called "${NEG_ACCESSOR}".`;

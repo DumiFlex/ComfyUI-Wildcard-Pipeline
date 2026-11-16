@@ -10,6 +10,7 @@ Each function:
 import re
 from typing import Any, Protocol
 
+from engine.sliders import NUMS_KEY, lookup_num
 from engine.syntax.types import deref_var_value, split_var_accessor
 from engine.toggles import BOOLS_KEY
 
@@ -87,9 +88,21 @@ def lookup_var(context: _CtxLike, name: str) -> str:
         return ""
     if bare.endswith(".bool"):
         return _lookup_bool(context, bare[: -len(".bool")])
+    if bare.endswith(".num"):
+        return _lookup_num(context, bare[: -len(".num")])
     base, index = split_var_accessor(bare)
     raw: Any = context.context.get(base) if context and getattr(context, "context", None) else None
     return deref_var_value(raw, index)
+
+
+def _lookup_num(context: _CtxLike, base: str) -> str:
+    """`$name.num`: a WP Slider's number, from the table the payload's
+    `internals` carry (a slider in text / words mode writes text to its
+    variable). Falls back to the variable itself when it is a number; else ""."""
+    internals = getattr(context, "internals", None) if context else None
+    table = internals.get(NUMS_KEY) if isinstance(internals, dict) else None
+    raw: Any = context.context.get(base) if context and getattr(context, "context", None) else None
+    return lookup_num(table, raw, base) or ""
 
 
 def _lookup_bool(context: _CtxLike, base: str) -> str:

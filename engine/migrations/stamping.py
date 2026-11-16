@@ -5,6 +5,8 @@ A payload is stamped with the LOWEST catalog version its features need, so
 an older consumer can still install everything that doesn't use a newer
 feature:
 
+- ``NUM_ACCESSOR_SCHEMA_VERSION`` (13): text reads ``$name.num`` or a
+  derivation test's ``var`` is ``name.num`` (WP Slider's number).
 - ``BOOL_ACCESSOR_SCHEMA_VERSION`` (12): text reads ``$name.bool`` or a
   derivation test's ``var`` is ``name.bool`` (WP Toggles' on/off).
 - ``FILTER_VARIABLES_SCHEMA_VERSION`` (11): a wildcard use's pool filter
@@ -49,6 +51,7 @@ from engine.migrations import (
     FILTER_VARIABLES_SCHEMA_VERSION,
     NEGATED_TESTS_SCHEMA_VERSION,
     NEGATIVES_SCHEMA_VERSION,
+    NUM_ACCESSOR_SCHEMA_VERSION,
     SP2B_SCHEMA_VERSION,
     SP3_REACH_SCHEMA_VERSION,
     TAG_AXES_SCHEMA_VERSION,
@@ -68,6 +71,13 @@ _BOOL_ACCESSOR_RE = re.compile(
     r"\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.bool(?![A-Za-z0-9_])"
 )
 _BOOL_VAR_RE = re.compile(r"^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.bool$")
+
+# `$name.num` (and `$name.K.num`): reads a WP Slider variable's number
+# (schema v13). A condition's `var` holds the same reference without `$`.
+_NUM_ACCESSOR_RE = re.compile(
+    r"\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.num(?![A-Za-z0-9_])"
+)
+_NUM_VAR_RE = re.compile(r"^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.num$")
 
 # A ref whose `:filter` holds a `$name` term (schema v11).
 _REF_FILTER_VAR_RE = re.compile(
@@ -288,6 +298,21 @@ def uses_bool_accessor(node: Any) -> bool:
     return any(uses_bool_accessor(value) for value in node.values())
 
 
+def uses_num_accessor(node: Any) -> bool:
+    """Any text reading ``$name.num``, or a derivation test whose ``var``
+    is ``name.num``, at any depth."""
+    if isinstance(node, list):
+        return any(uses_num_accessor(child) for child in node)
+    if isinstance(node, str):
+        return _NUM_ACCESSOR_RE.search(node) is not None
+    if not isinstance(node, dict):
+        return False
+    var = node.get("var")
+    if isinstance(var, str) and _NUM_VAR_RE.match(var.strip()):
+        return True
+    return any(uses_num_accessor(value) for value in node.values())
+
+
 def uses_sp2b_grammar(node: Any) -> bool:
     """Range-count or ``~`` multi-pick anywhere in the serialised payload."""
     text = json.dumps(node, ensure_ascii=False, default=str)
@@ -296,6 +321,8 @@ def uses_sp2b_grammar(node: Any) -> bool:
 
 def schema_version_for_payload(payload: Any) -> int:
     """The lowest catalog version that covers every feature in ``payload``."""
+    if uses_num_accessor(payload):
+        return NUM_ACCESSOR_SCHEMA_VERSION
     if uses_bool_accessor(payload):
         return BOOL_ACCESSOR_SCHEMA_VERSION
     if uses_filter_variables(payload):

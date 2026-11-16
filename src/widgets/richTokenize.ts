@@ -96,6 +96,10 @@ export const NEG_ACCESSOR = "neg";
  *  toggle writes. Reserved like `neg`. Mirrors `BOOL_ACCESSOR` in
  *  `engine/syntax/resolve.py`. */
 export const BOOL_ACCESSOR = "bool";
+/** `$name.num` reads a WP Slider variable's number, whatever text or word the
+ *  slider writes. Reserved like `neg`. Mirrors `NUM_ACCESSOR` in
+ *  `engine/syntax/resolve.py`. */
+export const NUM_ACCESSOR = "num";
 
 export function varAccessorParts(
   raw: string,

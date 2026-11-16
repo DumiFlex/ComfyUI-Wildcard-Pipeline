@@ -96,6 +96,7 @@ from wp_nodes.label_grid_node import WPLabelGrid
 from wp_nodes.model_info_node import WPModelInfo
 from wp_nodes.prompt_cleaner import WPPromptCleaner
 from wp_nodes.seed_list import WPSeedList
+from wp_nodes.slider_node import WPSlider
 from wp_nodes.toggles_node import WPToggles
 from wp_nodes.var_to_bool import WPVarToBool
 from wp_nodes.var_to_choice import WPVarToChoice
@@ -115,6 +116,7 @@ class WildcardPipelineExtension(ComfyExtension):
             WPContextInjector,
             WPModelInfo,
             WPToggles,
+            WPSlider,
             WPImageFilter,
             WPLabelGrid,
             WPPromptCleaner,

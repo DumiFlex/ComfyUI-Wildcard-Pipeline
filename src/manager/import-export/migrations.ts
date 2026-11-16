@@ -39,7 +39,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
  * very shapes this runtime just learned to produce, one version up. The
  * regression test below pins MAX_KNOWN >= the highest content-stamp.
  */
-export const MAX_KNOWN_SCHEMA_VERSION = 12;
+export const MAX_KNOWN_SCHEMA_VERSION = 13;
 
 /**
  * Community catalog version for the SP2b nested multi-pick TEXT grammar
@@ -174,6 +174,16 @@ export const FILTER_VARIABLES_SCHEMA_VERSION = 11;
  * Publish stamps it only when a payload reads one (`usesBoolAccessor`).
  */
 export const BOOL_ACCESSOR_SCHEMA_VERSION = 12;
+
+/**
+ * WP Slider numbers (schema v13): text reads `$name.num` (or `$name.K.num`),
+ * or a derivation test whose `var` is `name.num`. A slider in text or words
+ * mode writes that, and `.num` reads its number. Additive, no migrator; a
+ * pre-v13 runtime reads `.num` as a tag axis and renders nothing, so the
+ * stamp makes it refuse the pack up front. Publish stamps it only when a
+ * payload reads one (`usesNumAccessor`).
+ */
+export const NUM_ACCESSOR_SCHEMA_VERSION = 13;
 
 export interface MigrationOk<T> {
   ok: true;

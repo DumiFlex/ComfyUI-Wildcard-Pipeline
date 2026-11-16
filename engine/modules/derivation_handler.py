@@ -26,7 +26,7 @@ from engine.modules._detail import module_detail
 from engine.modules._seed import derive_module_rng, instance_key, stream_key
 from engine.modules.dispatcher import ModuleHandler
 from engine.syntax import resolve_text
-from engine.syntax.resolve import BOOL_ACCESSOR, NEG_ACCESSOR
+from engine.syntax.resolve import BOOL_ACCESSOR, NEG_ACCESSOR, NUM_ACCESSOR
 from engine.syntax.types import (
     deref_var_value,
     parse_var_reference,
@@ -127,6 +127,8 @@ def _ctx_get(ctx: Any, name: str) -> str:
         return _ctx_negative(ctx, base, index)
     if axis == BOOL_ACCESSOR:
         return _ctx_bool(ctx, base)
+    if axis == NUM_ACCESSOR:
+        return _ctx_num(ctx, base)
     if axis:
         return _ctx_axis(ctx, base, axis, index)
     return deref_var_value(_ctx_get_raw(ctx, base), index)
@@ -154,6 +156,15 @@ def _ctx_bool(ctx: Any, base: str) -> str:
     return word if word in ("true", "false") else ""
 
 
+def _ctx_num(ctx: Any, base: str) -> str:
+    """`$name.num` in a condition: WP Slider's number for the variable,
+    else its own value when that already is a number, else ""."""
+    from engine.sliders import NUMS_KEY, lookup_num  # noqa: PLC0415
+
+    table = ctx.get(NUMS_KEY) if isinstance(ctx, dict) else None
+    return lookup_num(table, _ctx_get_raw(ctx, base), base) or ""
+
+
 def _ctx_has(ctx: Any, name: str) -> bool:
     """Whether `name` is a known key in `ctx`, regardless of value.
 
@@ -171,6 +182,8 @@ def _ctx_has(ctx: Any, name: str) -> bool:
         return bool(_ctx_negative(ctx, base, _index))
     if axis == BOOL_ACCESSOR:
         return bool(_ctx_bool(ctx, base))
+    if axis == NUM_ACCESSOR:
+        return bool(_ctx_num(ctx, base))
     if axis:
         # An axis is present when the binding actually rolled it. Checked
         # against the axes bucket, not ctx: `$outfit.SHOES` can exist while

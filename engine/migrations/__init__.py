@@ -30,7 +30,7 @@ CURRENT_SCHEMA_VERSION = 2
 # MAINTENANCE CONTRACT: bump this whenever the TS `schemaVersionForPayload()`
 # learns to stamp a new (higher) version — otherwise this commit-side
 # re-validate will reject the very shapes the runtime just learned to produce.
-MAX_KNOWN_SCHEMA_VERSION = 12
+MAX_KNOWN_SCHEMA_VERSION = 13
 
 # Feature stamps (mirror of the TS constants beside MAX_KNOWN). Each is the
 # catalog version a payload needs once it uses that feature; see
@@ -53,6 +53,8 @@ NEGATED_TESTS_SCHEMA_VERSION = 10
 FILTER_VARIABLES_SCHEMA_VERSION = 11
 # WP Toggles booleans: text or a condition reading `$name.bool`
 BOOL_ACCESSOR_SCHEMA_VERSION = 12
+# WP Slider numbers: text or a condition reading `$name.num`
+NUM_ACCESSOR_SCHEMA_VERSION = 13
 
 _CHAIN = {
     0: migrate_v0_to_v1,

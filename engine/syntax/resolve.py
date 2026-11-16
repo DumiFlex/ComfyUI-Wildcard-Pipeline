@@ -189,6 +189,8 @@ def _resolve_var(tok: Token, ctx: ResolveContext) -> str:
         return _resolve_negative(tok, ctx)
     if axis == BOOL_ACCESSOR:
         return _resolve_bool(tok, ctx)
+    if axis == NUM_ACCESSOR:
+        return _resolve_num(tok, ctx)
     if axis:
         out = _resolve_axis(tok, ctx, str(axis))
         _note_read(ctx, name, tok.meta.get("index"), out)
@@ -225,8 +227,38 @@ NEG_ACCESSOR = "neg"
 #: whatever value the toggle writes. Reserved like `neg`.
 BOOL_ACCESSOR = "bool"
 
+#: The accessor that reads a WP Slider variable's number (`$name.num`),
+#: whatever text or word the slider writes. Reserved like `neg`.
+NUM_ACCESSOR = "num"
+
 #: Names an `accepts` tag group may not use: they are accessors.
-RESERVED_ACCESSORS = frozenset({NEG_ACCESSOR, BOOL_ACCESSOR})
+RESERVED_ACCESSORS = frozenset({NEG_ACCESSOR, BOOL_ACCESSOR, NUM_ACCESSOR})
+
+
+def _resolve_num(tok: Token, ctx: ResolveContext) -> str:
+    """Render `$name.num`: the slider's number. Not a read of `$name`
+    itself, so it carries no negatives along."""
+    name = str(tok.meta.get("name", ""))
+    getter: Any = getattr(ctx, "get_num", None)
+    got: Any = getter(name) if callable(getter) else None
+    if got is None:
+        own = ctx.get_var(name)
+        if own is None:
+            _push_warning(
+                ctx,
+                type="unknown_var",
+                severity="warn",
+                module_id="",
+                source_field="",
+                position=tok.start,
+                token_index=None,
+                detail={"name": name, "surface": ctx.surface},
+                message=f"Unknown variable ${name}",
+            )
+            return ""
+        from engine.sliders import lookup_num  # noqa: PLC0415 - keep syntax light
+        return lookup_num(None, own, name) or ""
+    return str(got)
 
 
 def _resolve_bool(tok: Token, ctx: ResolveContext) -> str:

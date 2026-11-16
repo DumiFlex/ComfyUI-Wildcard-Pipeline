@@ -37,6 +37,9 @@ const props = defineProps<{
   /** Each upstream toggle variable's switch: what `$name.bool` reads, since a
    *  toggle with a Value writes the Value to `$name`, not true / false. */
   varBools?: Record<string, boolean>;
+  /** Each upstream slider variable's number: what `$name.num` reads, since a
+   *  slider in text or words mode writes that text to `$name`. */
+  varNums?: Record<string, string>;
   /** What the preview run actually rolled, keyed by binding (the preview
    *  endpoint's `axes`). Preferred over `varAxes` for any axis the chain
    *  declares, because `varAxes` only knows the axis's first tag — it printed
@@ -247,6 +250,16 @@ function boolText(name: string, value: ResolvedValue | undefined): string {
   return v === "true" || v === "false" ? v : "";
 }
 
+/** `$name.num`, as the engine reads it (`sliders.lookup_num`): the slider's
+ *  number when a Slider node set it, else the value when it already is a
+ *  number, else nothing. */
+function numText(name: string, value: ResolvedValue | undefined): string {
+  const got = props.varNums?.[name];
+  if (got) return got;
+  const v = typeof value === "string" ? value.trim() : "";
+  return v && Number.isFinite(Number(v)) ? v : "";
+}
+
 const previewTokens = computed<PreviewToken[]>(() => {
   if (!props.template) return [];
 
@@ -271,6 +284,8 @@ const previewTokens = computed<PreviewToken[]>(() => {
         kind: "var",
         text: axis === "bool"
           ? boolText(name, has ? props.resolvedMap[name] : undefined)
+          : axis === "num"
+          ? numText(name, has ? props.resolvedMap[name] : undefined)
           : axis
           ? axisText(name, axis, index, raw)
           : (has ? applyVarAccessor(props.resolvedMap[name], index) : raw),

@@ -794,7 +794,7 @@ def edit_groups(payload: dict[str, Any], raw: Any) -> dict[str, Any]:
             if new.lower() in by_lower and by_lower[new.lower()] != name:
                 warnings.append(f"a group named {new} exists; move the tags with axes instead")
                 continue
-            if new.lower() in ("neg", "bool"):
+            if new.lower() in ("neg", "bool", "num"):
                 warnings.append(f"{new.lower()} is reserved and can't name a group")
                 continue
             groups = {(new if k == name else k): v for k, v in groups.items()}

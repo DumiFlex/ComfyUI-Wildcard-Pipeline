@@ -64,6 +64,11 @@ import DocRef from "../../../components/docs/DocRef.vue";
               <code>false</code>, even when the toggle writes its own Value.</td>
           </tr>
           <tr>
+            <td><VarToken>$name.num</VarToken></td>
+            <td>A <DocRef id="wp-slider" /> variable's number, even when the slider writes a text
+              or a word. For any other variable, its value when that already is a number.</td>
+          </tr>
+          <tr>
             <td><VarToken kind="ref">@{…}</VarToken></td>
             <td>A fresh pick from another wildcard. Type <b>@</b> to insert one; it shows as a chip.
               It can narrow the pick to some tags (<code>warm or cool</code>) or leave out the null

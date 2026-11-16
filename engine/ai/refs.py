@@ -391,6 +391,6 @@ def has_pick(text: Any) -> bool:
 
 
 def valid_axis_name(name: str) -> bool:
-    if name in ("neg", "bool"):
+    if name in ("neg", "bool", "num"):
         return False
     return bool(_IDENT.fullmatch(name)) and not validate_subcat_name(name)

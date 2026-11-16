@@ -356,13 +356,35 @@ describe("installEnvelope — natively-supported future versions install as-is",
     expect(opts[0].value).toBe("at @{0de11002#Setting:$model_variant}");
   });
 
-  it("rejects a v13 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+  it("installs a v13 envelope as-is and keeps a $name.num read", async () => {
     const v13Envelope = {
       schema_version: 13,
-      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      bundles: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+      wildcards: [
+        {
+          id: "wcnum001",
+          type: "wildcard",
+          name: "detail",
+          payload: { var_binding: "detail_text", options: [{ id: "o1", value: "(details:$detail.num)", weight: 1 }] },
+        },
+      ],
     };
     const { importExport, seen } = fakeCommit();
     const result = await installEnvelope({ envelope: v13Envelope }, { importExport });
+
+    expect(result.ok).toBe(true);
+    const added = seen[0].adds.find((a) => a.kind === "wildcard");
+    if (!added) throw new Error("wildcard add not found in commit payload");
+    expect((added.entity.payload as { options: Array<{ value: string }> }).options[0].value).toBe("(details:$detail.num)");
+  });
+
+  it("rejects a v14 envelope (> MAX_KNOWN) at parse with the future-version error", async () => {
+    const v14Envelope = {
+      schema_version: 14,
+      bundles: [], wildcards: [], fixed_values: [], combines: [], derivations: [], constraints: [], categories: [], templates: [],
+    };
+    const { importExport, seen } = fakeCommit();
+    const result = await installEnvelope({ envelope: v14Envelope }, { importExport });
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("parse_failed");
@@ -370,6 +392,7 @@ describe("installEnvelope — natively-supported future versions install as-is",
     // Nothing was committed.
     expect(seen).toHaveLength(0);
   });
+
 });
 
 describe("applyCollisionDecisions rename map", () => {

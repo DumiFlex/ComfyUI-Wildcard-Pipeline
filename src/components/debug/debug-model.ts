@@ -181,7 +181,9 @@ export interface RawTraceEntry {
   bool?: boolean;
   /** WP Toggles: the row wrote the toggle's value text, not true/false. */
   has_value?: boolean;
-  /** WP Toggles: the negative it filed for its variable. */
+  /** WP Slider: the slider's number (what `$name.num` reads). */
+  num?: string;
+  /** WP Toggles / WP Slider: the negative it filed for its variable. */
   negative?: string;
   error?: string | { type?: string; message?: string } | null;
   detail?: RawDetail;
@@ -202,7 +204,7 @@ export interface RawRef {
 
 // ── View model ──────────────────────────────────────────────────────────
 
-export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "toggle" | "loop" | "unknown";
+export type Kind = "wildcard" | "fixed" | "combine" | "derivation" | "constraint" | "injector" | "model" | "toggle" | "slider" | "loop" | "unknown";
 export type StepStatus = "ok" | "off" | "frame" | "error" | "unknown" | "never";
 export type Severity = "info" | "warning" | "error";
 
@@ -424,6 +426,7 @@ const KIND_LABELS: Record<Kind, string> = {
   injector: "injector",
   model: "model info",
   toggle: "toggle",
+  slider: "slider",
   loop: "loop",
   unknown: "module",
 };
@@ -439,18 +442,20 @@ export const KIND_ICONS: Record<Kind, string> = {
   injector: "pi pi-bolt",
   model: "pi pi-microchip",
   toggle: "pi pi-check-square",
+  slider: "pi pi-sliders-h",
   loop: "pi pi-replay",
   unknown: "pi pi-circle",
 };
 
 /** Kinds written by a node of their own rather than a module in a Context. */
-export const NODE_KINDS = new Set<Kind>(["injector", "model", "toggle", "loop"]);
+export const NODE_KINDS = new Set<Kind>(["injector", "model", "toggle", "slider", "loop"]);
 
 /** The node each node kind comes from, for rows the canvas can't name. */
 export const NODE_KIND_TITLES: Partial<Record<Kind, string>> = {
   injector: "WP Context Injector",
   model: "WP Model Info",
   toggle: "WP Toggles",
+  slider: "WP Slider",
   loop: "WP Context Loop",
 };
 
@@ -499,6 +504,7 @@ function kindOf(entry: RawTraceEntry): Kind {
   if (entry.node === "WP_ContextInjector") return "injector";
   if (entry.node === "WP_ModelInfo") return "model";
   if (entry.node === "WP_Toggles") return "toggle";
+  if (entry.node === "WP_Slider") return "slider";
   if (entry.node === "WP_ContextLoop") return "loop";
   switch (entry.type) {
     case "wildcard": return "wildcard";
@@ -643,6 +649,12 @@ export function sourceText(kind: Kind, entry: RawTraceEntry): string {
   if (kind === "toggle") {
     const what = type === "pick" ? "Pick one" : "switch";
     return entry.source === "upstream" ? `${what}, set upstream` : what;
+  }
+  if (kind === "slider") {
+    const mode = str(entry.detail?.mode);
+    const num = typeof entry.num === "string" && entry.num ? entry.num : "";
+    if (mode === "words" || mode === "text") return num ? `${mode}, at ${num}` : mode;
+    return "";
   }
   if (kind === "loop") {
     const d = entry.detail;
