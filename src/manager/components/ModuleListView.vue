@@ -178,6 +178,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: "fetch"): void;
+  /** The Refresh / Retry button: fetch the rows again from the server.
+   *  Followed by `fetch`. A filter or search change emits `fetch` alone,
+   *  which pages answer from the rows they hold. */
+  (e: "refresh"): void;
   (e: "clear"): void;
   (e: "delete", item: T): void;
   (e: "bulk-delete", items: T[]): void;
@@ -610,6 +614,11 @@ function emitFetch() {
   emit("fetch");
 }
 
+function emitRefresh() {
+  emit("refresh");
+  emit("fetch");
+}
+
 const tagAddOpen = ref(false);
 const tagAddValue = ref("");
 /** The `<input>` inside the kit Input, focused when the panel opens. */
@@ -785,7 +794,7 @@ defineExpose({
         aria-label="Refresh list"
         :disabled="loading"
         :class="{ 'wp-refresh-btn--spin': loading }"
-        @click="emitFetch"
+        @click="emitRefresh"
       >Refresh</Button>
       <span class="wp-toolbar__count">{{ filteredItems.length }} / {{ items.length }} items</span>
     </div>
@@ -1057,7 +1066,7 @@ defineExpose({
             size="sm"
             icon="pi-refresh"
             data-test="load-error-retry"
-            @click="emitFetch"
+            @click="emitRefresh"
           >Retry</Button>
         </template>
       </Banner>

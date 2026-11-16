@@ -1,8 +1,9 @@
 import { markDeleted } from "../composables/useLibraryChanged";
 import { defineStore } from "pinia";
-import { reactive, ref } from "vue";
+import { reactive, ref, shallowRef } from "vue";
 import { api } from "../api/client";
 import type { BundleCreateInput, BundleRow, BundleUpdateInput } from "../api/types";
+import { createLibraryCache, filterRows, replaceRow } from "./libraryCache";
 
 interface Filter {
   category?: string | null;
@@ -20,44 +21,55 @@ interface Filter {
  *  the API surface is identical so list views can reuse the same
  *  table/grid components by swapping store. */
 export const useBundleStore = defineStore("bundles", () => {
-  const items = ref<BundleRow[]>([]);
-  const catalog = ref<BundleRow[]>([]);
+  /** Every bundle (see `libraryCache.ts`: shallow, replaced on change). */
+  const cache = createLibraryCache<BundleRow>(() => api.bundles.list({}));
+  const catalog = cache.rows;
+  /** The Bundles page's rows: `catalog` through `filter`. */
+  const items = shallowRef<BundleRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
   /** Set once a list view has fetched `items`, so a library refresh only
-   *  re-fetches what some page has already loaded. */
+   *  re-derives what some page has already loaded. */
   const listed = ref(false);
+  let ticket = 0;
 
+  function derive(): void {
+    items.value = filterRows(catalog.value, filter);
+  }
+
+  function setCatalog(next: BundleRow[]): void {
+    cache.set(next);
+    if (listed.value) derive();
+  }
+
+  /** The Bundles page's rows for `filter`, filtered on the client (see
+   *  `moduleStore.fetchAll`). */
   async function fetchAll() {
-    loading.value = true;
+    const mine = ++ticket;
+    if (!cache.loaded.value) loading.value = true;
     try {
-      const params: Record<string, string | boolean | undefined> = {};
-      if (filter.category) params.category = filter.category ?? undefined;
-      if (filter.q) params.q = filter.q;
-      if (filter.favorites) params.favorites = true;
-      const res = await api.bundles.list(params);
-      items.value = res.items;
+      await cache.ensure();
+      if (mine !== ticket) return;
       listed.value = true;
+      derive();
     } finally {
-      loading.value = false;
+      if (mine === ticket) loading.value = false;
     }
   }
 
   /**
    * Fetch the full bundle catalog, ignoring the persistent `filter.*` state.
    *
-   * Writes ONLY to `catalog` (sidebar count badges, Cmd+K palette). Bundles
-   * have no kind discriminator so the staleness race that bit moduleStore
-   * doesn't apply here, but the API is kept symmetric for clarity.
+   * The one copy the Bundles page, sidebar count badges and Cmd+K palette
+   * read. `ensureCatalog()` when it only needs to be present.
    */
   async function fetchCatalog() {
-    loading.value = true;
-    try {
-      const res = await api.bundles.list({});
-      catalog.value = res.items;
-    } finally {
-      loading.value = false;
-    }
+    await cache.refresh();
+    if (listed.value) derive();
+  }
+
+  async function ensureCatalog() {
+    await cache.ensure();
   }
 
   async function get(id: string) {
@@ -66,17 +78,19 @@ export const useBundleStore = defineStore("bundles", () => {
 
   async function create(body: BundleCreateInput) {
     const row = await api.bundles.create(body);
-    items.value.unshift(row);
-    catalog.value = [row, ...catalog.value.filter((i) => i.id !== row.id)];
+    if (!listed.value) items.value = [row, ...items.value];
+    setCatalog([row, ...catalog.value.filter((i) => i.id !== row.id)]);
     return row;
+  }
+
+  function replaced(updated: BundleRow): void {
+    if (!listed.value) items.value = replaceRow(items.value, updated);
+    setCatalog(replaceRow(catalog.value, updated));
   }
 
   async function update(id: string, body: BundleUpdateInput) {
     const updated = await api.bundles.update(id, body);
-    const i1 = items.value.findIndex((i) => i.id === id);
-    if (i1 >= 0) items.value[i1] = updated;
-    const i2 = catalog.value.findIndex((i) => i.id === id);
-    if (i2 >= 0) catalog.value[i2] = updated;
+    replaced(updated);
     return updated;
   }
 
@@ -89,21 +103,18 @@ export const useBundleStore = defineStore("bundles", () => {
    *  DELETE there would 404 before the list updates). */
   function removeLocal(id: string) {
     markDeleted([id]);
-    items.value = items.value.filter((i) => i.id !== id);
-    catalog.value = catalog.value.filter((i) => i.id !== id);
+    if (!listed.value) items.value = items.value.filter((i) => i.id !== id);
+    setCatalog(catalog.value.filter((i) => i.id !== id));
   }
 
   async function toggleFavorite(id: string) {
     const updated = await api.bundles.favorite(id);
-    const i1 = items.value.findIndex((i) => i.id === id);
-    if (i1 >= 0) items.value[i1] = updated;
-    const i2 = catalog.value.findIndex((i) => i.id === id);
-    if (i2 >= 0) catalog.value[i2] = updated;
+    replaced(updated);
     return updated;
   }
 
   return {
-    items, catalog, loading, filter, listed,
-    fetchAll, fetchCatalog, get, create, update, remove, removeLocal, toggleFavorite,
+    items, catalog, loading, filter, listed, catalogLoaded: cache.loaded,
+    fetchAll, fetchCatalog, ensureCatalog, get, create, update, remove, removeLocal, toggleFavorite,
   };
 });

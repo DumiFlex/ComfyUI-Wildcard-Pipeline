@@ -140,6 +140,7 @@ function toggleTag(t: string, currentTags: string[] | undefined): string[] {
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="fetch"
+    @refresh="store.fetchCatalog().catch(() => undefined)"
     @delete="del"
     @bulk-favorite="bulk.onBulkFavorite"
     @bulk-tag-add="bulk.onBulkTagAdd"

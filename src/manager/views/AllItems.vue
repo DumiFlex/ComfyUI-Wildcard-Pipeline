@@ -22,8 +22,7 @@
  */
 import Checkbox from "@/kit/Checkbox.vue";
 import CopyButton from "@/kit/CopyButton.vue";
-import { computed, onMounted, ref, watch } from "vue";
-import { libraryVersion, markDeleted } from "../composables/useLibraryChanged";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useListUrlState } from "../composables/useListUrlState";
 import { useLoadError } from "../composables/useLoadError";
@@ -38,7 +37,6 @@ import Button from "@/kit/Button.vue";
 import Select from "@/kit/Select.vue";
 import EmptyState from "@/kit/EmptyState.vue";
 import { useToast } from "@/kit/useToast";
-import { api } from "../api/client";
 import { useCategoryStore } from "../stores/categoryStore";
 import Chip from "@/kit/Chip.vue";
 import { categoryAssignOptions, categoryFilterOptions } from "../utils/category-options";
@@ -110,8 +108,11 @@ interface LibraryRow {
   source: ModuleRow | BundleRow;
 }
 
-const localModules = ref<ModuleRow[]>([]);
-const localBundles = ref<BundleRow[]>([]);
+// The stores' copies of the library (one fetch for the whole app, kept
+// current by AppLayout's drift watch and `libraryVersion`), never a fetch
+// of this page's own: the search, kind and tag filters all run here.
+const localModules = computed<ModuleRow[]>(() => moduleStore.catalog);
+const localBundles = computed<BundleRow[]>(() => bundleStore.catalog);
 // Start `true` so the filter panel can render a stable "Loading…"
 // placeholder for the tag section BEFORE the first fetch resolves.
 // If we start `false`, the panel briefly renders with an empty tag
@@ -231,18 +232,16 @@ const visibleItems = computed<LibraryRow[]>(() => {
   return out;
 });
 
-async function fetchAll() {
-  loading.value = true;
+/** Load the stores' catalogs: `fresh` (the Refresh button) refetches them,
+ *  otherwise the copies there are used (and a stale one revalidated in the
+ *  background). */
+async function fetchAll(fresh = false) {
+  if (!moduleStore.catalogLoaded || !bundleStore.catalogLoaded) loading.value = true;
   try {
     await loadErr.run(async () => {
-      // No limit: the list pages client-side, and a single pack import
-      // can add ~1000 wildcards on its own.
-      const [modRes, bunRes] = await Promise.all([
-        api.modules.list(),
-        api.bundles.list(),
-      ]);
-      localModules.value = modRes.items;
-      localBundles.value = bunRes.items;
+      await Promise.all(fresh
+        ? [moduleStore.fetchCatalog(), bundleStore.fetchCatalog()]
+        : [moduleStore.ensureCatalog(), bundleStore.ensureCatalog()]);
     });
   } catch (e) {
     toast.push({ severity: "error", summary: "Load failed", detail: String(e), life: 4000 });
@@ -251,9 +250,6 @@ async function fetchAll() {
     hasLoaded.value = true;
   }
 }
-
-// A chat card applied or undone changed the library behind this list.
-watch(libraryVersion, () => { void fetchAll(); void categoryStore.fetchAll(); });
 
 onMounted(async () => {
   await Promise.all([fetchAll(), categoryStore.fetchAll()]);
@@ -284,13 +280,13 @@ function editRow(row: LibraryRow) {
 
 async function fav(row: LibraryRow) {
   try {
-    // Server toggles the flag itself — no boolean argument needed.
+    // Server toggles the flag itself — no boolean argument needed. The
+    // store swaps the returned row into its catalog, which this list reads.
     if (row.kind === "bundle") {
-      await api.bundles.favorite(row.id);
+      await bundleStore.toggleFavorite(row.id);
     } else {
-      await api.modules.favorite(row.id);
+      await moduleStore.toggleFavorite(row.id);
     }
-    await fetchAll();
   } catch (e) {
     toast.push({ severity: "error", summary: "Favorite failed", detail: String(e), life: 4000 });
   }
@@ -298,14 +294,13 @@ async function fav(row: LibraryRow) {
 
 async function del(row: LibraryRow) {
   try {
+    // The stores drop the row from their catalogs (and mark it deleted).
     if (row.kind === "bundle") {
-      await api.bundles.delete(row.id);
+      await bundleStore.remove(row.id);
     } else {
-      await api.modules.delete(row.id);
+      await moduleStore.remove(row.id);
     }
-    markDeleted([row.id]);
     toast.push({ severity: "success", summary: "Deleted", detail: row.name, life: 2000 });
-    await fetchAll();
   } catch (e) {
     toast.push({ severity: "error", summary: "Delete failed", detail: String(e), life: 4000 });
   }
@@ -319,32 +314,26 @@ function unwrap(rows: LibraryRow[]): AnyRow[] {
   return rows.map((r) => r.source);
 }
 
-/** Bulk handlers refetch after running so the synthesized view reflects
- *  server-side state — moduleStore/bundleStore mutations don't flow
- *  through this view's `localModules` / `localBundles` refs. */
+/** Bulk handlers run through the module / bundle stores, which swap each
+ *  changed row into their catalogs — the arrays this view reads — so no
+ *  refetch is needed after them. */
 async function onBulkFavorite(rows: LibraryRow[], on: boolean) {
   await bulkActions.onBulkFavorite(unwrap(rows), on);
-  await fetchAll();
 }
 async function onBulkDuplicate(rows: LibraryRow[]) {
   await bulkActions.onBulkDuplicate(unwrap(rows));
-  await fetchAll();
 }
 async function onBulkTagAdd(rows: LibraryRow[], tag: string) {
   await bulkActions.onBulkTagAdd(unwrap(rows), tag);
-  await fetchAll();
 }
 async function onBulkTagRemove(rows: LibraryRow[], tag: string) {
   await bulkActions.onBulkTagRemove(unwrap(rows), tag);
-  await fetchAll();
 }
 async function onBulkSetCategory(rows: LibraryRow[], categoryId: string | null) {
   await bulkActions.onBulkSetCategory(unwrap(rows), categoryId);
-  await fetchAll();
 }
 async function onBulkDelete(rows: LibraryRow[]) {
   await bulkActions.onBulkDelete(unwrap(rows));
-  await fetchAll();
 }
 
 function toggleKind(k: LibraryKind) {
@@ -358,10 +347,15 @@ function toggleTag(t: string, current: string[] | undefined): string[] {
   return cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t];
 }
 
-// no-op `emitFetch` — items are already client-side; nothing to
-// refetch when filters change.
+// `emitFetch` from a filter or search change: the rows are already here
+// (`visibleItems` filters them), so there is nothing to fetch.
 function refresh() {
-  void fetchAll();
+  /* nothing to fetch */
+}
+
+/** The Refresh / Retry button. */
+function reload() {
+  void fetchAll(true);
 }
 </script>
 
@@ -384,6 +378,7 @@ function refresh() {
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="refresh"
+    @refresh="reload"
     @clear="urlState.kinds = []"
     @delete="del"
     @bulk-favorite="onBulkFavorite"

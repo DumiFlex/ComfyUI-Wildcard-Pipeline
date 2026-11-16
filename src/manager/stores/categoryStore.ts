@@ -25,15 +25,23 @@ export const useCategoryStore = defineStore("categories", () => {
    *  re-fetches what some page has already loaded. */
   const listed = ref(false);
 
-  async function fetchAll() {
+  /** A page mounting while AppLayout's boot fetch runs shares that request. */
+  let inflight: Promise<void> | null = null;
+  function fetchAll(): Promise<void> {
+    if (inflight) return inflight;
     loading.value = true;
-    try {
-      const res = await api.categories.list();
-      items.value = res.items.map(clean);
-      listed.value = true;
-    } finally {
-      loading.value = false;
-    }
+    const p = (async () => {
+      try {
+        const res = await api.categories.list();
+        items.value = res.items.map(clean);
+        listed.value = true;
+      } finally {
+        loading.value = false;
+        inflight = null;
+      }
+    })();
+    inflight = p;
+    return p;
   }
 
   async function create(body: CategoryCreateInput) {

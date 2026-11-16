@@ -1,8 +1,9 @@
 import { markDeleted } from "../composables/useLibraryChanged";
 import { defineStore } from "pinia";
-import { reactive, ref } from "vue";
+import { reactive, ref, shallowRef } from "vue";
 import { api } from "../api/client";
 import type { TemplateCreateInput, TemplateRow, TemplateUpdateInput } from "../api/types";
+import { createLibraryCache, filterRows, replaceRow } from "./libraryCache";
 
 interface Filter {
   category?: string | null;
@@ -13,37 +14,48 @@ interface Filter {
 }
 
 export const useTemplateStore = defineStore("templates", () => {
-  const items = ref<TemplateRow[]>([]);
-  const catalog = ref<TemplateRow[]>([]);
+  /** Every template (see `libraryCache.ts`: shallow, replaced on change). */
+  const cache = createLibraryCache<TemplateRow>(() => api.templates.list({}));
+  const catalog = cache.rows;
+  const items = shallowRef<TemplateRow[]>([]);
   const loading = ref(false);
   const filter = reactive<Filter>({});
   /** Set once a list view has fetched `items`, so a library refresh only
-   *  re-fetches what some page has already loaded. */
+   *  re-derives what some page has already loaded. */
   const listed = ref(false);
+  let ticket = 0;
 
+  function derive(): void {
+    items.value = filterRows(catalog.value, filter);
+  }
+
+  function setCatalog(next: TemplateRow[]): void {
+    cache.set(next);
+    if (listed.value) derive();
+  }
+
+  /** The Templates page's rows for `filter`, filtered on the client (see
+   *  `moduleStore.fetchAll`). */
   async function fetchAll() {
-    loading.value = true;
+    const mine = ++ticket;
+    if (!cache.loaded.value) loading.value = true;
     try {
-      const params: Record<string, string | boolean | undefined> = {};
-      if (filter.category) params.category = filter.category ?? undefined;
-      if (filter.q) params.q = filter.q;
-      if (filter.favorites) params.favorites = true;
-      const res = await api.templates.list(params);
-      items.value = res.items;
+      await cache.ensure();
+      if (mine !== ticket) return;
       listed.value = true;
+      derive();
     } finally {
-      loading.value = false;
+      if (mine === ticket) loading.value = false;
     }
   }
 
   async function fetchCatalog() {
-    loading.value = true;
-    try {
-      const res = await api.templates.list({});
-      catalog.value = res.items;
-    } finally {
-      loading.value = false;
-    }
+    await cache.refresh();
+    if (listed.value) derive();
+  }
+
+  async function ensureCatalog() {
+    await cache.ensure();
   }
 
   async function get(id: string) {
@@ -52,38 +64,37 @@ export const useTemplateStore = defineStore("templates", () => {
 
   async function create(body: TemplateCreateInput) {
     const row = await api.templates.create(body);
-    items.value.unshift(row);
-    catalog.value = [row, ...catalog.value.filter((i) => i.id !== row.id)];
+    if (!listed.value) items.value = [row, ...items.value];
+    setCatalog([row, ...catalog.value.filter((i) => i.id !== row.id)]);
     return row;
+  }
+
+  function replaced(updated: TemplateRow): void {
+    if (!listed.value) items.value = replaceRow(items.value, updated);
+    setCatalog(replaceRow(catalog.value, updated));
   }
 
   async function update(id: string, body: TemplateUpdateInput) {
     const updated = await api.templates.update(id, body);
-    const i1 = items.value.findIndex((i) => i.id === id);
-    if (i1 >= 0) items.value[i1] = updated;
-    const i2 = catalog.value.findIndex((i) => i.id === id);
-    if (i2 >= 0) catalog.value[i2] = updated;
+    replaced(updated);
     return updated;
   }
 
   async function remove(id: string) {
     await api.templates.delete(id);
     markDeleted([id]);
-    items.value = items.value.filter((i) => i.id !== id);
-    catalog.value = catalog.value.filter((i) => i.id !== id);
+    if (!listed.value) items.value = items.value.filter((i) => i.id !== id);
+    setCatalog(catalog.value.filter((i) => i.id !== id));
   }
 
   async function toggleFavorite(id: string) {
     const updated = await api.templates.favorite(id);
-    const i1 = items.value.findIndex((i) => i.id === id);
-    if (i1 >= 0) items.value[i1] = updated;
-    const i2 = catalog.value.findIndex((i) => i.id === id);
-    if (i2 >= 0) catalog.value[i2] = updated;
+    replaced(updated);
     return updated;
   }
 
   return {
-    items, catalog, loading, filter, listed,
-    fetchAll, fetchCatalog, get, create, update, remove, toggleFavorite,
+    items, catalog, loading, filter, listed, catalogLoaded: cache.loaded,
+    fetchAll, fetchCatalog, ensureCatalog, get, create, update, remove, toggleFavorite,
   };
 });
