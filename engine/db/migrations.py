@@ -18,6 +18,7 @@ import hashlib
 import importlib.util
 import re
 import sqlite3
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -35,6 +36,20 @@ class SchemaAheadError(RuntimeError):
     """
 
 
+#: sha256 per migration file, keyed by (path, size, mtime): the guard below
+#: re-checks every applied migration on each `migrate`, and the files of a
+#: running build don't change. An edited file has a new key, so it is hashed
+#: again.
+_CHECKSUMS: dict[tuple[str, int, int], str] = {}
+#: `_discover()` per migrations folder, keyed by the folder's mtime (adding or
+#: removing a file moves it).
+_DISCOVERED: dict[tuple[str, int], tuple[tuple[int, Path], ...]] = {}
+#: DB files this process has migrated (`migrate_once`), with the version they
+#: were left at.
+_MIGRATED: dict[str, int] = {}
+_MIGRATED_LOCK = threading.Lock()
+
+
 def _checksum(path: Path) -> str:
     """sha256 of a migration file's bytes.
 
@@ -42,7 +57,17 @@ def _checksum(path: Path) -> str:
     runner `exec`s, so any edit at all is a different migration regardless of
     whether the SQL it emits looks the same.
     """
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        st = path.stat()
+        key: tuple[str, int, int] | None = (str(path), st.st_size, st.st_mtime_ns)
+    except OSError:
+        key = None
+    if key is not None and key in _CHECKSUMS:
+        return _CHECKSUMS[key]
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if key is not None:
+        _CHECKSUMS[key] = digest
+    return digest
 
 
 def _migrations_table_exists(conn: sqlite3.Connection) -> bool:
@@ -61,8 +86,15 @@ def current_version(conn: sqlite3.Connection) -> int:
 
 
 def _discover() -> list[tuple[int, Path]]:
+    folder = _SQL_DIR
+    try:
+        key: tuple[str, int] | None = (str(folder), folder.stat().st_mtime_ns)
+    except OSError:
+        key = None
+    if key is not None and key in _DISCOVERED:
+        return list(_DISCOVERED[key])
     pairs: list[tuple[int, Path]] = []
-    for entry in _SQL_DIR.iterdir():
+    for entry in folder.iterdir():
         if not entry.is_file():
             continue
         m = _VERSION_RE.match(entry.name)
@@ -70,6 +102,8 @@ def _discover() -> list[tuple[int, Path]]:
             continue
         pairs.append((int(m.group(1)), entry))
     pairs.sort(key=lambda p: p[0])
+    if key is not None:
+        _DISCOVERED[key] = tuple(pairs)
     return pairs
 
 
@@ -189,6 +223,48 @@ def _backup_if_upgrading(conn: sqlite3.Connection, applied: int) -> None:
     from engine.db.backups import backup_before_migration
 
     backup_before_migration(conn)
+
+
+def _db_file(conn: sqlite3.Connection) -> str:
+    """The resolved file behind ``conn``'s main database ("" in memory)."""
+    for row in conn.execute("PRAGMA database_list;").fetchall():
+        if row[1] == "main":
+            name = row[2] or ""
+            if not name:
+                return ""
+            try:
+                return str(Path(name).resolve())
+            except OSError:
+                return name
+    return ""
+
+
+def migrate_once(conn: sqlite3.Connection) -> None:
+    """`migrate`, once per database file per process.
+
+    The API routes migrate at startup, so a route (or a graph run) that opens
+    the library again only needs to know it is still the database it already
+    migrated: the full `migrate` re-hashes every migration file and re-reads
+    the folder (~14 ms), which the preview used to pay per chain step per
+    keystroke. A file whose version moved since (a restore swapped in an older
+    library, another build ran) is migrated again.
+    """
+    key = _db_file(conn)
+    if key:
+        with _MIGRATED_LOCK:
+            known = _MIGRATED.get(key)
+        if known is not None and current_version(conn) == known:
+            return
+    migrate(conn)
+    if key:
+        with _MIGRATED_LOCK:
+            _MIGRATED[key] = current_version(conn)
+
+
+def forget_migrated() -> None:
+    """Make `migrate_once` run `migrate` again for every file. For tests."""
+    with _MIGRATED_LOCK:
+        _MIGRATED.clear()
 
 
 def migrate(conn: sqlite3.Connection) -> None:

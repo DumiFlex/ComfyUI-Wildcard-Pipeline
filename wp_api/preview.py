@@ -30,14 +30,16 @@ Empty chain or any malformed step → empty resolved map (never 500).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import sqlite3
 from typing import Any, cast
 
 from aiohttp import web
 
 from engine.context import strip_internals
 from engine.db.connection import get_connection
-from engine.db.migrations import migrate
+from engine.db.migrations import migrate_once
 from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.log_once import log_once
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
@@ -78,9 +80,43 @@ def _build_catalog(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return catalog
 
 
+class _LibraryReader:
+    """One library connection for a whole preview request, opened on first
+    use (and migrated once per process, `migrate_once`), closed by `close`.
+    A preview used to open a connection and run the full `migrate` for every
+    chain step of every keystroke."""
+
+    def __init__(self) -> None:
+        self._conn: sqlite3.Connection | None = None
+        self._repo: ModuleRepository | None = None
+        self._failed = False
+
+    def repo(self) -> ModuleRepository | None:
+        if self._repo is None and not self._failed:
+            try:
+                self._conn = get_connection()
+            except Exception:
+                self._failed = True
+                return None
+            try:
+                migrate_once(self._conn)
+                self._repo = ModuleRepository(self._conn)
+            except Exception:
+                self.close()
+                self._failed = True
+        return self._repo
+
+    def close(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+        self._conn = None
+        self._repo = None
+
+
 def _expand_with_db(
     catalog: dict[str, dict[str, Any]],
     modules: list[dict[str, Any]] | None = None,
+    reader: _LibraryReader | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Pull in nested `@{uuid}` refs from the live DB so preview can
     resolve them — mirrors `wp_nodes/context_node.py:_expand_catalog_via_live_db`.
@@ -98,15 +134,10 @@ def _expand_with_db(
     seeds = ref_seed_uuids(modules)
     if not catalog and not seeds:
         return catalog
-    try:
-        conn = get_connection()
-    except Exception:
-        return catalog
-    try:
-        migrate(conn)
-        repo = ModuleRepository(conn)
-    except Exception:
-        conn.close()
+    own = reader is None
+    lib = reader if reader is not None else _LibraryReader()
+    repo = lib.repo()
+    if repo is None:
         return catalog
 
     def _fetch(uuid: str) -> dict[str, Any] | None:
@@ -131,7 +162,8 @@ def _expand_with_db(
         walk = walk_transitive_refs(roots, fetch_module=_fetch)
     finally:
         # Every preview request used to leave this connection open.
-        conn.close()
+        if own:
+            lib.close()
     return cast("dict[str, dict[str, Any]]", walk.snapshots)
 
 
@@ -174,31 +206,41 @@ async def resolve_preview(request: web.Request) -> web.Response:
             ok = isinstance(v, int) and not isinstance(v, bool)
             step_seeds.append((v & MAX_SAFE_SEED) if ok else seed)
 
+    # The engine run reads the library and rolls every step: off the event
+    # loop, since previews run on every keystroke.
+    return json_ok(await asyncio.to_thread(_resolve, chain, seed, step_seeds))
+
+
+def _resolve(chain: list[Any], seed: int, step_seeds: list[int]) -> dict[str, Any]:
     # Walk chain steps upstream → downstream; each step's modules run
     # in their own PipelineEngine.run() with its step seed. Earlier
     # ctx feeds the next step as upstream. Catalog accumulates wildcards
     # from every step + their nested refs from the live DB.
     ctx: dict[str, Any] = {}
     accum_catalog: dict[str, dict[str, Any]] = {}
-    for i, step in enumerate(chain):
-        if not isinstance(step, list):
-            continue
-        step_seed = step_seeds[i] if i < len(step_seeds) else seed
-        modules = [m for m in step if isinstance(m, dict)]
-        accum_catalog.update(_build_catalog(modules))
-        # Re-expand each step so newly-introduced wildcards pull their
-        # nested deps too. walk_transitive_refs is idempotent.
-        accum_catalog = _expand_with_db(accum_catalog, modules)
-        ctx["__wp_catalog__"] = accum_catalog
-        try:
-            ctx = PipelineEngine().run(modules, ctx=ctx, seed=step_seed)
-        except Exception as e:
-            # Previews run on every keystroke: one traceback per distinct error.
-            log_once(logger, logging.ERROR, ("preview", type(e).__name__, str(e)),
-                     "preview resolve: pipeline run failed", exc_info=True)
-            # Don't return 500 — the user is just typing. Surface
-            # whatever we resolved up to this point.
-            break
+    reader = _LibraryReader()
+    try:
+        for i, step in enumerate(chain):
+            if not isinstance(step, list):
+                continue
+            step_seed = step_seeds[i] if i < len(step_seeds) else seed
+            modules = [m for m in step if isinstance(m, dict)]
+            accum_catalog.update(_build_catalog(modules))
+            # Re-expand each step so newly-introduced wildcards pull their
+            # nested deps too. walk_transitive_refs is idempotent.
+            accum_catalog = _expand_with_db(accum_catalog, modules, reader)
+            ctx["__wp_catalog__"] = accum_catalog
+            try:
+                ctx = PipelineEngine().run(modules, ctx=ctx, seed=step_seed)
+            except Exception as e:
+                # Previews run on every keystroke: one traceback per distinct error.
+                log_once(logger, logging.ERROR, ("preview", type(e).__name__, str(e)),
+                         "preview resolve: pipeline run failed", exc_info=True)
+                # Don't return 500 — the user is just typing. Surface
+                # whatever we resolved up to this point.
+                break
+    finally:
+        reader.close()
 
     # The rolled `accepts` axes ride alongside, keyed by binding exactly as
     # `__wp_axes__` stores them. `strip_internals` drops that table, and
@@ -208,11 +250,11 @@ async def resolve_preview(request: web.Request) -> web.Response:
     # Send-to-negative: each variable's negatives, so the Assembler preview
     # can build its negative locally from whatever its template uses.
     negs = ctx.get("__wp_negatives__")
-    return json_ok({
+    return {
         "resolved": _jsonify_resolved(strip_internals(ctx)),
         "axes": axes if isinstance(axes, dict) else {},
         "negatives": negs if isinstance(negs, dict) else {},
-    })
+    }
 
 
 def register(router) -> None:

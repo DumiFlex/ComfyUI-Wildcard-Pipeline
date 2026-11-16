@@ -10,7 +10,7 @@ from aiohttp import web
 
 from engine.db import backups as _db_backups
 from engine.db.connection import get_connection
-from engine.db.migrations import migrate
+from engine.db.migrations import migrate_once
 from engine.db.pending_move import execute_pending_move
 from wp_api import ai as _ai
 from wp_api import bundles as _bundles
@@ -88,10 +88,13 @@ async def _startup_id_middleware(request: web.Request, handler):
 
 
 def _ensure_db_migrated() -> None:
-    """Run pending migrations on the configured DB. Idempotent."""
+    """Run pending migrations on the configured DB. Idempotent.
+
+    Through `migrate_once`, so later opens of the same file in this process
+    (the preview route, graph runs) skip the full re-check."""
     conn = get_connection()
     try:
-        migrate(conn)
+        migrate_once(conn)
     finally:
         conn.close()
 
