@@ -29,6 +29,14 @@ and never moves the dock or a jump.
    through parents that take the pointer); only a piece spanning at least
    half of that edge is a bar. A smaller one (a floating run bar near an
    edge) is a box to keep clear of, not a bar across the whole edge.
+   Each probe is a hit test of every node under the point (about 3 ms on a
+   120-node Nodes 2.0 graph in Chromium), so: `coverAt` asks only for the top
+   element (`elementFromPoint`) and takes the canvas or graph content there
+   as free, asking for the whole stack only under our dock or toasts or a
+   transient piece; the walk probes every 12 px and looks at the point
+   between only past a bar; and the result is cached by `walkKey` (window,
+   canvas box, pane frame, overlays) and warmed in an idle callback from the
+   dock's poll (`warmFreeArea`). `forgetFreeArea()` drops it.
 
 `IGNORED` = `GRAPH_CONTENT` (nodes, DOM widgets, our dock and toasts, the
 selection toolbox) + `TRANSIENT` (see below). Both the pane walk and the

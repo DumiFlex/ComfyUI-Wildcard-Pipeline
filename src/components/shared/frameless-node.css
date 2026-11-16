@@ -40,6 +40,16 @@
   .lg-node:has(.wp-frameless) [class*="component-node-background"] > div.text-muted-foreground,
   .lg-node:has(.wp-frameless) .bg-node-component-surface { display: none !important; }
   .lg-node:has(.wp-frameless) > div.absolute.border:not([data-testid]) { display: none !important; }
+  /* Frontend 1.58+: the card's shadow is a `drop-shadow` filter, the body
+     (`node-body-<id>`) carries the background and its own padding, and the
+     source badge row is its `mt-auto` child. */
+  .lg-node:has(.wp-frameless) { filter: none !important; }
+  .lg-node:has(.wp-frameless) [data-testid^="node-body-"] {
+    background: transparent !important;
+    padding: 0 !important;
+    row-gap: 0 !important;
+  }
+  .lg-node:has(.wp-frameless) [data-testid^="node-body-"] > .mt-auto { display: none !important; }
   /* A bookmark sizes itself: no resize corners (the node class says so too;
      this covers a frontend that draws them anyway). */
   .lg-node:has(.wp-bm) [role="button"][data-corner],

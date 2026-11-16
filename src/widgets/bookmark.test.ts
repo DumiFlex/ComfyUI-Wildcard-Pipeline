@@ -5,7 +5,9 @@ import { defaultBookmarkConfig, type BookmarkConfig } from "../extension/bookmar
 import {
   BOOKMARK_NODE_TYPE,
   dockLayoutKey,
-  freeArea,
+  forgetFreeArea,
+  warmFreeArea,
+  freeArea as cachedFreeArea,
   installBookmarkKeys,
   installHiddenFilter,
   jumpBack,
@@ -22,6 +24,12 @@ import {
 import { probeCombo } from "../extension/key-probe";
 
 type Graph = { _nodes: unknown[] };
+
+/** A fresh scan each time: the edge walk is cached while the layout holds. */
+function freeArea(c: Element | undefined): ReturnType<typeof cachedFreeArea> {
+  forgetFreeArea();
+  return cachedFreeArea(c);
+}
 
 function bookmark(id: number, title: string, cfg: Partial<BookmarkConfig>, graph: Graph, mode = 0): BookmarkNode {
   let config: BookmarkConfig = { ...defaultBookmarkConfig(), ...cfg };
@@ -87,6 +95,31 @@ describe("WP Bookmark runtime", () => {
     expect(canvas.ds.offset).toEqual([5, 6]);
     expect(canvas.ds.scale).toBe(0.5);
     expect(jumpBack()).toBe(false);
+  });
+
+  it("glides and holds Nodes 2.0's node layer while it moves", () => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
+    document.body.classList.remove("wp-a11y-no-motion");
+    const pane = document.createElement("div");
+    pane.dataset.testid = "transform-pane";
+    document.body.appendChild(pane);
+    try {
+      const b = bookmark(1, "B", { anchor: "tl", zoom: 2 }, root);
+      jumpTo(b);
+      expect(pane.style.willChange).toBe("transform");
+      vi.advanceTimersByTime(120);
+      expect(canvas.ds.scale).toBeGreaterThan(1);
+      expect(canvas.ds.scale).toBeLessThan(2);
+      expect(pane.style.willChange).toBe("transform");
+      vi.advanceTimersByTime(1000);
+      expect(canvas.ds.scale).toBe(2);
+      expect((1000 + ox()) * 2).toBeCloseTo(24);
+      expect(pane.style.willChange).toBe("");
+    } finally {
+      pane.remove();
+      document.body.classList.add("wp-a11y-no-motion");
+    }
   });
 
   it("opens the bookmark's subgraph before jumping", () => {
@@ -505,6 +538,111 @@ describe("The free area only follows the host's layout", () => {
       expect(freeArea(cv).free[1]).toBeGreaterThanOrEqual(80);
     } finally {
       document.elementsFromPoint = orig;
+    }
+  });
+
+  it("finds a bar's far edge to the step while probing every other point", () => {
+    layout(48);
+    for (const edge of [80, 86, 90]) {
+      const bar = el("div", [8, 48, 1592, edge]);
+      const orig = document.elementsFromPoint;
+      document.elementsFromPoint = (_x: number, y: number): Element[] => (y <= edge ? [bar, cv] : [cv]);
+      try {
+        const top = freeArea(cv).free[1];
+        expect(top).toBeGreaterThanOrEqual(edge);
+        expect(top).toBeLessThanOrEqual(edge + 6);
+      } finally {
+        document.elementsFromPoint = orig;
+        bar.remove();
+      }
+    }
+  });
+
+  it("settles a point from the top element alone when it is the canvas or graph content", () => {
+    layout(48);
+    const node = el("div", [300, 300, 700, 700]);
+    node.className = "lg-node";
+    const origAll = document.elementsFromPoint;
+    const origTop = document.elementFromPoint;
+    let stacks = 0;
+    document.elementsFromPoint = (): Element[] => { stacks++; return [cv]; };
+    document.elementFromPoint = (x: number, y: number): Element | null =>
+      x >= 300 && x <= 700 && y >= 300 && y <= 700 ? node : cv;
+    try {
+      expect(freeArea(cv).free[1]).toBe(48);
+      expect(stacks).toBe(0);
+    } finally {
+      document.elementsFromPoint = origAll;
+      document.elementFromPoint = origTop;
+    }
+  });
+
+  it("asks for the whole stack under our dock, which floats over the host's bars", () => {
+    layout(48);
+    const bar = el("div", [8, 48, 1592, 80]);
+    const dock = el("div", [8, 48, 400, 300]);
+    dock.id = "wp-bookmark-dock-root";
+    const origAll = document.elementsFromPoint;
+    const origTop = document.elementFromPoint;
+    document.elementFromPoint = (x: number, y: number): Element | null =>
+      x <= 400 && y <= 300 ? dock : y <= 80 ? bar : cv;
+    document.elementsFromPoint = (x: number, y: number): Element[] =>
+      [...(x <= 400 && y <= 300 ? [dock] : []), ...(y <= 80 ? [bar] : []), cv];
+    try {
+      expect(freeArea(cv).free[1]).toBeGreaterThanOrEqual(80);
+    } finally {
+      document.elementsFromPoint = origAll;
+      document.elementFromPoint = origTop;
+    }
+  });
+
+  it("reuses the edge walk while the layout holds, and walks again when it moves", () => {
+    layout(48);
+    const orig = document.elementsFromPoint;
+    let calls = 0;
+    document.elementsFromPoint = (): Element[] => { calls++; return [cv]; };
+    try {
+      forgetFreeArea();
+      const first = cachedFreeArea(cv);
+      const walked = calls;
+      expect(walked).toBeGreaterThan(0);
+      expect(cachedFreeArea(cv)).toEqual(first);
+      expect(calls).toBe(walked);
+      // The side panel opens: the pane narrows, so the walk runs again.
+      pane.getBoundingClientRect = (): DOMRect =>
+        ({ left: 300, top: 48, right: 1592, bottom: 892, width: 1292, height: 844, x: 300, y: 48, toJSON: () => ({}) }) as DOMRect;
+      expect(cachedFreeArea(cv).free[0]).toBe(300);
+      expect(calls).toBeGreaterThan(walked);
+    } finally {
+      document.elementsFromPoint = orig;
+    }
+  });
+
+  it("warms the walk when the browser is idle, once per layout", () => {
+    layout(48);
+    const orig = document.elementsFromPoint;
+    const g = globalThis as { requestIdleCallback?: unknown };
+    const origIdle = g.requestIdleCallback;
+    const queued: (() => void)[] = [];
+    g.requestIdleCallback = (cb: () => void): number => queued.push(cb);
+    let calls = 0;
+    document.elementsFromPoint = (): Element[] => { calls++; return [cv]; };
+    try {
+      forgetFreeArea();
+      warmFreeArea(cv);
+      warmFreeArea(cv);
+      expect(queued).toHaveLength(1);
+      expect(calls).toBe(0);
+      queued[0]?.();
+      expect(calls).toBeGreaterThan(0);
+      const walked = calls;
+      warmFreeArea(cv);
+      expect(queued).toHaveLength(1);
+      cachedFreeArea(cv);
+      expect(calls).toBe(walked);
+    } finally {
+      document.elementsFromPoint = orig;
+      g.requestIdleCallback = origIdle;
     }
   });
 

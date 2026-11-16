@@ -275,6 +275,26 @@ export function easeInOutQuad(t: number): number {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 }
 
+/** A softer ease-in-out for jumps: slower to leave and to arrive than
+ *  `easeInOutQuad`, so a long move reads as one glide. */
+export function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+/** Shortest and longest jump, in ms. */
+export const JUMP_MIN_MS = 260;
+export const JUMP_MAX_MS = 520;
+
+/** How long a jump takes: longer the farther the view travels (`distance`,
+ *  screen px) and the more the zoom changes (`zoomRatio`, new / old), so a
+ *  short hop stays quick and a trip across the graph doesn't snap. */
+export function jumpDuration(distance: number, zoomRatio: number): number {
+  const zoom = Number.isFinite(zoomRatio) && zoomRatio > 0 ? Math.abs(Math.log2(zoomRatio)) : 0;
+  const travel = Number.isFinite(distance) ? Math.max(0, distance) : 0;
+  const ms = JUMP_MIN_MS + 0.12 * travel + 120 * zoom;
+  return Math.round(Math.min(JUMP_MAX_MS, Math.max(JUMP_MIN_MS, ms)));
+}
+
 // ── shortcut combos ───────────────────────────────────────────────────
 
 /** The parts of a key combo, in ComfyUI's model (Meta counts as Ctrl). */

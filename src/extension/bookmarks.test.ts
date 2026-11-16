@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  easeInOutCubic,
+  jumpDuration,
+  JUMP_MAX_MS,
+  JUMP_MIN_MS,
   BOOKMARK_ANCHORS,
   clearOf,
   comboFromEvent,
@@ -182,5 +186,23 @@ describe("parseCombo", () => {
     expect(parseCombo("Ctrl+Shift+K")).toEqual({ key: "K", ctrl: true, alt: false, shift: true });
     expect(parseCombo("alt + 1")).toEqual({ key: "1", ctrl: false, alt: true, shift: false });
     expect(parseCombo("")).toBeNull();
+  });
+});
+
+describe("jump timing", () => {
+  it("eases in and out without overshoot", () => {
+    expect(easeInOutCubic(0)).toBe(0);
+    expect(easeInOutCubic(0.5)).toBeCloseTo(0.5);
+    expect(easeInOutCubic(1)).toBe(1);
+    for (let t = 0; t < 1; t += 0.05) expect(easeInOutCubic(t + 0.05)).toBeGreaterThanOrEqual(easeInOutCubic(t));
+  });
+
+  it("takes longer the farther it goes and the more it zooms, within bounds", () => {
+    expect(jumpDuration(0, 1)).toBe(JUMP_MIN_MS);
+    expect(jumpDuration(800, 1)).toBeGreaterThan(jumpDuration(100, 1));
+    expect(jumpDuration(100, 4)).toBeGreaterThan(jumpDuration(100, 1));
+    expect(jumpDuration(100, 0.25)).toBe(jumpDuration(100, 4));
+    expect(jumpDuration(1e6, 64)).toBe(JUMP_MAX_MS);
+    expect(jumpDuration(Number.NaN, 0)).toBe(JUMP_MIN_MS);
   });
 });
