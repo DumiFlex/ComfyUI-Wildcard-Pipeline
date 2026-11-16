@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
-import { computed, onMounted, ref, watch } from "vue";
-import { libraryVersion } from "../composables/useLibraryChanged";
+import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import Button from "@/kit/Button.vue";
 import Card from "@/kit/Card.vue";
 import Icon, { ICON_SM } from "@/kit/Icon.vue";
 import RelativeDate from "@/kit/RelativeDate.vue";
-import { api } from "../api/client";
 import type { BundleRow, CategoryRow, ModuleRow, ModuleType } from "../api/types";
 import { useCategoryStore } from "../stores/categoryStore";
 import Chip from "@/kit/Chip.vue";
@@ -72,20 +70,6 @@ const bundleStore = useBundleStore();
  *  scroll on typical viewports while still capping client-side merge work. */
 const DASHBOARD_LIST_CAP = 10;
 
-const counts = ref<Record<string, number>>({
-  wildcard: 0,
-  fixed_values: 0,
-  combine: 0,
-  derivation: 0,
-  constraint: 0,
-  bundle: 0,
-});
-
-/** Last edited timestamp per kind — surfaced under the stat tile's count
- *  so the dashboard answers "what changed recently" without scrolling
- *  to the Recent edits tab. Empty string means "never", which renders
- *  as a hyphen via the RelativeDate empty path. */
-const lastEditByKind = ref<Record<string, string>>({});
 
 /** Normalised recent/favorite entry. Bundles + modules feed into the
  *  same list so users see edits across both surfaces ordered by recency. */
@@ -100,8 +84,6 @@ interface DashboardRow {
   icon: string;
 }
 
-const recentItems = ref<DashboardRow[]>([]);
-const favoriteItems = ref<DashboardRow[]>([]);
 const tab = ref<"recent" | "opened" | "favorites">("opened");
 const RECENT_TABS: SegmentedOption<"recent" | "opened" | "favorites">[] = [
   { value: "opened", label: "Recently opened", icon: "pi-history" },
@@ -135,14 +117,6 @@ function newOfKind(slug: string) {
 const totalItems = computed<number>(() =>
   Object.values(counts.value).reduce((sum, n) => sum + n, 0),
 );
-/** The counts start at 0, so until they land every library looks new and
- *  the intro card flashed for everyone. */
-const countsLoaded = ref(false);
-// The server lists land after first paint: until then the Recent edits and
-// Favorites tabs draw row skeletons instead of "No edits yet." (the
-// Recently opened tab is local, so it never waits).
-const recentLoaded = ref(false);
-const favoritesLoaded = ref(false);
 const listLoading = computed<boolean>(() =>
   (tab.value === "recent" && !recentLoaded.value) || (tab.value === "favorites" && !favoritesLoaded.value));
 const showGettingStarted = computed<boolean>(() => countsLoaded.value && totalItems.value < 3);
@@ -297,96 +271,72 @@ function bundleToRow(b: BundleRow): DashboardRow {
   };
 }
 
-async function loadCounts() {
-  // Fetch one record per kind in parallel; both api.modules.list and
-  // api.bundles.list expose `total` on the response. Requesting limit:1
-  // sorted by updated_at desc gives us count + most-recent edit in a
-  // single round-trip per kind.
-  await Promise.all(
-    KIND_META.map(async (k) => {
-      try {
-        if (k.key === "bundle") {
-          const res = await api.bundles.list({ limit: 1 });
-          counts.value.bundle = res.total ?? res.items.length;
-          lastEditByKind.value.bundle = res.items[0]?.updated_at ?? "";
-        } else if (k.type) {
-          const res = await api.modules.list({ type: k.type, limit: 1 });
-          counts.value[k.key] = res.total ?? res.items.length;
-          lastEditByKind.value[k.key] = res.items[0]?.updated_at ?? "";
-        }
-      } catch {
-        counts.value[k.key] = 0;
-        lastEditByKind.value[k.key] = "";
-      }
-    }),
-  );
-  countsLoaded.value = true;
+/** Newest first, by `updated_at` (unparseable dates last). */
+function byUpdatedDesc(a: { updated_at: string }, b: { updated_at: string }): number {
+  return (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0);
 }
 
-async function loadRecent() {
-  // Pull both sources in parallel, normalise, sort by updated_at desc,
-  // take the top 5. Server-side recency endpoint doesn't exist; we
-  // ask for 50 of each and merge client-side which is plenty for the
-  // 5-row preview surface.
-  try {
-    const [modRes, bundleRes] = await Promise.all([
-      api.modules.list({ limit: 50 }),
-      api.bundles.list({ limit: 50 }),
-    ]);
-    const rows: DashboardRow[] = [
-      ...modRes.items.map(moduleToRow),
-      ...bundleRes.items.map(bundleToRow),
-    ];
-    rows.sort((a, b) => {
-      const ta = Date.parse(a.updated_at || "") || 0;
-      const tb = Date.parse(b.updated_at || "") || 0;
-      return tb - ta;
-    });
-    recentItems.value = rows.slice(0, DASHBOARD_LIST_CAP);
-  } catch {
-    recentItems.value = [];
-  }
-  recentLoaded.value = true;
-}
+// Counts, last edits, Recent edits and Favorites all come from the module
+// and bundle catalogs AppLayout loads at boot (and keeps current on every
+// library change), instead of eleven requests of the dashboard's own.
+const counts = computed<Record<string, number>>(() => {
+  const out: Record<string, number> = {
+    wildcard: 0, fixed_values: 0, combine: 0, derivation: 0, constraint: 0, bundle: 0,
+  };
+  for (const m of moduleStore.catalog) if (m.type in out) out[m.type] += 1;
+  out.bundle = bundleStore.catalog.length;
+  return out;
+});
 
-async function loadFavorites() {
-  try {
-    const [modRes, bundleRes] = await Promise.all([
-      api.modules.list({ favorites: true, limit: DASHBOARD_LIST_CAP }),
-      api.bundles.list({ favorites: true, limit: DASHBOARD_LIST_CAP }),
-    ]);
-    const rows: DashboardRow[] = [
-      ...modRes.items.map(moduleToRow),
-      ...bundleRes.items.map(bundleToRow),
-    ];
-    rows.sort((a, b) => {
-      const ta = Date.parse(a.updated_at || "") || 0;
-      const tb = Date.parse(b.updated_at || "") || 0;
-      return tb - ta;
-    });
-    favoriteItems.value = rows.slice(0, DASHBOARD_LIST_CAP);
-  } catch {
-    favoriteItems.value = [];
-  }
-  favoritesLoaded.value = true;
-}
+/** Last edited timestamp per kind — surfaced under the stat tile's count
+ *  so the dashboard answers "what changed recently" without scrolling
+ *  to the Recent edits tab. Empty string means "never", which renders
+ *  as a hyphen via the RelativeDate empty path. */
+const lastEditByKind = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {};
+  const note = (kind: string, at: string) => {
+    if (!at) return;
+    if (!out[kind] || (Date.parse(at) || 0) > (Date.parse(out[kind]) || 0)) out[kind] = at;
+  };
+  for (const m of moduleStore.catalog) note(m.type, m.updated_at);
+  for (const b of bundleStore.catalog) note("bundle", b.updated_at);
+  return out;
+});
+
+const libraryRows = computed<{ row: DashboardRow; favorite: boolean }[]>(() => [
+  ...moduleStore.catalog.map((m) => ({ row: moduleToRow(m), favorite: !!m.is_favorite })),
+  ...bundleStore.catalog.map((b) => ({ row: bundleToRow(b), favorite: !!b.is_favorite })),
+]);
+const recentItems = computed<DashboardRow[]>(() =>
+  libraryRows.value.map((r) => r.row).sort(byUpdatedDesc).slice(0, DASHBOARD_LIST_CAP));
+const favoriteItems = computed<DashboardRow[]>(() =>
+  libraryRows.value.filter((r) => r.favorite).map((r) => r.row).sort(byUpdatedDesc)
+    .slice(0, DASHBOARD_LIST_CAP));
+
+/** The counts start at 0, so until they land every library looks new and
+ *  the intro card flashed for everyone. */
+const countsLoaded = computed(() => moduleStore.catalogLoaded && bundleStore.catalogLoaded);
+// Until the catalogs land the Recent edits and Favorites tabs draw row
+// skeletons instead of "No edits yet." (the Recently opened tab is local, so
+// it never waits).
+const recentLoaded = countsLoaded;
+const favoritesLoaded = countsLoaded;
 
 const refreshing = ref(false);
-async function refresh() {
+/** `fresh` (the Refresh button) fetches the catalogs again; opening the page
+ *  uses the copies AppLayout loaded. */
+async function refresh(fresh = false) {
   refreshing.value = true;
   try {
     await Promise.all([
-      loadCounts(),
-      loadRecent(),
-      loadFavorites(),
+      (fresh ? moduleStore.fetchCatalog() : moduleStore.ensureCatalog()).catch(() => undefined),
+      (fresh ? bundleStore.fetchCatalog() : bundleStore.ensureCatalog()).catch(() => undefined),
       categoryStore.fetchAll().catch(() => undefined),
     ]);
   } finally {
     refreshing.value = false;
   }
 }
-// A delete, undo or chat card changed the library: counts and lists move.
-watch(libraryVersion, () => { void refresh(); });
 // Tell the AI chat what the dashboard shows: the counts, the warnings and
 // the list under the open tab.
 const TAB_LABEL = { opened: "Recently opened", recent: "Recent edits", favorites: "Favorites" } as const;
@@ -438,7 +388,7 @@ onMounted(async () => {
           aria-label="Refresh dashboard"
           :disabled="refreshing"
           :class="{ 'wp-refresh-btn--spin': refreshing }"
-          @click="refresh"
+          @click="refresh(true)"
         >Refresh</Button>
         <Button variant="outline" icon="pi-book" @click="openDocs">Docs</Button>
         <Button variant="primary" icon="pi-plus" data-ai-anchor="new-module" data-ai-label="New module button" @click="newWildcard">New module</Button>

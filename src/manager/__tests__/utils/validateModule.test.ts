@@ -371,3 +371,28 @@ describe("brokenRefLabels", () => {
     expect(brokenRefLabels(undefined, known)).toEqual([]);
   });
 });
+
+describe("validateModule - caching", () => {
+  it("returns the same list for the same row and catalog array, and rechecks against a new array", () => {
+    const target = mkWildcard("bbbb0001", "Target");
+    const row = mkWildcard("aaaa0001", "Uses", { options: [{ id: "o1", value: "@{bbbb0001}", weight: 1 }] });
+    const catalog = [row, target];
+    const first = validateModule(row, catalog);
+    expect(first).toEqual([]);
+    expect(validateModule(row, catalog)).toBe(first);
+    // The stores replace the array on a change: a delete reads as one.
+    const after = validateModule(row, [row]);
+    expect(after.map((i) => i.message)).toEqual(["Option 1: missing ref @{bbbb0001}"]);
+    // A changed row is a new object, so it is checked again too.
+    const edited = { ...row, payload: { options: [{ id: "o1", value: "", weight: 1 }] } };
+    expect(validateModule(edited, catalog).map((i) => i.message)).toEqual(["Option 1: empty value"]);
+  });
+
+  it("validateBundle resolves children against the arrays it is given", () => {
+    const child = mkWildcard("bbbb0001", "Child");
+    const bundle = { id: "cccc0001", name: "B", children: [{ id: "bbbb0001", type: "wildcard" }] } as unknown as BundleRow;
+    const modules = [child];
+    expect(validateBundle(bundle, modules)).toEqual([]);
+    expect(validateBundle(bundle, [])).toHaveLength(1);
+  });
+});

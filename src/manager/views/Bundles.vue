@@ -73,7 +73,7 @@ const categoryOptions = computed(() => categoryFilterOptions(categoryStore.items
 
 onMounted(async () => {
   // moduleStore.catalog feeds the per-row validity check (broken child refs).
-  await Promise.all([fetch(), categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
+  await Promise.all([fetch(), categoryStore.fetchAll(), moduleStore.ensureCatalog()]);
 });
 
 async function fetch() {
@@ -131,7 +131,6 @@ function onBundleCascadeConfirmed(result: { undo_entry_id: string; affected_coun
   // Server already deleted the bundle + (cascade-on) cleaned parent
   // refs. Refetch + rebuild reverse-dep index so the local list +
   // sidebar counts mirror the post-delete state.
-  void store.fetchAll();
   void store.fetchCatalog();
   const count = result.affected_count;
   toast.push({
@@ -261,6 +260,7 @@ function frameColor(row: BundleRow): string {
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="fetch"
+    @refresh="store.fetchCatalog().catch(() => undefined)"
     @delete="del"
     @bulk-favorite="bulk.onBulkFavorite"
     @bulk-tag-add="bulk.onBulkTagAdd"
@@ -376,7 +376,7 @@ function frameColor(row: BundleRow): string {
         />
       </td>
       <td><span class="wp-mono">{{ childCount(row) }}</span></td>
-      <td><ValidityIcon :issues="validateBundle(row as unknown as BundleRow, moduleStore.catalog, store.items)" /></td>
+      <td><ValidityIcon :issues="validateBundle(row as unknown as BundleRow, moduleStore.catalog, store.catalog)" /></td>
     </template>
 
     <template #actions="{ row }">

@@ -7,12 +7,11 @@ import Button from "@/kit/Button.vue";
 import Chip from "@/kit/Chip.vue";
 import { vTooltip } from "@/kit/tooltip";
 import Popover from "@/kit/Popover.vue";
-import UpdateDialog from "../components/UpdateDialog.vue";
 import { DISCORD_INVITE, GITHUB_REPO } from "../config/links";
 import { useBrowserHistory } from "../composables/useBrowserHistory";
 import { useReleaseCheck } from "../composables/useReleaseCheck";
 import { useUiStore } from "../stores/uiStore";
-import { useAiChat } from "../composables/useAiChat";
+import { useAiChatShell } from "../composables/aiChatShell";
 import AiWorking from "../components/ai/AiWorking.vue";
 import { activeAiRequests } from "../api/ai-progress";
 import { aiDebugEnabled, aiDebugUnseen } from "../api/ai-debug";
@@ -25,7 +24,7 @@ import Logo from "@/kit/Logo.vue";
 const ui = useUiStore();
 const tweaks = useTweaksStore();
 const engagement = useEngagementStore();
-const aiChat = useAiChat();
+const aiChat = useAiChatShell();
 /** Something is waiting on the model: shown here on every page, so it's
  *  never a guess whether the AI is still working. The open chat shows its
  *  own line, so it only counts here while the drawer is closed. */
@@ -68,7 +67,10 @@ const repoUrl = GITHUB_REPO;
 // The update pill opens the in-app Update dialog (changelog + one-click
 // update via ComfyUI Manager) rather than linking straight to GitHub.
 const updateDialogOpen = ref(false);
-function openUpdateDialog(): void { updateDialogOpen.value = true; }
+/** Loaded the first time it opens (not needed to boot). */
+const UpdateDialog = defineAsyncComponent(() => import("../components/UpdateDialog.vue"));
+const updateDialogUsed = ref(false);
+function openUpdateDialog(): void { updateDialogOpen.value = true; updateDialogUsed.value = true; }
 
 /** Theme button icon — mirrors prototype (current state, not next). */
 const themeIcon = computed(() => {
@@ -277,7 +279,7 @@ function openPalette(): void {
       <Icon name="pi-cog" />
     </RouterLink>
 
-    <UpdateDialog :open="updateDialogOpen" @close="updateDialogOpen = false" />
+    <UpdateDialog v-if="updateDialogUsed" :open="updateDialogOpen" @close="updateDialogOpen = false" />
   </header>
 </template>
 

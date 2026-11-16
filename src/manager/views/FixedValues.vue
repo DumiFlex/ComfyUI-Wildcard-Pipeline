@@ -150,6 +150,7 @@ function topValues(row: ModuleRow): NamedValue[] { return values(row).slice(0, 4
     @update:page="(v) => urlState.page = v"
     @update:page-size="(v) => urlState.pageSize = v"
     @fetch="fetch"
+    @refresh="store.fetchCatalog().catch(() => undefined)"
     @delete="del"
     @bulk-favorite="bulk.onBulkFavorite"
     @bulk-duplicate="bulk.onBulkDuplicate"

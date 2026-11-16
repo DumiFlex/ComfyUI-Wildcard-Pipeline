@@ -506,7 +506,7 @@ function toggleFallback(o: WildcardOption): void {
 // `serializeTagGroupKinds` live in `components/wildcard-editor/tag-groups`.
 
 onMounted(async () => {
-  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
+  await Promise.all([categoryStore.fetchAll(), moduleStore.ensureCatalog()]);
   if (props.id) {
     try {
       const row = await moduleStore.get(props.id);

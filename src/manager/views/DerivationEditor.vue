@@ -358,7 +358,7 @@ function migrateAction(raw: unknown): DerivationAction {
 }
 
 onMounted(async () => {
-  await Promise.all([categoryStore.fetchAll(), moduleStore.fetchCatalog()]);
+  await Promise.all([categoryStore.fetchAll(), moduleStore.ensureCatalog()]);
   if (props.id) {
     try {
       const row = await moduleStore.get(props.id);

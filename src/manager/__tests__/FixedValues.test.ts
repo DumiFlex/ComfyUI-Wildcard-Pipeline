@@ -19,6 +19,7 @@ vi.mock("../api/client", () => ({
 
 import { api } from "../api/client";
 import FixedValues from "../views/FixedValues.vue";
+import { useModuleStore } from "../stores/moduleStore";
 
 const apiMod = api.modules as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
@@ -46,11 +47,20 @@ function mountView() {
 }
 
 describe("FixedValues.vue", () => {
-  it("filters store by type=fixed_values on mount", async () => {
-    apiMod.list.mockResolvedValue({ items: [], total: 0 });
+  it("shows only fixed_values rows, filtered from the catalog on the client", async () => {
+    const row = (id: string, type: string) => ({
+      id, type, name: id, category_id: null, tags: [], is_favorite: false,
+      payload: {}, version: 1, description: "", created_at: "", updated_at: "",
+    });
+    apiMod.list.mockResolvedValue({ items: [row("mine01", "fixed_values"), row("other1", "wildcard")], total: 2 });
     mountView();
     await flushPromises();
-    expect(apiMod.list).toHaveBeenCalledWith(expect.objectContaining({ type: "fixed_values" }));
+    // One unfiltered catalog fetch, no per-kind request.
+    expect(apiMod.list).toHaveBeenCalledTimes(1);
+    expect(apiMod.list).toHaveBeenCalledWith({});
+    const store = useModuleStore();
+    expect(store.filter.type).toBe("fixed_values");
+    expect(store.items.map((r) => r.id)).toEqual(["mine01"]);
   });
 
   it("renders rows", async () => {

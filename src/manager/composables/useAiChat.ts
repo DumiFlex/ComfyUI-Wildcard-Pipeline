@@ -27,7 +27,7 @@ import { markLibraryChanged } from "./useLibraryChanged";
 import { computed, nextTick, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
 import type {
-  AiChatStep, AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatStatusEvent, AiChatPage, AiChatProposal, AiChatResult,
+  AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatStatusEvent, AiChatPage, AiChatProposal, AiChatResult,
   AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall, AiAskAnswer, AiAskAnswered, AiAskQuestion,
   ModuleUpdateInput,
 } from "../api/types";
@@ -44,6 +44,9 @@ import { cardOptions, draftRoute, draftType, withoutOptions } from "./aiCards";
 import { MAX_IMAGES, prepareImage, type ChatImage } from "../utils/chat-image";
 import { isWebCall } from "../utils/web-calls";
 import { withMentionIds, withMentionLabels } from "../utils/chat-completions";
+import { chatInput, chatLive, chatLoading, chatOpen, EMPTY_LIVE } from "./aiChatShell";
+
+export type { LiveAnswer } from "./aiChatShell";
 
 /** The user's answer to a web search the model asked for. */
 export type SearchApproval = "once" | "chat" | "deny";
@@ -86,15 +89,17 @@ export type AskCall = Extract<AiPendingCall, { tool: "ask" }>;
 
 export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
 
-const open = ref(false);
-const input = ref("");
+// Shared with the app shell (`aiChatShell.ts`), which reads them without
+// loading this module.
+const open = chatOpen;
+const input = chatInput;
 /** A question a page asked for (`ask`); the drawer sends it with its page
  *  context as soon as it is open. */
 const queued = ref("");
 const entries = shallowRef<ChatEntry[]>([]);
 /** Most cards auto-apply applies from one answer. */
 const MAX_AUTO = 20;
-const loading = ref(false);
+const loading = chatLoading;
 const error = ref("");
 /** The composer holds the last message, edited: Send runs it again in
  *  place of the old one (`editLast`). */
@@ -112,21 +117,7 @@ const asking = shallowRef<ReadonlySet<string>>(new Set());
 const approvals = new Map<string, (choice: SearchApproval | null) => void>();
 /** Page tools running now (their labels), for the status line. */
 const running = ref("");
-/** The answer being written: its text so far, what the model is doing,
- *  and the steps it has taken. Cleared when the answer arrives. */
-export interface LiveAnswer {
-  text: string;
-  status: string;
-  thinking: boolean;
-  steps: AiChatStep[];
-  /** The step's reasoning so far, while it streams. */
-  thought?: string;
-  /** When the step was asked, while the model has sent nothing back
-   *  (busy with another request, loading, or reading the prompt). */
-  waitingSince?: number;
-}
-const EMPTY_LIVE: LiveAnswer = { text: "", status: "", thinking: false, steps: [] };
-const live = shallowRef<LiveAnswer>(EMPTY_LIVE);
+const live = chatLive;
 /** How full the model's window is (from the last answer). */
 const context = ref<AiChatContext | null>(null);
 const compacting = ref(false);

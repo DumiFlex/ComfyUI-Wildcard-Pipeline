@@ -122,7 +122,10 @@ describe("Dashboard.vue", () => {
   });
 
   it("renders the Recents tabs when the library has items", async () => {
-    apiMod.list.mockResolvedValue({ items: [], total: 5 });
+    apiMod.list.mockResolvedValue({
+      items: [1, 2, 3, 4, 5].map((n) => ({ id: `w000000${n}`, type: "wildcard", name: `w${n}`, updated_at: "", is_favorite: false })),
+      total: 5,
+    });
     apiBundles.list.mockResolvedValue({ items: [], total: 0 });
     const wrap = mountView();
     await flushPromises();
@@ -130,9 +133,10 @@ describe("Dashboard.vue", () => {
     expect(wrap.find('[data-test="dashboard-tab-opened"]').exists()).toBe(true);
     // Default tab is Recently opened — empty-state copy.
     expect(wrap.text()).toContain("No recently opened items yet");
-    // Switch to Recent edits tab and confirm its empty-state copy.
+    // Recent edits lists the catalog's rows (no request of its own).
     await wrap.get('[data-test="dashboard-tab-recent"]').trigger("click");
-    expect(wrap.text()).toContain("No edits yet.");
+    expect(wrap.text()).toContain("w1");
+    expect(apiMod.list).toHaveBeenCalledTimes(1);
     // Switch to Favorites tab and confirm its empty-state copy.
     await wrap.get('[data-test="dashboard-tab-favorites"]').trigger("click");
     expect(wrap.text()).toContain("No favorites yet.");

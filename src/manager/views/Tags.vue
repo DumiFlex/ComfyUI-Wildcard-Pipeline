@@ -55,14 +55,14 @@ const COLUMNS: DataColumn<LibraryTagCount>[] = [
 /** Unsorted keeps the library order (most used first). */
 const sort = ref<DataSort | null>(null);
 
-async function refresh() {
+/** Opening the page reads the stores' copies (`fresh` false); a tag edit
+ *  here fetches them again. */
+async function refresh(fresh = true) {
   loading.value = true;
   try {
-    await Promise.all([
-      moduleStore.fetchCatalog(),
-      bundleStore.fetchCatalog(),
-      templateStore.fetchCatalog(),
-    ]);
+    await Promise.all(fresh
+      ? [moduleStore.fetchCatalog(), bundleStore.fetchCatalog(), templateStore.fetchCatalog()]
+      : [moduleStore.ensureCatalog(), bundleStore.ensureCatalog(), templateStore.ensureCatalog()]);
   } catch (e) {
     reportError(e, "Refresh failed");
   } finally {
@@ -70,7 +70,7 @@ async function refresh() {
   }
 }
 
-onMounted(refresh);
+onMounted(() => refresh(false));
 
 function reportError(e: unknown, summary: string) {
   const msg = e instanceof ApiError ? e.message : String(e);
@@ -214,7 +214,7 @@ registerPageNote(() => {
           data-ai-label="Refresh button"
           :disabled="loading"
           :class="{ 'wp-refresh-btn--spin': loading }"
-          @click="refresh"
+          @click="refresh()"
         >Refresh</Button>
       </div>
     </div>

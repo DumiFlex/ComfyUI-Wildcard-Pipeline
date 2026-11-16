@@ -11,6 +11,7 @@ import SearchInput from "@/kit/SearchInput.vue";
 import WpSegmented, { type SegmentedOption } from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import ProgressBar from "@/kit/ProgressBar.vue";
+import Pagination from "@/kit/Pagination.vue";
 import Banner from "@/kit/Banner.vue";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -128,6 +129,19 @@ const groups = computed<Group[]>(() => {
     .map((check) => ({ check, rows: shown.filter((f) => f.check === check.id) }))
     .filter((g) => g.rows.length > 0);
 });
+
+/** Rows a group draws until "Load more": a big library has hundreds of
+ *  findings, and drawing them all (with their buttons) built ~22k nodes and
+ *  a 2 s long task on a mid laptop. Search and filters still cover them all. */
+const GROUP_PAGE = 25;
+const shownCount = ref<Record<string, number>>({});
+function shownRows(g: Group): HealthFinding[] {
+  return g.rows.slice(0, shownCount.value[g.check.id] ?? GROUP_PAGE);
+}
+function showMore(g: Group): void {
+  const now = shownCount.value[g.check.id] ?? GROUP_PAGE;
+  shownCount.value = { ...shownCount.value, [g.check.id]: now + GROUP_PAGE * 4 };
+}
 
 const COLUMNS: DataColumn<HealthFinding>[] = [
   { key: "item", label: "Item", width: "240px" },
@@ -290,7 +304,7 @@ function reportError(e: unknown, summary: string): void {
 onMounted(() => {
   // The first visit's ensure() starts a scan; later visits check again.
   if (!health.ensure()) void health.refresh();
-  if (!bundleStore.catalog.length) void bundleStore.fetchCatalog().catch(() => {});
+  if (!bundleStore.catalog.length) void bundleStore.ensureCatalog().catch(() => {});
 });
 
 registerPageNote(() => {
@@ -385,6 +399,7 @@ registerPageNote(() => {
         v-for="g in groups"
         :key="g.check.id"
         boxed
+        lazy
         :default-open="g.check.severity !== 'tidy' || groups.length <= 3"
         :count="g.rows.length"
         :trigger-attrs="{ 'data-test': `health-group-${g.check.id}` }"
@@ -401,7 +416,7 @@ registerPageNote(() => {
         <p class="wp-health__why">{{ WHY[g.check.id] }}</p>
         <DataTable
           :columns="COLUMNS"
-          :rows="g.rows"
+          :rows="shownRows(g)"
           row-key="key"
           size="sm"
           :aria-label="g.check.title"
@@ -455,6 +470,16 @@ registerPageNote(() => {
             </span>
           </template>
         </DataTable>
+        <Pagination
+          v-if="g.rows.length > GROUP_PAGE"
+          mode="more"
+          size="sm"
+          :shown="shownRows(g).length"
+          :total="g.rows.length"
+          noun="findings"
+          :data-test="`health-more-${g.check.id}`"
+          @more="showMore(g)"
+        />
       </Disclosure>
     </div>
 

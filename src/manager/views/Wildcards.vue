@@ -307,6 +307,7 @@ function issuesFor(row: ModuleRow) {
     @update:page-size="(v) => urlState.pageSize = v"
     @update:extra-active="(v) => extraActiveFromUrl = v"
     @fetch="fetch"
+    @refresh="store.fetchCatalog().catch(() => undefined)"
     @delete="del"
     @bulk-favorite="bulk.onBulkFavorite"
     @bulk-duplicate="bulk.onBulkDuplicate"

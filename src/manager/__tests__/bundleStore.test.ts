@@ -37,13 +37,38 @@ describe("bundleStore", () => {
     expect(s.items[0].id).toBe("abcd1234");
   });
 
-  it("fetchAll forwards filters", async () => {
-    apiBundles.list.mockResolvedValue({ items: [], total: 0 });
+  it("fetchAll filters the catalog on the client, one request for any number of searches", async () => {
+    apiBundles.list.mockResolvedValue({
+      items: [
+        { id: "b1", name: "Subject pack", is_favorite: true, category_id: null },
+        { id: "b2", name: "Subject other", is_favorite: false, category_id: null },
+        { id: "b3", name: "Scene", is_favorite: true, category_id: null },
+      ],
+      total: 3,
+    });
     const s = useBundleStore();
     s.filter.q = "subject";
     s.filter.favorites = true;
     await s.fetchAll();
-    expect(apiBundles.list).toHaveBeenCalledWith({ q: "subject", favorites: true });
+    expect(apiBundles.list).toHaveBeenCalledWith({});
+    expect(s.items.map((b) => b.id)).toEqual(["b1"]);
+    s.filter.q = "SCE";
+    await s.fetchAll();
+    expect(s.items.map((b) => b.id)).toEqual(["b3"]);
+    expect(apiBundles.list).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggleFavorite swaps a new catalog array in and re-derives the list", async () => {
+    apiBundles.list.mockResolvedValue({ items: [{ id: "b1", name: "a", is_favorite: false }], total: 1 });
+    apiBundles.favorite.mockResolvedValue({ id: "b1", name: "a", is_favorite: true });
+    const s = useBundleStore();
+    s.filter.favorites = true;
+    await s.fetchAll();
+    expect(s.items).toHaveLength(0);
+    const before = s.catalog;
+    await s.toggleFavorite("b1");
+    expect(s.catalog).not.toBe(before);
+    expect(s.items.map((b) => b.id)).toEqual(["b1"]);
   });
 
   it("create unshifts to items", async () => {

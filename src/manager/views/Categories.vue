@@ -47,15 +47,15 @@ const countsByCategory = computed(() => {
   return map;
 });
 
-async function refresh() {
+async function refresh(fresh = true) {
   try {
-    await Promise.all([store.fetchAll(), moduleStore.fetchCatalog()]);
+    await Promise.all([store.fetchAll(), fresh ? moduleStore.fetchCatalog() : moduleStore.ensureCatalog()]);
   } catch (e) {
     reportError(e, "Refresh failed");
   }
 }
 
-onMounted(refresh);
+onMounted(() => refresh(false));
 
 function moduleCount(row: CategoryRow): number {
   return countsByCategory.value.get(row.id) ?? 0;
@@ -238,7 +238,7 @@ async function saveEdit() {
           data-ai-label="Refresh button"
           :disabled="store.loading"
           :class="{ 'wp-refresh-btn--spin': store.loading }"
-          @click="refresh"
+          @click="refresh()"
         >Refresh</Button>
       </div>
     </div>

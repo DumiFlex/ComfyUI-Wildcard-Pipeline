@@ -27,38 +27,63 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("moduleStore", () => {
-  it("clears the rows when the kind changes, keeps them for a search on the same kind", async () => {
-    apiMod.list.mockResolvedValue({ items: [{ id: "w1", name: "w", type: "wildcard", is_favorite: false }], total: 1 });
+  it("switches kind from the one catalog, with no request per kind or search", async () => {
+    apiMod.list.mockResolvedValue({
+      items: [
+        { id: "w1", name: "warm", type: "wildcard", is_favorite: false },
+        { id: "c1", name: "rule", type: "constraint", is_favorite: false },
+      ],
+      total: 2,
+    });
     const s = useModuleStore();
     s.filter.type = "wildcard";
     await s.fetchAll();
-    expect(s.items).toHaveLength(1);
-    // Same kind, a search: the rows stay up while it loads.
-    s.filter.q = "w";
-    const same = s.fetchAll();
-    expect(s.items).toHaveLength(1);
-    await same;
-    // Wildcards → Constraints: no wildcard rows under the Constraints columns.
+    expect(s.items.map((i) => i.id)).toEqual(["w1"]);
+    s.filter.q = "zzz";
+    await s.fetchAll();
+    expect(s.items).toHaveLength(0);
     s.filter.type = "constraint";
     s.filter.q = undefined;
-    apiMod.list.mockReturnValue(new Promise(() => {}));
-    void s.fetchAll();
-    expect(s.items).toHaveLength(0);
+    await s.fetchAll();
+    expect(s.items.map((i) => i.id)).toEqual(["c1"]);
+    expect(apiMod.list).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the newest request's rows when an older one lands last", async () => {
+  it("clears another kind's rows while the first catalog fetch is still out", async () => {
+    apiMod.list.mockReturnValue(new Promise(() => {}));
+    const s = useModuleStore();
+    s.items = [{ id: "w1", name: "w", type: "wildcard" } as never];
+    s.filter.type = "constraint";
+    void s.fetchAll();
+    expect(s.items).toHaveLength(0);
+    expect(s.loading).toBe(true);
+  });
+
+  it("a page mounting while the boot fetch runs shares that request", async () => {
+    let land: (v: unknown) => void = () => {};
+    apiMod.list.mockReturnValueOnce(new Promise((r) => { land = r; }));
+    const s = useModuleStore();
+    const boot = s.ensureCatalog();
+    s.filter.type = "wildcard";
+    const page = s.fetchAll();
+    land({ items: [{ id: "w1", name: "w", type: "wildcard", is_favorite: false }], total: 1 });
+    await Promise.all([boot, page]);
+    expect(apiMod.list).toHaveBeenCalledTimes(1);
+    expect(s.items.map((i) => i.id)).toEqual(["w1"]);
+    expect(s.loading).toBe(false);
+  });
+
+  it("keeps the newest catalog when an older fetch lands last", async () => {
     let slow: (v: unknown) => void = () => {};
     apiMod.list
       .mockReturnValueOnce(new Promise((r) => { slow = r; }))
       .mockResolvedValueOnce({ items: [{ id: "new", name: "n", type: "wildcard", is_favorite: false }], total: 1 });
     const s = useModuleStore();
-    s.filter.type = "wildcard";
-    const first = s.fetchAll();
-    await s.fetchAll();
+    const first = s.fetchCatalog();
+    await s.fetchCatalog();
     slow({ items: [{ id: "old", name: "o", type: "wildcard", is_favorite: false }], total: 1 });
     await first;
-    expect(s.items.map((i) => i.id)).toEqual(["new"]);
-    expect(s.loading).toBe(false);
+    expect(s.catalog.map((i) => i.id)).toEqual(["new"]);
   });
 
   it("fetchAll populates items", async () => {
@@ -72,13 +97,34 @@ describe("moduleStore", () => {
     expect(s.items[0].id).toBe("wc_x_1");
   });
 
-  it("fetchAll forwards filters", async () => {
-    apiMod.list.mockResolvedValue({ items: [], total: 0 });
+  it("fetchAll applies the server's filter on the client", async () => {
+    apiMod.list.mockResolvedValue({
+      items: [
+        { id: "aa11bb22", name: "Hair color", type: "wildcard", is_favorite: true, category_id: "c1" },
+        { id: "cc33dd44", name: "Eye color", type: "wildcard", is_favorite: false, category_id: "c1" },
+        { id: "ee55ff66", name: "Color rule", type: "constraint", is_favorite: true, category_id: "c1" },
+        { id: "0a0b0c0d", name: "Mood", type: "wildcard", is_favorite: true, category_id: null },
+      ],
+      total: 4,
+    });
     const s = useModuleStore();
     s.filter.type = "wildcard";
-    s.filter.q = "color";
+    s.filter.q = "COLOR";
     await s.fetchAll();
-    expect(apiMod.list).toHaveBeenCalledWith({ type: "wildcard", q: "color" });
+    expect(apiMod.list).toHaveBeenCalledWith({});
+    expect(s.items.map((i) => i.id)).toEqual(["aa11bb22", "cc33dd44"]);
+    s.filter.favorites = true;
+    await s.fetchAll();
+    expect(s.items.map((i) => i.id)).toEqual(["aa11bb22"]);
+    // The id matches too (the server's `name OR id LIKE`).
+    s.filter.q = "0B0C";
+    s.filter.favorites = false;
+    await s.fetchAll();
+    expect(s.items.map((i) => i.id)).toEqual(["0a0b0c0d"]);
+    s.filter.q = undefined;
+    s.filter.category = "c1";
+    await s.fetchAll();
+    expect(s.items.map((i) => i.id)).toEqual(["aa11bb22", "cc33dd44"]);
   });
 
   // Regression: editors and the sidebar need cross-kind cross-references (e.g.
@@ -156,6 +202,20 @@ describe("moduleStore", () => {
     await s.fetchAll();
     await s.toggleFavorite("wc_x_1");
     expect(s.items[0].is_favorite).toBe(true);
+  });
+
+  it("a created row of another kind stays off a listed kind's page", async () => {
+    apiMod.list.mockResolvedValue({ items: [{ id: "w1", name: "w", type: "wildcard" }], total: 1 });
+    apiMod.create.mockResolvedValue({ id: "c1", name: "c", type: "constraint" });
+    const s = useModuleStore();
+    s.filter.type = "wildcard";
+    await s.fetchAll();
+    const before = s.catalog;
+    await s.create({ type: "constraint", name: "c", payload: {} });
+    // A new array (never mutated in place): the validation cache keys on it.
+    expect(s.catalog).not.toBe(before);
+    expect(s.catalog.map((i) => i.id)).toEqual(["c1", "w1"]);
+    expect(s.items.map((i) => i.id)).toEqual(["w1"]);
   });
 
   it("loading flag toggles around fetchAll", async () => {

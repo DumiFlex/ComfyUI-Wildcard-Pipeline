@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { getActivePinia } from "pinia";
 import { RouterView } from "vue-router";
 import AppTopbar from "./AppTopbar.vue";
 import AppSidebar from "./AppSidebar.vue";
@@ -8,13 +9,9 @@ import { usePageWidth } from "../composables/usePageWidth";
 import ErrorBoundary from "../components/ErrorBoundary.vue";
 import ToastHost from "@/kit/ToastHost.vue";
 import TweaksPanel from "../components/TweaksPanel.vue";
-import FeedbackModal from "../components/FeedbackModal.vue";
-import CommandPalette from "../components/CommandPalette.vue";
-import ShortcutsHelp from "../components/ShortcutsHelp.vue";
-import UnmetDepsDialog from "../components/UnmetDepsDialog.vue";
 import { useUiStore } from "../stores/uiStore";
 import { useAiConfig } from "../composables/useAiConfig";
-import { useAiChat } from "../composables/useAiChat";
+import { useAiChatShell } from "../composables/aiChatShell";
 import { useAskHandoff } from "../composables/useAskHandoff";
 import { useCommandIndex } from "../composables/useCommandIndex";
 import { useRecentStore } from "../stores/recentStore";
@@ -26,7 +23,6 @@ import { useTemplateStore } from "../stores/templateStore";
 import { useCategoryStore } from "../stores/categoryStore";
 import { useCommunityUpdateStore } from "../stores/communityUpdateStore";
 import { useCascadeStore } from "../cascade/cascade-store";
-import { useGuidedPublishStore } from "../import-export/guided-publish-store";
 import { repairLibraryOnce } from "../import-export/uuid-repair-boot";
 import { api } from "../api/client";
 import { libraryVersion } from "../composables/useLibraryChanged";
@@ -38,7 +34,7 @@ import {
 } from "../../components/context/drift-store";
 
 const ui = useUiStore();
-const aiChat = useAiChat();
+const aiChat = useAiChatShell();
 const aiConfig = useAiConfig();
 // Loaded the first time the assistant opens, so the manager doesn't pay for
 // it when the assistant is off.
@@ -56,11 +52,27 @@ const templateStore = useTemplateStore();
 const categoryStore = useCategoryStore();
 const communityUpdateStore = useCommunityUpdateStore();
 const cascadeStore = useCascadeStore();
-const guidedPublish = useGuidedPublishStore();
+/** The guided-publish gate's host loads with the publish path, once
+ *  something has used its store (a Publish button) — the store registers
+ *  itself in pinia's state then — so neither is in the boot chunk. */
+const GuidedPublishHost = defineAsyncComponent(() => import("../components/GuidedPublishHost.vue"));
+const pinia = getActivePinia();
+const publishGateUsed = computed(() => !!pinia && "guidedPublish" in pinia.state.value);
 
 const paletteOpen = ref(false);
 const shortcutsOpen = ref(false);
 const feedbackOpen = ref(false);
+// The palette and the two dialogs load the first time they open (and stay
+// mounted after, so closing still animates): none is needed to boot.
+const CommandPalette = defineAsyncComponent(() => import("../components/CommandPalette.vue"));
+const ShortcutsHelp = defineAsyncComponent(() => import("../components/ShortcutsHelp.vue"));
+const FeedbackModal = defineAsyncComponent(() => import("../components/FeedbackModal.vue"));
+const paletteUsed = ref(false);
+const shortcutsUsed = ref(false);
+const feedbackUsed = ref(false);
+watch(paletteOpen, (v) => { if (v) paletteUsed.value = true; });
+watch(shortcutsOpen, (v) => { if (v) shortcutsUsed.value = true; });
+watch(feedbackOpen, (v) => { if (v) feedbackUsed.value = true; });
 
 /** Nav items that open something in-app rather than navigating. The sidebar
  *  and topbar both emit this so neither needs to own modal state. */
@@ -157,6 +169,17 @@ function stopStalePoll(): void {
   stalePollHandle = null;
 }
 
+/** The library drift poll (`drift-store`, every 5 s) runs only while this
+ *  tab is visible. Subscribing again polls at once, so coming back catches
+ *  up on whatever changed meanwhile (the hash watch below refetches). */
+let driftSubscribed = false;
+function setDriftPolling(on: boolean): void {
+  if (on === driftSubscribed) return;
+  driftSubscribed = on;
+  if (on) subscribeDrift();
+  else unsubscribeDrift();
+}
+
 /** Pause polling when tab hidden, resume on focus. Also fire one
  *  immediate ping on focus so we don't have to wait the full
  *  interval after the user returns. */
@@ -164,8 +187,10 @@ function onVisibilityChange(): void {
   if (document.visibilityState === "visible") {
     pingForRestart();
     startStalePoll();
+    setDriftPolling(true);
   } else {
     stopStalePoll();
+    setDriftPolling(false);
   }
 }
 
@@ -175,11 +200,15 @@ usePageWidth(pageEl);
 // Which catalogs have loaded at least once. Recently opened is pruned
 // against them only then, so a failed fetch never empties it.
 const catalogsLoaded = { modules: false, bundles: false };
-function fetchModuleCatalog(): Promise<void> {
-  return moduleStore.fetchCatalog().then(() => { catalogsLoaded.modules = true; });
+/** `fresh` false at boot: a list page mounting first may already have
+ *  started the fetch, and that one request serves both. */
+function fetchModuleCatalog(fresh = true): Promise<void> {
+  return (fresh ? moduleStore.fetchCatalog() : moduleStore.ensureCatalog())
+    .then(() => { catalogsLoaded.modules = true; });
 }
-function fetchBundleCatalog(): Promise<void> {
-  return bundleStore.fetchCatalog().then(() => { catalogsLoaded.bundles = true; });
+function fetchBundleCatalog(fresh = true): Promise<void> {
+  return (fresh ? bundleStore.fetchCatalog() : bundleStore.ensureCatalog())
+    .then(() => { catalogsLoaded.bundles = true; });
 }
 function pruneRecent(): void {
   if (!catalogsLoaded.modules || !catalogsLoaded.bundles) return;
@@ -198,9 +227,7 @@ async function refreshLibrary(): Promise<void> {
     templateStore.fetchCatalog(),
     categoryStore.fetchAll(),
   ];
-  if (moduleStore.listed) jobs.push(moduleStore.fetchAll());
-  if (bundleStore.listed) jobs.push(bundleStore.fetchAll());
-  if (templateStore.listed) jobs.push(templateStore.fetchAll());
+  // A list page's rows are derived from these catalogs, so they follow.
   await Promise.allSettled(jobs);
   cascadeStore.rebuildFromCatalogs(moduleStore.catalog, bundleStore.catalog, categoryStore.items);
   pruneRecent();
@@ -228,9 +255,9 @@ onMounted(() => {
   // Errors on individual fetches are swallowed — the lazy list-view
   // fetches still run on actual usage if a fetch fails here.
   Promise.all([
-    fetchModuleCatalog().catch(() => undefined),
-    fetchBundleCatalog().catch(() => undefined),
-    templateStore.fetchCatalog().catch(() => undefined),
+    fetchModuleCatalog(false).catch(() => undefined),
+    fetchBundleCatalog(false).catch(() => undefined),
+    templateStore.ensureCatalog().catch(() => undefined),
     categoryStore.fetchAll().catch(() => undefined),
   ]).then(() => {
     cascadeStore.rebuildFromCatalogs(
@@ -274,7 +301,7 @@ onMounted(() => {
   // above already covers cold-load; firing again here would race that
   // request and double-mutate catalog.value mid-render — Vue's patcher
   // observed a null parentNode on insertBefore in the wild.
-  subscribeDrift();
+  setDriftPolling(document.visibilityState !== "hidden");
   // After the catalog refetch resolves, rebuild the cascade reverse-dep
   // index so a wildcard delete (etc.) immediately routes through the cascade
   // impact dialog. `rebuildFromCatalogs` is a pure read+build — safe to call
@@ -330,7 +357,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("wp:server-restarted", onServerRestarted);
   document.removeEventListener("visibilitychange", onVisibilityChange);
   stopStalePoll();
-  unsubscribeDrift();
+  setDriftPolling(false);
 });
 </script>
 
@@ -366,20 +393,13 @@ onBeforeUnmount(() => {
     <AiSelectionChip v-if="aiConfig.ready.value" />
     <ToastHost />
     <TweaksPanel />
-    <CommandPalette v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
-    <ShortcutsHelp v-model:open="shortcutsOpen" />
-    <FeedbackModal v-model:open="feedbackOpen" />
+    <CommandPalette v-if="paletteUsed" v-model:open="paletteOpen" :items="commandIndex" :recent-ids="recent.recentIds" />
+    <ShortcutsHelp v-if="shortcutsUsed" v-model:open="shortcutsOpen" />
+    <FeedbackModal v-if="feedbackUsed" v-model:open="feedbackOpen" />
     <!-- Single host for the guided-publish gate (B3). Both publish entry
          points (CommunityRowActions, ExportTab) route through the
          guided-publish store; this lone dialog renders whenever it opens. -->
-    <UnmetDepsDialog
-      :open="guidedPublish.open"
-      :module-name="guidedPublish.pendingModule?.name ?? ''"
-      :unmet-rows="guidedPublish.unmetRows"
-      @publish-dep="guidedPublish.publishDep"
-      @publish-anyway="guidedPublish.publishAnyway"
-      @cancel="guidedPublish.cancel"
-    />
+    <GuidedPublishHost v-if="publishGateUsed" />
   </div>
 </template>
 

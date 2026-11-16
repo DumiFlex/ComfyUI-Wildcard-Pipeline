@@ -22,7 +22,6 @@ vi.mock("../utils/ai-context", () => ({ askCanvasFacts: vi.fn().mockResolvedValu
 import { api } from "../api/client";
 import type { HealthScan } from "../api/types";
 import LibraryHealth from "../views/LibraryHealth.vue";
-import { useBundleStore } from "../stores/bundleStore";
 import { useHealthStore } from "../stores/healthStore";
 
 const health = api.health as unknown as Record<string, ReturnType<typeof vi.fn>>;
@@ -112,6 +111,25 @@ describe("LibraryHealth.vue", () => {
     wrap.unmount();
   });
 
+  it("draws a long group 25 rows at a time, and search still finds the rest", async () => {
+    const many = structuredClone(SCAN);
+    many.findings = Array.from({ length: 60 }, (_, i) => ({
+      check: "missing_ref", severity: "problem" as const, key: `missing_ref:module:m${i}`,
+      item: { kind: "module" as const, id: `m${i}`, name: `Item ${i}`, type: "wildcard" },
+      detail: "Points at a wildcard that's gone.",
+    }));
+    health.scan.mockResolvedValue(many);
+    const { wrap } = await mountPage();
+    const rows = () => wrap.findAll('[data-test^="health-row-missing_ref"]').length;
+    expect(rows()).toBe(25);
+    expect(wrap.text()).toContain("Showing 25 of 60 findings");
+    await wrap.get('[data-test="health-more-missing_ref"] button').trigger("click");
+    expect(rows()).toBe(60);
+    await wrap.get('input[aria-label="Search findings"]').setValue("Item 59");
+    expect(rows()).toBe(1);
+    wrap.unmount();
+  });
+
   it("filters by severity and search", async () => {
     const { wrap } = await mountPage();
     await wrap.get('[data-test="health-filter-problem"]').trigger("click");
@@ -158,7 +176,7 @@ describe("LibraryHealth.vue", () => {
   });
 
   it("runs the variety check for a bundle", async () => {
-    useBundleStore().catalog = [{ id: "bund0001", name: "Sky", children: [] } as never];
+    vi.mocked(api.bundles.list).mockResolvedValue({ items: [{ id: "bund0001", name: "Sky", children: [] }], total: 1 } as never);
     health.variety.mockResolvedValue({
       runs: 200, failed: 0, distinct: 150, ratio: 0.75,
       stuck: [{ var: "weather", name: "Weather", value: "rain" }],

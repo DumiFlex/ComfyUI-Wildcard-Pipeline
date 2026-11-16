@@ -480,7 +480,7 @@ onMounted(async () => {
   // Bundle catalog drives the new tier-2 reference picker — fetched in
   // parallel since the two stores are independent.
   try {
-    await Promise.all([moduleStore.fetchCatalog(), store.fetchCatalog()]);
+    await Promise.all([moduleStore.ensureCatalog(), store.ensureCatalog()]);
   } catch (e) {
     toast.push({ severity: "error", summary: "Failed to load library", detail: String(e), life: 3000 });
   }

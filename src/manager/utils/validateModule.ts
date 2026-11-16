@@ -17,6 +17,7 @@
  *   - "warn"  - resolves at runtime but the user probably didn't
  *     mean it (empty options array, empty matrix). Reads as amber.
  */
+import { toRaw } from "vue";
 import type { BundleRow, ModuleRow } from "../api/types";
 import { tokenizeRich, varBaseName, type RichToken } from "../../widgets/richTokenize";
 import { validateExpression } from "../parsing/subcatFilter";
@@ -81,12 +82,26 @@ function buildCatalogIndex(catalog: readonly ModuleRow[]): CatalogIndex {
  *  `$silver` variable ref. Only top-level tokens are inspected; the
  *  `$$` weight prefix inside a dp-multi block lives inside `meta`,
  *  not as a stand-alone var token. */
+/** Tokens per text, shared by every row and render: a list page validates
+ *  every row on each render and an editor checks every option per keystroke,
+ *  while the texts themselves rarely change. Cleared whole when it grows past
+ *  `TOKEN_CACHE_MAX` (cheap, and a library edit only re-tokenises its rows).
+ *  The arrays are internal: nothing here mutates them. */
+const TOKEN_CACHE_MAX = 5000;
+const tokenCache = new Map<string, RichToken[]>();
+
 function tokensFor(text: string): RichToken[] {
+  const hit = tokenCache.get(text);
+  if (hit) return hit;
+  let tokens: RichToken[];
   try {
-    return tokenizeRich(text);
+    tokens = tokenizeRich(text);
   } catch {
-    return [];
+    tokens = [];
   }
+  if (tokenCache.size >= TOKEN_CACHE_MAX) tokenCache.clear();
+  tokenCache.set(text, tokens);
+  return tokens;
 }
 
 function extractRefs(text: string): Array<{ uuid: string; filter?: string; name?: string }> {
@@ -429,12 +444,56 @@ function validateFixedValues(row: ModuleRow): ValidationIssue[] {
  * receives a flat issue list. The validator runs across the union
  * of {modules, bundles} so cross-kind refs resolve uniformly.
  */
+interface CatalogLookup {
+  idx: CatalogIndex;
+  vars: Set<string>;
+  /** Issues per row object checked against this catalog. */
+  rows: WeakMap<object, ValidationIssue[]>;
+}
+
+/** One lookup per catalog array. The stores replace their arrays on every
+ *  change (never mutate them in place), so the array's identity is its
+ *  version: a list page's hundreds of rows share one index, and a row that
+ *  didn't change keeps its issues across renders. */
+const lookups = new WeakMap<object, CatalogLookup>();
+
+function lookupFor(catalog: readonly ModuleRow[]): CatalogLookup {
+  const raw = toRaw(catalog) as ModuleRow[];
+  let hit = lookups.get(raw);
+  if (!hit) {
+    hit = { idx: buildCatalogIndex(raw), vars: knownVarNames(raw), rows: new WeakMap() };
+    lookups.set(raw, hit);
+  }
+  return hit;
+}
+
+/**
+ * Public entry point. Caller passes the row + the live catalog and
+ * receives a flat issue list. The validator runs across the union
+ * of {modules, bundles} so cross-kind refs resolve uniformly.
+ *
+ * Cached per (catalog array, row object): pass the store's array as it is
+ * (not a fresh copy or `.filter()` of it), or every call rebuilds the index.
+ * Never mutate the returned list.
+ */
 export function validateModule(
   row: ModuleRow,
   catalog: readonly ModuleRow[],
 ): ValidationIssue[] {
-  const idx = buildCatalogIndex(catalog);
-  const vars = knownVarNames(catalog);
+  const lookup = lookupFor(catalog);
+  const rawRow = toRaw(row);
+  const cached = lookup.rows.get(rawRow);
+  if (cached) return cached;
+  const issues = validateModuleUncached(rawRow, lookup.idx, lookup.vars);
+  lookup.rows.set(rawRow, issues);
+  return issues;
+}
+
+function validateModuleUncached(
+  row: ModuleRow,
+  idx: CatalogIndex,
+  vars: Set<string>,
+): ValidationIssue[] {
   switch (row.type) {
     case "wildcard":     return validateWildcard(row, idx, vars);
     case "constraint":   return validateConstraint(row, idx);
@@ -443,6 +502,18 @@ export function validateModule(
     case "fixed_values": return validateFixedValues(row);
     default:             return [];
   }
+}
+
+/** Ids of a store array, built once per array identity (see `lookups`). */
+const idSets = new WeakMap<object, Set<string>>();
+function idSet(rows: readonly { id: string }[]): Set<string> {
+  const raw = toRaw(rows) as { id: string }[];
+  let hit = idSets.get(raw);
+  if (!hit) {
+    hit = new Set(raw.map((r) => r.id));
+    idSets.set(raw, hit);
+  }
+  return hit;
 }
 
 /** Bundle validator - flags bundles whose `children[]` references
@@ -460,8 +531,8 @@ export function validateBundle(
   bundles: readonly BundleRow[] = [],
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const modulesById = new Map(catalog.map((m) => [m.id, m]));
-  const bundlesById = new Map(bundles.map((b) => [b.id, b]));
+  const modulesById = idSet(catalog);
+  const bundlesById = idSet(bundles);
   const children = Array.isArray(row.children) ? row.children : [];
   if (children.length === 0) {
     issues.push({ severity: "warn", message: "Bundle has no children" });
