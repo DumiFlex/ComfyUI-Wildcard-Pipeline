@@ -98,8 +98,8 @@ class WPContextInjector(io.ComfyNode):
     ):
         out = cls._execute(wp_rows, upstream, **slot_values)
         carry_frame0(
-            upstream, out.values[0],
-            lambda up: cls._execute(wp_rows, up, **slot_values).values[0],
+            upstream, out.args[0],
+            lambda up: cls._execute(wp_rows, up, **slot_values).args[0],
         )
         return out
 
