@@ -9,6 +9,7 @@ import {
   internalSliderVars,
   newSlider,
   normalizeOuts,
+  outputNumber,
   outputValues,
   ownSliderNegatives,
   parseSlidersConfig,
@@ -180,5 +181,17 @@ describe("groups and drag", () => {
     expect(ids(dropSliderRow(cfg, "L1", "x", "end"))).toBeNull();
     expect(ids(dropSliderRow(cfg, "L1", "b", "end"))).toEqual(["L2", "b", "c", "L1", "a"]);
     expect(dropSliderRow(cfg, "L1", "b", "after")).toBeNull();
+  });
+});
+
+describe("output type", () => {
+  it("follows the decimals unless the slider picks one", () => {
+    expect(sliderOutputType({ decimals: 0 })).toBe("INT");
+    expect(sliderOutputType({ decimals: 2 })).toBe("FLOAT");
+    expect(sliderOutputType({ decimals: 2, out_type: "int" })).toBe("INT");
+    expect(sliderOutputType({ decimals: 0, out_type: "float" })).toBe("FLOAT");
+    expect(outputNumber({ value: 6.5, decimals: 1, out_type: "int" })).toBe(7);
+    expect(outputNumber({ value: -0.4, decimals: 1, out_type: "int" })).toBe(0);
+    expect(parseSlidersConfig(JSON.stringify({ rows: [{ id: "a", kind: "slider", var: "a", out_type: "x" }] })).rows[0]).not.toHaveProperty("out_type");
   });
 });
