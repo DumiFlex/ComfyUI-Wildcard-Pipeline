@@ -1,0 +1,463 @@
+{
+ "_comment": "Shared by engine/sliders.py (tests/engine/test_sliders.py) and src/extension/sliders.ts (sliders.test.ts). Keep both in step.",
+ "cases": [
+  {
+   "name": "numbers and an int",
+   "config": {
+    "version": 1,
+    "rows": [
+     {
+      "id": "aaaa0000",
+      "kind": "label",
+      "name": "LoRAs",
+      "color": 1
+     },
+     {
+      "id": "00000001",
+      "kind": "slider",
+      "name": "char_lora",
+      "var": "char_lora",
+      "value": 0.85,
+      "min": 0,
+      "max": 1.5,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "pin": true,
+      "out": 1
+     },
+     {
+      "id": "00000002",
+      "kind": "slider",
+      "name": "steps",
+      "var": "steps",
+      "value": 28,
+      "min": 1,
+      "max": 60,
+      "step": 1,
+      "decimals": 0,
+      "style": "row",
+      "pin": true,
+      "out": 2
+     }
+    ]
+   },
+   "values": {
+    "char_lora": "0.85",
+    "steps": "28"
+   },
+   "nums": {
+    "char_lora": "0.85",
+    "steps": "28"
+   },
+   "outputs": [
+    0.85,
+    28
+   ]
+  },
+  {
+   "name": "words pick a range, last catches the rest",
+   "config": {
+    "version": 1,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "slider",
+      "name": "shot",
+      "var": "shot",
+      "value": 0.45,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "mode": "words",
+      "words": [
+       {
+        "upto": 0.3,
+        "word": "close-up"
+       },
+       {
+        "upto": 0.7,
+        "word": "medium shot"
+       },
+       {
+        "word": "wide shot",
+        "negative": "cropped"
+       }
+      ]
+     },
+     {
+      "id": "00000002",
+      "kind": "slider",
+      "name": "far",
+      "var": "far",
+      "value": 0.95,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "mode": "words",
+      "words": [
+       {
+        "upto": 0.3,
+        "word": "close-up"
+       },
+       {
+        "upto": 0.7,
+        "word": "medium shot"
+       },
+       {
+        "word": "wide shot",
+        "negative": "cropped"
+       }
+      ]
+     },
+     {
+      "id": "00000003",
+      "kind": "slider",
+      "name": "edge",
+      "var": "edge",
+      "value": 0.3,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "mode": "words",
+      "words": [
+       {
+        "upto": 0.3,
+        "word": "close-up"
+       },
+       {
+        "upto": 0.7,
+        "word": "medium shot"
+       },
+       {
+        "word": "wide shot",
+        "negative": "cropped"
+       }
+      ]
+     },
+     {
+      "id": "00000004",
+      "kind": "slider",
+      "name": "past",
+      "var": "past",
+      "value": 0.95,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "mode": "words",
+      "words": [
+       {
+        "upto": 0.3,
+        "word": "close-up"
+       },
+       {
+        "upto": 0.7,
+        "word": "medium shot"
+       }
+      ]
+     }
+    ]
+   },
+   "values": {
+    "shot": "medium shot",
+    "far": "wide shot",
+    "edge": "close-up",
+    "past": "medium shot"
+   },
+   "nums": {
+    "shot": "0.45",
+    "far": "0.95",
+    "edge": "0.30",
+    "past": "0.95"
+   },
+   "negatives": {
+    "far": "cropped"
+   },
+   "outputs": []
+  },
+  {
+   "name": "text mode keeps its text, negative files",
+   "config": {
+    "version": 1,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "slider",
+      "name": "detail",
+      "var": "detail",
+      "value": 1.2,
+      "min": 0,
+      "max": 2,
+      "step": 0.05,
+      "decimals": 1,
+      "style": "row",
+      "mode": "text",
+      "text": "(intricate details:$detail.num)",
+      "negative": "blurry",
+      "pin": true,
+      "out": 1
+     }
+    ]
+   },
+   "values": {
+    "detail": "(intricate details:$detail.num)"
+   },
+   "nums": {
+    "detail": "1.2"
+   },
+   "negatives": {
+    "detail": "blurry"
+   },
+   "outputs": [
+    1.2
+   ]
+  },
+  {
+   "name": "rounding matches toFixed",
+   "config": {
+    "version": 1,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "slider",
+      "name": "a",
+      "var": "a",
+      "value": 0.125,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row"
+     },
+     {
+      "id": "00000002",
+      "kind": "slider",
+      "name": "b",
+      "var": "b",
+      "value": 1.005,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row"
+     },
+     {
+      "id": "00000003",
+      "kind": "slider",
+      "name": "c",
+      "var": "c",
+      "value": -0.001,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row"
+     },
+     {
+      "id": "00000004",
+      "kind": "slider",
+      "name": "d",
+      "var": "d",
+      "value": 2.5,
+      "min": -5,
+      "max": 5,
+      "step": 0.05,
+      "decimals": 0,
+      "style": "row"
+     },
+     {
+      "id": "00000005",
+      "kind": "slider",
+      "name": "e",
+      "var": "e",
+      "value": -0.4,
+      "min": -5,
+      "max": 5,
+      "step": 0.05,
+      "decimals": 0,
+      "style": "row"
+     }
+    ]
+   },
+   "values": {
+    "a": "0.13",
+    "b": "1.00",
+    "c": "0.00",
+    "d": "3",
+    "e": "0"
+   },
+   "nums": {
+    "a": "0.13",
+    "b": "1.00",
+    "c": "0.00",
+    "d": "3",
+    "e": "0"
+   },
+   "outputs": []
+  },
+  {
+   "name": "out order, bad var skipped, later row wins, internal",
+   "config": {
+    "version": 1,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "slider",
+      "name": "a",
+      "var": "a",
+      "value": 0.1,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "pin": true,
+      "out": 2
+     },
+     {
+      "id": "00000002",
+      "kind": "slider",
+      "name": "b",
+      "var": "b",
+      "value": 0.2,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "pin": true,
+      "out": 1,
+      "internal": true
+     },
+     {
+      "id": "00000003",
+      "kind": "slider",
+      "name": "9bad",
+      "var": "9bad",
+      "value": 0.3,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "pin": true,
+      "out": 3
+     },
+     {
+      "id": "00000004",
+      "kind": "slider",
+      "name": "a",
+      "var": "a",
+      "value": 0.4,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row"
+     }
+    ]
+   },
+   "values": {
+    "a": "0.40",
+    "b": "0.20"
+   },
+   "nums": {
+    "a": "0.40",
+    "b": "0.20"
+   },
+   "internal": [
+    "b"
+   ],
+   "outputs": [
+    0.2,
+    0.1,
+    0.3
+   ]
+  },
+  {
+   "name": "out gaps fall back to row order",
+   "config": {
+    "version": 1,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "slider",
+      "name": "a",
+      "var": "a",
+      "value": 0.1,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "pin": true,
+      "out": 5
+     },
+     {
+      "id": "00000002",
+      "kind": "slider",
+      "name": "b",
+      "var": "b",
+      "value": 0.2,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "pin": true,
+      "out": 1
+     }
+    ]
+   },
+   "values": {
+    "a": "0.10",
+    "b": "0.20"
+   },
+   "nums": {
+    "a": "0.10",
+    "b": "0.20"
+   },
+   "outputs": [
+    0.1,
+    0.2
+   ]
+  },
+  {
+   "name": "words mode without words writes the number",
+   "config": {
+    "version": 1,
+    "rows": [
+     {
+      "id": "00000001",
+      "kind": "slider",
+      "name": "w",
+      "var": "w",
+      "value": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "mode": "words",
+      "words": []
+     }
+    ]
+   },
+   "values": {
+    "w": "0.50"
+   },
+   "nums": {
+    "w": "0.50"
+   },
+   "outputs": []
+  }
+ ]
+}

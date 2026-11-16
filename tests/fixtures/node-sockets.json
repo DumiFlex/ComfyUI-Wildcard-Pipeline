@@ -389,6 +389,90 @@
       }
     ]
   },
+  "WP_Slider": {
+    "inputs": [
+      {
+        "name": "upstream",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "wp_sliders",
+        "type": "WP_SLIDERS",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      },
+      {
+        "name": "value_1",
+        "type": "*"
+      },
+      {
+        "name": "value_2",
+        "type": "*"
+      },
+      {
+        "name": "value_3",
+        "type": "*"
+      },
+      {
+        "name": "value_4",
+        "type": "*"
+      },
+      {
+        "name": "value_5",
+        "type": "*"
+      },
+      {
+        "name": "value_6",
+        "type": "*"
+      },
+      {
+        "name": "value_7",
+        "type": "*"
+      },
+      {
+        "name": "value_8",
+        "type": "*"
+      },
+      {
+        "name": "value_9",
+        "type": "*"
+      },
+      {
+        "name": "value_10",
+        "type": "*"
+      },
+      {
+        "name": "value_11",
+        "type": "*"
+      },
+      {
+        "name": "value_12",
+        "type": "*"
+      },
+      {
+        "name": "value_13",
+        "type": "*"
+      },
+      {
+        "name": "value_14",
+        "type": "*"
+      },
+      {
+        "name": "value_15",
+        "type": "*"
+      },
+      {
+        "name": "value_16",
+        "type": "*"
+      }
+    ]
+  },
   "WP_Toggles": {
     "inputs": [
       {
