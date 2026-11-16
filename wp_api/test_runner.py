@@ -28,7 +28,7 @@ from engine.scenario import (
     resolve_seeds,
     run_scenario,
 )
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import in_db_thread, json_error, json_ok
 
 _MAX_SAMPLE_LIMIT = 1000
 _MAX_VALUE_LIMIT = 5000
@@ -212,9 +212,12 @@ async def run_scenario_route(request: web.Request) -> web.Response:
             or not all(isinstance(t, str) and t for t in track)
         ):
             raise ScenarioError(f"track must be a list of up to {MAX_TRACK_VARS} variable names")
-        with db_session(request) as conn:
+        def _stack(conn):
             modules, layout, missing = _build_stack(conn, stack)
-            catalog = _build_catalog(conn, modules)
+            return modules, layout, missing, _build_catalog(conn, modules)
+
+        # Reads every module the stack names plus their refs: in a worker.
+        modules, layout, missing, catalog = await in_db_thread(request, _stack)
     except ScenarioError as exc:
         return json_error(str(exc), status=400)
 

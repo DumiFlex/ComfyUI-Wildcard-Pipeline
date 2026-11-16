@@ -23,7 +23,7 @@ from engine.db.repositories import (
     ModuleRepository,
     TemplateRepository,
 )
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import in_db_thread, json_error, json_ok
 from wp_api._validators import MAX_TAG_LEN
 
 
@@ -83,8 +83,8 @@ async def rename_tag(request: web.Request) -> web.Response:
         return json_error(f"to must be at most {MAX_TAG_LEN} chars", status=400)
     if new == old:
         return json_ok({"updated": {"modules": 0, "bundles": 0, "templates": 0}})
-    with db_session(request) as conn:
-        counts = _apply(conn, old, new)
+    # Rewrites every row carrying the tag: in a worker.
+    counts = await in_db_thread(request, _apply, old, new)
     return json_ok({"updated": counts})
 
 
@@ -95,8 +95,7 @@ async def delete_tag(request: web.Request) -> web.Response:
     tag = body.get("tag")
     if not isinstance(tag, str) or not tag:
         return json_error("missing field: tag", status=400)
-    with db_session(request) as conn:
-        counts = _apply(conn, tag, None)
+    counts = await in_db_thread(request, _apply, tag, None)
     return json_ok({"updated": counts})
 
 

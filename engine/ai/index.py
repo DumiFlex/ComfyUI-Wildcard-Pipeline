@@ -95,6 +95,25 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
 """
 
 
+def library_stamp(conn: sqlite3.Connection) -> str | None:
+    """A cheap fingerprint of what `Index.sync` compares: every module,
+    bundle and template id with its `updated_at` (the per-item stamp `_stamp`
+    uses), without reading a payload. Equal stamps mean a sync would change
+    nothing. None when it can't stand in for the per-item stamps (a row
+    without `updated_at` is stamped by its content; a table is missing)."""
+    h = hashlib.sha256(str(FORMAT).encode("utf-8"))
+    for table in ("modules", "bundles", "templates"):
+        try:
+            rows = conn.execute(f"SELECT id, updated_at FROM {table} ORDER BY id").fetchall()
+        except sqlite3.Error:
+            return None
+        for item_id, updated in rows:
+            if not isinstance(updated, str) or not updated:
+                return None
+            h.update(f"{table}\x1f{item_id}\x1f{updated}\x1e".encode())
+    return h.hexdigest()
+
+
 def has_fts5() -> bool:
     try:
         c = sqlite3.connect(":memory:")
@@ -288,6 +307,10 @@ class Hit:
 class Index:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
+        #: `library_stamp` of the library this index was last synced with
+        #: (None: unknown). A caller holding the same stamp can skip loading
+        #: the library and `sync` altogether.
+        self.synced: str | None = None
 
     def prepare(self) -> None:
         cur = self.conn.execute(
@@ -511,6 +534,7 @@ class Index:
         return [(rows[n][0], rows[n][1], float(sims[n])) for n in order]
 
     def clear(self) -> None:
+        self.synced = None
         with self.conn:
             for t in ("fts", "items", "refs", "vectors"):
                 self.conn.execute(f"DELETE FROM {t}")

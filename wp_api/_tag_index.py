@@ -28,6 +28,7 @@ categories and the UI degrades to plain rows.
 from __future__ import annotations
 
 import csv
+import functools
 import logging
 from bisect import bisect_left
 from dataclasses import dataclass
@@ -120,8 +121,10 @@ class TagIndex:
     def __len__(self) -> int:
         return len(self._tags)
 
-    @property
+    @functools.cached_property
     def has_categories(self) -> bool:
+        # Cached: a file without categories is a full scan, and the status
+        # route asks on every Settings visit.
         return any(t.category is not None for t in self._tags)
 
     def is_stale(self) -> bool:

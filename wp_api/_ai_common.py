@@ -23,7 +23,7 @@ from wp_api import (
     _ai_images,
     _ai_search,
 )
-from wp_api._helpers import db_session, json_error
+from wp_api._helpers import in_db_thread, json_error
 
 _MAX_BODY_BYTES = 512 * 1024
 
@@ -117,10 +117,10 @@ class _Web:
         return ai_research.take(answer, self.searched) if self.on else (answer, [])
 
 
-def _wildcards(request: web.Request) -> list[dict[str, Any]]:
-    """The library's wildcards, for name refs (`@{Colors:warm}`)."""
-    with db_session(request) as conn:
-        return [m for m in ModuleRepository(conn).list() if m.get("type") == "wildcard"]
+async def _wildcards(request: web.Request) -> list[dict[str, Any]]:
+    """The library's wildcards, for name refs (`@{Colors:warm}`). Read in a
+    worker thread (every payload is decoded)."""
+    return await in_db_thread(request, lambda conn: ModuleRepository(conn).list(type="wildcard"))
 
 
 def _ref_index(rows: list[dict[str, Any]], editor_id: Any = None,

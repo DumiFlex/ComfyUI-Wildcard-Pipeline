@@ -48,18 +48,18 @@ from wp_api._ai_context import (
     _vocab_kinds,
     _window,
 )
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import in_db_thread, json_error, json_ok
 from wp_api._validators import validate_wildcard_name
 
 
-def _reusable(request: web.Request) -> list[dict[str, Any]]:
-    """Library rows a pack may reuse or point at: wildcards and fixed values."""
-    with db_session(request) as conn:
-        return [m for m in ModuleRepository(conn).list()
-                if m.get("type") in ai_pack.REUSABLE]
+async def _reusable(request: web.Request) -> list[dict[str, Any]]:
+    """Library rows a pack may reuse or point at: wildcards and fixed values.
+    Read in a worker thread."""
+    rows = await in_db_thread(request, lambda conn: ModuleRepository(conn).list())
+    return [m for m in rows if m.get("type") in ai_pack.REUSABLE]
 
 
-def _pack_base(request: web.Request, body: dict[str, Any],
+async def _pack_base(request: web.Request, body: dict[str, Any],
                library: list[dict[str, Any]]) -> dict[str, Any] | None | web.Response:
     """"Extend with AI": the bundle named by ``bundle_id``, read fresh on
     every request (None without one)."""
@@ -68,8 +68,7 @@ def _pack_base(request: web.Request, body: dict[str, Any],
         return None
     if not isinstance(bid, str) or not bid:
         return json_error("bundle_id must be a bundle id", status=400)
-    with db_session(request) as conn:
-        bundles = BundleRepository(conn).list()
+    bundles = await in_db_thread(request, lambda conn: BundleRepository(conn).list())
     bundle = next((b for b in bundles if b["id"] == bid), None)
     if bundle is None:
         return json_error("that bundle no longer exists", status=404)
@@ -175,13 +174,15 @@ async def post_pack_plan(request: web.Request) -> web.Response:
     sample = _got if isinstance(_got := body.get("sample"), str) else ""
     settings = ai_pack.parse_settings(body.get("settings"))
     decisions = ai_pack.parse_decisions(body.get("decisions"))
-    with db_session(request) as conn:
+    def _load(conn: Any) -> tuple[list[dict[str, Any]], str]:
         modules = ModuleRepository(conn).list()
-        lib_note = ai_patterns.note(ai_patterns.summarize(
+        return modules, ai_patterns.note(ai_patterns.summarize(
             modules, BundleRepository(conn).list(), TemplateRepository(conn).list()),
             reuse=False)
+
+    modules, lib_note = await in_db_thread(request, _load)
     library = [m for m in modules if m.get("type") in ai_pack.REUSABLE]
-    base = _pack_base(request, body, library)
+    base = await _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
     previous = _got if isinstance(_got := body.get("previous"), dict) else None
@@ -434,8 +435,8 @@ async def post_pack_change(request: web.Request) -> web.Response:
     refused = ai_adult.refused_request(instruction)
     if refused:
         return json_error(refused, status=400)
-    library = _reusable(request)
-    base = _pack_base(request, body, library)
+    library = await _reusable(request)
+    base = await _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
     parsed = _pack_body(body, library, base)
@@ -494,8 +495,8 @@ async def post_pack_images(request: web.Request) -> web.Response:
         return images
     if not images:
         return json_error("no images were sent", status=400)
-    library = _reusable(request)
-    base = _pack_base(request, body, library)
+    library = await _reusable(request)
+    base = await _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
     parsed = _pack_body(body, library, base)
@@ -536,8 +537,8 @@ async def post_pack_review(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     own_words = await _check_request(cfg, body)
-    library = _reusable(request)
-    base = _pack_base(request, body, library)
+    library = await _reusable(request)
+    base = await _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
     parsed = _pack_body(body, library, base)
@@ -580,8 +581,8 @@ async def post_pack_item(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     await _check_request(cfg, body)
-    library = _reusable(request)
-    base = _pack_base(request, body, library)
+    library = await _reusable(request)
+    base = await _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
     parsed = _pack_body(body, library, base)
@@ -687,8 +688,8 @@ async def post_pack_check(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     await _check_request(cfg, body)
-    library = _reusable(request)
-    base = _pack_base(request, body, library)
+    library = await _reusable(request)
+    base = await _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
     parsed = _pack_body(body, library, base)
@@ -721,8 +722,8 @@ async def post_pack_install(request: web.Request) -> web.Response:
     if isinstance(body, web.Response):
         return body
     await _check_request(cfg, body)
-    library = _reusable(request)
-    base = _pack_base(request, body, library)
+    library = await _reusable(request)
+    base = await _pack_base(request, body, library)
     if isinstance(base, web.Response):
         return base
     parsed = _pack_body(body, library, base)
@@ -737,7 +738,7 @@ async def post_pack_install(request: web.Request) -> web.Response:
             err = validate_wildcard_name(i["name"])
             if err is not None:
                 return json_error(f"{i['name']}: {err}", status=400)
-    with db_session(request) as conn:
+    def _install(conn: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         def ids(table: str) -> set[str]:
             return {r[0] for r in conn.execute(f"SELECT id FROM {table};")}  # noqa: S608
         taken = ids("modules") | ids("bundles")
@@ -747,7 +748,10 @@ async def post_pack_install(request: web.Request) -> web.Response:
         else:
             ops = ai_pack.extend_ops(plan, built, base, taken=taken,
                                      template_ids=ids("templates"), bundle_ids=ids("bundles"))
-        result = commit_import(conn, {"adds": ops["adds"], "replaces": ops["replaces"]})
+        return ops, commit_import(conn, {"adds": ops["adds"], "replaces": ops["replaces"]})
+
+    # One undoable import of the whole pack: off the event loop.
+    ops, result = await in_db_thread(request, _install)
     if not result.get("ok"):
         return json_error(result.get("error", "install failed"), status=400)
     return json_ok({

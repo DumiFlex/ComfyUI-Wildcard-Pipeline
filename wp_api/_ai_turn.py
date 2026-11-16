@@ -34,12 +34,8 @@ from engine.ai import tools as ai_tools
 from engine.ai import trace as ai_trace
 from engine.ai.step_fields import strip_step_fields
 from engine.db.repositories import (
-    BundleRepository,
-    CategoryRepository,
     ChatNotFound,
     ChatRepository,
-    ModuleRepository,
-    TemplateRepository,
 )
 from wp_api import (
     _ai_chat,
@@ -63,6 +59,7 @@ from wp_api._ai_context import (
     _context,
     _decls,
     _final_step,
+    _index_stamp,
     _maybe_compact,
     _more_tools,
     _open_chat,
@@ -77,8 +74,9 @@ from wp_api._ai_context import (
     _too_small,
     _vocab_kinds,
     _window,
+    load_library,
 )
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import db_session, in_db_thread, json_error, json_ok
 
 #: Time one chat answer may take, checked before each step: a step that
 #: started finishes (each model call has its own timeout), and once the time
@@ -345,12 +343,11 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
         return ask
     vocab_kinds = await _vocab_kinds(body)
 
-    with db_session(request) as conn:
-        lib = ai_chat.Library(
-            ModuleRepository(conn).list(), BundleRepository(conn).list(),
-            CategoryRepository(conn).list(), TemplateRepository(conn).list(),
-        )
-        lib.index = _synced_index(conn, lib)
+    def _load(conn: Any) -> tuple[ai_chat.Library, dict[str, Any] | None, list[dict[str, Any]]]:
+        # The stamp before the rows: a write in between costs one more sync.
+        stamp = _index_stamp(conn)
+        lib = load_library(conn)
+        lib.index = _synced_index(conn, lib, stamp=stamp)
         chat: dict[str, Any] | None = None
         log: list[dict[str, Any]] = []
         if ask.chat_id:
@@ -359,6 +356,10 @@ async def _chat_turn(request: web.Request, body: dict[str, Any], emit: Any) -> w
                 log = ChatRepository(conn).messages(ask.chat_id)
             except ChatNotFound:
                 chat = None
+        return lib, chat, log
+
+    # The whole library and the chat log: read in a worker thread.
+    lib, chat, log = await in_db_thread(request, _load)
     retried_from: int | None = None
     if ask.retry:
         rewound = _rewind(ask, chat, log)

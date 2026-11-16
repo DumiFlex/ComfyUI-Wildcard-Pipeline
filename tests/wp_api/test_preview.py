@@ -257,3 +257,39 @@ async def test_preview_null_or_missing_step_seed_uses_seed(wp_client):
     assert await _resolve(wp_client, {"chain": chain, "seed": 7, "seeds": [None]}) == base
     assert await _resolve(wp_client, {"chain": chain, "seed": 7, "seeds": []}) == base
     assert await _resolve(wp_client, {"chain": chain, "seed": 7, "seeds": ["x", True]}) == base
+
+
+def _color_step(mid: str, var: str) -> list:
+    return [{
+        "id": mid, "type": "wildcard", "enabled": True, "meta": {"name": var}, "entries": [],
+        "payload": {"var_binding": var, "options": [
+            {"id": "o1", "value": "red", "weight": 1}, {"id": "o2", "value": "blue", "weight": 1},
+        ]},
+    }]
+
+
+async def test_preview_opens_one_connection_and_migrates_once(wp_client, monkeypatch):
+    """One library connection per request (not per chain step), and no full
+    `migrate` once the process has migrated the file."""
+    from engine.db import migrations
+    from wp_api import preview
+
+    opened: list[int] = []
+    real_get = preview.get_connection
+
+    def counting_get(*a, **k):
+        opened.append(1)
+        return real_get(*a, **k)
+
+    migrated: list[int] = []
+    real_migrate = migrations.migrate
+    monkeypatch.setattr(preview, "get_connection", counting_get)
+    monkeypatch.setattr(migrations, "migrate", lambda c: (migrated.append(1), real_migrate(c)))
+    chain = [_color_step(f"abcdef0{i}", f"c{i}") for i in range(3)]
+    for _ in range(2):
+        resp = await wp_client.post("/wp/api/preview/resolve", json={"chain": chain})
+        assert resp.status == 200
+        assert set((await resp.json())["resolved"]) == {"c0", "c1", "c2"}
+    assert opened == [1, 1]
+    # register_routes already migrated this file in-process.
+    assert migrated == []

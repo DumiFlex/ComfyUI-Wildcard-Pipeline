@@ -39,6 +39,33 @@ def db_session(request: web.Request):
         conn.close()
 
 
+async def in_db_thread(request: web.Request, fn: Callable[..., Any], *args: Any,
+                       **kwargs: Any) -> Any:
+    """``fn(conn, *args, **kwargs)`` in a worker thread, with the connection
+    opened (and closed) inside that thread.
+
+    aiohttp runs every handler on ComfyUI's one event loop, so a handler that
+    reads or writes the whole library inline freezes all of ComfyUI (the
+    canvas, the websocket, other extensions) until it returns. Whole-library
+    work goes through here. The connection is opened in the worker, not on
+    the loop: opening one runs PRAGMAs and can wait on a lock.
+    """
+    injected = request.app.get("wp_db") if hasattr(request, "app") else None
+    if injected is not None:
+        # A connection a test injected belongs to the thread that made it
+        # (sqlite3's default `check_same_thread`): use it right here.
+        return fn(injected, *args, **kwargs)
+
+    def work() -> Any:
+        conn = get_connection()
+        try:
+            return fn(conn, *args, **kwargs)
+        finally:
+            conn.close()
+
+    return await asyncio.to_thread(work)
+
+
 #: How often a long handler checks whether its client is still there.
 DISCONNECT_POLL_S = 0.2
 
@@ -80,6 +107,13 @@ def cancel_on_disconnect(
 
 def json_ok(data: Any, *, status: int = 200) -> web.Response:
     return web.json_response(data, status=status)
+
+
+def json_text(text: str, *, status: int = 200) -> web.Response:
+    """A JSON response from text already serialised with ``json.dumps``
+    (in a worker thread, for a big body): the same response ``json_ok``
+    makes from the data."""
+    return web.Response(text=text, status=status, content_type="application/json")
 
 
 def json_error(message: str, *, status: int) -> web.Response:

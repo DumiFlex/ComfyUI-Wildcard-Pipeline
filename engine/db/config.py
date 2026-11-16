@@ -109,6 +109,11 @@ def save(config: DbConfig, path: Path | None = None) -> None:
     except OSError:
         tmp_path.unlink(missing_ok=True)
         raise
+    # The resolver caches the path it read from here; a new preference must
+    # take effect on the next connection, as it always did.
+    from engine.db.connection import reset_db_path_cache
+
+    reset_db_path_cache()
 
 
 def clear_pending_move(path: Path | None = None) -> None:

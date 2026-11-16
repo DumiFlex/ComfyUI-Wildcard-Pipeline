@@ -12,6 +12,8 @@ appears without a restart.
 """
 from __future__ import annotations
 
+import asyncio
+
 from aiohttp import web
 
 from wp_api._helpers import json_error, json_ok
@@ -49,6 +51,14 @@ def _hits(folder_key: str, *, refresh: bool = False) -> list[ModelHit]:
     return _cache[folder_key]
 
 
+async def _hits_off_loop(folder_key: str, *, refresh: bool = False) -> list[ModelHit]:
+    """`_hits` for a route: a first (or refreshed) read asks ComfyUI to list
+    the folder, which walks the disk, so it runs in a worker thread."""
+    if not refresh and folder_key in _cache:
+        return _cache[folder_key]
+    return await asyncio.to_thread(_hits, folder_key, refresh=refresh)
+
+
 def reset_cache() -> None:
     """Drop the cached lists. For tests, and after an explicit refresh."""
     _cache.clear()
@@ -62,7 +72,7 @@ async def get_status(request: web.Request) -> web.Response:
     """
     return json_ok({
         "sources": [
-            {"kind": kind, "count": len(_hits(folder))}
+            {"kind": kind, "count": len(await _hits_off_loop(folder))}
             for folder, kind in _KINDS.items()
         ],
     })
@@ -98,7 +108,7 @@ async def suggest(request: web.Request) -> web.Response:
     for folder, kind in _KINDS.items():
         if kind not in wanted:
             continue
-        hits = _hits(folder)
+        hits = await _hits_off_loop(folder)
         chosen = (
             sorted(hits, key=lambda h: h.name.lower())[:limit]
             if not query
@@ -117,7 +127,8 @@ async def refresh(request: web.Request) -> web.Response:
     reason: ComfyUI caches its own file lists, so a model added while the server
     is running is invisible until something asks again.
     """
-    counts = {kind: len(_hits(folder, refresh=True)) for folder, kind in _KINDS.items()}
+    counts = {kind: len(await _hits_off_loop(folder, refresh=True))
+              for folder, kind in _KINDS.items()}
     return json_ok({"sources": [{"kind": k, "count": c} for k, c in counts.items()]})
 
 

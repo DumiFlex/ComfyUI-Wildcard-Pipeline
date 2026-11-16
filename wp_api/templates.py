@@ -8,13 +8,14 @@ drift — see engine/db/migrations_sql/012_templates.sql).
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 
 from aiohttp import web
 
 from engine.db.repositories import TemplateNotFound, TemplateRepository
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import db_session, in_db_thread, json_error, json_ok, json_text
 from wp_api._validators import validate_body_size, validate_meta
 
 _NEW_ID = re.compile(r"[0-9a-f]{8}")
@@ -61,7 +62,7 @@ async def list_templates(request: web.Request) -> web.Response:
     if offset < 0:
         return json_error("offset must be non-negative", status=400)
 
-    with db_session(request) as conn:
+    def _list(conn: sqlite3.Connection) -> str:
         repo = TemplateRepository(conn)
         items = repo.list(
             category_id=category_id, query=query,
@@ -70,7 +71,9 @@ async def list_templates(request: web.Request) -> web.Response:
         total = repo.count(
             category_id=category_id, query=query, favorites_only=favorites,
         )
-    return json_ok({"items": items, "total": total})
+        return json.dumps({"items": items, "total": total})
+
+    return json_text(await in_db_thread(request, _list))
 
 
 async def create_template(request: web.Request) -> web.Response:

@@ -9,7 +9,7 @@ from aiohttp import web
 
 from engine.cascade.orchestrator import apply_cascade as _apply
 from engine.cascade.undo import undo_cascade as _undo
-from wp_api._helpers import db_session, json_error, json_ok
+from wp_api._helpers import in_db_thread, json_error, json_ok
 
 
 async def cascade_apply(request: web.Request) -> web.Response:
@@ -46,8 +46,8 @@ async def cascade_apply(request: web.Request) -> web.Response:
     if not isinstance(body, dict):
         return json_error("body must be a JSON object", status=400)
 
-    with db_session(request) as conn:
-        result = _apply(conn, body)
+    # Rewrites every row that reads the renamed variable: in a worker.
+    result = await in_db_thread(request, _apply, body)
 
     if not result.get("ok"):
         return json_error(result.get("error", "apply failed"), status=400)
@@ -77,8 +77,7 @@ async def cascade_undo(request: web.Request) -> web.Response:
     if not isinstance(undo_id, str) or not undo_id:
         return json_error("undo_entry_id required", status=400)
 
-    with db_session(request) as conn:
-        result = _undo(conn, undo_id)
+    result = await in_db_thread(request, _undo, undo_id)
 
     if not result.get("ok"):
         error = result.get("error", "undo failed")

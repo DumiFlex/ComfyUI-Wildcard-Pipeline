@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import sqlite3
+import threading
 from typing import Any
 
 from engine.ai import budget as ai_budget
@@ -19,6 +20,12 @@ from engine.ai import pack as ai_pack
 from engine.ai import safety as ai_safety
 from engine.ai import tools as ai_tools
 from engine.ai import vocab as ai_vocab
+from engine.db.repositories import (
+    BundleRepository,
+    CategoryRepository,
+    ModuleRepository,
+    TemplateRepository,
+)
 from wp_api import (
     _ai_chat,
     _ai_client,
@@ -493,27 +500,58 @@ async def _maybe_compact(cfg: dict[str, Any], log: list[dict[str, Any]], meta: d
 
 #: One library index per library database file (see `engine.ai.index`).
 _INDEXES: dict[str, ai_index.Index | None] = {}
+#: Syncs run in worker threads now; one at a time, as they did on the loop.
+_SYNC_LOCK = threading.Lock()
 
 
 #: Ids and docs sections a chat remembers having handed the model.
 MAX_SHOWN = 400
 
 
-def _synced_index(conn: Any, lib: ai_chat.Library) -> ai_index.Index | None:
+def _index_stamp(conn: Any) -> str | None:
+    """`ai_index.library_stamp` for a library file (None in memory, where
+    every library shares one index)."""
+    return ai_index.library_stamp(conn) if ai_index.library_path(conn) else None
+
+
+def load_library(conn: Any) -> ai_chat.Library:
+    return ai_chat.Library(
+        ModuleRepository(conn).list(), BundleRepository(conn).list(),
+        CategoryRepository(conn).list(), TemplateRepository(conn).list(),
+    )
+
+
+def _synced_index(conn: Any, lib: ai_chat.Library | None = None, *,
+                  stamp: str | None = None) -> ai_index.Index | None:
     """The library index, brought up to date with the saved rows; None when
     SQLite has no FTS5 or the index can't be used (search then scores rows
-    in Python, as before)."""
-    idx = _library_index_for(conn)
-    if idx is None:
-        return None
-    key = str(ai_index.index_path(ai_index.library_path(conn)) or "")
-    rows = [*lib.modules.values(), *lib.bundles.values(), *lib.templates.values()]
-    try:
-        idx.sync(rows, lib._kind)
-    except sqlite3.Error:
-        _INDEXES.pop(key, None)
-        return None
-    return idx
+    in Python, as before).
+
+    `stamp` is `_index_stamp(conn)` taken BEFORE `lib` was read (a write in
+    between then only costs one more sync, never a missed one). When the
+    index was last synced at that stamp, nothing is loaded or compared; with
+    no `lib` the library is loaded only when a sync is due. Blocking: call
+    it from a worker thread.
+    """
+    with _SYNC_LOCK:
+        idx = _library_index_for(conn)
+        if idx is None:
+            return None
+        if lib is None:
+            stamp = _index_stamp(conn)
+        if stamp is not None and idx.synced == stamp:
+            return idx
+        if lib is None:
+            lib = load_library(conn)
+        key = str(ai_index.index_path(ai_index.library_path(conn)) or "")
+        rows = [*lib.modules.values(), *lib.bundles.values(), *lib.templates.values()]
+        try:
+            idx.sync(rows, lib._kind)
+        except sqlite3.Error:
+            _INDEXES.pop(key, None)
+            return None
+        idx.synced = stamp
+        return idx
 
 
 async def _query_vector(lib: ai_chat.Library, cfg: dict[str, Any],
