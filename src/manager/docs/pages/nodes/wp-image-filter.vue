@@ -21,7 +21,7 @@ const modes = [
 
 const keys = [
   { term: "Keep", kbd: "Enter", desc: "Keep the picks and let the run go on." },
-  { term: "Step back", kbd: "Esc", desc: "Step back a mode: Zoom to Detail, Detail to Grid. From Grid it tucks the picker away; a waiting pill at the bottom of the screen opens it again, picks intact." },
+  { term: "Step back", kbd: "Esc", desc: "Step back a mode: Zoom to Detail, Detail to Grid. From Grid it tucks the picker away; a waiting pill at the bottom of the screen opens it again, picks intact. The × in the header tucks it away from any mode." },
 ];
 
 </script>
