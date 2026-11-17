@@ -177,6 +177,18 @@ describe("PickerModal", () => {
     expect(w.emitted("answer")?.[0]?.[0]).toEqual({ action: "picks", picks: [[0, 1], [0, 2]], labels: { "0:1": "#1 · 2", "0:2": "#1 · 3" } });
   });
 
+  it("has one close button: the × hides the picker from any mode, without stepping back", async () => {
+    const w = mk(request([3]));
+    await w.vm.$nextTick();
+    expect(w.find('[data-test="image-filter-minimize"]').exists()).toBe(false);
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "z" });
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
+    await w.find('[data-test="modal-close"]').trigger("click");
+    expect(w.emitted("minimize")).toHaveLength(1);
+    expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
+  });
+
   it("the strip in Detail jumps to an image; double-clicking it opens Zoom", async () => {
     const w = mk(request([4]));
     await w.vm.$nextTick();
