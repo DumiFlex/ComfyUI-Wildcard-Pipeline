@@ -1196,6 +1196,10 @@ export interface ModuleEntry {
      * project, adapted to our `_fresh_instance` shape.
      */
     locked_seed?: number | null;
+    /** Value lock (the row lock's second state): always take this option,
+     *  the one the last run picked. A sweep pin wins on its frame. `null`
+     *  in a frame override unlocks that frame. Wildcards only. */
+    locked_option_id?: string | null;
     /** Iteration seed scope: "hold" pins this module's RNG to the run base
      *  seed (identical across loop iterations, re-rolls per run); "vary"
      *  (default/absent) rides the per-iteration seed. `locked_seed` wins. */

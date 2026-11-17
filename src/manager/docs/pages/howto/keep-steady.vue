@@ -7,7 +7,7 @@ import DocRef from "../../../components/docs/DocRef.vue";
 import CrossLinks from "../../../components/docs/CrossLinks.vue";
 
 const ways = [
-  { term: "Keep one pick for good: Lock pick", desc: "Click the lock on a row (Lock seed on modules other than wildcards). It keeps its result on every Generate until you unlock it. Good for a style you've settled on." },
+  { term: "Keep one pick for good: the row lock", desc: "Click the lock on a row once to lock its seed: it keeps rolling the same way on every Generate. On a wildcard, click again to lock the value: it always takes the option it picked last run, whatever the seed or the rules above it do. A third click unlocks. The value step needs one run first; until then the second click unlocks." },
   { term: "Keep one pick for a batch: Hold across run", desc: "Right-click a row, or switch it on in the row's editor. Every loop frame of one Generate shares the pick; the next Generate picks again. Good for one character through a story." },
   { term: "Always the same option: untick the others", desc: "In the row's editor, untick every option but one. Or use a Fixed Values module if it never changes at all." },
   { term: "Keep every pick: fix the Context seed", desc: "Set the WP Context's seed to fixed (control after generate). The same seed and the same modules give the same prompt every time." },
@@ -35,9 +35,13 @@ const ways = [
 
     <DocSection title="Good to know">
       <ul>
-        <li>A lock keeps the module's dice the same. If you edit its options, or a constraint above
-          it changes the odds, the result can still change. Hold across run keeps the finished
-          text instead.</li>
+        <li>A seed lock keeps the module's dice the same. If you edit its options, or a constraint
+          above it changes the odds, the result can still change. A value lock keeps the option
+          itself, and constraints whose source sits above it keep that source fitting the locked
+          value (see <DocRef id="constraints" />). Hold across run keeps the finished text for one
+          Generate.</li>
+        <li>A value-locked row shows its option in a small badge next to its name. Its editor shows
+          a <b>Locked value</b> switch to turn it off.</li>
         <li>Hide from prompt and Hold across run apply to every frame, so they're greyed out while
           you edit a single frame.</li>
         <li>The full story of seeds is on <DocRef id="seeds-and-loops" />.</li>

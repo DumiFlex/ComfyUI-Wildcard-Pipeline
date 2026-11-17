@@ -217,10 +217,12 @@ def _domain(
         # Held: its value is the frame-0 one, decided already.
         return None
     narrowed = False
-    if inst.get("mode") == "pinned":
-        pinned = next((o for o in options if o.get("id") == inst.get("pinned_option_id")), None)
-        if pinned is not None:
-            return [pinned]
+    for on, key in ((inst.get("mode") == "pinned", "pinned_option_id"), (True, "locked_option_id")):
+        want = inst.get(key)
+        if on and want:
+            pinned = next((o for o in options if o.get("id") == want), None)
+            if pinned is not None:
+                return [pinned]
     pool = options
     expr = inst.get("category_filter")
     exclude_null = bool(inst.get("exclude_null", False))

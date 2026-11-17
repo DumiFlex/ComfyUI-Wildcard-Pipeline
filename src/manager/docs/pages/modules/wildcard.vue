@@ -33,7 +33,7 @@ const instanceOptions = [
   { term: "Exclude null", desc: "Leaves the null option out for this use, so something always prints." },
   { term: "Fallback", desc: "Untick the fallback to switch it off for this use; then nothing prints when nothing is left." },
   { term: "Match variable", desc: "Instead of rolling, pick the option whose text equals a variable's value (case doesn't matter), e.g. $model_variant from WP Model Info. No match uses the fallback, or rolls as usual. This is how a variable can drive a constraint." },
-  { term: "Lock pick", desc: "Keeps the same pick on every Generate and loop frame until you unlock it. Good for an art style you've settled on." },
+  { term: "Lock pick", desc: "Keeps the same pick on every Generate and loop frame until you unlock it. Good for an art style you've settled on. The row's lock button goes one step further on a second click: Lock value always takes the option the last run picked." },
   { term: "Hold across run", desc: "The same pick on every frame of one loop run, a new one next Generate. Good for a character who stays the same through a story." },
   { term: "Hide from prompt", desc: "The variable prints nothing, but constraints, combines and derivations can still use it." },
 ];

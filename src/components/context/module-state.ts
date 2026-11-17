@@ -1,5 +1,6 @@
 import type { ModuleEntry } from "../../widgets/_shared";
 import { currentFrame } from "../context-loop/frame-cursor";
+import { lockStateAt, type LockState } from "./lock-cycle";
 import {
   withFrameInstance,
   effectiveEnabled as feEffectiveEnabled,
@@ -131,8 +132,23 @@ export function isInternalable(m: ModuleEntry): boolean {
   return m.type !== "constraint";
 }
 
+/** Locked at all: seed or value (the row lock's second and third state). */
 export function isLocked(m: ModuleEntry): boolean {
-  return typeof withFrameInstance(m, currentFrame.value).instance?.locked_seed === "number";
+  return lockStateAt(m, currentFrame.value) !== "off";
+}
+/** The row lock's state on the frame in view (or the base). */
+export function lockState(m: ModuleEntry): LockState {
+  return lockStateAt(m, currentFrame.value);
+}
+/** The text of the option a value lock holds (its id when the option is gone). */
+export function lockedValueText(m: ModuleEntry): string {
+  const id = withFrameInstance(m, currentFrame.value).instance?.locked_option_id;
+  if (typeof id !== "string") return "";
+  const options = (m.payload as { options?: unknown } | undefined)?.options;
+  const hit = Array.isArray(options)
+    ? options.find((o) => (o as { id?: unknown })?.id === id) as { value?: unknown } | undefined
+    : undefined;
+  return typeof hit?.value === "string" ? hit.value : id;
 }
 export function isInternal(m: ModuleEntry): boolean {
   return !!m.instance?.internal;

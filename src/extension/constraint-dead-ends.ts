@@ -81,8 +81,10 @@ function instanceOf(side: WildcardSide): InstanceLike {
 /** Pinned and Match-variable instances skip constraint re-weighting on the
  *  target side (a pin) or take a fixed option, so they're handled apart. */
 function pinnedOptionId(instance: Record<string, unknown> | null | undefined): string | null {
-  if (!instance || instance.mode !== "pinned") return null;
-  return typeof instance.pinned_option_id === "string" ? instance.pinned_option_id : null;
+  if (!instance) return null;
+  if (instance.mode === "pinned" && typeof instance.pinned_option_id === "string") return instance.pinned_option_id;
+  // A value lock (the row lock's third state) holds one option the same way.
+  return typeof instance.locked_option_id === "string" && instance.locked_option_id ? instance.locked_option_id : null;
 }
 
 function matchesVariable(instance: Record<string, unknown> | null | undefined): boolean {

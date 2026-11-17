@@ -173,6 +173,9 @@ const props = withDefaults(defineProps<{
    *  computed from the upstream Loop without a run. Drives the per-frame seed
    *  lock so it pins the seed the module actually uses on that frame. */
   frameSeedReader?: (frame: number) => number | null;
+  /** The option a wildcard use (by `_uid`) picked last run, at frame `k`
+   *  when one is active. Drives the row lock's "lock value" step. */
+  lastPickReader?: (uid: string, frame: number | null) => string | null;
   /** What "Seed from" can pick: a Context Loop upstream, and the row names of
    *  the WP Seeds nodes upstream. Absent in headless mounts. */
   seedSources?: { loop: boolean; rows: string[] };

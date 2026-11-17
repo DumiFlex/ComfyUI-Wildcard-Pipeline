@@ -1397,6 +1397,49 @@ describe("ContextWidget inline actions", () => {
     expect(wrapper.find('[data-test="row-action-internal"]').exists()).toBe(true);
   });
 
+  it("lock steps seed → value → off, pinning the last run's pick", async () => {
+    const onChange = vi.fn();
+    const mod = {
+      id: "abc12345", _uid: "row00001", type: "wildcard", enabled: true,
+      meta: { name: "place", description: "", tags: [] }, entries: [],
+      payload: { options: [{ id: "o-bed", value: "bedroom" }, { id: "o-bath", value: "bathroom" }] },
+    };
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 9050, initialJson: JSON.stringify({ version: 1, modules: [mod] }), upstreamVars: [], onChange,
+        lastUsedSeedReader: () => 42,
+        lastPickReader: (uid: string) => (uid === "row00001" ? "o-bath" : null),
+      },
+    });
+    const btn = () => wrapper.find('[data-test="row-action-lock"]');
+    const last = () => JSON.parse(onChange.mock.calls.at(-1)?.[0] as string).modules[0].instance;
+    await btn().trigger("click");
+    expect(last().locked_seed).toBe(42);
+    expect(btn().attributes("data-lock")).toBe("seed");
+    await btn().trigger("click");
+    expect(last().locked_option_id).toBe("o-bath");
+    expect(last().locked_seed).toBeUndefined();
+    expect(btn().attributes("data-lock")).toBe("value");
+    expect(wrapper.find('[data-test="mod-locked-value"]').text()).toContain("bathroom");
+    await btn().trigger("click");
+    expect(last().locked_option_id).toBeUndefined();
+    expect(btn().attributes("data-lock")).toBe("off");
+  });
+
+  it("lock seed steps straight to off when the last run picked nothing", async () => {
+    const onChange = vi.fn();
+    const mod = { id: "abc12345", _uid: "row00002", type: "wildcard", enabled: true,
+      meta: { name: "w", description: "", tags: [] }, entries: [], payload: {} };
+    const wrapper = mount(ContextWidget, {
+      props: { nodeId: 9051, initialJson: JSON.stringify({ version: 1, modules: [mod] }), upstreamVars: [], onChange,
+        lastUsedSeedReader: () => 7, lastPickReader: () => null },
+    });
+    const btn = () => wrapper.find('[data-test="row-action-lock"]');
+    await btn().trigger("click");
+    await btn().trigger("click");
+    expect(btn().attributes("data-lock")).toBe("off");
+  });
+
   it("hides both lock and internal for constraint kind (no bindings produced)", () => {
     const wrapper = mountWithModules([
       { id: "def67890", type: "constraint", enabled: true },

@@ -143,3 +143,19 @@ def test_pipeline_trace_records_effective_seed_per_module():
     trace = ctx["__wp_trace__"]
     assert trace[0]["seed"] == 99      # locked
     assert trace[1]["seed"] == 12345   # chain
+
+
+def test_ui_reports_each_use_pick_for_the_lock_value():
+    """`module_picks` / `frame_picks` carry the option each single-pick
+    wildcard use picked, by `_uid`, for the row lock's value step."""
+    from wp_nodes import context_node as cn
+
+    row = {
+        "id": "m1", "_uid": "row00001", "type": "wildcard", "enabled": True,
+        "meta": {"name": "color"}, "entries": [],
+        "payload": {"var_binding": "color",
+                    "options": [{"id": "o-red", "value": "red", "weight": 1}]},
+    }
+    out = cn.WPContext.execute(seed=3, wp_modules={"modules": [row]}, upstream=None)
+    assert out.ui["module_picks"] == [{"row00001": "o-red"}]
+    assert out.ui["frame_picks"] == [{"frame": 0, "picks": {"row00001": "o-red"}}]

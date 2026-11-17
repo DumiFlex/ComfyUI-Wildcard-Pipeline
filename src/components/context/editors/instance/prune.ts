@@ -66,6 +66,10 @@ export function pruneStaleInstanceRefs(
       out.pinned_option_id = null;
       out.mode = "random";
     }
+    if (typeof out.locked_option_id === "string" && !optionIds.has(out.locked_option_id)) {
+      warnings.push(`locked_option_id: dropped stale id '${out.locked_option_id}'`);
+      delete out.locked_option_id;
+    }
     if (typeof out.category_filter === "string" && out.category_filter.trim()) {
       const stale = [...new Set(exprTags(parseSubcatExpr(out.category_filter)))]
         .filter((c) => !subCats.has(c));

@@ -11,8 +11,8 @@ import {
   clearFrameOverride,
   dropRedundantFrameLockNulls,
   toggleFrameEnabled,
-  toggleFrameLock,
 } from "./frame-overrides";
+import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock } from "./lock-cycle";
 import {
   animateEnterBatch,
   captureFlipSnapshot,
@@ -28,6 +28,9 @@ import type { ModuleRowCtx } from "./module-row-ctx";
 export interface ModuleOpsProps {
   readonly lastUsedSeedReader?: (moduleId?: string) => number | null;
   readonly frameSeedReader?: (frame: number) => number | null;
+  /** The option this use (by `_uid`) picked last run, at frame `k` when one
+   *  is active; null when unknown or a multi-pick. */
+  readonly lastPickReader?: (uid: string, frame: number | null) => string | null;
 }
 
 /**
@@ -47,68 +50,37 @@ export function createModuleOps(
 ) {
   const { value, commitModules, modulesContainer } = state;
 
-  /** In-card lock toggle. Off → null `locked_seed` but keep
-   *  `_ui.last_locked_seed` so the next toggle-on has a fallback.
-   *  On → fallback chain (per-module priority so re-locking captures
-   *  what THIS specific wildcard actually rolled with):
-   *    1. lastUsedSeedReader(m._uid) — seed THIS instance used last
-   *       run (locked_seed if it was locked, else chain seed).
-   *       Keyed by per-instance _uid so siblings sharing m.id don't
-   *       collapse to one value.
-   *       Refreshes after every queue. Handles the
-   *       lock→run→unlock→lock case correctly: the locked-and-then-
-   *       unlocked wildcard restores to ITS locked seed, not the
-   *       chain seed of that run.
-   *    2. `_ui.last_locked_seed` — cold-start fallback when no queue
-   *       has happened yet this session.
-   *    3. 0 (final default). */
+  /** In-card lock: one click steps off → lock seed → lock value → off.
+   *  Lock seed captures the seed THIS use rolled last run, by its own `_uid`
+   *  (siblings share `m.id`), else the frame's seed when a frame is active,
+   *  else `_ui.last_locked_seed`, else 0. Lock value pins the option THIS use
+   *  picked last run (wildcards with a single pick only); with no such pick
+   *  the seed lock steps straight to off. A seed lock that turns into a value
+   *  lock drops the seed: the option no longer depends on it. */
   function toggleLockOnCard(idx: number) {
     const m = value.value.modules[idx];
     if (!m) return;
     const k = currentFrame.value;
+    const key = m._uid ?? m.id;
+    const pick = m.type === "wildcard" ? (props.lastPickReader?.(key, k) ?? null) : null;
+    const lastUsed = props.lastUsedSeedReader?.(key);
+    const stored = typeof m.instance?._ui?.last_locked_seed === "number" ? m.instance._ui.last_locked_seed : 0;
+    const list = [...value.value.modules];
     if (k != null) {
-      // Prefer the seed THIS module actually rolls at frame #k (computed from the
-      // upstream Loop), so the lock pins the frame's real seed — not the single
-      // representative seed a run surfaced. Falls back to last-used / stored when
-      // no Loop drives the node.
+      // Prefer the seed THIS module actually rolls at frame #k, so the lock
+      // pins the frame's real seed, not the one representative seed a run
+      // surfaced.
       const frameSeed = props.frameSeedReader?.(k);
-      const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
-      const fallback = typeof frameSeed === "number" ? frameSeed
-        : typeof lastUsed === "number" ? lastUsed
-        : (typeof m.instance?._ui?.last_locked_seed === "number" ? m.instance._ui.last_locked_seed : 0);
-      const list = [...value.value.modules];
-      list[idx] = toggleFrameLock(m, k, fallback);
+      const seed = typeof frameSeed === "number" ? frameSeed : typeof lastUsed === "number" ? lastUsed : stored;
+      const next = nextLockState(lockStateAt(m, k), pick);
+      list[idx] = withFrameLock(m, k, lockFields(next, seed, pick));
       commitModules(list);
       return;
     }
     const inst = m.instance ?? {};
-    let nextInst: NonNullable<ModuleEntry["instance"]>;
-    if (typeof inst.locked_seed === "number") {
-      // DROP `locked_seed` rather than setting `null` — bundle MOD
-      // fingerprint stableStringify distinguishes `null` from missing,
-      // and a bundle was lighting up "modified" on the first per-card
-      // unlock because the JSON shape changed even though the engine
-      // treats both states identically.
-      const { locked_seed: _drop, ...restInst } = inst;
-      void _drop;
-      nextInst = restInst;
-    } else {
-      let fallback: number;
-      // Read by per-instance `_uid` — sibling rows share `m.id` (library
-      // uuid) so id-keyed reads would return the same value for every
-      // sibling regardless of which one rolled last. Engine trace now
-      // emits `_uid` per entry; `module_seeds` is keyed by it. Falls back
-      // to `m.id` for pre-`_uid` migration entries.
-      const lastUsed = props.lastUsedSeedReader?.(m._uid ?? m.id);
-      if (typeof lastUsed === "number") {
-        fallback = lastUsed;
-      } else if (typeof inst._ui?.last_locked_seed === "number") {
-        fallback = inst._ui.last_locked_seed;
-      } else {
-        fallback = 0;
-      }
-      nextInst = { ...inst, locked_seed: fallback, _ui: { ...inst._ui, last_locked_seed: fallback } };
-    }
+    const seed = typeof lastUsed === "number" ? lastUsed : stored;
+    const next = nextLockState(lockStateOf(inst), pick);
+    let nextInst = withBaseLock(inst, lockFields(next, seed, pick));
     // Drop the bundle master_lock marker — the user is now hand-
     // managing this row's lock state, so a future master OFF on the
     // bundle should leave it alone. Strips both legacy `master_lock`
@@ -119,12 +91,10 @@ export function createModuleOps(
       void _drop2;
       nextInst = { ...nextInst, _ui: restUi };
     }
-    // Phase B: index-based mutation — sibling rows share `m.id`, so a
-    // map-by-id pass would toggle every sibling at once. Indexing into
-    // the array hits the specific instance the user clicked.
-    const list = [...value.value.modules];
-    // Unlocking base makes any frame `locked_seed: null` override redundant —
-    // sweep it so the row stops showing a stale "override #k". No-op on lock.
+    // Index-based: sibling rows share `m.id`, so a map-by-id pass would
+    // toggle every sibling at once. Unlocking the base makes any frame
+    // `null` lock override redundant: sweep it so the row stops showing a
+    // stale "override #k".
     list[idx] = dropRedundantFrameLockNulls({ ...m, instance: nextInst });
     commitModules(list);
   }

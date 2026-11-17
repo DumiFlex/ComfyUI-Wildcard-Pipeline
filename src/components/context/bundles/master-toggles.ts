@@ -59,7 +59,9 @@ const INTERNAL: Master = {
 const LOCK: Master = {
   applies: isSeedLockable,
   isOn: isLocked,
-  has: (inst) => typeof inst.locked_seed === "number",
+  // A value-locked row counts as locked, so master ON leaves it alone.
+  has: (inst) => typeof inst.locked_seed === "number"
+    || (typeof inst.locked_option_id === "string" && inst.locked_option_id !== ""),
   field: "locked_seed",
   flag: "master_lock",
   claim: "master_lock_by",
