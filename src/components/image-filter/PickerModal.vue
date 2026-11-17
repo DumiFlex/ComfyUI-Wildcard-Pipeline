@@ -11,8 +11,9 @@
  * - Zoom shows only the picture, at real zoom levels (WpImageZoom). The level
  *   and spot carry over when ←/→ step, so a series is checked in one place.
  * The pick count and the Keep buttons stay in the footer in every mode.
- * Closing (Escape / clicking outside) steps back a mode, then only minimises
- * it: the run keeps waiting until one of the three answers is sent.
+ * Escape (or clicking outside) steps back a mode, then tucks the picker away;
+ * the × tucks it away at once. Either way the run keeps waiting until one of
+ * the three answers is sent.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import Modal from "@/kit/Modal.vue";
@@ -538,6 +539,12 @@ function stop(): void {
   finish({ action: "stop" });
 }
 
+function onModalClose(reason: "button" | "escape" | "backdrop"): void {
+  // The × hides the picker from any mode; Escape and outside clicks step back first.
+  if (reason === "button") emit("minimize");
+  else onClose();
+}
+
 function onClose(): void {
   // Escape / outside click: Zoom steps back to Detail, Detail to Grid, then the picker tucks away.
   if (mode.value === "zoom") setMode("detail");
@@ -610,7 +617,7 @@ const subLine = computed(() => {
     flush
     accent="var(--wp-accent)"
     icon="filter"
-    @update:open="(v: boolean) => { if (!v) onClose(); }"
+    @close="onModalClose"
     @keydown="onKey"
   >
     <template #header="{ titleId }">
@@ -635,7 +642,6 @@ const subLine = computed(() => {
         :disabled="!total"
         @update:model-value="(m) => setMode(m)"
       />
-      <Button size="sm" variant="ghost" icon="pi-minus" aria-label="Hide for now (the run keeps waiting)" data-test="image-filter-minimize" @click="emit('minimize')" />
     </template>
     <div ref="pickerEl" class="wp-ifp" :class="[`is-${mode}`, { 'is-fit': isFit }]" data-test="image-filter-picker" :data-mode="mode" tabindex="-1">
 
