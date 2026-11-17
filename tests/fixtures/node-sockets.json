@@ -590,6 +590,38 @@
       }
     ]
   },
+  "WP_Slider3D": {
+    "inputs": [
+      {
+        "name": "upstream",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "wp_sliders",
+        "type": "WP_SLIDER_3D",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      },
+      {
+        "name": "x",
+        "type": "*"
+      },
+      {
+        "name": "y",
+        "type": "*"
+      },
+      {
+        "name": "z",
+        "type": "*"
+      }
+    ]
+  },
   "WP_Toggles": {
     "inputs": [
       {

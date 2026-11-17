@@ -1977,6 +1977,50 @@
    ]
   },
   {
+   "id": "wp-slider-3d",
+   "title": "WP Slider 3D",
+   "group": "nodes",
+   "blurb": "Three numbers at once: an XY pad with a Z fader, or a camera or light orbiting the subject that writes words like front-left view, high angle, medium shot.",
+   "keywords": [
+    "slider",
+    "3d",
+    "xyz",
+    "pad",
+    "orbit",
+    "camera",
+    "angle",
+    "view",
+    "light",
+    "lighting",
+    "shot",
+    "distance",
+    "num",
+    "mxtoolkit"
+   ],
+   "sections": [
+    {
+     "title": "What it's for",
+     "text": "WP Slider 3D sets three numbers together. Each axis is a slider of its own, as in WP Slider 2D: it writes $its_variable (the number, your text or a word per range), $name.num reads its number, and it has its own output, x, y or z.\nTwo ways to draw it. The pad styles are the 2D pad with a Z fader beside it; a ring round the point grows with Z. The Orbit style puts a camera or a light round the subject: X is the angle round it, Y the height, Z the distance. Its Camera and Light words turn the three numbers into one phrase, like $view = front-left view, high angle, medium shot, ready for a prompt or a multi-angle LoRA."
+    },
+    {
+     "title": "When to use it",
+     "text": "Good for\n- A camera angle for a character or product shot: Orbit with the Camera words, $view in the prompt\n- Where the key light comes from: Orbit with the Light words, $light in the prompt (backlight, side light from the left, overhead light …)\n- Three numbers you tune together: cfg, steps and denoise, or three LoRA strengths\nBetter with something else\n- Two numbers: WP Slider 2D\n- Numbers you set one at a time: WP Slider"
+    },
+    {
+     "title": "Controls",
+     "text": "upstream (in)\nOptional Context to extend. Only nodes after this one see the node's variables.\nPad and Z fader\nThe Pad, Size, Stick and Map styles: the XY pad of WP Slider 2D for X and Y, and an upright fader beside it for Z. A ring round the point grows with Z, and the mouse wheel over the pad moves Z one step.\nOrbit\nThe Orbit style: a camera or a light round the subject. The top view sets X, the angle round it (0 the front, 90 the right, ±180 the back), and how far from the middle sets Z, the distance; the side view sets Y, the height angle from below to straight above. The arrow keys turn it and move it out and in.\nX, Y and Z\nAbove the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now.\nPhrase\nUnder the axes once the Orbit words are on: one $variable that joins the three words, like front-left view, high angle, medium shot. It is a Text value reading the axes' variables, so you can change its wording in its pencil.\nPencil (toolbar)\nSelect the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis and the phrase, the style and its looks, and Done.\nStyle\nEdit strip. Pad, Size, Stick and Map work as in WP Slider 2D, with the Z fader beside the pad. Orbit draws the camera or light round the subject; picking it puts the camera words on the axes unless X already turns from -180 to 180.\nLook and Words\nEdit strip, Orbit. Look draws a camera or a light (an amber sun). Camera or Light puts that word set on all three axes: X the side (front, front-left … back), Y the height (eye level, high angle …; for a light low, high or overhead), Z the shot (close-up … wide shot; for a light soft, diffused or hard), and the phrase that joins them. It replaces the axes' ranges and words.\nShape, size, dots and looks\nEdit strip, pad styles. The same as WP Slider 2D: shape, S/M/L, dots and Snap to dots, Area, Colours and Lines. Swap swaps X and Y.\ncontext (out)\nThe Context with the three axis variables (and the phrase) added, and the numbers $name.num reads.\nx / y / z (out)\nEach axis's number, named after the axis: an INT or a FLOAT (by default an INT when the axis writes 0 decimals, else a FLOAT; the axis window can pick either)."
+    },
+    {
+     "title": "Editing an axis or the phrase",
+     "text": "Axis window\nAn axis's pencil opens the same window as a WP Slider slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way. Output picks Auto, INT or FLOAT; an axis always has its output.\nPhrase window\nThe phrase's pencil opens the same window in Text mode: change the variable's name or the wording, for example $view_side shot from $view_height. It has no output.\nThe Orbit words are ordinary Words ranges, so you can change any of them in the axis window: rename medium shot to cowboy shot, or add a range. The back of the subject covers both ends of the turn, -180 and 180."
+    },
+    {
+     "title": "Works with",
+     "text": "WP Slider 2D WP Slider WP Prompt Assembler"
+    }
+   ]
+  },
+  {
    "id": "wp-node-group",
    "title": "WP Node Group",
    "group": "nodes",

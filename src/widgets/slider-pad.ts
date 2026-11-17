@@ -29,11 +29,11 @@ export interface SliderPadHostNode extends MountTargetNode {
   outputs?: PadOutput[];
 }
 
-/** Label and type (INT or FLOAT, `sliderOutputType`) of the x and y
+/** Label and type (INT or FLOAT, `sliderOutputType`) of the x, y (and z)
  *  outputs. The schema says `*`, so any number input takes them. */
-export function relabelPad(node: SliderPadHostNode, cfg: SlidersConfig): void {
+export function relabelPad(node: SliderPadHostNode, cfg: SlidersConfig, dims: 2 | 3 = 2): void {
   const outs = node.outputs ?? [];
-  sliderRows(cfg).slice(0, 2).forEach((s, i) => {
+  sliderRows(cfg).slice(0, dims).forEach((s, i) => {
     const slot = outs[i + 1];
     if (!slot) return;
     slot.type = sliderOutputType(s);
@@ -43,14 +43,15 @@ export function relabelPad(node: SliderPadHostNode, cfg: SlidersConfig): void {
 }
 
 /**
- * Mount glue for WP_Slider2D's one widget (`WP_SLIDER_PAD`). The value is
- * the JSON `SlidersConfig` with two rows, X then Y (`padConfig`); the node
- * parses it at run time like WP Slider's. The x and y outputs are named
- * after the axes and typed from them.
+ * Mount glue for WP_Slider2D's one widget (`WP_SLIDER_PAD`) and, with
+ * `dims` 3, WP_Slider3D's (`WP_SLIDER_3D`). The value is the JSON
+ * `SlidersConfig` with two rows, X then Y, or three plus an optional phrase
+ * (`padConfig`); the node parses it at run time like WP Slider's. The
+ * outputs are named after the axes and typed from them.
  */
-export function create(node: SliderPadHostNode, inputName: string) {
+export function create(node: SliderPadHostNode, inputName: string, dims: 2 | 3 = 2) {
   const mirrored = isMirrorBuild(node);
-  const config = ref<SlidersConfig>(padConfig(""));
+  const config = ref<SlidersConfig>(padConfig("", dims));
   const editRequest = ref(0);
   if (!mirrored) {
     nodeEditors.set(node, () => {
@@ -61,7 +62,7 @@ export function create(node: SliderPadHostNode, inputName: string) {
   function store(next: SlidersConfig): void {
     config.value = next;
     host.setValue(serializeWidgetJson(next));
-    if (!mirrored) relabelPad(node, next);
+    if (!mirrored) relabelPad(node, next, dims);
     node.setDirtyCanvas?.(true, true);
   }
 
@@ -91,12 +92,13 @@ export function create(node: SliderPadHostNode, inputName: string) {
       });
       return () => h(SliderPadWidget, {
         modelValue: config.value,
+        dims,
         nodeMode: nodeMode.value,
         editRequest: editRequest.value,
         nodeTitle: (node as { title?: string }).title ?? "",
         upstreamVars: upstreamVars.value,
         varProducers: varProducers.value,
-        "onUpdate:modelValue": (next: SlidersConfig) => store(padConfig(next)),
+        "onUpdate:modelValue": (next: SlidersConfig) => store(padConfig(next, dims)),
       });
     },
   };
@@ -107,13 +109,13 @@ export function create(node: SliderPadHostNode, inputName: string) {
     minWidth: 300,
     autoHeight: true,
     onValueRestored: (raw: string) => {
-      const parsed = padConfig(raw);
+      const parsed = padConfig(raw, dims);
       if (JSON.stringify(parsed) === JSON.stringify(config.value)) return;
       config.value = parsed;
-      if (!mirrored) relabelPad(node, parsed);
+      if (!mirrored) relabelPad(node, parsed, dims);
     },
   });
 
-  if (!mirrored) queueMicrotask(() => relabelPad(node, config.value));
+  if (!mirrored) queueMicrotask(() => relabelPad(node, config.value, dims));
   return host;
 }
