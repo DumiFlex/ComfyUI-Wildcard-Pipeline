@@ -90,9 +90,34 @@ export interface SliderLabelRow {
 
 export type SlidersItem = SliderRow | SliderLabelRow;
 
+/** WP Slider 2D's pad looks (the kit XYPad's props). */
+export interface PadLooks {
+  /** Absent: the plain pad. size = area, ratio guides and a W × H readout;
+   *  stick = round with zero in the middle; map = each Words axis's ranges
+   *  as labelled stripes. */
+  style?: "size" | "stick" | "map";
+  /** Width over height of the pad (1 = square). */
+  ratio?: number;
+  /** The shape follows the two ranges (a 0–1024 × 0–1344 pad is 3:4). */
+  fit?: true;
+  /** Shade from the bottom-left corner to the point. */
+  area?: true;
+  /** No lines through the point. */
+  no_crosshair?: true;
+  /** Dots per side. Absent: one per step (spread on steps past 16);
+   *  0: none; N: up to N per side, on steps. */
+  grid?: number;
+  /** The point lands on a dot. */
+  snap_dots?: true;
+  /** The pad's width: s / m; absent fills the node. */
+  size?: "s" | "m";
+}
+
 export interface SlidersConfig {
   version: 1;
   rows: SlidersItem[];
+  /** WP Slider 2D only. */
+  pad?: PadLooks;
 }
 
 export const VAR_RE = /^[a-zA-Z][a-zA-Z0-9_]*$/;
@@ -249,7 +274,77 @@ export function parseSlidersConfig(raw: unknown): SlidersConfig {
     if (hex(o.tint)) s.tint = hex(o.tint);
     rows.push(s);
   }
-  return { version: 1, rows };
+  const cfg: SlidersConfig = { version: 1, rows };
+  const pad = parsePad(d.pad);
+  if (pad) cfg.pad = pad;
+  return cfg;
+}
+
+function hasRows(raw: unknown): boolean {
+  let data: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      data = raw.trim() ? JSON.parse(raw) : null;
+    } catch {
+      return false;
+    }
+  }
+  return !!data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows);
+}
+
+const PAD_STYLES = new Set(["size", "stick", "map"]);
+function parsePad(raw: unknown): PadLooks | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const pad: PadLooks = {};
+  if (typeof o.style === "string" && PAD_STYLES.has(o.style)) pad.style = o.style as PadLooks["style"];
+  if (typeof o.ratio === "number" && o.ratio >= 0.25 && o.ratio <= 4) pad.ratio = o.ratio;
+  if (o.fit === true) pad.fit = true;
+  if (o.area === true) pad.area = true;
+  if (o.no_crosshair === true) pad.no_crosshair = true;
+  if (typeof o.grid === "number" && Number.isInteger(o.grid) && o.grid >= 0 && o.grid <= 16) pad.grid = o.grid;
+  if (o.snap_dots === true) pad.snap_dots = true;
+  if (o.size === "s" || o.size === "m") pad.size = o.size;
+  return pad;
+}
+
+/** The pad's width over height: its own, or (with `fit`) the two ranges'. */
+export function padRatio(pad: PadLooks, x: Pick<SliderRow, "min" | "max">, y: Pick<SliderRow, "min" | "max">): number {
+  if (pad.style === "stick") return 1;
+  if (!pad.fit) return pad.ratio ?? 1;
+  const w = x.max - x.min;
+  const h = y.max - y.min;
+  if (!(w > 0) || !(h > 0)) return 1;
+  return Math.min(4, Math.max(0.25, w / h));
+}
+
+/** A Words axis's ranges as the pad's labelled bands (none for other modes). */
+export function padBands(s: SliderRow): { to: number; label: string }[] {
+  if (s.mode !== "words") return [];
+  return (s.words ?? []).map((w) => ({ to: w.upto ?? s.max, label: w.word }));
+}
+
+/** A new pad axis: X across, Y up, 0 to 1. */
+function padAxis(cfg: SlidersConfig, axis: "x" | "y"): SliderRow {
+  const s = newSlider(cfg, axis.toUpperCase());
+  return { ...s, var: uniqueVar(axis, cfg), value: 0.5, pin: true, out: axis === "x" ? 1 : 2 };
+}
+
+/**
+ * WP Slider 2D's config: exactly two slider rows, X then Y, both with an
+ * output (slot 1 and 2); labels and extra rows are dropped, a missing axis
+ * is added.
+ */
+export function padConfig(raw: unknown): SlidersConfig {
+  const parsed = parseSlidersConfig(raw);
+  // An empty or broken value parses to WP Slider's default slider: start clean.
+  const axes = hasRows(raw) ? sliderRows(parsed).slice(0, 2) : [];
+  const cfg: SlidersConfig = { version: 1, rows: axes };
+  if (parsed.pad) cfg.pad = parsed.pad;
+  if (!axes[0]) cfg.rows.push(padAxis(cfg, "x"));
+  if (!cfg.rows[1]) cfg.rows.push(padAxis(cfg, "y"));
+  cfg.rows = sliderRows(cfg).map((s, i) => ({ ...s, pin: true, out: i + 1, style: "row" }));
+  return cfg;
 }
 
 /**
@@ -533,6 +628,12 @@ export function sliderMarks(s: SliderRow): { value: number; label?: string }[] {
 }
 
 export const SLIDER_NODE = "WP_Slider";
+/** WP Slider 2D: the same widget JSON with two rows, X then Y (+ `pad`). */
+export const SLIDER_2D_NODE = "WP_Slider2D";
+/** Nodes whose `wp_sliders` widget graph walkers read as sliders. */
+export function isSliderNode(type: string | undefined): boolean {
+  return type === SLIDER_NODE || type === SLIDER_2D_NODE;
+}
 
 interface SlidersNodeLike {
   widgets?: { name: string; value?: unknown }[];

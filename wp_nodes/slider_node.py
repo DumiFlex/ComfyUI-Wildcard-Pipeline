@@ -29,6 +29,11 @@ def _has_syntax(text: str) -> bool:
 class WPSlider(io.ComfyNode):
     """Chain source of number variables, plus a number output per pinned slider."""
 
+    #: The node id traces, warnings and negatives name (WP_Slider2D reuses
+    #: this class's run with its own).
+    NODE = "WP_Slider"
+    LABEL = "WP Slider"
+
     @classmethod
     def define_schema(cls):
         return io.Schema(
@@ -81,10 +86,16 @@ class WPSlider(io.ComfyNode):
         upstream: PipelineContext | None = None,
         wp_sliders: str = "",
     ):
+        cfg = sliders.parse_config(wp_sliders)
+        return io.NodeOutput(cls._context(upstream, cfg), *sliders.output_values(cfg))
+
+    @classmethod
+    def _context(cls, upstream: PipelineContext | None, cfg: sliders.Config):
+        """The Context with every slider variable, its negatives, the
+        `$name.num` table, traces and warnings added."""
         upstream_ctx: dict = upstream.context if upstream is not None else {}
         upstream_debug: dict = upstream.debug if upstream is not None else {}
         upstream_internals: dict = upstream.internals if upstream is not None else {}
-        cfg = sliders.parse_config(wp_sliders)
         values = sliders.resolve(cfg)
         raw_values = dict(values)
         nums = sliders.nums(cfg)
@@ -131,7 +142,7 @@ class WPSlider(io.ComfyNode):
                 {negatives.NEG_KEY: table}, value_reads.get(k, []),
             )
             if own_negs.get(k):
-                entries.append({"text": own_negs[k], "pick": None, "source": "WP_Slider"})
+                entries.append({"text": own_negs[k], "pick": None, "source": cls.NODE})
             if entries:
                 table[k] = entries
         if table or negatives.NEG_KEY in out_internals:
@@ -155,7 +166,7 @@ class WPSlider(io.ComfyNode):
             if raw_values[name] != value:
                 detail["raw"] = raw_values[name][:240]
             traces.append({
-                "node": "WP_Slider",
+                "node": cls.NODE,
                 "binding": name,
                 "internal": name in hidden_vars,
                 "type": "slider",
@@ -165,11 +176,11 @@ class WPSlider(io.ComfyNode):
                 "detail": detail,
             })
         warnings = [
-            {"type": "slider_problem", "severity": "warn", "message": f"WP Slider: {msg}"}
+            {"type": "slider_problem", "severity": "warn", "message": f"{cls.LABEL}: {msg}"}
             for msg in sliders.problems(cfg)
         ]
         warnings += [
-            {**w, "message": f"WP Slider text: {w.get('message', '')}"}
+            {**w, "message": f"{cls.LABEL} text: {w.get('message', '')}"}
             for w in value_warnings if isinstance(w, dict)
         ]
 
@@ -182,7 +193,4 @@ class WPSlider(io.ComfyNode):
         if warnings:
             debug["__wp_warnings__"] = list(debug.get("__wp_warnings__", [])) + warnings
 
-        return io.NodeOutput(
-            PipelineContext.Type(context=ctx, debug=debug, internals=out_internals),
-            *sliders.output_values(cfg),
-        )
+        return PipelineContext.Type(context=ctx, debug=debug, internals=out_internals)

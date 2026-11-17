@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@dumiflex/wp-kit':
-        specifier: github:DumiFlex/wp-kit#63704de8ded79f502a5313539c76517fe6c73c41
-        version: https://codeload.github.com/DumiFlex/wp-kit/tar.gz/63704de8ded79f502a5313539c76517fe6c73c41(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))
+        specifier: github:DumiFlex/wp-kit#4e5470dda4968b16f34fec735d7b4922297a7fa5
+        version: https://codeload.github.com/DumiFlex/wp-kit/tar.gz/4e5470dda4968b16f34fec735d7b4922297a7fa5(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))
       pinia:
         specifier: ^2.2.6
         version: 2.3.1(typescript@6.0.3)(vue@3.5.45(typescript@6.0.3))
@@ -240,8 +240,8 @@ packages:
     resolution: {integrity: sha512-/yCrWGCoA1SVKOks25EGadP9Pnj0oAIHGpl2wH2M2Y46dPM2ueb8wyCVOD7O3WCTkaJ0IkKvzhl1JY7+uCT2Dw==}
     engines: {node: '>=v18'}
 
-  '@dumiflex/wp-kit@https://codeload.github.com/DumiFlex/wp-kit/tar.gz/63704de8ded79f502a5313539c76517fe6c73c41':
-    resolution: {tarball: https://codeload.github.com/DumiFlex/wp-kit/tar.gz/63704de8ded79f502a5313539c76517fe6c73c41}
+  '@dumiflex/wp-kit@https://codeload.github.com/DumiFlex/wp-kit/tar.gz/4e5470dda4968b16f34fec735d7b4922297a7fa5':
+    resolution: {tarball: https://codeload.github.com/DumiFlex/wp-kit/tar.gz/4e5470dda4968b16f34fec735d7b4922297a7fa5}
     version: 0.20.1
     engines: {node: '>=22'}
     peerDependencies:
@@ -2366,7 +2366,7 @@ snapshots:
       '@types/conventional-commits-parser': 5.0.2
       chalk: 5.6.2
 
-  '@dumiflex/wp-kit@https://codeload.github.com/DumiFlex/wp-kit/tar.gz/63704de8ded79f502a5313539c76517fe6c73c41(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))':
+  '@dumiflex/wp-kit@https://codeload.github.com/DumiFlex/wp-kit/tar.gz/4e5470dda4968b16f34fec735d7b4922297a7fa5(primeicons@8.0.2)(vue@3.5.45(typescript@6.0.3))':
     dependencies:
       primeicons: 8.0.2
       vue: 3.5.45(typescript@6.0.3)
