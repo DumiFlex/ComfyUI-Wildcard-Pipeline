@@ -58,6 +58,9 @@ export interface ImageRef {
   filename: string;
   subfolder: string;
   type: string;
+  /** The picture's size in px, when the node sends it (a run may mix sizes). */
+  width?: number;
+  height?: number;
 }
 
 export interface FrameLabel {
@@ -119,6 +122,17 @@ export function pickKey(frame: number, image: number): string {
   return `${frame}:${image}`;
 }
 
+function cleanRef(ref: ImageRef): ImageRef {
+  const out: ImageRef = { filename: ref.filename, subfolder: String(ref.subfolder ?? ""), type: String(ref.type ?? "temp") };
+  const w = Number(ref.width);
+  const h = Number(ref.height);
+  if (Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0) {
+    out.width = w;
+    out.height = h;
+  }
+  return out;
+}
+
 /** Narrow an untyped websocket payload to a usable request (or null). */
 export function parsePickRequest(raw: unknown): PickRequest | null {
   if (!raw || typeof raw !== "object") return null;
@@ -126,7 +140,7 @@ export function parsePickRequest(raw: unknown): PickRequest | null {
   if (typeof r.token !== "string" || !Array.isArray(r.frames)) return null;
   const frames: ImageRef[][] = r.frames.map((frame) =>
     Array.isArray(frame)
-      ? frame.filter((x): x is ImageRef => !!x && typeof (x as ImageRef).filename === "string")
+      ? frame.filter((x): x is ImageRef => !!x && typeof (x as ImageRef).filename === "string").map(cleanRef)
       : [],
   );
   const labels = Array.isArray(r.labels) ? (r.labels as FrameLabel[]) : [];

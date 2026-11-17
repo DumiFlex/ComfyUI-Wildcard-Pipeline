@@ -37,6 +37,7 @@ import {
   MAX_LABEL, TILE_PX, withLabel, withMask, withText, writeModePref, writeTilePref, type PickerMode, type TileSize,
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
+import { cellAspect, containSize, mixedSizes, sizeText, type Size } from "./picker-sizes";
 import { frameValues, promptRuns, valuesText } from "./picker-details";
 import Button from "@/kit/Button.vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
@@ -211,7 +212,6 @@ const tableTile = computed(() => (tile.value === "s" || tile.value === "l" ? TIL
 
 const body = ref<HTMLElement | null>(null);
 const bodySize = ref({ width: 0, height: 0 });
-const aspect = ref(1);
 let observer: ResizeObserver | null = null;
 watch(body, (el) => {
   observer?.disconnect();
@@ -222,22 +222,56 @@ watch(body, (el) => {
   observer.observe(el);
 });
 onBeforeUnmount(() => observer?.disconnect());
-watch(() => frames.value[0]?.[0], (first) => {
-  if (!first || typeof Image === "undefined") return;
-  const img = new Image();
-  img.onload = () => { if (img.naturalWidth) aspect.value = img.naturalHeight / img.naturalWidth; };
-  img.src = viewUrl(first);
+
+/* ── picture sizes: a run may mix them ────────────────────────────────── */
+
+/** Each picture's natural size: sent by the node, else read once it loads. */
+const natural = ref<Record<string, Size>>({});
+function noteSize(key: string, width: number, height: number): void {
+  const had = natural.value[key];
+  if (width > 0 && height > 0 && (had?.width !== width || had?.height !== height)) {
+    natural.value = { ...natural.value, [key]: { width, height } };
+  }
+}
+watch(cells, (list) => {
+  const known: Record<string, Size> = {};
+  const probe: Cell[] = [];
+  for (const c of list) {
+    if (c.ref.width && c.ref.height) known[c.key] = { width: c.ref.width, height: c.ref.height };
+    else probe.push(c);
+  }
+  natural.value = known;
+  // An older node sends no sizes: read them from the pictures (the tiles load them anyway).
+  if (typeof Image === "undefined") return;
+  for (const c of probe) {
+    const img = new Image();
+    img.onload = () => noteSize(c.key, img.naturalWidth, img.naturalHeight);
+    img.src = viewUrl(c.ref);
+  }
 }, { immediate: true });
-const tileStyle = computed(() => {
+const sizeList = computed(() => cells.value.map((c) => natural.value[c.key]));
+/** The one cell shape Grid and the strips lay every picture into. */
+const aspect = computed(() => cellAspect(sizeList.value));
+/** The run mixes sizes: tiles say each picture's size. */
+const mixed = computed(() => mixedSizes(sizeList.value));
+function sizeMark(key: string, tilePx: number): string {
+  return mixed.value && tilePx >= 110 ? sizeText(natural.value[key]) : "";
+}
+/** Fit: the largest tile that shows every picture without scrolling. */
+const fitPx = computed(() => {
   const card = multiFrame.value;
-  if (tile.value !== "fit") return { "--wp-ifp-tile": `${TILE_PX[tile.value][card ? "frame" : "flat"]}px` };
-  const size = fitTileSize(total.value, aspect.value, {
-    // A card adds padding, border and its label; tiles add a 2px border.
-    // Leave a few px of slack so rounding never wraps a row.
-    ...bodySize.value, gap: 10, extraW: card ? 26 : 8, extraH: card ? 42 : 8,
+  // Each tile adds its 2px border and the label line under it; a frame card
+  // its padding, border, head row and the gaps; tiles sit in a row in it.
+  // Leave a few px of slack so rounding never wraps a row.
+  const perCell = card ? Math.max(1, ...frames.value.map((f) => f.length)) : 1;
+  return fitTileSize(card ? frames.value.length : total.value, aspect.value, {
+    ...bodySize.value, gap: 10, perCell, innerGap: 6,
+    extraW: (card ? 18 : 2) + perCell * 4, extraH: card ? 72 : 32,
   });
-  return { "--wp-ifp-tile": `${size}px` };
 });
+/** The grid's tile size in px (the long side of a cell). */
+const tilePx = computed(() => (tile.value === "fit" ? fitPx.value : TILE_PX[tile.value][multiFrame.value ? "frame" : "flat"]));
+const tileStyle = computed(() => ({ "--wp-ifp-tile": `${tilePx.value}px` }));
 const isFit = computed(() => mode.value === "grid" && tile.value === "fit" && !showTable.value);
 
 /* ── detail: compare, values, refine ──────────────────────────────────── */
@@ -292,12 +326,32 @@ function togglePaint(): void {
   if (painting.value) comparePin.value = null;
 }
 
-/** Natural sizes of the images shown so far, for the "1024 × 1024" line. */
-const sizes = ref<Record<string, string>>({});
 function onDetailLoad(key: string, ev: Event): void {
   const img = ev.target as HTMLImageElement;
-  if (img.naturalWidth) sizes.value = { ...sizes.value, [key]: `${img.naturalWidth} × ${img.naturalHeight}` };
+  noteSize(key, img.naturalWidth, img.naturalHeight);
 }
+
+/** Detail scales every picture to fill the same stage (up or down), so
+ *  stepping between sizes never moves the arrows or the strip, and the
+ *  box is known before the picture loads. */
+const figEl = ref<HTMLElement | null>(null);
+const figBox = ref<Size>({ width: 0, height: 0 });
+let figObserver: ResizeObserver | null = null;
+watch(figEl, (el) => {
+  figObserver?.disconnect();
+  if (!el || typeof ResizeObserver === "undefined") return;
+  figObserver = new ResizeObserver(() => { figBox.value = { width: el.clientWidth, height: el.clientHeight }; });
+  figObserver.observe(el);
+});
+onBeforeUnmount(() => figObserver?.disconnect());
+/** The picture's box in Detail (its 3px border included), or nothing until its size is known. */
+const detailStyle = computed((): Record<string, string> => {
+  const size = cell.value ? natural.value[cell.value.key] : undefined;
+  if (!size || figBox.value.width <= 0) return {};
+  const fit = containSize(size, { width: figBox.value.width - 6, height: figBox.value.height - 6 });
+  if (fit.width <= 0) return {};
+  return { "--wp-ifp-pic-w": `${fit.width}px`, "--wp-ifp-pic-h": `${fit.height}px` };
+});
 
 const label = computed(() => (cell.value ? labels.value[cell.value.frame] : undefined));
 const values = computed(() => frameValues(label.value, axes.value));
@@ -606,6 +660,8 @@ const subLine = computed(() => {
             :edits="edits"
             :tooltip="frameTooltip"
             :tile="tableTile"
+            :aspect="aspect"
+            :size-of="(key: string, px: number) => sizeMark(key, px)"
             @toggle="toggle"
             @toggle-frames="toggleFrames"
             @zoom="(f, i) => setMode('detail', indexOf(f, i))"
@@ -656,6 +712,8 @@ const subLine = computed(() => {
                   :index="imgs.length > 1 || !multiFrame ? i + 1 : 0"
                   :edited="isEditedCell(pickKey(f, i))"
                   :masked="isMaskedCell(pickKey(f, i))"
+                  :aspect="aspect"
+                  :size="sizeMark(pickKey(f, i), tilePx)"
                   :test-id="`image-filter-tile-${f}-${i}`"
                   @toggle="toggle(pickKey(f, i))"
                   @zoom="setMode('detail', indexOf(f, i))"
@@ -683,7 +741,7 @@ const subLine = computed(() => {
         <div class="wp-ifp__stage">
           <div class="wp-ifp__view">
             <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
-            <figure class="wp-ifp__fig">
+            <figure ref="figEl" class="wp-ifp__fig" :style="detailStyle">
               <MaskPainter
                 v-if="painting"
                 ref="painter"
@@ -744,6 +802,7 @@ const subLine = computed(() => {
               :index="0"
               :edited="isEditedCell(c.key)"
               :masked="isMaskedCell(c.key)"
+              :aspect="aspect"
               :class="{ 'is-current': ci === current }"
               :aria-current="ci === current || undefined"
               :test-id="`image-filter-strip-${c.frame}-${c.image}`"
@@ -772,7 +831,7 @@ const subLine = computed(() => {
               />
             </div>
             <div class="wp-ifp__side-meta" data-test="image-filter-meta">
-              <span v-if="sizes[cell.key]">{{ sizes[cell.key] }}</span>
+              <span v-if="natural[cell.key]">{{ sizeText(natural[cell.key]) }}</span>
               <span v-if="typeof label?.seed === 'number'">seed {{ label.seed }}</span>
               <span class="wp-ifp__pos">{{ current + 1 }} / {{ total }}</span>
             </div>
@@ -990,6 +1049,7 @@ const subLine = computed(() => {
                   :index="0"
                   :edited="isEditedCell(c.key)"
                   :masked="isMaskedCell(c.key)"
+                  :aspect="aspect"
                   :class="{ 'is-current': c.key === cell.key }"
                   :aria-current="c.key === cell.key || undefined"
                   :test-id="`image-filter-full-thumb-${c.image}`"
@@ -1061,9 +1121,11 @@ const subLine = computed(() => {
 .wp-ifp__detail { flex: 1; min-height: 0; display: flex; }
 .wp-ifp__stage { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .wp-ifp__view { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
-.wp-ifp__fig { margin: 0; min-width: 0; min-height: 0; max-height: 100%; display: flex; }
+/* The figure takes all the room between the arrows; the picture is sized
+ * to fill it (--wp-ifp-pic-w/h, set once its size is known). */
+.wp-ifp__fig { margin: 0; flex: 1; align-self: stretch; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .wp-ifp__detail { --wp-ifp-stage-h: calc(90vh - 240px); }
-.wp-ifp__img { display: block; max-width: 100%; max-height: var(--wp-ifp-stage-h); border: 3px solid transparent; border-radius: min(6px, var(--wp-radius-cap, 999px)); cursor: pointer; }
+.wp-ifp__img { display: block; box-sizing: content-box; width: var(--wp-ifp-pic-w, auto); height: var(--wp-ifp-pic-h, auto); max-width: var(--wp-ifp-pic-w, 100%); max-height: var(--wp-ifp-pic-h, var(--wp-ifp-stage-h)); border: 3px solid transparent; border-radius: min(6px, var(--wp-radius-cap, 999px)); cursor: pointer; }
 .wp-ifp__img.is-picked { border-color: var(--wp-green); }
 .wp-ifp__strip { flex-shrink: 0; display: flex; gap: 4px; overflow-x: auto; padding: 2px 2px 4px; --wp-ifp-tile: 56px; }
 .wp-ifp__strip > * { flex-shrink: 0; }

@@ -73,7 +73,13 @@ describe("fitTileSize", () => {
     // 2 portraits (h/w 1.5): side by side, 600 tall each.
     expect(fitTileSize(2, 1.5, box)).toBe(600);
   });
-  it("never goes below the small tile size", () => {
+  it("lays frame cards of several tiles side by side in a row", () => {
+    // 2 cards of 3 squares: one row of two cards, each (1000 - 10) / 2 = 495
+    // wide holding 3 tiles and 2 inner gaps of 6: (495 - 12) / 3 = 161.
+    // (Stacked they would be 145 tall at most.)
+    expect(fitTileSize(2, 1, { ...box, height: 300, perCell: 3, innerGap: 6 })).toBe(161);
+  });
+    it("never goes below the small tile size", () => {
     expect(fitTileSize(500, 1, box)).toBe(80);
     expect(fitTileSize(0, 1, box)).toBe(200);
   });

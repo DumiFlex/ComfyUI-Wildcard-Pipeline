@@ -407,7 +407,8 @@ defineExpose({ clear, invert, undo, redo, canUndo, canRedo, snapshot });
 
 <style scoped>
 .wp-ifm { position: relative; display: inline-block; line-height: 0; max-width: 100%; }
-.wp-ifm__img { display: block; max-width: 100%; max-height: var(--wp-ifp-stage-h, calc(90vh - 200px)); border-radius: min(6px, var(--wp-radius-cap, 999px)); user-select: none; }
+/* Detail sets --wp-ifp-pic-w/h so the painter is the same size as the picture it replaces. */
+.wp-ifm__img { display: block; width: var(--wp-ifp-pic-w, auto); height: var(--wp-ifp-pic-h, auto); max-width: var(--wp-ifp-pic-w, 100%); max-height: var(--wp-ifp-pic-h, var(--wp-ifp-stage-h, calc(90vh - 200px))); border-radius: min(6px, var(--wp-radius-cap, 999px)); user-select: none; }
 .wp-ifm__canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; cursor: none; touch-action: none; border-radius: min(6px, var(--wp-radius-cap, 999px)); }
 .wp-ifm__canvas.is-lasso, .wp-ifm__canvas.is-fill { cursor: crosshair; }
 .wp-ifm__lasso { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

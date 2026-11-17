@@ -52,11 +52,13 @@ def _first(values: Any, default: Any = None) -> Any:
     return default if values is None else values
 
 
-def _save_previews(images: list[Any]) -> list[list[dict[str, str]]]:
+def _save_previews(images: list[Any]) -> list[list[dict[str, Any]]]:
     """Write every frame's images to ComfyUI's temp folder for the picker.
 
-    Returns ``[[{filename, subfolder, type}, …] per frame]`` — the same refs a
-    PreviewImage node sends, so the canvas loads them through ``/view``.
+    Returns ``[[{filename, subfolder, type, width, height}, …] per frame]`` —
+    the refs a PreviewImage node sends (so the canvas loads them through
+    ``/view``) plus each picture's size, so the picker lays out a run that
+    mixes sizes before the pictures load.
     """
     import folder_paths  # type: ignore[import-not-found]
     import numpy as np
@@ -65,15 +67,18 @@ def _save_previews(images: list[Any]) -> list[list[dict[str, str]]]:
     out_dir = folder_paths.get_temp_directory()
     os.makedirs(out_dir, exist_ok=True)
     stem = f"wp_filter_{uuid.uuid4().hex[:10]}"
-    frames: list[list[dict[str, str]]] = []
+    frames: list[list[dict[str, Any]]] = []
     for fi, batch in enumerate(images):
-        refs: list[dict[str, str]] = []
+        refs: list[dict[str, Any]] = []
         for ii in range(int(batch.shape[0])):
             arr = np.clip(255.0 * batch[ii].cpu().numpy(), 0, 255).astype(np.uint8)
             name = f"{stem}_{fi:03d}_{ii:03d}.png"
             # compress_level 1: these are throwaway previews, speed wins.
             Image.fromarray(arr).save(os.path.join(out_dir, name), compress_level=1)
-            refs.append({"filename": name, "subfolder": "", "type": "temp"})
+            refs.append({
+                "filename": name, "subfolder": "", "type": "temp",
+                "width": int(arr.shape[1]), "height": int(arr.shape[0]),
+            })
         frames.append(refs)
     return frames
 

@@ -158,22 +158,27 @@ export interface FitBox {
   gap: number;
   extraW: number;
   extraH: number;
+  /** Tiles side by side in one cell (a frame card holds its images in a row), and the gap between them. */
+  perCell?: number;
+  innerGap?: number;
 }
 
-/** The largest square bound (the tile's max width = max height) that lays
- *  `count` images of height/width `aspect` out in `box` without scrolling,
- *  over every column count. Clamped to 80..1600. */
+/** The largest square bound (the tile's long side) that lays `count` cells
+ *  of `perCell` tiles of height/width `aspect` out in `box` without
+ *  scrolling, over every column count. Clamped to 80..1600. */
 export function fitTileSize(count: number, aspect: number, box: FitBox): number {
   if (count <= 0 || box.width <= 0 || box.height <= 0) return 200;
   const a = aspect > 0 && Number.isFinite(aspect) ? aspect : 1;
   const wPer = Math.min(1, 1 / a);
   const hPer = Math.min(1, a);
+  const per = Math.max(1, box.perCell ?? 1);
+  const inner = (per - 1) * (box.innerGap ?? 0);
   let best = 0;
   for (let cols = 1; cols <= count; cols++) {
     const rows = Math.ceil(count / cols);
-    const w = (box.width - box.gap * (cols - 1)) / cols - box.extraW;
+    const w = (box.width - box.gap * (cols - 1)) / cols - box.extraW - inner;
     const h = (box.height - box.gap * (rows - 1)) / rows - box.extraH;
-    best = Math.max(best, Math.min(w / wPer, h / hPer));
+    best = Math.max(best, Math.min(w / (wPer * per), h / hPer));
   }
   return Math.round(Math.min(1600, Math.max(80, best)));
 }

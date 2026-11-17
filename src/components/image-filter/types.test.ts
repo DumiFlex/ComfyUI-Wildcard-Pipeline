@@ -19,6 +19,20 @@ describe("parseImageFilterConfig", () => {
 });
 
 describe("parsePickRequest", () => {
+  it("keeps each picture's size when the node sends one", () => {
+    const req = parsePickRequest({
+      token: "t",
+      frames: [[
+        { filename: "a.png", subfolder: "", type: "temp", width: 832, height: 1216 },
+        { filename: "b.png", subfolder: "", type: "temp", width: "x", height: 3 },
+      ]],
+    });
+    expect(req?.frames[0]).toEqual([
+      { filename: "a.png", subfolder: "", type: "temp", width: 832, height: 1216 },
+      { filename: "b.png", subfolder: "", type: "temp" },
+    ]);
+  });
+
   it("narrows a websocket payload", () => {
     const req = parsePickRequest({
       token: "t", node_id: 7, timeout: 30, started_at: 1,
