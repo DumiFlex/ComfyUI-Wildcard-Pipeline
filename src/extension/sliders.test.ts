@@ -8,7 +8,11 @@ import {
   fmtSlider,
   groupsOf,
   internalSliderVars,
+  isSliderNode,
   newSlider,
+  padBands,
+  padConfig,
+  padRatio,
   normalizeOuts,
   outputNumber,
   outputValues,
@@ -221,5 +225,60 @@ describe("styles and snapping", () => {
     const rows = parseSlidersConfig(raw).rows as SliderRow[];
     expect(rows[0]).toMatchObject({ style: "fader", free: true });
     expect(rows[1]).not.toHaveProperty("free");
+  });
+});
+
+describe("WP Slider 2D pad config", () => {
+  it("keeps two pinned axes, X then Y, and the pad looks", () => {
+    const cfg = padConfig(JSON.stringify({
+      pad: { ratio: 1.5, area: true, grid: 99 },
+      rows: [
+        { id: "L", kind: "label", name: "G" },
+        { id: "a", kind: "slider", name: "Width", var: "width", style: "fader" },
+        { id: "b", kind: "slider", name: "Height", var: "height" },
+        { id: "c", kind: "slider", name: "Extra", var: "extra" },
+      ],
+    }));
+    expect(cfg.pad).toEqual({ ratio: 1.5, area: true });
+    expect((cfg.rows as SliderRow[]).map((s) => [s.id, s.pin, s.out, s.style])).toEqual([["a", true, 1, "row"], ["b", true, 2, "row"]]);
+  });
+
+  it("adds missing axes with free variables", () => {
+    const empty = padConfig("");
+    expect((empty.rows as SliderRow[]).map((s) => [s.name, s.var, s.out])).toEqual([["X", "x", 1], ["Y", "y", 2]]);
+    const one = padConfig({ rows: [{ id: "a", kind: "slider", name: "Y", var: "y" }] });
+    expect((one.rows as SliderRow[]).map((s) => s.var)).toEqual(["y", "y_2"]);
+  });
+
+  it("reads the style, Auto shape, dots, snap and size", () => {
+    const cfg = padConfig({ pad: { style: "map", fit: true, grid: 0, snap_dots: true, size: "s", ratio: 9 }, rows: [] });
+    expect(cfg.pad).toEqual({ style: "map", fit: true, grid: 0, snap_dots: true, size: "s" });
+    expect(padConfig({ pad: { style: "nope", size: "xl", grid: 17 }, rows: [] }).pad).toEqual({});
+  });
+
+  it("padRatio follows the ranges with fit, and a stick is square", () => {
+    const x = { min: 0, max: 1024 };
+    const y = { min: 0, max: 1344 };
+    expect(padRatio({}, x, y)).toBe(1);
+    expect(padRatio({ ratio: 1.5 }, x, y)).toBe(1.5);
+    expect(padRatio({ fit: true }, x, y)).toBeCloseTo(1024 / 1344);
+    expect(padRatio({ fit: true }, { min: 0, max: 100 }, { min: 0, max: 1 })).toBe(4);
+    expect(padRatio({ style: "stick", ratio: 2 }, x, y)).toBe(1);
+  });
+
+  it("padBands turns a Words axis's ranges into bands", () => {
+    const [, mood] = padConfig({ rows: [
+      { id: "a", kind: "slider", name: "X", var: "x" },
+      { id: "b", kind: "slider", name: "Mood", var: "mood", mode: "words", words: [{ word: "calm", upto: 0.5 }, { word: "wild" }] },
+    ] }).rows as SliderRow[];
+    expect(mood && padBands(mood)).toEqual([{ to: 0.5, label: "calm" }, { to: 1, label: "wild" }]);
+    const [x] = padConfig("").rows as SliderRow[];
+    expect(x && padBands(x)).toEqual([]);
+  });
+
+  it("is read as a slider node by the graph walkers", () => {
+    expect(isSliderNode("WP_Slider2D")).toBe(true);
+    expect(isSliderNode("WP_Slider")).toBe(true);
+    expect(isSliderNode("WP_Toggles")).toBe(false);
   });
 });

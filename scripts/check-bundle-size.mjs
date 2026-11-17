@@ -406,7 +406,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 740 -> 760 KB on 2026-11-17 for WP Seeds (its widget, row window,
 // the seed maths mirror and the Context's Seed from chip, all lazy) landing
 // on top of WP Slider: the total sits at ~752 KB.
-const TOTAL_LIMIT = 760 * 1024;     // 760 KB
+// RAISED 760 -> 775 KB on 2026-11-17: WP Slider 2D (#470, the XY pad, lazy)
+// and the Image Filter's mixed sizes (#471, lazy picker chunk) put the total
+// at ~766.7 KB.
+const TOTAL_LIMIT = 775 * 1024;     // 775 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

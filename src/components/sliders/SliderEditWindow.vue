@@ -44,6 +44,9 @@ const props = defineProps<{
   varSuggestions?: string[] | undefined;
   varProducers?: Map<string, VarProducerLike> | undefined;
   nodeTitle?: string | undefined;
+  /** A WP Slider 2D axis: its output is always there (no Output box, no
+   *  Style), and the chip names the axis. */
+  axis?: "X" | "Y" | undefined;
 }>();
 const emit = defineEmits<{ done: [next: SliderRow, groupId: string]; cancel: [] }>();
 
@@ -169,7 +172,7 @@ function onKey(ev: KeyboardEvent): void {
       <div class="wp-slw__titles">
         <div class="wp-slw__title-row">
           <h3 :id="titleId" class="wp-slw__title">{{ nodeTitle || 'WP Slider' }}</h3>
-          <span class="wp-slw__chip" :style="headStyle">Slider</span>
+          <span class="wp-slw__chip" :style="headStyle">{{ axis ? `${axis} axis` : 'Slider' }}</span>
         </div>
         <div class="wp-slw__sub" :style="headStyle">
           <span class="wp-slw__subname">{{ d.name }}</span>
@@ -279,7 +282,7 @@ function onKey(ev: KeyboardEvent): void {
       </div>
       <Banner v-if="missingVars.length" tone="warn" size="sm" data-test="sl-missing-vars">{{ missingVars.map((v) => '$' + v).join(', ') }}: nothing upstream sets {{ missingVars.length > 1 ? 'these' : 'this' }}, so it prints nothing</Banner>
       <Banner v-if="d.mode === 'text' && hasInlinePicks(d.text ?? '')" tone="warn" size="sm">{{ INLINE_PICKS_NOTE }}</Banner>
-      <div class="wp-slw__field">
+      <div v-if="!axis" class="wp-slw__field">
         <span>Style <em>how the slider is drawn on the node</em></span>
         <WpSegmented :model-value="d.style" :options="STYLES" size="sm" block aria-label="Style" test-prefix="sl-style" @update:model-value="(v: SliderStyle) => patch({ style: v })" />
       </div>
@@ -300,7 +303,18 @@ function onKey(ev: KeyboardEvent): void {
         <span>Group</span>
         <WpSelect :model-value="draftGroup" :options="groupOptions" aria-label="Group" data-test="sl-group" @update:model-value="(v: string) => (draftGroup = v)" />
       </div>
-      <div class="wp-slw__out">
+      <div v-if="axis" class="wp-slw__field">
+        <span>Output <em>the {{ axis.toLowerCase() }} output's type</em></span>
+        <WpSegmented
+          :model-value="d.out_type ?? 'auto'"
+          :options="OUT_TYPES"
+          size="sm"
+          aria-label="Output type"
+          test-prefix="sl-out-type"
+          @update:model-value="(v: OutPick) => patch({ out_type: v === 'auto' ? undefined : v })"
+        />
+      </div>
+      <div v-else class="wp-slw__out">
         <span v-tooltip="!d.pin && outputsFull ? 'All 16 outputs are in use' : `Show an ${outType} output with the number, for a sampler, LoRA strength or any number input`" v-toggle-row class="wp-slw__check">
           <Checkbox :model-value="d.pin" size="sm" :disabled="!d.pin && outputsFull" :aria-label="`${outType} output`" data-test="sl-pin" @update:model-value="(v: boolean) => patch({ pin: v })" />
           <span aria-hidden="true">{{ outType }} output</span>
