@@ -51,6 +51,20 @@ export function effectiveChainSeed(
   return Number((base ^ shift) & MASK);
 }
 
+/** The first 8 bytes of sha256(`text`), masked to 50 bits: the engine's
+ *  `engine/seeds.py::_hash`. */
+export function hashSeed(text: string): number {
+  const digest = sha256Bytes(text);
+  let v = 0n;
+  for (let b = 0; b < 8; b++) v = (v << 8n) | BigInt(digest[b]);
+  return Number(v & MASK);
+}
+
+/** Mask a seed to 50 bits like the engine (`MAX_SAFE_SEED`). */
+export function maskSeed(seed: number): number {
+  return Number(BigInt(Math.max(0, Math.trunc(seed))) & MASK);
+}
+
 const LOCK_LINE = /^\s*#(\d+)\s*:\s*(-?\d+)\s*$/;
 
 /**

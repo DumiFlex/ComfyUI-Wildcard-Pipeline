@@ -39,6 +39,7 @@ export * as ctxLoopMod from "./widgets/context_loop";
 export * as seedListMod from "./widgets/seed_list";
 export * as modelInfoMod from "./widgets/model_info";
 export * as togglesMod from "./widgets/toggles";
+export * as seedsMod from "./widgets/seeds";
 export * as slidersMod from "./widgets/sliders";
 export * as togglesMergeMod from "./extension/toggles-merge";
 export * as imageFilterWidgetMod from "./widgets/image_filter";

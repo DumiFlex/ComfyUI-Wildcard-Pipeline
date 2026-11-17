@@ -389,6 +389,95 @@
       }
     ]
   },
+  "WP_Seeds": {
+    "inputs": [
+      {
+        "name": "upstream",
+        "type": "PIPELINE_CONTEXT",
+        "optional": true
+      },
+      {
+        "name": "base_seed",
+        "type": "INT",
+        "optional": false
+      },
+      {
+        "name": "wp_seeds",
+        "type": "WP_SEEDS",
+        "optional": true
+      }
+    ],
+    "outputs": [
+      {
+        "name": "context",
+        "type": "PIPELINE_CONTEXT"
+      },
+      {
+        "name": "seed_1",
+        "type": "INT"
+      },
+      {
+        "name": "seed_2",
+        "type": "INT"
+      },
+      {
+        "name": "seed_3",
+        "type": "INT"
+      },
+      {
+        "name": "seed_4",
+        "type": "INT"
+      },
+      {
+        "name": "seed_5",
+        "type": "INT"
+      },
+      {
+        "name": "seed_6",
+        "type": "INT"
+      },
+      {
+        "name": "seed_7",
+        "type": "INT"
+      },
+      {
+        "name": "seed_8",
+        "type": "INT"
+      },
+      {
+        "name": "seed_9",
+        "type": "INT"
+      },
+      {
+        "name": "seed_10",
+        "type": "INT"
+      },
+      {
+        "name": "seed_11",
+        "type": "INT"
+      },
+      {
+        "name": "seed_12",
+        "type": "INT"
+      },
+      {
+        "name": "seed_13",
+        "type": "INT"
+      },
+      {
+        "name": "seed_14",
+        "type": "INT"
+      },
+      {
+        "name": "seed_15",
+        "type": "INT"
+      },
+      {
+        "name": "seed_16",
+        "type": "INT"
+      }
+    ]
+  },
   "WP_Slider": {
     "inputs": [
       {

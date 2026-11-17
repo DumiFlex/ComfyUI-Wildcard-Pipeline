@@ -124,6 +124,15 @@ const strategies = [
       </p>
     </DocSection>
 
+    <DocSection title="Pick the seed per node">
+      <p>
+        <b>WP Seeds</b> holds named seeds, each with its own value for every frame. Put it after the
+        loop and every WP Context gets a <b>Seed from</b> chip: Auto, Loop, Own seed or one of the
+        WP Seeds rows. Nothing takes over on its own, so a wired seed or the loop's override is only
+        used where the chip says so.
+      </p>
+    </DocSection>
+
     <DocSection title="Keep the frames you liked">
       <p>
         <b>Per-iteration seeds</b> (on the loop and on WP Seed List) lists the seed each frame will
@@ -154,6 +163,7 @@ const strategies = [
         :links="[
           { id: 'wp-context-loop', label: 'WP Context Loop', icon: 'pi pi-replay', tone: 'node' },
           { id: 'wp-seed-list', label: 'WP Seed List', icon: 'pi pi-clone', tone: 'node' },
+          { id: 'wp-seeds', label: 'WP Seeds', icon: 'pi pi-table', tone: 'node' },
           { id: 'wp-context', label: 'WP Context', icon: 'pi pi-sitemap', tone: 'node' },
           { id: 'iteration-overrides', label: 'Per-iteration overrides', icon: 'pi pi-images', tone: 'neutral' },
         ]"

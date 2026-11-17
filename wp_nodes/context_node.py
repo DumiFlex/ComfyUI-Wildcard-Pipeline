@@ -1,6 +1,8 @@
 """WP_Context — runs a module list and emits a PipelineContext payload."""
 
 import contextlib
+import json
+from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
@@ -9,7 +11,7 @@ from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.pipeline import FRAME0_CTX_KEY, PipelineEngine
-from engine.seed_derive import effective_chain_seed
+from engine.seed_derive import SEED_FROM_AUTO, resolve_context_seed
 from wp_nodes.types import (
     FRAME0_KEY,
     ContextModulesInput,
@@ -184,6 +186,37 @@ def _stamp_pool_provenance(
             entry["library_option_count"] = len(live_options)
 
 
+def _seed_from(raw: Any) -> str:
+    """The Context widget's ``seed_from`` ("auto" when absent or malformed)."""
+    data = raw
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            return SEED_FROM_AUTO
+    value = data.get("seed_from") if isinstance(data, dict) else None
+    return value.strip() if isinstance(value, str) and value.strip() else SEED_FROM_AUTO
+
+
+def _warn_seed_source_missing(ctx: dict, seed_from: str) -> None:
+    """The picked seed source isn't upstream: the node ran on Auto."""
+    warnings = ctx.get("__wp_warnings__")
+    if not isinstance(warnings, list):
+        return
+    row = seed_from[len("row:"):] if seed_from.startswith("row:") else ""
+    what = f"WP Seeds row {row!r}" if row else "a Context Loop"
+    warnings.append({
+        "type": "seed_source_missing",
+        "severity": "warn",
+        "module_id": "",
+        "source_field": "",
+        "position": 0,
+        "token_index": None,
+        "detail": {"seed_from": seed_from},
+        "message": f"Seed from {what}, but none is upstream; used Auto",
+    })
+
+
 def _node_id(cls: type) -> str:
     """This node's graph id when ComfyUI supplied it (tests call `execute`
     directly and get "")."""
@@ -253,34 +286,18 @@ class WPContext(io.ComfyNode):
 
         ctx = _input_ctx(upstream_ctx, upstream_internals, catalog)
 
-        # Compute the actual chain seed for THIS iteration. When no
-        # WP_ContextLoop is upstream, `upstream_internals` lacks both
-        # keys → helper returns `widget_seed` unchanged (backwards-compat).
-        # When ContextLoop is upstream with override_seed=true, the
-        # override replaces the widget seed; loop_index>0 XORs in a
-        # stable hash shift so each iteration walks a distinct seed.
+        # The chain seed for THIS iteration and the constant frame-0 hold
+        # seed, from the source this node's "Seed from" picks (auto = the
+        # Loop's seed when it overrides, else the widget shifted per frame;
+        # loop / own / a WP Seeds row). A wired seed is only the widget's
+        # value: it never wins by itself. See `resolve_context_seed`.
         loop_index = int(upstream_internals.get("__wp_loop_index__", 0))
-        chain_seed = effective_chain_seed(
+        seed_from = _seed_from(wp_modules)
+        chain_seed, hold_seed, seed_source = resolve_context_seed(
             widget_seed=int(seed),
-            seed_override=upstream_internals.get("__wp_seed_override__"),
-            loop_index=loop_index,
+            seed_from=seed_from,
+            internals=upstream_internals,
         )
-        # Hold base seed: the CONSTANT frame-0 seed so a held module resolves
-        # the SAME base-frame value on every iteration. When the loop drives
-        # seeds the per-iteration override varies, and effective_chain_seed
-        # returns an override verbatim (ignoring loop_index), so loop_index=0
-        # alone can't make it constant — read the loop's derived series head
-        # (frame 0's seed) instead. Falls back to the widget seed when no loop
-        # drives seeds (override off).
-        _loop_seeds = upstream_internals.get("__wp_loop_seeds__")
-        if isinstance(_loop_seeds, list) and _loop_seeds:
-            hold_seed = int(_loop_seeds[0])
-        else:
-            hold_seed = effective_chain_seed(
-                widget_seed=int(seed),
-                seed_override=None,
-                loop_index=0,
-            )
         # Sweep mode with "hold other picks": every frame rolls the
         # non-swept modules on the frame-0 seed, so only the swept
         # wildcards (pinned per frame) change across the grid.
@@ -309,6 +326,9 @@ class WPContext(io.ComfyNode):
             hold_seed=hold_seed,
             loop_index=loop_index,
         )
+
+        if seed_from != SEED_FROM_AUTO and seed_source == SEED_FROM_AUTO:
+            _warn_seed_source_missing(ctx, seed_from)
 
         # Hand downstream nodes THIS node's frame-0 output, from the base pass.
         base_ctx = ctx.get("__wp_hold_base_ctx__")
@@ -361,5 +381,13 @@ class WPContext(io.ComfyNode):
                 "seed": [int(seed)],
                 "module_seeds": [module_seeds],
                 "loop_seeds": [loop_seeds],
+                # The seed the chain actually ran with and where it came from
+                # (auto / loop / own / row:<name>), for the Seed from chip.
+                "seed_used": [int(chain_seed)],
+                "seed_source": [seed_source],
+                # One entry per frame run (ComfyUI joins a list run's UI
+                # outputs), so the per-frame module lock pins the seed each
+                # frame actually used, whatever the source.
+                "frame_seeds": [{"frame": loop_index, "seed": int(chain_seed)}],
             },
         )

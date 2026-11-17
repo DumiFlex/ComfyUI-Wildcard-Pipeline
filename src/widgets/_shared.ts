@@ -923,6 +923,15 @@ export interface ContextWidgetValue {
    * read with `value.bundles ?? []`.
    */
   bundles?: BundleInstance[];
+  /**
+   * Where the node's chain seed comes from: `auto` (absent; the Loop's
+   * per-frame seed when it overrides, else the node's own `seed`), `loop`,
+   * `own` (the `seed` widget or its wire, even under a Loop override) or
+   * `row:<name>` (that WP Seeds row upstream, per frame). Read by
+   * `wp_nodes/context_node.py`; a missing source runs as Auto with a
+   * `seed_source_missing` warning.
+   */
+  seed_from?: string;
 }
 
 /** A bundle instance pinned to one Context node. Stable across
