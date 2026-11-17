@@ -23,6 +23,10 @@ const props = defineProps<{
   tooltip: (frame: number) => string;
   /** The tile size the picker's S / M / L asks for (px); unset picks one from the grid's size. */
   tile?: number;
+  /** The one cell shape every tile takes (height over width), so mixed sizes line up. */
+  aspect?: number;
+  /** A tile's "1024 × 1536" mark at this tile size ("" for none). */
+  sizeOf?: (key: string, tilePx: number) => string;
 }>();
 const emit = defineEmits<{
   "update:layout": [layout: GridLayout];
@@ -33,7 +37,8 @@ const emit = defineEmits<{
 }>();
 
 const split = computed(() => props.grid.groups.length > 1);
-const tileSize = computed(() => (props.tile ? `${props.tile}px` : split.value || props.grid.cols.length > 4 ? "108px" : "150px"));
+const tilePx = computed(() => props.tile ?? (split.value || props.grid.cols.length > 4 ? 108 : 150));
+const tileSize = computed(() => `${tilePx.value}px`);
 
 function hue(axis: number): Record<string, string> {
   return { "--wp-ifg-hue": axisHueAt(axis) };
@@ -139,6 +144,8 @@ function isEdited(key: string): boolean {
                   :index="(frames[f]?.length ?? 0) > 1 ? i + 1 : 0"
                   :edited="isEdited(pickKey(f, i))"
                   :masked="!!edits[pickKey(f, i)]?.mask"
+                  :aspect="aspect"
+                  :size="sizeOf?.(pickKey(f, i), tilePx) ?? ''"
                   :test-id="`image-filter-tile-${f}-${i}`"
                   @toggle="emit('toggle', pickKey(f, i))"
                   @zoom="emit('zoom', f, i)"

@@ -42,6 +42,34 @@ describe("PickerModal", () => {
     expect(again.find('[data-test="image-filter-keep-picked"]').text()).toBe("Keep 1 picked");
   });
 
+  it("a run of mixed sizes lays every tile in one cell shape and marks each size", async () => {
+    const sized = (n: string, width: number, height: number) => ({ ...ref(n), width, height });
+    const req = request([3]);
+    req.frames = [[sized("a", 832, 1216), sized("b", 832, 1216), sized("c", 1216, 832)]];
+    localStorage.setItem("wp-image-filter-tile", "m");
+    const w = mk(req);
+    const tiles = [0, 1, 2].map((i) => w.find(`[data-test="image-filter-tile-0-${i}"]`));
+    // The shape most pictures share (portrait) is every tile's cell.
+    for (const t of tiles) {
+      expect(t.classes()).toContain("is-cell");
+      expect(t.attributes("style")).toContain(`--wp-ifp-cell-w: ${832 / 1216}`);
+    }
+    expect(tiles[2]?.find('[data-test="image-filter-tile-size-mark"]').text()).toBe("1216 × 832");
+    // One size only: no marks.
+    const same = request([2]);
+    same.frames = [[sized("a", 512, 512), sized("b", 512, 512)]];
+    const w2 = mk(same);
+    expect(w2.find('[data-test="image-filter-tile-size-mark"]').exists()).toBe(false);
+  });
+
+  it("Detail knows a picture's size before it loads", async () => {
+    const req = request([1]);
+    req.frames = [[{ ...ref("a"), width: 640, height: 960 }]];
+    localStorage.setItem("wp-image-filter-mode", "detail");
+    const w = mk(req);
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("640 × 960");
+  });
+
   it("one batch shows a flat grid; keep picked sends the picks in order", async () => {
     const w = mk(request([4]));
     expect(w.findAll('[data-test^="image-filter-frame-"]')).toHaveLength(1);

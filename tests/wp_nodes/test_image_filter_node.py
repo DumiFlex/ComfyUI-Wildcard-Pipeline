@@ -293,3 +293,35 @@ async def test_cancelling_the_run_ends_the_wait(monkeypatch):
 def test_fingerprint_never_matches():
     fp = WPImageFilter.fingerprint_inputs()
     assert fp != fp
+
+
+def test_previews_carry_each_pictures_size(monkeypatch, tmp_path):
+    """A run may mix sizes: every ref says its picture's size, so the picker
+    lays the run out before the pictures load."""
+    np = pytest.importorskip("numpy")
+    paths = types.SimpleNamespace(get_temp_directory=lambda: str(tmp_path))
+    monkeypatch.setitem(sys.modules, "folder_paths", paths)
+
+    class Pic:
+        def __init__(self, h, w):
+            self.arr = np.zeros((h, w, 3), dtype="float32")
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return self.arr
+
+    class Batch:
+        def __init__(self, *pics):
+            self.pics = pics
+            self.shape = (len(pics),)
+
+        def __getitem__(self, i):
+            return self.pics[i]
+
+    frames = node_mod._save_previews([Batch(Pic(64, 32)), Batch(Pic(16, 48), Pic(20, 20))])
+    sizes = [[(r["width"], r["height"]) for r in refs] for refs in frames]
+    assert sizes == [[(32, 64)], [(48, 16), (20, 20)]]
+    refs = [r for frame in frames for r in frame]
+    assert all(r["type"] == "temp" and (tmp_path / r["filename"]).exists() for r in refs)
