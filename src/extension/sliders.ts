@@ -95,8 +95,10 @@ export interface PadLooks {
   /** Absent: the plain pad. size = area, ratio guides and a W × H readout;
    *  stick = round with zero in the middle; map = each Words axis's ranges
    *  as labelled stripes; orbit (3D only) = the kit OrbitPad: X turns
-   *  round the subject, Y is the height angle, Z the distance. */
-  style?: "size" | "stick" | "map" | "orbit";
+   *  round the subject, Y is the height angle, Z the distance; mix (3D
+   *  only) = the kit TrianglePad: the three axes are shares of a blend,
+   *  each a part of its own range, the parts adding up to one. */
+  style?: "size" | "stick" | "map" | "orbit" | "mix";
   /** Orbit: drawn as a light (an amber sun) instead of a camera. */
   light?: true;
   /** Width over height of the pad (1 = square). */
@@ -297,7 +299,7 @@ function hasRows(raw: unknown): boolean {
   return !!data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows);
 }
 
-const PAD_STYLES = new Set(["size", "stick", "map", "orbit"]);
+const PAD_STYLES = new Set(["size", "stick", "map", "orbit", "mix"]);
 function parsePad(raw: unknown): PadLooks | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
@@ -354,7 +356,7 @@ export function padConfig(raw: unknown, dims: 2 | 3 = 2): SlidersConfig {
   const phrase = dims === 3 ? rows.slice(dims).find((s) => s.mode === "text") : undefined;
   const cfg: SlidersConfig = { version: 1, rows: axes };
   if (parsed.pad) cfg.pad = parsed.pad;
-  if (dims === 2 && cfg.pad?.style === "orbit") delete cfg.pad.style;
+  if (dims === 2 && (cfg.pad?.style === "orbit" || cfg.pad?.style === "mix")) delete cfg.pad.style;
   for (let i = axes.length; i < dims; i++) cfg.rows.push(padAxis(cfg, AXES[i] ?? "z"));
   cfg.rows = sliderRows(cfg).map((s, i) => ({ ...s, pin: true, out: i + 1, style: "row" }));
   if (phrase) cfg.rows.push({ ...phrase, pin: false, out: 0, style: "row" });
@@ -463,6 +465,73 @@ export function orbitPreset(cfg: SlidersConfig, kind: OrbitKind): SlidersConfig 
 export function orbitReady(cfg: SlidersConfig): boolean {
   const [x, y] = padAxes(cfg, 3);
   return !!x && !!y && x.min === -180 && x.max === 180 && y.min >= -90 && y.max <= 90 && y.max > y.min;
+}
+
+/** Mix: how much of the blend each axis holds, 0..1 of its own range (its min = none, its max = all). */
+export function mixParts(axes: readonly SliderRow[]): [number, number, number] {
+  const part = (s: SliderRow | undefined): number => {
+    if (!s || !(s.max > s.min)) return 0;
+    return Math.min(1, Math.max(0, (s.value - s.min) / (s.max - s.min)));
+  };
+  return [part(axes[0]), part(axes[1]), part(axes[2])];
+}
+
+/** Mix: the axes' values for shares that add up to 100 (each a share of its own range, on its decimals). */
+export function mixValues(axes: readonly SliderRow[], shares: readonly number[]): number[] {
+  return axes.slice(0, 3).map((s, i) => {
+    const t = Math.min(1, Math.max(0, (shares[i] ?? 0) / 100));
+    const span = s.max > s.min ? s.max - s.min : 0;
+    return sliderNumber({ value: s.min + t * span, decimals: s.decimals });
+  });
+}
+
+const MIX_STEPS = [1, 2, 4, 5, 10, 20, 25, 50];
+/** Mix: the triangle's step in percent: the finest axis step, on a step that divides 100. */
+export function mixStep(axes: readonly SliderRow[]): number {
+  const pcts = axes.slice(0, 3).filter((s) => s.max > s.min && s.step > 0).map((s) => (s.step / (s.max - s.min)) * 100);
+  const want = pcts.length ? Math.min(...pcts) : 5;
+  return [...MIX_STEPS].reverse().find((m) => m <= want + 1e-9) ?? 1;
+}
+
+/** The Mix style's ready-made blend: three art styles and the weighted phrase. */
+export const MIX_EXAMPLE = {
+  names: ["Watercolor", "Ink sketch", "Oil painting", "Style mix"] as const,
+  vars: ["mix_a", "mix_b", "mix_c", "style_mix"] as const,
+  values: [0.4, 0.3, 0.3] as const,
+  phrase: "(watercolor:$mix_a), (ink sketch:$mix_b), (oil painting:$mix_c)",
+};
+
+/**
+ * Mix's ready-made axes: three number axes 0..1 by 0.05 (kept out of the
+ * prompt) holding a blend that adds up to 1, plus a phrase that weights each
+ * one. Keeps each axis's id, output type and looks; variable names already
+ * used by other rows get a number.
+ */
+export function mixPreset(cfg: SlidersConfig): SlidersConfig {
+  const old = padAxes(cfg, 3);
+  const others: SlidersConfig = { version: 1, rows: [] };
+  const axes: SliderRow[] = [0, 1, 2].map((i) => {
+    const s = old[i] ?? padAxis(others, AXES[i] ?? "z");
+    const row: SliderRow = {
+      ...s, name: MIX_EXAMPLE.names[i] ?? s.name, var: MIX_EXAMPLE.vars[i] ?? s.var, mode: "number",
+      min: 0, max: 1, step: 0.05, decimals: 2, value: MIX_EXAMPLE.values[i] ?? 0,
+      internal: true, pin: true, out: i + 1, style: "row",
+    };
+    delete row.text;
+    delete row.words;
+    delete row.free;
+    return row;
+  });
+  const prev = padPhrase(cfg);
+  const phrase: SliderRow = {
+    ...(prev ?? newSlider(others, MIX_EXAMPLE.names[3])),
+    name: MIX_EXAMPLE.names[3], var: MIX_EXAMPLE.vars[3], mode: "text", text: MIX_EXAMPLE.phrase, pin: false, out: 0, style: "row",
+  };
+  delete phrase.internal;
+  const next: SlidersConfig = { version: 1, rows: [...axes, phrase] };
+  next.pad = { ...(cfg.pad ?? {}), style: "mix" };
+  delete next.pad.light;
+  return next;
 }
 
 /**

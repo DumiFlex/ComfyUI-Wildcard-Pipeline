@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import SliderPadWidget from "../SliderPadWidget.vue";
-import { orbitPreset, padConfig, type SliderRow, type SlidersConfig } from "../../../extension/sliders";
+import { mixPreset, orbitPreset, padConfig, type SliderRow, type SlidersConfig } from "../../../extension/sliders";
 
 const cfg: SlidersConfig = padConfig({
   rows: [
@@ -130,6 +130,38 @@ describe("SliderPadWidget, 3D", () => {
     await w.find('[data-test="orbit"] [role="slider"]').trigger("keydown", { key: "ArrowRight" });
     expect(rows(last(w)).map((s) => s.value).slice(0, 3)).toEqual([-30, 30, 0.5]);
     expect(rows(last(w))[3]?.var).toBe("light");
+    w.unmount();
+  });
+
+  it("turns to Mix with the style example and blends from the triangle", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: three, dims: 3, editRequest: 0 } });
+    await w.setProps({ editRequest: 1 });
+    await w.find('[data-test="pad-style-mix"]').trigger("click");
+    const mix = last(w) ?? three;
+    expect(mix?.pad).toEqual({ style: "mix" });
+    expect(rows(mix).map((s) => s.var)).toEqual(["mix_a", "mix_b", "mix_c", "style_mix"]);
+    await w.setProps({ modelValue: mix });
+    expect(w.find('[data-test="mix"]').exists()).toBe(true);
+    expect(w.find('[data-test="pad-shape-1"]').exists()).toBe(false);
+    expect(w.find('[data-test="pad-swap"]').exists()).toBe(false);
+    expect(w.findAll(".wp-tri__label").map((l) => l.text())).toEqual(["Watercolor 40%", "Ink sketch 30%", "Oil painting 30%"]);
+    await w.find('[data-test="mix"] [role="slider"]').trigger("keydown", { key: "1" });
+    expect(rows(last(w)).map((s) => s.value).slice(0, 3)).toEqual([1, 0, 0]);
+    expect(rows(last(w))[3]?.var).toBe("style_mix");
+    // A pad with a phrase already keeps its axes when it turns to Mix.
+    await w.setProps({ modelValue: { ...mix, pad: {} } });
+    await w.find('[data-test="pad-style-mix"]').trigger("click");
+    expect(rows(last(w)).map((s) => s.value).slice(0, 3)).toEqual([0.4, 0.3, 0.3]);
+    expect(last(w)?.pad).toEqual({ style: "mix" });
+    w.unmount();
+  });
+
+  it("starts the style example again from the strip", async () => {
+    const mix = { ...mixPreset(three), rows: rows(mixPreset(three)).map((s, i) => (i === 0 ? { ...s, name: "Mine" } : s)) };
+    const w = mount(SliderPadWidget, { props: { modelValue: mix, dims: 3, editRequest: 1 } });
+    await w.setProps({ editRequest: 2 });
+    await w.find('[data-test="mix-example"]').trigger("click");
+    expect(rows(last(w))[0]?.name).toBe("Watercolor");
     w.unmount();
   });
 

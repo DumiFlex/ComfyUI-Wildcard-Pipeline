@@ -25,12 +25,14 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <code>x</code>, <code>y</code> or <code>z</code>.
       </p>
       <p>
-        Two ways to draw it. The <b>pad</b> styles are the 2D pad with a <b>Z fader</b> beside it; a
+        Three ways to draw it. The <b>pad</b> styles are the 2D pad with a <b>Z fader</b> beside it; a
         ring round the point grows with Z. The <b>Orbit</b> style puts a camera or a light round the
         subject: X is the angle round it, Y the height, Z the distance. Its <b>Camera</b> and
         <b>Light</b> words turn the three numbers into one phrase, like
         <VarToken>$view</VarToken> = <code>front-left view, high angle, medium shot</code>, ready for a
-        prompt or a multi-angle LoRA.
+        prompt or a multi-angle LoRA. The <b>Mix</b> style is a triangle with one thing at each corner:
+        drag the point to blend them, and the three shares always add up to 100%, like
+        <VarToken>$style_mix</VarToken> = <code>(watercolor:0.40), (ink sketch:0.30), (oil painting:0.30)</code>.
       </p>
     </DocSection>
 
@@ -39,7 +41,8 @@ import VarToken from "../../../components/docs/VarToken.vue";
         :good="[
           'A camera angle for a character or product shot: Orbit with the Camera words, $view in the prompt',
           'Where the key light comes from: Orbit with the Light words, $light in the prompt (backlight, side light from the left, overhead light …)',
-          'Three numbers you tune together: cfg, steps and denoise, or three LoRA strengths',
+          'A blend of three styles, moods or LoRAs that add up to one: Mix, each axis a weight',
+          'Three numbers you tune together: cfg, steps and denoise',
         ]"
         :better="[
           'Two numbers: WP Slider 2D',

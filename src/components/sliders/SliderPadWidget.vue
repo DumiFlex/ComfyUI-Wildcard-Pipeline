@@ -5,7 +5,9 @@
  * the pad's `ring` showing Z), or the Orbit style (kit `OrbitPad`: X turns
  * round the subject, Y is the height, Z the distance) for a camera or a
  * light, whose word presets (`orbitPreset`) add a phrase row joining the
- * three words.
+ * three words, or the Mix style (kit `TrianglePad`: the three axes are
+ * shares of a blend, `mixParts` / `mixValues`; `mixPreset` adds a weighted
+ * phrase).
  *
  * The config is a `SlidersConfig` with two slider rows, X then Y
  * (`padConfig`), so each axis is a slider: its window
@@ -23,6 +25,7 @@ import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import OrbitPad from "@/kit/OrbitPad.vue";
+import TrianglePad from "@/kit/TrianglePad.vue";
 import Slider from "@/kit/Slider.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import XYPad from "@/kit/XYPad.vue";
@@ -33,6 +36,10 @@ import { varColorClass } from "../shared/var-color";
 import {
   fineStepOf,
   fmtSlider,
+  mixParts,
+  mixPreset,
+  mixStep,
+  mixValues,
   orbitPreset,
   orbitReady,
   padAxes,
@@ -75,6 +82,7 @@ const STYLES = [
   { value: "map", label: "Map", icon: "pi-map", hint: "Each Words axis shows its words on the pad" },
 ];
 const ORBIT_STYLE = { value: "orbit", label: "Orbit", icon: "pi-video", hint: "A camera or a light round the subject: X turns round it, Y is the height, Z the distance" };
+const MIX_STYLE = { value: "mix", label: "Mix", icon: "pi-percentage", hint: "A blend of three things: the closer the point to a corner, the more of it; the three add up to one" };
 const LOOKS = [
   { value: "camera", label: "Camera", icon: "pi-camera", hint: "Drawn as a camera" },
   { value: "light", label: "Light", icon: "pi-sun", hint: "Drawn as a light (an amber sun)" },
@@ -98,7 +106,7 @@ const ay = computed(() => axes.value[1]);
 const az = computed(() => (props.dims === 3 ? axes.value[2] : undefined));
 const phrase = computed(() => (props.dims === 3 ? padPhrase(props.modelValue) : undefined));
 const phraseText = computed(() => phrasePreview(props.modelValue));
-const styles = computed(() => (props.dims === 3 ? [...STYLES, ORBIT_STYLE] : STYLES));
+const styles = computed(() => (props.dims === 3 ? [...STYLES, ORBIT_STYLE, MIX_STYLE] : STYLES));
 /** The rows to show and edit by number: the axes, then the phrase. */
 const editRows = computed(() => [...axes.value, ...(phrase.value ? [phrase.value] : [])]);
 const TAGS = ["X", "Y", "Z"] as const;
@@ -128,7 +136,7 @@ function setZ(v: number): void {
 /** The mouse wheel over the pad moves Z by a step. */
 function onWheel(ev: WheelEvent): void {
   const z = az.value;
-  if (!z || style.value === "orbit" || ev.deltaY === 0) return;
+  if (!z || special.value || ev.deltaY === 0) return;
   ev.preventDefault();
   ev.stopPropagation();
   const next = z.value + (ev.deltaY < 0 ? 1 : -1) * z.step;
@@ -161,6 +169,15 @@ const fmtOrbit = (v: number, part: "around" | "height" | "distance"): string => 
   const row = { ...s, value: v };
   return s.mode === "words" ? (wordFor(row)?.word ?? fmtSlider(row)) : part === "distance" ? fmtSlider(row) : `${fmtSlider(row)}°`;
 };
+/** Mix: the three shares, set from the triangle. */
+const mixShares = computed(() => mixParts(axes.value));
+const mixLabels = computed<[string, string, string]>(() => [ax.value?.name ?? "X", ay.value?.name ?? "Y", az.value?.name ?? "Z"]);
+function setMix(shares: number[]): void {
+  setValues(mixValues(axes.value, shares));
+}
+function useMixExample(): void {
+  emit("update:modelValue", mixPreset(props.modelValue));
+}
 /** Swap the axes: X's settings go up, Y's across (outputs keep their slot). */
 function swap(): void {
   const [sx, sy] = axes.value;
@@ -185,6 +202,8 @@ function holds(s: SliderRow): string {
   return "";
 }
 const style = computed(() => pad.value.style ?? "pad");
+/** Orbit and Mix draw their own pad: no shape, dots, lines or swap. */
+const special = computed(() => style.value === "orbit" || style.value === "mix");
 const shape = computed(() => (pad.value.fit ? "fit" : String(pad.value.ratio ?? 1)));
 const ratio = computed(() => (ax.value && ay.value ? padRatio(pad.value, ax.value, ay.value) : 1));
 /** Dots along one axis: one per step (Auto), N on steps, or none. */
@@ -201,6 +220,8 @@ const yBands = computed(() => (style.value === "map" && ay.value ? padBands(ay.v
 function setStyle(v: string): void {
   // Orbit needs an angle round (-180..180) and a height: start from the camera words.
   if (v === "orbit" && !orbitReady(props.modelValue)) return usePreset(orbitLook.value);
+  // Mix with nothing to blend yet (no phrase): start from the style example.
+  if (v === "mix" && !phrase.value) return useMixExample();
   setPad({ style: v === "pad" ? undefined : (v as PadLooks["style"]) });
 }
 function setShape(v: string): void {
@@ -285,6 +306,18 @@ function applyWindow(next: SliderRow): void {
       />
     </div>
     <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
+    <div v-else-if="ax && ay && az && style === 'mix'" class="wp-pad__box" :data-size="pad.size ?? 'l'" @pointerdown.stop>
+      <TrianglePad
+        :model-value="mixShares"
+        :labels="mixLabels"
+        :step="mixStep(axes)"
+        :aria-label="phrase?.name ?? 'Mix'"
+        size="sm"
+        data-test="mix"
+        @update:model-value="setMix"
+      />
+    </div>
+    <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
     <div v-else-if="ax && ay" :ref="az ? watchPadHeight : undefined" class="wp-pad__box" :data-size="pad.size ?? 'l'" :data-z="az ? '' : undefined" :style="ay.tint || ax.tint ? { '--wp-accent': ax.tint ?? ay.tint } : undefined" @pointerdown.stop @wheel="onWheel">
       <XYPad
         :model-value="[ax.value, ay.value]"
@@ -344,12 +377,17 @@ function applyWindow(next: SliderRow): void {
         <Button size="sm" icon="pi-camera" hint="Camera words on all three axes: front-left view, high angle, medium shot (replaces their ranges and words)" data-test="orbit-camera" @click="usePreset('camera')">Camera words</Button>
         <Button size="sm" icon="pi-sun" hint="Light words on all three axes: light from the front-left, high light, soft light (replaces their ranges and words)" data-test="orbit-light" @click="usePreset('light')">Light words</Button>
       </div>
-      <div v-if="style !== 'orbit'" class="wp-pad__looks-row">
+      <div v-if="style === 'mix'" class="wp-pad__looks-row">
+        <span class="wp-pad__lbl">Start</span>
+        <Button size="sm" icon="pi-palette" hint="Three art styles 0 to 1 and a phrase that weights them: (watercolor:0.40), (ink sketch:0.30), (oil painting:0.30) (replaces the axes and the phrase)" data-test="mix-example" @click="useMixExample">Style example</Button>
+        <WpSegmented :model-value="pad.size ?? 'l'" :options="SIZES" size="sm" aria-label="Pad size" test-prefix="mix-size" @update:model-value="(v: string) => setPad({ size: v === 'l' ? undefined : (v as 's' | 'm') })" />
+      </div>
+      <div v-if="!special" class="wp-pad__looks-row">
         <span class="wp-pad__lbl">Shape</span>
         <WpSegmented :model-value="shape" :options="SHAPES" size="sm" aria-label="Pad shape" test-prefix="pad-shape" :disabled="style === 'stick'" @update:model-value="setShape" />
         <WpSegmented :model-value="pad.size ?? 'l'" :options="SIZES" size="sm" aria-label="Pad size" test-prefix="pad-size" @update:model-value="(v: string) => setPad({ size: v === 'l' ? undefined : (v as 's' | 'm') })" />
       </div>
-      <div v-if="style !== 'orbit'" class="wp-pad__looks-row">
+      <div v-if="!special" class="wp-pad__looks-row">
         <label v-tooltip="'Dots per side. Empty (Auto) puts one on every step, 0 hides them'" class="wp-pad__grid">
           <span>Dots</span>
           <WpNumber class="wp-pad__grid-num" :model-value="pad.grid ?? null" nullable placeholder="Auto" :min="0" :max="16" :step="1" size="sm" aria-label="Dots per side" data-test="pad-grid" @update:model-value="(v: number | null) => setPad({ grid: v === null ? undefined : v })" />
@@ -372,7 +410,7 @@ function applyWindow(next: SliderRow): void {
         </span>
       </div>
       <div class="wp-pad__looks-row wp-pad__looks-end">
-        <Button v-if="style !== 'orbit'" size="sm" icon="pi-arrow-right-arrow-left" hint="Swap the axes: X's settings go up, Y's across" data-test="pad-swap" @click="swap">Swap</Button>
+        <Button v-if="!special" size="sm" icon="pi-arrow-right-arrow-left" hint="Swap the axes: X's settings go up, Y's across" data-test="pad-swap" @click="swap">Swap</Button>
         <Button size="sm" variant="primary" icon="pi-check" data-test="pad-done" @click="editMode = false; editing = null">Done</Button>
       </div>
     </div>
@@ -435,6 +473,7 @@ function applyWindow(next: SliderRow): void {
 .wp-pad__box[data-z] > .wp-xypad { flex: 1 1 auto; min-width: 0; }
 .wp-pad__box > .wp-pad__z { flex: none; }
 .wp-pad__box > * { max-height: 420px; }
+.wp-pad__box > .wp-tri { max-width: 320px; }
 .wp-pad__box[data-size="s"] > * { max-width: 160px; }
 .wp-pad__box[data-size="m"] > * { max-width: 260px; }
 .wp-pad__looks { display: flex; flex-direction: column; gap: 6px; }
