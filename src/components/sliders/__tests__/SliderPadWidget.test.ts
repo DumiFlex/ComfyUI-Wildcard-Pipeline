@@ -41,6 +41,31 @@ describe("SliderPadWidget", () => {
     w.unmount();
   });
 
+  it("sets the style, Auto shape, size, dots and snap", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: cfg, editRequest: 1 } });
+    await w.setProps({ editRequest: 2 });
+    await w.find('[data-test="pad-style-map"]').trigger("click");
+    expect(last(w)?.pad).toEqual({ style: "map" });
+    await w.setProps({ modelValue: last(w) });
+    expect(w.findAll(".wp-xypad__band").map((b) => b.text())).toEqual(["calm", "wild"]);
+    await w.find('[data-test="pad-shape-fit"]').trigger("click");
+    expect(last(w)?.pad).toEqual({ style: "map", fit: true });
+    await w.find('[data-test="pad-size-s"]').trigger("click");
+    await w.find('[data-test="pad-snap-dots"]').trigger("click");
+    expect(last(w)?.pad).toMatchObject({ snap_dots: true });
+    w.unmount();
+  });
+
+  it("puts a dot on every step by default", () => {
+    const small = padConfig({ rows: [
+      { id: "x", kind: "slider", name: "X", var: "x", value: 0.5, min: 0, max: 1, step: 0.25, decimals: 2 },
+      { id: "y", kind: "slider", name: "Y", var: "y", value: 0.5, min: 0, max: 1, step: 0.5, decimals: 2 },
+    ] });
+    const w = mount(SliderPadWidget, { props: { modelValue: small } });
+    expect(w.findAll(".wp-xypad__dot")).toHaveLength(3);
+    w.unmount();
+  });
+
   it("an axis window keeps its output and slot", async () => {
     const w = mount(SliderPadWidget, { props: { modelValue: cfg }, attachTo: document.body });
     await w.setProps({ editRequest: 1 });

@@ -26,14 +26,19 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <code>y</code>. Like WP Slider, the pad is part of the node, so it works in the new Vue node
         mode.
       </p>
+      <p>
+        With <b>Auto</b> dots, a dot sits on every step of each axis, so a 64-step Width × Height pad
+        shows where each size lands; turn on <b>Snap to dots</b> and the point only lands on them.
+      </p>
     </DocSection>
 
     <DocSection title="When to use it">
       <DocUseWhen
         :good="[
-          'A picture size: Width across, Height up, wired into an Empty Latent Image, with Area on so the shaded box looks like the picture',
+          'A picture size: Width across, Height up, wired into an Empty Latent Image, in the Size style with Auto shape so the shaded box looks like the picture and the guide lines show 1:1, 4:3 and 16:9',
+          'A camera pan or tilt from -1 to 1 in the Stick style, zero in the middle',
           'Two numbers you tune together: cfg and steps, two LoRA strengths',
-          'A mood map: calm to wild across, dark to bright up, each axis in Words mode',
+          'A mood map: calm to wild across, dark to bright up, each axis in Words mode, in the Map style so the words are written on the pad',
         ]"
         :better="[
           'Numbers you set one at a time: WP Slider',

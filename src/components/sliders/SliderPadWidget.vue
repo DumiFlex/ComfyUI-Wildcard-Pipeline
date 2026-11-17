@@ -8,7 +8,9 @@
  * value mode, negative and output type. The pad sets both values at once.
  *
  * The pencil in ComfyUI's selection toolbar (`editRequest`) shows the edit
- * strip: a pencil per axis, the pad's shape and looks, and Swap.
+ * strip: a pencil per axis, the pad's style (Pad / Size / Stick / Map),
+ * shape (or Auto from the ranges), width, looks, dots (Auto = one per step)
+ * with Snap to dots, and Swap.
  */
 import { computed, defineAsyncComponent, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
@@ -17,12 +19,15 @@ import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import XYPad from "@/kit/XYPad.vue";
+import { stepDots } from "@/kit/xy-pad";
 import { vTooltip } from "@/kit/tooltip";
 import { vToggleRow } from "@/kit/toggle-row";
 import { varColorClass } from "../shared/var-color";
 import {
   fineStepOf,
   fmtSlider,
+  padBands,
+  padRatio,
   sliderProblems,
   sliderRows,
   wordFor,
@@ -49,10 +54,22 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ "update:modelValue": [next: SlidersConfig] }>();
 
+const STYLES = [
+  { value: "pad", label: "Pad", icon: "pi-stop", hint: "The plain pad" },
+  { value: "size", label: "Size", icon: "pi-expand", hint: "A picture size: the box is shaded, with 1:1, 4:3, 16:9 … guide lines and a W × H readout" },
+  { value: "stick", label: "Stick", icon: "pi-circle", hint: "Round, with zero in the middle (set both ranges from -1 to 1)" },
+  { value: "map", label: "Map", icon: "pi-map", hint: "Each Words axis shows its words on the pad" },
+];
 const SHAPES = [
   { value: "1", label: "Square", hint: "A square pad" },
   { value: "1.5", label: "Wide", hint: "3:2, wider than tall" },
   { value: "0.6667", label: "Tall", hint: "2:3, taller than wide" },
+  { value: "fit", label: "Auto", hint: "Follows the two ranges: 0–1024 across and 0–1344 up is a 3:4 pad" },
+];
+const SIZES = [
+  { value: "s", label: "S", hint: "A small pad" },
+  { value: "m", label: "M", hint: "A medium pad" },
+  { value: "l", label: "L", hint: "Fills the node" },
 ];
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -101,6 +118,28 @@ function holds(s: SliderRow): string {
   if (s.mode === "text") return "text";
   return "";
 }
+const style = computed(() => pad.value.style ?? "pad");
+const shape = computed(() => (pad.value.fit ? "fit" : String(pad.value.ratio ?? 1)));
+const ratio = computed(() => (ax.value && ay.value ? padRatio(pad.value, ax.value, ay.value) : 1));
+/** Dots along one axis: one per step (Auto), N on steps, or none. */
+function dotsOf(s: SliderRow): number[] {
+  const g = pad.value.grid;
+  if (g === 0) return [];
+  const max = s.max > s.min ? s.max : s.min + 1;
+  return stepDots(s.min, max, s.step, g ?? undefined);
+}
+const xDots = computed(() => (ax.value ? dotsOf(ax.value) : []));
+const yDots = computed(() => (ay.value ? dotsOf(ay.value) : []));
+const xBands = computed(() => (style.value === "map" && ax.value ? padBands(ax.value) : []));
+const yBands = computed(() => (style.value === "map" && ay.value ? padBands(ay.value) : []));
+function setStyle(v: string): void {
+  setPad({ style: v === "pad" ? undefined : (v as PadLooks["style"]) });
+}
+function setShape(v: string): void {
+  if (v === "fit") setPad({ fit: true, ratio: undefined });
+  else setPad({ fit: undefined, ratio: v === "1" ? undefined : Number(v) });
+}
+
 const fmtAxis = (v: number, axis: "x" | "y"): string => {
   const s = axis === "x" ? ax.value : ay.value;
   return s ? fmtSlider({ value: v, decimals: s.decimals }) : String(v);
@@ -146,7 +185,7 @@ function applyWindow(next: SliderRow): void {
     </div>
     <!-- Stops the pointer here so a drag on the pad never drags the node. -->
     <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
-    <div v-if="ax && ay" class="wp-pad__box" :style="ay.tint || ax.tint ? { '--wp-accent': ax.tint ?? ay.tint } : undefined" @pointerdown.stop>
+    <div v-if="ax && ay" class="wp-pad__box" :data-size="pad.size ?? 'l'" :style="ay.tint || ax.tint ? { '--wp-accent': ax.tint ?? ay.tint } : undefined" @pointerdown.stop>
       <XYPad
         :model-value="[ax.value, ay.value]"
         :x-min="ax.min"
@@ -156,10 +195,15 @@ function applyWindow(next: SliderRow): void {
         :y-max="ay.max > ay.min ? ay.max : ay.min + 1"
         :y-step="stepOf(ay)"
         :fine-step="fineStep"
-        :ratio="pad.ratio ?? 1"
+        :ratio="ratio"
+        :variant="style === 'size' || style === 'stick' ? style : 'pad'"
         :area="!!pad.area"
         :crosshair="!pad.no_crosshair"
-        :grid="pad.grid ?? 6"
+        :x-dots="xDots"
+        :y-dots="yDots"
+        :snap-dots="!!pad.snap_dots"
+        :x-bands="xBands"
+        :y-bands="yBands"
         :x-label="ax.name"
         :y-label="ay.name"
         :format="fmtAxis"
@@ -170,28 +214,37 @@ function applyWindow(next: SliderRow): void {
       />
     </div>
     <div v-if="editMode" class="wp-pad__looks" data-test="pad-looks">
-      <WpSegmented
-        :model-value="String(pad.ratio ?? 1)"
-        :options="SHAPES"
-        size="sm"
-        aria-label="Pad shape"
-        test-prefix="pad-shape"
-        @update:model-value="(v: string) => setPad({ ratio: v === '1' ? undefined : Number(v) })"
-      />
-      <span v-tooltip="'Shade the box from the bottom-left corner to the point, like a picture size'" v-toggle-row class="wp-pad__check">
-        <Checkbox :model-value="!!pad.area" size="sm" aria-label="Area" data-test="pad-area" @update:model-value="(v: boolean) => setPad({ area: v ? true : undefined })" />
-        <span aria-hidden="true">Area</span>
-      </span>
-      <span v-tooltip="'Lines through the point'" v-toggle-row class="wp-pad__check">
-        <Checkbox :model-value="!pad.no_crosshair" size="sm" aria-label="Lines" data-test="pad-lines" @update:model-value="(v: boolean) => setPad({ no_crosshair: v ? undefined : true })" />
-        <span aria-hidden="true">Lines</span>
-      </span>
-      <label v-tooltip="'Dots per side (0 for none)'" class="wp-pad__grid">
-        <span>Dots</span>
-        <WpNumber class="wp-pad__grid-num" :model-value="pad.grid ?? 6" :min="0" :max="12" :step="1" size="sm" aria-label="Dots per side" data-test="pad-grid" @update:model-value="(v: number | null) => setPad({ grid: v === null || v === 6 ? undefined : v })" />
-      </label>
-      <Button size="sm" icon="pi-arrow-right-arrow-left" hint="Swap the axes: X's settings go up, Y's across" data-test="pad-swap" @click="swap">Swap</Button>
-      <Button size="sm" variant="primary" icon="pi-check" data-test="pad-done" @click="editMode = false; editing = null">Done</Button>
+      <div class="wp-pad__looks-row">
+        <span class="wp-pad__lbl">Style</span>
+        <WpSegmented :model-value="style" :options="STYLES" size="sm" aria-label="Pad style" test-prefix="pad-style" @update:model-value="setStyle" />
+      </div>
+      <div class="wp-pad__looks-row">
+        <span class="wp-pad__lbl">Shape</span>
+        <WpSegmented :model-value="shape" :options="SHAPES" size="sm" aria-label="Pad shape" test-prefix="pad-shape" :disabled="style === 'stick'" @update:model-value="setShape" />
+        <WpSegmented :model-value="pad.size ?? 'l'" :options="SIZES" size="sm" aria-label="Pad size" test-prefix="pad-size" @update:model-value="(v: string) => setPad({ size: v === 'l' ? undefined : (v as 's' | 'm') })" />
+      </div>
+      <div class="wp-pad__looks-row">
+        <label v-tooltip="'Dots per side. Empty (Auto) puts one on every step, 0 hides them'" class="wp-pad__grid">
+          <span>Dots</span>
+          <WpNumber class="wp-pad__grid-num" :model-value="pad.grid ?? null" nullable placeholder="Auto" :min="0" :max="16" :step="1" size="sm" aria-label="Dots per side" data-test="pad-grid" @update:model-value="(v: number | null) => setPad({ grid: v === null ? undefined : v })" />
+        </label>
+        <span v-tooltip="'The point lands on a dot (or an edge); the arrow keys walk dot to dot'" v-toggle-row class="wp-pad__check">
+          <Checkbox :model-value="!!pad.snap_dots" size="sm" aria-label="Snap to dots" data-test="pad-snap-dots" @update:model-value="(v: boolean) => setPad({ snap_dots: v ? true : undefined })" />
+          <span aria-hidden="true">Snap to dots</span>
+        </span>
+        <span v-if="style !== 'size'" v-tooltip="'Shade the box from the bottom-left corner to the point, like a picture size'" v-toggle-row class="wp-pad__check">
+          <Checkbox :model-value="!!pad.area" size="sm" aria-label="Area" data-test="pad-area" @update:model-value="(v: boolean) => setPad({ area: v ? true : undefined })" />
+          <span aria-hidden="true">Area</span>
+        </span>
+        <span v-tooltip="'Lines through the point'" v-toggle-row class="wp-pad__check">
+          <Checkbox :model-value="!pad.no_crosshair" size="sm" aria-label="Lines" data-test="pad-lines" @update:model-value="(v: boolean) => setPad({ no_crosshair: v ? undefined : true })" />
+          <span aria-hidden="true">Lines</span>
+        </span>
+      </div>
+      <div class="wp-pad__looks-row wp-pad__looks-end">
+        <Button size="sm" icon="pi-arrow-right-arrow-left" hint="Swap the axes: X's settings go up, Y's across" data-test="pad-swap" @click="swap">Swap</Button>
+        <Button size="sm" variant="primary" icon="pi-check" data-test="pad-done" @click="editMode = false; editing = null">Done</Button>
+      </div>
     </div>
     <SliderEditWindow
       v-if="editingRow"
@@ -240,8 +293,12 @@ function applyWindow(next: SliderRow): void {
 .wp-pad__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-pad__box { display: flex; justify-content: center; min-width: 0; }
 .wp-pad__box > * { max-height: 420px; }
-.wp-pad__looks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.wp-pad__looks > :last-child { margin-left: auto; }
+.wp-pad__box[data-size="s"] > * { max-width: 160px; }
+.wp-pad__box[data-size="m"] > * { max-width: 260px; }
+.wp-pad__looks { display: flex; flex-direction: column; gap: 6px; }
+.wp-pad__looks-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.wp-pad__looks-end { justify-content: flex-end; }
+.wp-pad__lbl { width: 38px; flex: none; font-size: 11px; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-pad__check { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; }
 .wp-pad__grid { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-pad__grid { flex: none; }

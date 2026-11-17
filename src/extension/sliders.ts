@@ -92,14 +92,25 @@ export type SlidersItem = SliderRow | SliderLabelRow;
 
 /** WP Slider 2D's pad looks (the kit XYPad's props). */
 export interface PadLooks {
+  /** Absent: the plain pad. size = area, ratio guides and a W × H readout;
+   *  stick = round with zero in the middle; map = each Words axis's ranges
+   *  as labelled stripes. */
+  style?: "size" | "stick" | "map";
   /** Width over height of the pad (1 = square). */
   ratio?: number;
+  /** The shape follows the two ranges (a 0–1024 × 0–1344 pad is 3:4). */
+  fit?: true;
   /** Shade from the bottom-left corner to the point. */
   area?: true;
   /** No lines through the point. */
   no_crosshair?: true;
-  /** Dots per side (absent: 6, 0: none). */
+  /** Dots per side. Absent: one per step (spread on steps past 16);
+   *  0: none; N: up to N per side, on steps. */
   grid?: number;
+  /** The point lands on a dot. */
+  snap_dots?: true;
+  /** The pad's width: s / m; absent fills the node. */
+  size?: "s" | "m";
 }
 
 export interface SlidersConfig {
@@ -281,15 +292,36 @@ function hasRows(raw: unknown): boolean {
   return !!data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows);
 }
 
+const PAD_STYLES = new Set(["size", "stick", "map"]);
 function parsePad(raw: unknown): PadLooks | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
   const pad: PadLooks = {};
+  if (typeof o.style === "string" && PAD_STYLES.has(o.style)) pad.style = o.style as PadLooks["style"];
   if (typeof o.ratio === "number" && o.ratio >= 0.25 && o.ratio <= 4) pad.ratio = o.ratio;
+  if (o.fit === true) pad.fit = true;
   if (o.area === true) pad.area = true;
   if (o.no_crosshair === true) pad.no_crosshair = true;
-  if (typeof o.grid === "number" && Number.isInteger(o.grid) && o.grid >= 0 && o.grid <= 12) pad.grid = o.grid;
+  if (typeof o.grid === "number" && Number.isInteger(o.grid) && o.grid >= 0 && o.grid <= 16) pad.grid = o.grid;
+  if (o.snap_dots === true) pad.snap_dots = true;
+  if (o.size === "s" || o.size === "m") pad.size = o.size;
   return pad;
+}
+
+/** The pad's width over height: its own, or (with `fit`) the two ranges'. */
+export function padRatio(pad: PadLooks, x: Pick<SliderRow, "min" | "max">, y: Pick<SliderRow, "min" | "max">): number {
+  if (pad.style === "stick") return 1;
+  if (!pad.fit) return pad.ratio ?? 1;
+  const w = x.max - x.min;
+  const h = y.max - y.min;
+  if (!(w > 0) || !(h > 0)) return 1;
+  return Math.min(4, Math.max(0.25, w / h));
+}
+
+/** A Words axis's ranges as the pad's labelled bands (none for other modes). */
+export function padBands(s: SliderRow): { to: number; label: string }[] {
+  if (s.mode !== "words") return [];
+  return (s.words ?? []).map((w) => ({ to: w.upto ?? s.max, label: w.word }));
 }
 
 /** A new pad axis: X across, Y up, 0 to 1. */
