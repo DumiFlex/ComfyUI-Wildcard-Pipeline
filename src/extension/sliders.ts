@@ -104,6 +104,8 @@ export interface PadLooks {
   area?: true;
   /** No lines through the point. */
   no_crosshair?: true;
+  /** Map style: no colour per word section (coloured by default). */
+  no_tint?: true;
   /** Dots per side. Absent: one per step (spread on steps past 16);
    *  0: none; N: up to N per side, on steps. */
   grid?: number;
@@ -302,6 +304,7 @@ function parsePad(raw: unknown): PadLooks | undefined {
   if (o.fit === true) pad.fit = true;
   if (o.area === true) pad.area = true;
   if (o.no_crosshair === true) pad.no_crosshair = true;
+  if (o.no_tint === true) pad.no_tint = true;
   if (typeof o.grid === "number" && Number.isInteger(o.grid) && o.grid >= 0 && o.grid <= 16) pad.grid = o.grid;
   if (o.snap_dots === true) pad.snap_dots = true;
   if (o.size === "s" || o.size === "m") pad.size = o.size;

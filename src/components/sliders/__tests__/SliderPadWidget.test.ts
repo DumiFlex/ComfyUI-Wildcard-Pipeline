@@ -53,6 +53,9 @@ describe("SliderPadWidget", () => {
     await w.find('[data-test="pad-size-s"]').trigger("click");
     await w.find('[data-test="pad-snap-dots"]').trigger("click");
     expect(last(w)?.pad).toMatchObject({ snap_dots: true });
+    expect(w.findAll(".wp-xypad__cell")).toHaveLength(2);
+    await w.find('[data-test="pad-tint"]').trigger("click");
+    expect(last(w)?.pad).toMatchObject({ no_tint: true });
     w.unmount();
   });
 

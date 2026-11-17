@@ -199,6 +199,7 @@ function applyWindow(next: SliderRow): void {
         :variant="style === 'size' || style === 'stick' ? style : 'pad'"
         :area="!!pad.area"
         :crosshair="!pad.no_crosshair"
+        :tint="style === 'map' && !pad.no_tint"
         :x-dots="xDots"
         :y-dots="yDots"
         :snap-dots="!!pad.snap_dots"
@@ -235,6 +236,10 @@ function applyWindow(next: SliderRow): void {
         <span v-if="style !== 'size'" v-tooltip="'Shade the box from the bottom-left corner to the point, like a picture size'" v-toggle-row class="wp-pad__check">
           <Checkbox :model-value="!!pad.area" size="sm" aria-label="Area" data-test="pad-area" @update:model-value="(v: boolean) => setPad({ area: v ? true : undefined })" />
           <span aria-hidden="true">Area</span>
+        </span>
+        <span v-if="style === 'map'" v-tooltip="'A colour for each word section, the point\'s one a little stronger'" v-toggle-row class="wp-pad__check">
+          <Checkbox :model-value="!pad.no_tint" size="sm" aria-label="Colours" data-test="pad-tint" @update:model-value="(v: boolean) => setPad({ no_tint: v ? undefined : true })" />
+          <span aria-hidden="true">Colours</span>
         </span>
         <span v-tooltip="'Lines through the point'" v-toggle-row class="wp-pad__check">
           <Checkbox :model-value="!pad.no_crosshair" size="sm" aria-label="Lines" data-test="pad-lines" @update:model-value="(v: boolean) => setPad({ no_crosshair: v ? undefined : true })" />
