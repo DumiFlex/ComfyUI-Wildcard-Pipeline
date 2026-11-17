@@ -347,6 +347,25 @@ export const NODE_FIELDS = {
       { term: "Output", desc: "Auto, INT or FLOAT for the axis's output. An axis always has its output." },
     ],
   },
+  WP_Slider3D: {
+    controls: [
+      { term: "upstream (in)", sockets: ["in:upstream"], desc: "Optional Context to extend. Only nodes after this one see the node's variables." },
+      { term: "Pad and Z fader", desc: "The Pad, Size, Stick and Map styles: the XY pad of WP Slider 2D for X and Y, and an upright fader beside it for Z. A ring round the point grows with Z, and the mouse wheel over the pad moves Z one step." },
+      { term: "Orbit", desc: "The Orbit style: a camera or a light round the subject. The top view sets X, the angle round it (0 the front, 90 the right, ±180 the back), and how far from the middle sets Z, the distance; the side view sets Y, the height angle from below to straight above. The arrow keys turn it and move it out and in." },
+      { term: "X, Y and Z", desc: "Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now." },
+      { term: "Phrase", desc: "Under the axes once the Orbit words are on: one $variable that joins the three words, like front-left view, high angle, medium shot. It is a Text value reading the axes' variables, so you can change its wording in its pencil." },
+      { term: "Pencil (toolbar)", pin: "page:.wp-tb-icon--edit", desc: "Select the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis and the phrase, the style and its looks, and Done." },
+      { term: "Style", desc: "Edit strip. Pad, Size, Stick and Map work as in WP Slider 2D, with the Z fader beside the pad. Orbit draws the camera or light round the subject; picking it puts the camera words on the axes unless X already turns from -180 to 180." },
+      { term: "Look and Words", desc: "Edit strip, Orbit. Look draws a camera or a light (an amber sun). Camera or Light puts that word set on all three axes: X the side (front, front-left … back), Y the height (eye level, high angle …; for a light low, high or overhead), Z the shot (close-up … wide shot; for a light soft, diffused or hard), and the phrase that joins them. It replaces the axes' ranges and words." },
+      { term: "Shape, size, dots and looks", desc: "Edit strip, pad styles. The same as WP Slider 2D: shape, S/M/L, dots and Snap to dots, Area, Colours and Lines. Swap swaps X and Y." },
+      { term: "context (out)", sockets: ["out:context"], desc: "The Context with the three axis variables (and the phrase) added, and the numbers $name.num reads." },
+      { term: "x / y / z (out)", sockets: ["out:x", "out:y", "out:z"], desc: "Each axis's number, named after the axis: an INT or a FLOAT (by default an INT when the axis writes 0 decimals, else a FLOAT; the axis window can pick either)." },
+    ],
+    edit: [
+      { term: "Axis window", desc: "An axis's pencil opens the same window as a WP Slider slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way. Output picks Auto, INT or FLOAT; an axis always has its output." },
+      { term: "Phrase window", desc: "The phrase's pencil opens the same window in Text mode: change the variable's name or the wording, for example $view_side shot from $view_height. It has no output." },
+    ],
+  },
   WP_VarToBool: {
     controls: [
       { term: "context (in)", sockets: ["in:context"], desc: "The Context that holds the $variable." },

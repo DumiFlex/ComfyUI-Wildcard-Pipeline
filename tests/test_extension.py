@@ -42,6 +42,7 @@ def test_entrypoint_exposes_all_node_classes():
         "WP_Seeds",
         "WP_Slider",
         "WP_Slider2D",
+        "WP_Slider3D",
         "WP_Toggles",
         "WP_VarToBool",
         "WP_VarToChoice",

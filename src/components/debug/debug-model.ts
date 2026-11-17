@@ -510,7 +510,7 @@ function kindOf(entry: RawTraceEntry): Kind {
   if (entry.node === "WP_ContextInjector") return "injector";
   if (entry.node === "WP_ModelInfo") return "model";
   if (entry.node === "WP_Toggles") return "toggle";
-  if (entry.node === "WP_Slider" || entry.node === "WP_Slider2D") return "slider";
+  if (entry.node === "WP_Slider" || entry.node === "WP_Slider2D" || entry.node === "WP_Slider3D") return "slider";
   if (entry.node === "WP_ContextLoop") return "loop";
   switch (entry.type) {
     case "wildcard": return "wildcard";

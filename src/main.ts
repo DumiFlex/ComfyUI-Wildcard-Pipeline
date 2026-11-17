@@ -424,6 +424,8 @@ app.registerExtension({
         showMod.offerPanel(node, inputName, () => slidersMod.create(node, inputName)),
       WP_SLIDER_PAD: (node: SliderPadCreateNode, inputName: string) =>
         showMod.offerPanel(node, inputName, () => sliderPadMod.create(node, inputName)),
+      WP_SLIDER_3D: (node: SliderPadCreateNode, inputName: string) =>
+        showMod.offerPanel(node, inputName, () => sliderPadMod.create(node, inputName, 3)),
       WP_IMAGE_FILTER: (node: ImageFilterCreateNode, inputName: string) =>
         showMod.offerPanel(node, inputName, () => imageFilterWidgetMod.create(node, inputName)),
       WP_LABEL_GRID: (node: LabelGridCreateNode, inputName: string) =>

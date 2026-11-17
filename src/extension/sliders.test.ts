@@ -11,8 +11,13 @@ import {
   isSliderNode,
   newSlider,
   padBands,
+  orbitPreset,
+  orbitReady,
+  padAxes,
   padConfig,
+  padPhrase,
   padRatio,
+  phrasePreview,
   normalizeOuts,
   outputNumber,
   outputValues,
@@ -282,3 +287,64 @@ describe("WP Slider 2D pad config", () => {
     expect(isSliderNode("WP_Toggles")).toBe(false);
   });
 });
+
+describe("WP Slider 3D pad config", () => {
+  it("keeps three pinned axes and the first later text row as the phrase", () => {
+    const cfg = padConfig({
+      pad: { style: "orbit", light: true },
+      rows: [
+        { id: "a", kind: "slider", name: "A", var: "a" },
+        { id: "b", kind: "slider", name: "B", var: "b" },
+        { id: "c", kind: "slider", name: "C", var: "c" },
+        { id: "d", kind: "slider", name: "D", var: "d" },
+        { id: "p", kind: "slider", name: "P", var: "p", mode: "text", text: "$a and $c", pin: true, out: 4 },
+      ],
+    }, 3);
+    expect((cfg.rows as SliderRow[]).map((s) => [s.id, s.pin, s.out])).toEqual([["a", true, 1], ["b", true, 2], ["c", true, 3], ["p", false, 0]]);
+    expect(cfg.pad).toEqual({ style: "orbit", light: true });
+    expect(padAxes(cfg, 3).map((s) => s.id)).toEqual(["a", "b", "c"]);
+    expect(padPhrase(cfg)?.id).toBe("p");
+    expect(phrasePreview(cfg)).toBe("0.00 and 0.00");
+    // A 2D pad never takes the orbit style.
+    expect(padConfig({ pad: { style: "orbit" }, rows: [] }).pad).toEqual({});
+  });
+
+  it("adds a missing Z and has no phrase until one is made", () => {
+    const empty = padConfig("", 3);
+    expect((empty.rows as SliderRow[]).map((s) => [s.name, s.var, s.out])).toEqual([["X", "x", 1], ["Y", "y", 2], ["Z", "z", 3]]);
+    expect(padPhrase(empty)).toBeUndefined();
+    expect(phrasePreview(empty)).toBe("");
+    expect(orbitReady(empty)).toBe(false);
+  });
+
+  it("orbitPreset sets camera words, keeps ids and adds the phrase", () => {
+    const base = padConfig("", 3);
+    const cam = orbitPreset(base, "camera");
+    const rows = cam.rows as SliderRow[];
+    expect(rows.map((s) => s.id).slice(0, 3)).toEqual(base.rows.map((r) => r.id));
+    expect(rows.map((s) => s.var)).toEqual(["view_side", "view_height", "view_shot", "view"]);
+    expect(rows.slice(0, 3).every((s) => s.mode === "words" && s.internal && s.pin)).toBe(true);
+    expect(cam.pad).toEqual({ style: "orbit" });
+    expect(orbitReady(cam)).toBe(true);
+    expect(phrasePreview(cam)).toBe("front-left view, high angle, medium shot");
+    const back = { ...cam, rows: rows.map((s, i) => (i === 0 ? { ...s, value: 180 } : s)) };
+    expect(phrasePreview(back)).toMatch(/^back view/);
+    const front = { ...cam, rows: rows.map((s, i) => (i === 0 ? { ...s, value: -180 } : s)) };
+    expect(phrasePreview(front)).toMatch(/^back view/);
+    // Survives the widget's own round trip.
+    expect(padConfig(cam, 3)).toEqual(cam);
+  });
+
+  it("orbitPreset light swaps the words and keeps the phrase row's id", () => {
+    const cam = orbitPreset(padConfig("", 3), "camera");
+    const light = orbitPreset(cam, "light");
+    expect(light.pad).toEqual({ style: "orbit", light: true });
+    expect(padPhrase(light)?.id).toBe(padPhrase(cam)?.id);
+    expect(phrasePreview(light)).toBe("light from the front-left, high light, diffused light");
+  });
+
+  it("is read as a slider node by the graph walkers", () => {
+    expect(isSliderNode("WP_Slider3D")).toBe(true);
+  });
+});
+
