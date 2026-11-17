@@ -26,7 +26,7 @@ import { collectCrossNodePairingsFull, collectFullChainModules } from "../extens
 import { deriveLoopSeeds, applySeedLocks, effectiveChainSeed } from "../components/shared/seed-derive";
 import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
-import { nodeFrameSeeds, nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds, nodeSeedSource } from "../extension/_stashes";
+import { nodeFrameSeeds, nodeLastPicks, nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds, nodeSeedSource } from "../extension/_stashes";
 import { parseSeedsConfig, seedRows, SEED_FROM_AUTO, SEED_FROM_OWN } from "../extension/seeds";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 import { inputLinkId } from "../extension/slot-links";
@@ -523,6 +523,15 @@ export function create(node: ContextNode, inputName: string) {
         return typeof v === "number" && Number.isFinite(v) ? v : null;
       }
 
+      // The option a wildcard use picked last run (lock value). With a frame
+      // active, what it picked on that frame; null when unknown.
+      function lastPickReader(uid: string, frame: number | null): string | null {
+        const picks = nodeLastPicks.get(node);
+        if (!picks) return null;
+        const v = frame != null ? picks.frames.get(frame)?.[uid] : picks.all[uid];
+        return typeof v === "string" && v ? v : null;
+      }
+
       // Per-frame seed reader for the iteration-frame lock. Computes the seed
       // THIS module rolls at frame #k WITHOUT a run, mirroring the engine:
       // resolve the upstream Loop's derived series (base + strategy + the Loop's
@@ -611,6 +620,7 @@ export function create(node: ContextNode, inputName: string) {
           nodeMode: nodeMode.value,
           lastUsedSeedReader,
           frameSeedReader,
+          lastPickReader,
           seedSources: seedSources.value,
           lastSeed: lastSeed.value,
           onSeedFrom: (v: string) => {
@@ -693,6 +703,11 @@ export function create(node: ContextNode, inputName: string) {
     }
     return undefined;
   }
+  function stringMap(raw: object): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) if (typeof v === "string" && v) out[k] = v;
+    return out;
+  }
   function onExecuted(ev: Event) {
     const detail = (ev as ExecutedEvent).detail;
     if (!detail || String(detail.node) !== String(node.id)) return;
@@ -734,6 +749,21 @@ export function create(node: ContextNode, inputName: string) {
         if (typeof frame === "number" && typeof seed === "number") frames.set(frame, seed);
       }
       nodeFrameSeeds.set(node, frames);
+    }
+    // What each wildcard use picked (lock value). `frame_picks` holds one
+    // entry per frame run; `module_picks` is the first frame's (ComfyUI joins
+    // a list run's UI outputs).
+    const rawPicks = pickArrayValue(out, "module_picks");
+    if (rawPicks && typeof rawPicks === "object" && !Array.isArray(rawPicks)) {
+      const all = stringMap(rawPicks);
+      const frames = new Map<number, Record<string, string>>();
+      if (Array.isArray(out.frame_picks)) {
+        for (const f of out.frame_picks) {
+          const { frame, picks } = (f ?? {}) as { frame?: unknown; picks?: unknown };
+          if (typeof frame === "number" && picks && typeof picks === "object") frames.set(frame, stringMap(picks));
+        }
+      }
+      nodeLastPicks.set(node, { all, frames });
     }
     const rawSource = pickArrayValue(out, "seed_source");
     const rawUsed = pickArrayValue(out, "seed_used");

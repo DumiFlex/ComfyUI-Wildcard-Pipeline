@@ -541,6 +541,20 @@ def _record_axes(
         decl[binding] = list(_accepts_axes(payload))
 
 
+OPTION_PICKS_KEY = "__wp_option_picks__"
+
+
+def note_option_pick(ctx: dict[str, Any] | None, option_id: Any) -> None:
+    """Remember the option this wildcard use picked, by its per-use ``_uid``,
+    so the Context node can hand it to the row lock (lock the value)."""
+    if not isinstance(ctx, dict) or not isinstance(option_id, str) or not option_id:
+        return
+    uid = ctx.get("__wp_current_module_uid__")
+    if not isinstance(uid, str) or not uid:
+        return
+    ctx.setdefault(OPTION_PICKS_KEY, {})[uid] = option_id
+
+
 def _warn_pinned_missing(ctx: dict[str, Any] | None, pinned_id: Any) -> None:
     """A ``pinned`` instance whose option the library no longer has rolls
     normally; say so (a sweep frame relies on the pin, so a deleted option
@@ -1073,6 +1087,15 @@ class WildcardHandler(ModuleHandler):
             pinned = next((o for o in options if o.get("id") == pinned_id), None)
             if pinned is None:
                 _warn_pinned_missing(ctx, pinned_id)
+        # A value lock (the row lock's second state) pins the option the last
+        # run picked. A sweep pin above wins over it for its frame.
+        locked_id = instance.get("locked_option_id")
+        if pinned is None and isinstance(locked_id, str) and locked_id:
+            pinned = next((o for o in options if o.get("id") == locked_id), None)
+            if pinned is None:
+                _warn_pinned_missing(ctx, locked_id)
+            else:
+                pin_mode = "locked"
         # `match_variable`: take the option whose text equals another
         # variable's value (case-insensitive), e.g. `$model_variant` from WP
         # Model Info, so this wildcard's pick can drive constraints. No match →
@@ -1099,8 +1122,9 @@ class WildcardHandler(ModuleHandler):
             # info regardless of how the source resolved its option.
             _record_pick(ctx, pinned, payload, pinned_rolled)
             _record_axes(ctx, binding, pinned_rolled, payload)
-            if pin_mode == "pinned":
+            if pin_mode in ("pinned", "locked"):
                 _warn_locked_conflict(ctx, pinned, payload)
+            note_option_pick(ctx, pinned.get("id"))
             detail = module_detail(ctx)
             if detail is not None:
                 detail.update({"mode": pin_mode, "option_id": pinned.get("id")})
@@ -1112,7 +1136,7 @@ class WildcardHandler(ModuleHandler):
                     and ctx.get("__wp_current_module_uid__") in sweep_pins
                 ):
                     detail["swept"] = True
-                if pin_mode != "pinned":
+                if pin_mode not in ("pinned", "locked"):
                     detail["match_variable"] = match_var.strip()
                     raw_match = ctx.get(match_var.strip())
                     detail["match_value"] = "" if raw_match is None else str(raw_match)
@@ -1422,6 +1446,7 @@ class WildcardHandler(ModuleHandler):
         chosen = fallback if use_fallback else _pick_weighted(options, rng)
         if chosen is None:
             return {binding: ""}
+        note_option_pick(ctx, chosen.get("id"))
         if detail is not None:
             total = sum(_weight(o) for o in options)
             detail["option_id"] = chosen.get("id")

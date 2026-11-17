@@ -10,6 +10,7 @@ from engine.db.connection import get_connection, resolve_db_path
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
+from engine.modules.wildcard_handler import OPTION_PICKS_KEY
 from engine.pipeline import FRAME0_CTX_KEY, PipelineEngine
 from engine.seed_derive import SEED_FROM_AUTO, resolve_context_seed
 from wp_nodes.types import (
@@ -368,6 +369,16 @@ class WPContext(io.ComfyNode):
             es = entry.get("seed")
             if isinstance(key, str) and key and isinstance(es, int):
                 module_seeds[key] = es
+        # The option each wildcard use of THIS node picked (single picks only),
+        # by `_uid`, so the row lock's second state can pin it (lock value).
+        own_uids = {
+            e.get("_uid") for e in ctx.get("__wp_trace__", []) if isinstance(e, dict)
+        }
+        raw_picks = ctx.get(OPTION_PICKS_KEY)
+        module_picks: dict[str, str] = {
+            str(uid): oid for uid, oid in (raw_picks.items() if isinstance(raw_picks, dict) else [])
+            if uid in own_uids and isinstance(oid, str)
+        }
         # The Loop's full derived per-iteration series (present only when the
         # Loop drives seeds via override). Captured by the frontend so the
         # per-frame seed lock pins the seed each frame ACTUALLY rolled THIS
@@ -389,5 +400,8 @@ class WPContext(io.ComfyNode):
                 # outputs), so the per-frame module lock pins the seed each
                 # frame actually used, whatever the source.
                 "frame_seeds": [{"frame": loop_index, "seed": int(chain_seed)}],
+                # Same for the picks: one entry per frame run.
+                "module_picks": [module_picks],
+                "frame_picks": [{"frame": loop_index, "picks": module_picks}],
             },
         )

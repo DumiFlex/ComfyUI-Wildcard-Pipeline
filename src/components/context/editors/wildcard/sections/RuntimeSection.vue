@@ -28,6 +28,23 @@ function onHoldClick(): void {
   emit("update", { instance: { ...instance.value, seed_scope: held.value ? "vary" : "hold" } });
 }
 
+// Value lock (the row lock's third state): shown only while set, so it can
+// be turned off here too. Turning it on happens on the row, after a run.
+const lockedValue = computed(() => {
+  const id = instance.value.locked_option_id;
+  if (typeof id !== "string" || !id) return null;
+  const options = (props.module.payload as { options?: unknown } | undefined)?.options;
+  const hit = Array.isArray(options)
+    ? options.find((o) => (o as { id?: unknown })?.id === id) as { value?: unknown } | undefined
+    : undefined;
+  return typeof hit?.value === "string" ? hit.value : id;
+});
+function onUnlockValue(): void {
+  const next: Record<string, unknown> = { ...instance.value };
+  delete next.locked_option_id;
+  emit("update", { instance: next as ModuleEntry["instance"] });
+}
+
 // "Match variable": pick the option whose text equals `$<name>` instead of
 // rolling (engine `_match_variable_option`). Stored bare, absent when empty.
 const matchVar = computed(() =>
@@ -46,6 +63,15 @@ function onMatchInput(e: Event): void {
   <section class="runtime">
     <span class="runtime__label">Runtime</span>
     <SeedLockControls :module="module" label="Lock pick" @update="emit('update', $event)" />
+    <WpSwitch
+      v-if="lockedValue != null"
+      variant="chip"
+      icon="pi-lock"
+      :label="`Locked value: ${lockedValue}`"
+      data-test="runtime-locked-value"
+      :model-value="true"
+      @update:model-value="onUnlockValue"
+    />
     <WpSwitch
       variant="chip"
       icon="pi-eye-slash"

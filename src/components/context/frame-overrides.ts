@@ -138,13 +138,24 @@ export function toggleFrameEnabled(module: ModuleEntry, frame: number): ModuleEn
  *  leaves a stale entry so the row keeps showing "override #k". */
 export function dropRedundantFrameLockNulls(module: ModuleEntry): ModuleEntry {
   const ov = module.iteration_overrides;
-  if (!ov || typeof module.instance?.locked_seed === "number") return module;
+  if (!ov) return module;
+  // The same for a value lock's `locked_option_id: null`.
+  const base = (module.instance ?? {}) as Record<string, unknown>;
+  const keys = (["locked_seed", "locked_option_id"] as const)
+    .filter((key) => base[key] === undefined || base[key] === null);
+  if (!keys.length) return module;
   const next: IterationOverrides = {};
   let changed = false;
   for (const [k, patch] of Object.entries(ov)) {
-    if (patch && (patch as Record<string, unknown>).locked_seed === null) {
-      const rest = { ...patch } as Record<string, unknown>;
-      delete rest.locked_seed;
+    const rest = { ...(patch ?? {}) } as Record<string, unknown>;
+    let hit = false;
+    for (const key of keys) {
+      if (rest[key] === null) {
+        delete rest[key];
+        hit = true;
+      }
+    }
+    if (hit) {
       changed = true;
       if (Object.keys(rest).length) next[k] = rest as Partial<Instance>;
     } else {

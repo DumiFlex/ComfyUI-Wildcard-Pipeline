@@ -2,6 +2,7 @@
 import { computed, inject } from "vue";
 import type { ModuleEntry } from "../../widgets/_shared";
 import { ModuleRowCtxKey } from "./module-row-ctx";
+import { lockState, lockedValueText } from "./module-state";
 import PairBadge from "./PairBadge.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
@@ -35,6 +36,24 @@ const {
   viaInboundFor,
   contributorsFor,
 } = ctx;
+
+function lockLabel(m: ModuleEntry): string {
+  const st = lockState(m);
+  if (st === "value") return "Unlock value";
+  if (st === "seed") return m.type === "wildcard" ? "Lock value" : "Unlock seed";
+  return "Lock seed";
+}
+function lockHint(m: ModuleEntry): string {
+  const st = lockState(m);
+  if (st === "value") return `Locked value: “${lockedValueText(m)}”. Click to unlock.`;
+  if (st === "seed") {
+    const seed = `Locked seed: ${ctx?.effectiveLockedSeed(m)}.`;
+    return m.type === "wildcard"
+      ? `${seed} Click to lock the value it picked last run (unlocks when it hasn't run yet).`
+      : `${seed} Click to unlock.`;
+  }
+  return m.type === "wildcard" ? "Lock seed (click again to lock the value)" : "Lock seed";
+}
 </script>
 
 <template>
@@ -155,16 +174,18 @@ const {
           class="wp-conflict-badge"
           :class="`wp-conflict-badge--${severityFor(module._uid ?? module.id)}`"
           :title="conflictTooltip(module._uid ?? module.id)">{{ conflictBadgeText(module._uid ?? module.id) }}</span>
+        <span v-if="lockState(module) === 'value'" class="wp-mod-badge wp-mod-badge--locked" data-test="mod-locked-value"
+          :title="`Always “${lockedValueText(module)}”`">= {{ lockedValueText(module) }}</span>
         <span v-if="ctx?.isHeld(module)" class="wp-mod-badge wp-mod-badge--clash" data-test="mod-held" title="Held across the run">held</span>
         <span v-if="ctx?.isOverriddenOnFrame(module)" class="wp-conflict-badge wp-conflict-badge--warning" data-test="mod-override" title="Overridden on this frame">override #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
         <span v-if="ctx?.frameEnableOverride(module) === 'off'" class="wp-mod-badge wp-mod-badge--missing" data-test="mod-frame-disabled" title="Disabled on this frame">off #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
         <span v-else-if="ctx?.frameEnableOverride(module) === 'on'" class="wp-mod-badge wp-mod-badge--on" data-test="mod-frame-enabled" title="Enabled on this frame">on #{{ (ctx.currentFrame.value ?? 0) + 1 }}</span>
       </span>
       <div class="wp-mod-actions" draggable="false">
-        <WpIconButton v-if="isSeedLockable(module)" icon="pi-lock" tone="warn"
-          :pressed="isLocked(module)" data-test="row-action-lock"
-          :label="isLocked(module) ? 'Unlock seed' : 'Lock seed'"
-          :hint="isLocked(module) ? `Locked seed: ${ctx?.effectiveLockedSeed(module)}. Click to unlock.` : 'Lock seed'"
+        <WpIconButton v-if="isSeedLockable(module)" icon="pi-lock"
+          :tone="lockState(module) === 'value' ? 'accent' : 'warn'"
+          :pressed="isLocked(module)" data-test="row-action-lock" :data-lock="lockState(module)"
+          :label="lockLabel(module)" :hint="lockHint(module)"
           @click.stop="toggleLockOnCard(idx)" />
         <WpIconButton v-if="module.type === 'wildcard' || module.type === 'fixed_values' || module.type === 'combine' || module.type === 'derivation'"
           icon="pi-globe" tone="accent"

@@ -94,7 +94,8 @@ const reachModes = [
     <DocSection title="When the target is narrowed first">
       <p>
         A constraint runs forward: the source picks, then the target follows. But the target's
-        pool can be narrowed before it rolls: a locked pick, <b>Match variable</b>, a Pool filter
+        pool can be narrowed before it rolls: a locked value (the row lock's second click),
+        <b>Match variable</b>, a Pool filter
         (including one that reads <VarToken>$variables</VarToken>, like place chips on WP Toggles),
         the node's option toggles, or a per-use weight of 0. Then the source looks ahead: right
         before it rolls, it drops every option that no option left in the target accepts, and the
@@ -109,7 +110,7 @@ const reachModes = [
         nothing is ever re-picked and a circle of rules can't loop.
         This follows chains (mood → pose → place) and every reach setting. A source with a locked
         seed still rolls inside what fits, as it does under a normal constraint; a source with a
-        locked pick is never changed, and WP Debug warns when it clashes with the locked target
+        locked value is never changed, and WP Debug warns when it clashes with the locked target
         (<code>locked_value_conflict</code>). When nothing fits, the source takes its fallback, or
         rolls as usual with a <code>backward_no_fit</code> warning. A target nothing narrows never
         pushes back, so those runs roll exactly as before. For now it looks at targets in the same

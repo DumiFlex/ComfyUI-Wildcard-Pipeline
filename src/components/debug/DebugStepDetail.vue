@@ -216,6 +216,7 @@ function modeGlyph(mode: string | undefined): string {
         <span v-if="d.fallback" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-fallback">fallback used</span>
         <span v-if="d.mode === 'pinned' && d.swept" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-swept"><i class="pi pi-replay" /> swept: this frame's option</span>
         <span v-else-if="d.mode === 'pinned'" class="wp-dbg-fact wp-dbg-fact--accent"><i class="pi pi-thumbtack" /> pinned option</span>
+        <span v-else-if="d.mode === 'locked'" class="wp-dbg-fact wp-dbg-fact--accent"><i class="pi pi-lock" /> locked value</span>
         <span v-if="d.mode === 'match_variable'" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-match-var">matched <code>${{ d.match_variable }}</code><template v-if="d.match_value != null"> = <code>{{ d.match_value || '""' }}</code></template></span>
         <span v-if="d.mode === 'match_fallback'" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-match-var">no option matched <code>${{ d.match_variable }}</code>, fallback used</span>
         <span v-if="chanceText" class="wp-dbg-fact wp-dbg-fact--accent" data-test="dbg-chance">{{ chanceText }}</span>

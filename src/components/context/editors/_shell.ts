@@ -14,7 +14,7 @@ export type InstanceFieldKey =
   | "variable_binding" | "enabled_options" | "option_weights" | "category_filter"
   | "exclude_null"
   | "pick_min" | "pick_max" | "pick_separator" | "pick_independent"
-  | "mode" | "pinned_option_id" | "match_variable" | "locked_seed" | "seed_scope" | "internal" | "values_overrides"
+  | "mode" | "pinned_option_id" | "match_variable" | "locked_seed" | "locked_option_id" | "seed_scope" | "internal" | "values_overrides"
   | "template_override" | "negative_override"
   | "disabled_rule_ids"
   // Derivation tier-D modal expansion (2026-05-10 cycle)
@@ -46,7 +46,7 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
     // implicit in pool state. Engine handler still reads them on
     // legacy snapshots; UI never writes them.
     "variable_binding", "enabled_options",
-    "option_weights", "category_filter", "exclude_null", "locked_seed", "seed_scope", "internal",
+    "option_weights", "category_filter", "exclude_null", "locked_seed", "locked_option_id", "seed_scope", "internal",
     // SP2a multi-select: count range + join separator (per-instance, local).
     // SP2c: pick_independent (allow repeats / with replacement).
     "pick_min", "pick_max", "pick_separator", "pick_independent",
@@ -94,7 +94,7 @@ export const INSTANCE_FIELDS_PER_KIND: Record<ModuleEntryKind, readonly Instance
 // per-frame save-diff so toggling Hold/binding/Hide on a frame records no override.
 export const FRAME_OVERRIDABLE_FIELDS: Record<ModuleEntryKind, readonly InstanceFieldKey[]> = {
   wildcard: ["enabled_options", "option_weights", "category_filter", "exclude_null",
-    "locked_seed", "pick_min", "pick_max", "pick_separator", "pick_independent"],
+    "locked_seed", "locked_option_id", "pick_min", "pick_max", "pick_separator", "pick_independent"],
   fixed_values: ["values_overrides", "enabled_options", "locked_seed"],
   combine: ["template_override", "negative_override", "locked_seed"],
   derivation: ["disabled_rule_ids", "disabled_branch_keys", "action_value_overrides",

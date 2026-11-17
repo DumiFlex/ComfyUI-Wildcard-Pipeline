@@ -92,6 +92,9 @@ def _fresh_instance() -> dict[str, Any]:
         # the user cycles the Context node's seed. `None` = roll with
         # the chain seed (default).
         "locked_seed": None,
+        # Value lock — the row lock's second state: always take this option
+        # id (what the last run picked). ``None`` = not value-locked.
+        "locked_option_id": None,
         # Internal — when True, every binding this module produces is
         # marked engine-only by `PipelineEngine.run` (via
         # `__wp_internal_flags__`). Downstream modules still see the
