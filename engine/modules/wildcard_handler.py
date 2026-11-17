@@ -89,9 +89,11 @@ def _explain_options(
 ) -> None:
     """Every option of this use with its library weight, its final weight and
     why it can't be drawn (``filter`` / ``toggle`` / ``constraint`` /
-    ``weight``), so WP Debug can say why an option never comes up. Also the
+    ``backward`` / ``weight``), so WP Debug can say why an option never comes up. Also the
     pool size after each step (library → filter → toggles → drawable)."""
     final_w = {o.get("id"): _weight(o) for o in final}
+    # Options backward rules dropped (engine/modules/_backward.py).
+    back = set((detail.get("backward") or {}).get("removed") or [])
     rows: list[dict[str, Any]] = []
     for o in library:
         oid = o.get("id")
@@ -106,6 +108,8 @@ def _explain_options(
             cut = None
             if weight <= 0:
                 cut = "constraint" if pre > 0 else "weight"
+                if oid in back:
+                    cut = "backward"
         row: dict[str, Any] = {
             "id": oid,
             "value": str(o.get("value", ""))[:_TEXT_SHOWN],
@@ -556,6 +560,36 @@ def _warn_pinned_missing(ctx: dict[str, Any] | None, pinned_id: Any) -> None:
             "rolled normally"
         ),
     })
+
+
+def _warn_locked_conflict(
+    ctx: Any, pinned: dict[str, Any], payload: dict[str, Any],
+) -> None:
+    """A locked (pinned) option skips its own constraints. Backward rules
+    keep unlocked sources compatible with it, so a constraint that still rules
+    it out means its source was locked too, or rolled in another node: say so
+    (the lock is kept). Counts no hits and files nothing else."""
+    if not isinstance(ctx, dict) or not isinstance(ctx.get("__wp_warnings__"), list):
+        return
+    my_id = ctx.get("__wp_current_module_id__")
+    if not my_id:
+        return
+    from engine.modules import _backward
+    from engine.modules._constraints import apply_constraints_for_target
+
+    scratch: list[dict[str, Any]] = []
+    out, applied = apply_constraints_for_target(
+        [{**pinned, "weight": 1}], my_id, ctx.get("__wp_constraints__"),
+        ctx.get("__wp_picks__"), scratch,
+        hits=dict(ctx.get("__wp_constraint_hits__") or {}),
+        firing_uid=ctx.get("__wp_current_module_uid__"),
+        firing_origin=ctx.get("__wp_current_module_bundle_origin__"),
+        target_axes=_accepts_axes(payload),
+    )
+    if applied and out and _weight(out[0]) <= 0:
+        ctx["__wp_warnings__"].append(
+            _backward.locked_conflict_warning(my_id, pinned.get("id")),
+        )
 
 
 def _match_variable_option(
@@ -1065,6 +1099,8 @@ class WildcardHandler(ModuleHandler):
             # info regardless of how the source resolved its option.
             _record_pick(ctx, pinned, payload, pinned_rolled)
             _record_axes(ctx, binding, pinned_rolled, payload)
+            if pin_mode == "pinned":
+                _warn_locked_conflict(ctx, pinned, payload)
             detail = module_detail(ctx)
             if detail is not None:
                 detail.update({"mode": pin_mode, "option_id": pinned.get("id")})
@@ -1204,6 +1240,35 @@ class WildcardHandler(ModuleHandler):
             )
         if any_constraint_applied and fallback is None:
             warn_excludes_all(options, my_id or "", ctx["__wp_warnings__"])
+        # Backward rules: drop the options a NARROWED downstream target of
+        # this wildcard's constraints could not accept (locked value, Match
+        # variable, pool filter, toggles). A seed lock still rolls inside what
+        # is left, as it does under forward constraints.
+        back_removed: list[Any] = []
+        if my_id and isinstance(ctx, dict) and not pool_is_dead(options):
+            from engine.modules import _backward
+
+            pruned, back_removed, back_targets = _backward.prune(
+                ctx, payload, options, my_id,
+                str(ctx.get("__wp_current_module_bundle_origin__") or ""),
+                int(ctx.get(_backward.POS_KEY, -1)),
+                binding=binding,
+            )
+            if back_removed:
+                if pool_is_dead(pruned):
+                    ctx["__wp_warnings__"].append(_backward.no_fit_warning(
+                        my_id, back_targets, fallback=fallback is not None,
+                    ))
+                    if fallback is None:
+                        back_removed = []
+                    else:
+                        options = pruned
+                else:
+                    options = pruned
+                if back_removed and detail is not None:
+                    detail["backward"] = {
+                        "removed": back_removed, "targets": back_targets,
+                    }
         if detail is not None:
             _explain_pool(detail, options)
             _explain_constraints(detail, applied_constraints)

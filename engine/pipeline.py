@@ -20,6 +20,7 @@ from engine import negatives, prefs
 from engine.context import Context
 from engine.log_once import log_once
 from engine.modules import Module
+from engine.modules import _backward as backward
 from engine.modules._detail import DETAIL_KEY, EXPLAIN_KEY
 from engine.modules.dispatcher import UnknownModuleType, resolve_module
 from engine.modules.snapshot import coerce_legacy_module
@@ -551,8 +552,16 @@ class PipelineEngine:
         # pick odds, ...) for the WP Debug node; see engine/modules/_detail.py.
         explain = bool(ctx.get(EXPLAIN_KEY))
         self._hold_base_pass(modules, ctx, loop_index)
-        for index, module in enumerate(modules):
-            self._run_module(index, module, ctx, explain)
+        # Backward rules (engine/modules/_backward.py) look down this node's
+        # chain from the running wildcard; dropped again after the run.
+        ctx[backward.CHAIN_KEY] = modules
+        try:
+            for index, module in enumerate(modules):
+                ctx[backward.POS_KEY] = index
+                self._run_module(index, module, ctx, explain)
+        finally:
+            for key in (backward.CHAIN_KEY, backward.POS_KEY, backward.CACHE_KEY):
+                ctx.pop(key, None)
         _clear_active_module(ctx)
         finalize_constraint_warnings(ctx, modules)
         return ctx

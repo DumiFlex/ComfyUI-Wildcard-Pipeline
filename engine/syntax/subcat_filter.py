@@ -331,7 +331,12 @@ def bind(
             return {"op": "not", "x": walk(n["x"])}
         return {"op": n["op"], "kids": [walk(k) for k in n["kids"]]}
 
-    return _drop_vars(walk(ast)), notes
+    out = _drop_vars(walk(ast))
+    # Chips: one `$pick_x` term per toggle, most of them off. When another
+    # term narrowed, an unset one is expected, not news.
+    if len(notes) < len(cache):
+        notes = [n for n in notes if n.get("reason") != "unset"]
+    return out, notes
 
 
 def values_of(raw: Any) -> list[str]:
