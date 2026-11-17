@@ -251,8 +251,8 @@ describe("WP Slider 2D pad config", () => {
   });
 
   it("reads the style, Auto shape, dots, snap and size", () => {
-    const cfg = padConfig({ pad: { style: "map", fit: true, grid: 0, snap_dots: true, size: "s", ratio: 9 }, rows: [] });
-    expect(cfg.pad).toEqual({ style: "map", fit: true, grid: 0, snap_dots: true, size: "s" });
+    const cfg = padConfig({ pad: { style: "map", fit: true, grid: 0, snap_dots: true, size: "s", ratio: 9, no_tint: true }, rows: [] });
+    expect(cfg.pad).toEqual({ style: "map", fit: true, no_tint: true, grid: 0, snap_dots: true, size: "s" });
     expect(padConfig({ pad: { style: "nope", size: "xl", grid: 17 }, rows: [] }).pad).toEqual({});
   });
 
