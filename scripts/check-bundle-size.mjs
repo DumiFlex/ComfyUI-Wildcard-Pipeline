@@ -409,7 +409,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 760 -> 775 KB on 2026-11-17: WP Slider 2D (#470, the XY pad, lazy)
 // and the Image Filter's mixed sizes (#471, lazy picker chunk) put the total
 // at ~766.7 KB.
-const TOTAL_LIMIT = 775 * 1024;     // 775 KB
+// RAISED 775 -> 790 KB on 2026-11-17: WP Slider 3D (#474, OrbitPad) and its
+// Mix style (kit TrianglePad), all in the lazy pad chunk, put the total at
+// ~776 KB.
+const TOTAL_LIMIT = 790 * 1024;     // 790 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

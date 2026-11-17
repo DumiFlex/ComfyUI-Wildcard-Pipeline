@@ -204,7 +204,7 @@ export const DOC_PAGES: DocPageMeta[] = [
     blurb: "One XY pad: drag a point to set two numbers at once, each a $variable and an INT / FLOAT output.", keywords: ["slider", "2d", "xy", "pad", "width", "height", "size", "resolution", "aspect", "num", "mxtoolkit"],
     ...page(() => import("./pages/nodes/wp-slider-2d.vue")) },
   { id: "wp-slider-3d", title: "WP Slider 3D", group: "nodes", icon: "pi pi-box", tone: "node", nodeId: "WP_Slider3D",
-    blurb: "Three numbers at once: an XY pad with a Z fader, or a camera or light orbiting the subject that writes words like front-left view, high angle, medium shot.", keywords: ["slider", "3d", "xyz", "pad", "orbit", "camera", "angle", "view", "light", "lighting", "shot", "distance", "num", "mxtoolkit"],
+    blurb: "Three numbers at once: an XY pad with a Z fader, a camera or light orbiting the subject that writes words like front-left view, high angle, medium shot, or a triangle that blends three things.", keywords: ["slider", "3d", "xyz", "pad", "orbit", "mix", "blend", "triangle", "weights", "camera", "angle", "view", "light", "lighting", "shot", "distance", "num", "mxtoolkit"],
     ...page(() => import("./pages/nodes/wp-slider-3d.vue")) },
   { id: "wp-node-group", title: "WP Node Group", group: "nodes", icon: "pi pi-sitemap", tone: "node", nodeId: "WP_NodeGroup",
     blurb: "Gather nodes so one WP Toggles switch mutes or bypasses them all.", keywords: ["mute", "bypass", "group", "collector", "repeater", "toggle", "rgthree"],

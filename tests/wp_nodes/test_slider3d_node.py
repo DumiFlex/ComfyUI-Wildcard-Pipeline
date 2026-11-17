@@ -71,3 +71,22 @@ def test_only_one_text_row_after_the_axes_counts():
     assert [s.var for s in kept.sliders] == ["view_side", "view_height", "view_shot", "view"]
     payload, x, y, z = _run({"rows": CFG["rows"][:2]}).values
     assert z == 0 and "view" not in payload.context
+
+
+def test_mix_weights_and_the_phrase():
+    def axis(i, var, value):
+        return {"id": f"0000000{i}", "kind": "slider", "name": var, "var": var, "value": value,
+                "min": 0, "max": 1, "step": 0.05, "decimals": 2, "mode": "number",
+                "internal": True, "pin": True, "out": i}
+    cfg = {"version": 1, "pad": {"style": "mix"}, "rows": [
+        axis(1, "mix_a", 0.4), axis(2, "mix_b", 0.3), axis(3, "mix_c", 0.3),
+        {"id": "0000000p", "kind": "slider", "name": "Style mix", "var": "style_mix",
+         "mode": "text",
+         "text": "(watercolor:$mix_a), (ink sketch:$mix_b), (oil painting:$mix_c)"},
+    ]}
+    payload, x, y, z = _run(cfg).values
+    assert (x, y, z) == (0.4, 0.3, 0.3)
+    assert payload.context["style_mix"] == (
+        "(watercolor:0.40), (ink sketch:0.30), (oil painting:0.30)"
+    )
+    assert payload.context["mix_a"] == "0.40"

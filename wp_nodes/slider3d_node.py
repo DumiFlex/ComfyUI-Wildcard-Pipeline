@@ -28,7 +28,7 @@ def axes_and_phrase(cfg: sliders.Config) -> sliders.Config:
 
 
 class WPSlider3D(WPSlider):
-    """Three numbers: a pad + Z fader, or a camera / light orbit."""
+    """Three numbers: a pad + Z fader, a camera / light orbit, or a mix."""
 
     NODE = "WP_Slider3D"
     LABEL = "WP Slider 3D"
@@ -43,8 +43,9 @@ class WPSlider3D(WPSlider):
                 "Three numbers set together: an XY pad with a Z fader, or an "
                 "orbit around the subject for a camera or a light (angle, "
                 "height, distance) that can write words like \"front-left "
-                "view, high angle, medium shot\". Each axis writes $its_variable "
-                "like a WP Slider and has its own output."
+                "view, high angle, medium shot\", or a triangle that blends "
+                "three things into shares adding up to one. Each axis writes "
+                "$its_variable like a WP Slider and has its own output."
             ),
             inputs=[
                 PipelineContext.Input(

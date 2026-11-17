@@ -11,6 +11,10 @@ import {
   isSliderNode,
   newSlider,
   padBands,
+  mixParts,
+  mixPreset,
+  mixStep,
+  mixValues,
   orbitPreset,
   orbitReady,
   padAxes,
@@ -341,6 +345,38 @@ describe("WP Slider 3D pad config", () => {
     expect(light.pad).toEqual({ style: "orbit", light: true });
     expect(padPhrase(light)?.id).toBe(padPhrase(cam)?.id);
     expect(phrasePreview(light)).toBe("light from the front-left, high light, diffused light");
+  });
+
+  it("mixPreset makes three 0..1 shares and a weighted phrase", () => {
+    const base = padConfig("", 3);
+    const mix = mixPreset(base);
+    const rows = mix.rows as SliderRow[];
+    expect(rows.map((s) => s.id).slice(0, 3)).toEqual(base.rows.map((r) => r.id));
+    expect(rows.map((s) => s.var)).toEqual(["mix_a", "mix_b", "mix_c", "style_mix"]);
+    expect(rows.slice(0, 3).every((s) => s.mode === "number" && s.internal && s.min === 0 && s.max === 1)).toBe(true);
+    expect(mix.pad).toEqual({ style: "mix" });
+    expect(phrasePreview(mix)).toBe("(watercolor:0.40), (ink sketch:0.30), (oil painting:0.30)");
+    expect(padConfig(mix, 3)).toEqual(mix);
+    // Never on a 2D pad, and the light look goes.
+    expect(padConfig({ pad: { style: "mix" }, rows: [] }).pad).toEqual({});
+    expect(mixPreset({ ...mix, pad: { style: "orbit", light: true } }).pad).toEqual({ style: "mix" });
+  });
+
+  it("mixParts / mixValues read and write each axis as a part of its own range", () => {
+    const rows = padAxes(padConfig("", 3), 3).map((s, i) => ({ ...s, min: i === 2 ? 1 : 0, max: i === 1 ? 2 : i === 2 ? 3 : 1, value: [0.5, 1, 2][i] ?? 0 }));
+    expect(mixParts(rows)).toEqual([0.5, 0.5, 0.5]);
+    expect(mixValues(rows, [50, 25, 25])).toEqual([0.5, 0.5, 1.5]);
+    expect(mixValues(rows, [0, 0, 100])).toEqual([0, 0, 3]);
+    expect(mixParts([{ ...rows[0], max: 0, min: 0 } as SliderRow])).toEqual([0, 0, 0]);
+  });
+
+  it("mixStep follows the finest axis step on a step that divides 100", () => {
+    const axes = padAxes(mixPreset(padConfig("", 3)), 3);
+    expect(mixStep(axes)).toBe(5);
+    expect(mixStep(axes.map((s) => ({ ...s, step: 0.01 })))).toBe(1);
+    expect(mixStep(axes.map((s) => ({ ...s, step: 0.03 })))).toBe(2);
+    expect(mixStep(axes.map((s) => ({ ...s, step: 0.3 })))).toBe(25);
+    expect(mixStep([])).toBe(5);
   });
 
   it("is read as a slider node by the graph walkers", () => {
