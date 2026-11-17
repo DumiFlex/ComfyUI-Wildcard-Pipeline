@@ -247,7 +247,11 @@ export function bindVars(
     if (n.op === "not") return { op: "not", x: walk(n.x) };
     return { op: n.op, kids: n.kids.map(walk) };
   };
-  return { ast: dropVars(walk(ast)), notes };
+  const out = dropVars(walk(ast));
+  // Chips: one `$pick_x` term per toggle, most of them off. When another term
+  // narrowed, an unset one is expected, not news (mirror of Python `bind`).
+  const kept = notes.length < cache.size ? notes.filter((n) => n.reason !== "unset") : notes;
+  return { ast: out, notes: kept };
 }
 
 /** A run's raw variable value as the list `bindVars` compares: a list var's

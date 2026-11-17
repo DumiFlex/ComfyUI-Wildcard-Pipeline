@@ -91,6 +91,33 @@ const reachModes = [
       </p>
     </DocSection>
 
+    <DocSection title="When the target is narrowed first">
+      <p>
+        A constraint runs forward: the source picks, then the target follows. But the target's
+        pool can be narrowed before it rolls: a locked pick, <b>Match variable</b>, a Pool filter
+        (including one that reads <VarToken>$variables</VarToken>, like place chips on WP Toggles),
+        the node's option toggles, or a per-use weight of 0. Then the source looks ahead: right
+        before it rolls, it drops every option that no option left in the target accepts, and the
+        rest keep their usual odds. Lock the place to a bed and the pose only picks poses that go
+        with a bed.
+      </p>
+      <p>
+        If a module between the source and the target sets a variable the target's filter reads
+        (a rule, say), the source runs it ahead to see what it will be. When that variable comes
+        from the source's own pick, nothing can know it in advance: that part of the filter is not
+        counted and WP Debug warns (<code>backward_late_variable</code>). The run is one pass, so
+        nothing is ever re-picked and a circle of rules can't loop.
+        This follows chains (mood → pose → place) and every reach setting. A source with a locked
+        seed still rolls inside what fits, as it does under a normal constraint; a source with a
+        locked pick is never changed, and WP Debug warns when it clashes with the locked target
+        (<code>locked_value_conflict</code>). When nothing fits, the source takes its fallback, or
+        rolls as usual with a <code>backward_no_fit</code> warning. A target nothing narrows never
+        pushes back, so those runs roll exactly as before. For now it looks at targets in the same
+        Context, used directly (not inside a reference), and at constraints only, not derivations.
+        WP Debug marks the dropped options "doesn't fit <VarToken>$place</VarToken>".
+      </p>
+    </DocSection>
+
     <DocSection title="Constraints across chained Contexts">
       <p>
         A constraint in one Context also applies to its target in a later, chained Context. You can

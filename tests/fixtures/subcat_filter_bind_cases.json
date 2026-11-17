@@ -6,5 +6,7 @@
   {"expr": "$model_variant", "tags": ["pony", "illustrious"], "groups": {"model": ["pony", "illustrious"]}, "values": {"model_variant": ["flux"]}, "reads_as": "", "notes": ["no_tag"], "matches": {"pony": true, "illustrious": true}},
   {"expr": "not $model_variant", "tags": ["pony", "illustrious"], "groups": {"model": ["pony", "illustrious"]}, "values": {"model_variant": ["flux"]}, "reads_as": "", "notes": ["no_tag"], "matches": {"pony": true}},
   {"expr": "$colors", "tags": ["red", "blue", "green"], "groups": {"color": ["red", "blue", "green"]}, "values": {"colors": ["red", "blue", "purple"]}, "reads_as": "red or blue or not (red or blue or green)", "notes": [], "matches": {"red": true, "blue": true, "green": false, "": true}},
-  {"expr": "($a or $b) and warm", "tags": ["x", "y", "warm"], "groups": {}, "values": {"a": ["x"], "b": []}, "reads_as": "x and warm", "notes": ["unset"], "matches": {"x,warm": true, "y,warm": false, "x": false}}
+  {"expr": "($a or $b) and warm", "tags": ["x", "y", "warm"], "groups": {}, "values": {"a": ["x"], "b": []}, "reads_as": "x and warm", "notes": [], "matches": {"x,warm": true, "y,warm": false, "x": false}},
+  {"expr": "$a, $b", "tags": ["x", "y"], "groups": {}, "values": {"a": [], "b": []}, "reads_as": "", "notes": ["unset", "unset"], "matches": {"x": true, "y": true}},
+  {"expr": "$a, $b", "tags": ["x", "y"], "groups": {}, "values": {"a": ["zz"], "b": []}, "reads_as": "", "notes": ["no_tag", "unset"], "matches": {"x": true, "y": true}}
 ]

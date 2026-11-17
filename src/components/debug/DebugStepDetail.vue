@@ -117,8 +117,15 @@ const CUT_LABEL: Record<string, string> = {
   filter: "filtered out",
   toggle: "toggled off",
   constraint: "excluded by a constraint",
+  backward: "doesn't fit a later pick",
   weight: "weight 0",
 };
+/** "doesn't fit $place": names the narrowed targets when the run said them. */
+function cutLabel(cut: string): string {
+  const targets = d.value?.backward?.targets ?? [];
+  if (cut === "backward" && targets.length) return `doesn't fit ${targets.map((t) => "$" + t).join(", ")}`;
+  return CUT_LABEL[cut] ?? cut;
+}
 const pickedIds = computed(() => new Set<string>([d.value?.option_id, ...(d.value?.option_ids ?? [])].filter((x): x is string => typeof x === "string")));
 function isPicked(o: RawOptionRow): boolean {
   return typeof o.id === "string" && pickedIds.value.has(o.id);
@@ -254,7 +261,7 @@ function modeGlyph(mode: string | undefined): string {
               <template v-else>{{ o.value }}</template>
             </span>
             <Chip v-if="o.fallback" size="xs" tone="info">fallback</Chip>
-            <Chip v-if="o.cut" size="xs" :tone="o.cut === 'constraint' ? 'warn' : 'default'" data-test="dbg-option-cut">{{ CUT_LABEL[o.cut] }}</Chip>
+            <Chip v-if="o.cut" size="xs" :tone="o.cut === 'constraint' || o.cut === 'backward' ? 'warn' : 'default'" data-test="dbg-option-cut">{{ cutLabel(o.cut) }}</Chip>
             <span class="wp-dbg-opt__weight" :title="o.override != null ? `library weight ${fmtWeight(o.base)}, this node sets ${fmtWeight(o.override)}` : 'weight'">
               <template v-if="o.override != null"><s>{{ fmtWeight(o.base) }}</s> {{ fmtWeight(o.override) }}</template>
               <template v-else>{{ fmtWeight(o.base) }}</template>

@@ -71,6 +71,9 @@ export interface RawDetail {
   match_variable?: string;
   /** A Context Loop sweep pinned this frame's option. */
   swept?: boolean;
+  /** Backward rules: options dropped because no live option of these
+   *  narrowed targets (locked, filtered, toggled) accepts them. */
+  backward?: { removed: Array<string | null>; targets: string[] };
   exclude_null?: boolean;
   held?: boolean;
   /** Schema v9: nothing else was left, so the fallback option was used. */
@@ -151,7 +154,7 @@ export interface RawOptionRow {
   weight?: number | null;
   /** Why it can't be drawn: the pool filter, the node's option toggles,
    *  a constraint, or a weight of 0. */
-  cut?: "filter" | "toggle" | "constraint" | "weight";
+  cut?: "filter" | "toggle" | "constraint" | "backward" | "weight";
   /** The node's weight override, when it differs from the library's. */
   override?: number;
   null?: boolean;
@@ -380,6 +383,9 @@ export const WARNING_LABELS: Record<string, string> = {
   constraint_register_failed: "Constraint failed to register",
   constraint_excludes_all_options: "Constraint excluded every option",
   fallback_used: "Fallback used",
+  backward_no_fit: "Nothing fits a narrowed target",
+  locked_value_conflict: "Locked pick clashes with a constraint",
+  backward_late_variable: "Filter set after its source, from it",
   pinned_option_missing: "Pinned option missing",
   match_variable_no_match: "No option matches the variable",
   filter_variable_no_tag: "Filter variable left out",
