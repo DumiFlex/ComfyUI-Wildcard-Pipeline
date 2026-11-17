@@ -27,6 +27,7 @@ export const NODE_DOC_PAGES: Readonly<Record<string, string>> = {
   WP_Context: "wp-context",
   WP_ContextLoop: "wp-context-loop",
   WP_SeedList: "wp-seed-list",
+  WP_Seeds: "wp-seeds",
   WP_ContextInjector: "wp-context-injector",
   WP_ModelInfo: "wp-model-info",
   WP_Toggles: "wp-toggles",

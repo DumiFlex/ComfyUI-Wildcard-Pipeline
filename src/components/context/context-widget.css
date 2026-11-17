@@ -769,6 +769,24 @@
 }
 /* Fixed codename — a read-only identity, not an interactive control. */
 .wp-node-id__chip--fixed { cursor: default; }
+.wp-node-id__tag--seed { margin-left: auto; }
+/* "Seed from" wears the codename chip's look, so the strip reads as one row
+ * of facts about the node: NODE [name] … SEED [source ▾]. */
+.wp-node-id .wp-btn.wp-node-id__seed {
+  height: 20px;
+  min-height: 20px;
+  max-width: 180px;
+  gap: 5px;
+  padding: 0 6px 0 8px;
+  font: 600 11px/1.2 var(--wp-font-sans, sans-serif);
+  color: var(--wp-text-muted, var(--wp-text2));
+  background: color-mix(in srgb, var(--wp-text) 6%, transparent);
+  border: 1px solid var(--wp-border);
+  border-radius: min(4px, var(--wp-radius-cap, 999px));
+}
+.wp-node-id .wp-btn.wp-node-id__seed:hover { color: var(--wp-text); border-color: var(--wp-border-strong, var(--wp-border)); }
+.wp-node-id .wp-btn.wp-node-id__seed--set { color: var(--wp-text); }
+.wp-node-id .wp-btn.wp-node-id__seed--missing { color: var(--wp-amber, var(--wp-warn)); border-color: color-mix(in srgb, var(--wp-amber, var(--wp-warn)) 50%, transparent); }
 .wp-node-id__text {
   overflow: hidden;
   text-overflow: ellipsis;

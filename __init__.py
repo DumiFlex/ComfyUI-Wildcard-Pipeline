@@ -96,6 +96,7 @@ from wp_nodes.label_grid_node import WPLabelGrid
 from wp_nodes.model_info_node import WPModelInfo
 from wp_nodes.prompt_cleaner import WPPromptCleaner
 from wp_nodes.seed_list import WPSeedList
+from wp_nodes.seeds_node import WPSeeds
 from wp_nodes.slider2d_node import WPSlider2D
 from wp_nodes.slider_node import WPSlider
 from wp_nodes.toggles_node import WPToggles
@@ -123,6 +124,7 @@ class WildcardPipelineExtension(ComfyExtension):
             WPLabelGrid,
             WPPromptCleaner,
             WPSeedList,
+            WPSeeds,
             WPVarToInt,
             WPVarToFloat,
             WPVarToBool,

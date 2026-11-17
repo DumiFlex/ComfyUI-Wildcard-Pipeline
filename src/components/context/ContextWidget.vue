@@ -85,6 +85,19 @@ import {
   isTypeConflict,
 } from "./library-status";
 import ConfirmModal from "@/kit/ConfirmModal.vue";
+import Button from "@/kit/Button.vue";
+import DropdownMenu from "@/kit/DropdownMenu.vue";
+import type { ContextMenuEntry } from "@/kit/ContextMenu.vue";
+import {
+  SEED_FROM_AUTO,
+  SEED_FROM_LOOP,
+  SEED_FROM_OWN,
+  SEED_FROM_ROW,
+  nameKey,
+  seedFromLabel,
+  seedFromRow,
+  formatSeed,
+} from "../../extension/seeds";
 import ContextRecoveryPanel from "./ContextRecoveryPanel.vue";
 import ContextToolbar from "./ContextToolbar.vue";
 import ContextAddActions from "./ContextAddActions.vue";
@@ -160,6 +173,14 @@ const props = withDefaults(defineProps<{
    *  computed from the upstream Loop without a run. Drives the per-frame seed
    *  lock so it pins the seed the module actually uses on that frame. */
   frameSeedReader?: (frame: number) => number | null;
+  /** What "Seed from" can pick: a Context Loop upstream, and the row names of
+   *  the WP Seeds nodes upstream. Absent in headless mounts. */
+  seedSources?: { loop: boolean; rows: string[] };
+  /** The seed the last run used and its source (`auto:loop`, `row:Hero` …). */
+  lastSeed?: { seed: number; source: string } | null;
+  /** Told the value's `seed_from` (on mount and on every change), so the
+   *  mount glue can grey out the stock `seed` widget when it isn't used. */
+  onSeedFrom?: (seedFrom: string) => void;
   onChange: (json: string) => void;
   /** Called whenever the formula-computed minimum node width changes
    *  (a conflict appears, a state badge gets attached). Mount glue
@@ -646,6 +667,82 @@ const enabledCount = computed(() => {
 // both showed "A") and was editable (so not a stable identifier).
 const nodeCodename = computed<string>(() => baseCodename(props.nodeId));
 
+// ── Seed from ──────────────────────────────────────────────────────────
+// Which seed this node's picks run on. Stored as `seed_from` in the value
+// (absent = Auto) and read by the node at run time.
+const seedFrom = computed<string>(() => value.value.seed_from ?? SEED_FROM_AUTO);
+watch(seedFrom, (v) => props.onSeedFrom?.(v), { immediate: true });
+function setSeedFrom(next: string): void {
+  const nextValue: ContextWidgetValue = { ...value.value, seed_from: next };
+  if (next === SEED_FROM_AUTO) delete nextValue.seed_from;
+  value.value = nextValue;
+}
+/** The picked row isn't upstream any more (or the Loop is gone). */
+const seedFromMissing = computed<boolean>(() => {
+  const sources = props.seedSources;
+  if (!sources) return false;
+  const row = seedFromRow(seedFrom.value);
+  if (row !== null) return !sources.rows.some((r) => nameKey(r) === nameKey(row));
+  return seedFrom.value === SEED_FROM_LOOP && !sources.loop;
+});
+const showSeedFrom = computed<boolean>(() =>
+  seedFrom.value !== SEED_FROM_AUTO || !!props.seedSources?.loop || !!props.seedSources?.rows.length,
+);
+const SOURCE_TEXT: Record<string, string> = {
+  auto: "Auto",
+  loop: "the Loop's frame seed",
+  own: "this node's seed",
+};
+const seedFromHint = computed<string>(() => {
+  const lines: string[] = [];
+  const row = seedFromRow(seedFrom.value);
+  if (seedFromMissing.value) {
+    lines.push(row !== null
+      ? `No WP Seeds row "${row}" upstream: runs as Auto`
+      : "No Context Loop upstream: runs as Auto");
+  } else if (row !== null) lines.push(`Seed from the WP Seeds row "${row}", per frame`);
+  else if (seedFrom.value === SEED_FROM_LOOP) lines.push("Seed from the Context Loop's frame seed");
+  else if (seedFrom.value === SEED_FROM_OWN) lines.push("Seed from this node's seed (widget or wire), even when the Loop overrides");
+  else lines.push("Auto: the Loop's frame seed when it overrides, else this node's seed");
+  const last = props.lastSeed;
+  if (last) {
+    const lastRow = seedFromRow(last.source);
+    const from = lastRow !== null ? `row "${lastRow}"` : (SOURCE_TEXT[last.source] ?? last.source);
+    lines.push(`Last run: ${formatSeed(last.seed)} from ${from}`);
+  }
+  return lines.join("\n");
+});
+/** The chip's text: the row's own name for a WP Seeds row. */
+const seedFromText = computed<string>(() => seedFromRow(seedFrom.value) ?? seedFromLabel(seedFrom.value));
+const seedFromIcon = computed<string | undefined>(() => {
+  if (seedFromMissing.value) return "pi-exclamation-triangle";
+  if (seedFrom.value === SEED_FROM_LOOP) return "pi-replay";
+  if (seedFrom.value === SEED_FROM_OWN) return "pi-pencil";
+  if (seedFromRow(seedFrom.value) !== null) return "pi-hashtag";
+  return "pi-sparkles";
+});
+const seedFromItems = computed<ContextMenuEntry[]>(() => {
+  const cur = seedFrom.value;
+  const items: ContextMenuEntry[] = [
+    { label: "Auto", icon: "pi-sparkles", subtitle: "The Loop's seed while it overrides, else this node's", checked: cur === SEED_FROM_AUTO, onSelect: () => setSeedFrom(SEED_FROM_AUTO) },
+    { label: "Loop", subtitle: "The Context Loop's frame seed", icon: "pi-replay", disabled: !props.seedSources?.loop && cur !== SEED_FROM_LOOP, checked: cur === SEED_FROM_LOOP, onSelect: () => setSeedFrom(SEED_FROM_LOOP) },
+    { label: "Own seed", subtitle: "The seed widget or its wire", icon: "pi-pencil", checked: cur === SEED_FROM_OWN, onSelect: () => setSeedFrom(SEED_FROM_OWN) },
+  ];
+  const rows = [...(props.seedSources?.rows ?? [])];
+  const picked = seedFromRow(cur);
+  if (picked !== null && !rows.some((r) => nameKey(r) === nameKey(picked))) rows.push(picked);
+  if (rows.length) {
+    items.push({ section: "WP Seeds" });
+    for (const r of rows) {
+      const key = `${SEED_FROM_ROW}${r}`;
+      const isPicked = picked !== null && nameKey(picked) === nameKey(r);
+      items.push({ label: r, icon: "pi-hashtag", subtitle: "A WP Seeds row, its seed per frame", checked: isPicked, onSelect: () => setSeedFrom(key) });
+    }
+  }
+  return items;
+});
+
+
 /** Open the SPA dashboard in a new tab. Mirrors `extension/topbar.ts`'s
  *  `openSpa` so widget + topbar both land on the dashboard overview
  *  rather than the wildcards list (which is what the SPA root redirect
@@ -768,6 +865,24 @@ function onReveal(ev: Event): void {
       >
         <span class="wp-node-id__text">{{ nodeCodename }}</span>
       </span>
+      <template v-if="showSeedFrom">
+        <span class="wp-node-id__tag wp-node-id__tag--seed">seed</span>
+        <DropdownMenu :items="seedFromItems" :label="`Seed from: ${seedFromLabel(seedFrom)}`" placement="bottom-start">
+          <template #trigger="{ props: triggerProps }">
+            <Button
+              v-bind="triggerProps"
+              size="sm"
+              variant="ghost"
+              :icon="seedFromIcon"
+              icon-right="pi-chevron-down"
+              :hint="seedFromHint"
+              class="wp-node-id__seed"
+              :class="{ 'wp-node-id__seed--missing': seedFromMissing, 'wp-node-id__seed--set': seedFrom !== SEED_FROM_AUTO }"
+              data-test="seed-from"
+            >{{ seedFromText }}</Button>
+          </template>
+        </DropdownMenu>
+      </template>
     </div>
 
     <!-- Corrupt-workflow recovery panel (5.6). -->

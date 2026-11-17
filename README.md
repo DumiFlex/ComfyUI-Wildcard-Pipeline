@@ -135,6 +135,7 @@ doesn't exist yet, pick **Placeholder** from the `@` list and connect it later.
 | **WP Context Loop** + **WP Seed List** | Run the whole chain N times from one Generate, each with its own prompt and seed, or sweep every combination of chosen wildcard options. |
 | **WP Context Injector** | Turns any ComfyUI output (text, a number) into a `$variable`. |
 | **WP Model Info** | Reads the loaded checkpoint into `$model_family` / `$model_variant` (Pony, Illustrious, …) so rules can pick LoRAs and tags per model. |
+| **WP Seeds** | Named seeds with a value per loop frame. Each WP Context picks the one it runs on (Seed from: Auto, Loop, Own seed or a row), each sampler can take its own as an INT, and any frame of any row can be locked. |
 | **WP Toggles** | Several on/off switches in one node: each writes a true/false `$variable` for rules, can have a BOOLEAN output, and can mute or bypass the nodes wired into it. Merges existing Boolean nodes. |
 | **WP Slider** | Several number sliders in one node: each writes a `$variable` (the number, your text, or a word per range), `$name.num` reads the number, and a slider can have an INT or FLOAT output. Works in Nodes 2.0. |
 | **WP Slider 2D** | One XY pad: drag a point to set two numbers at once (width and height, cfg and steps). Each axis writes a `$variable` like a slider and has its own INT or FLOAT output. Styles Pad, Size, Stick and Map; dots on every step with Snap to dots. |

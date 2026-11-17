@@ -236,6 +236,46 @@ class ModelInfoWidgetInput:
 
 
 
+@comfytype(io_type="WP_SEEDS")
+class SeedsWidgetInput:
+    """Widget-only custom type — frontend binds ``getCustomWidgets["WP_SEEDS"]``.
+
+    JSON ``{version, rows: [seed | label]}``. Parsed by
+    ``engine/seeds.py::parse_config``.
+    """
+
+    Type = str
+
+    class Input(io.WidgetInput):
+        def __init__(
+            self,
+            id: str,
+            display_name: str | None = None,
+            optional: bool = False,
+            tooltip: str | None = None,
+            lazy: bool | None = None,
+            default: str | None = None,
+            socketless: bool | None = None,
+            extra_dict: dict[str, Any] | None = None,
+            raw_link: bool | None = None,
+            advanced: bool | None = None,
+        ):
+            super().__init__(
+                id,
+                display_name,
+                optional,
+                tooltip,
+                lazy,
+                default,
+                socketless,
+                None,  # widget_type
+                None,  # force_input
+                extra_dict,
+                raw_link,
+                advanced,
+            )
+
+
 @comfytype(io_type="WP_TOGGLES")
 class TogglesWidgetInput:
     """Widget-only custom type — frontend binds ``getCustomWidgets["WP_TOGGLES"]``.
@@ -607,6 +647,11 @@ _CROSS_NODE_INTERNAL_KEYS = (
     "__wp_loop_index__",
     "__wp_seed_override__",
     "__wp_loop_seeds__",
+    # The Loop's per-frame seed whether or not it overrides (`Seed from:
+    # Loop`), and WP Seeds' per-frame row seeds (`Seed from: <row>`); see
+    # `engine.seed_derive.resolve_context_seed`.
+    "__wp_loop_seed__",
+    "__wp_seed_rows__",
     # Sweep mode (engine/sweep.py): this frame's {uid: option_id} pins and
     # the "hold other picks" flag, carried so every Context in the chain
     # pins its own swept wildcards and holds the rest.

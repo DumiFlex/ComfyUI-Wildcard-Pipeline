@@ -179,7 +179,7 @@ export const PAGE_VIDEOS: Record<string, string[]> = {
 
 /** Each node's own in-depth video, by node id (the node help pages link it). */
 /** Nodes whose video isn't recorded yet (their help page links none). */
-export const NODES_WITHOUT_VIDEO: ReadonlySet<string> = new Set(["WP_Slider", "WP_Slider2D"]);
+export const NODES_WITHOUT_VIDEO: ReadonlySet<string> = new Set(["WP_Seeds", "WP_Slider", "WP_Slider2D"]);
 
 export const NODE_VIDEOS: Record<string, string> = {
   WP_Context: "N01",
