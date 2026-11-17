@@ -33,6 +33,7 @@ export const NODE_DOC_PAGES: Readonly<Record<string, string>> = {
   WP_Toggles: "wp-toggles",
   WP_Slider: "wp-slider",
   WP_Slider2D: "wp-slider-2d",
+  WP_Slider3D: "wp-slider-3d",
   WP_NodeGroup: "wp-node-group",
   WP_ModeRelay: "wp-mode-relay",
   WP_Bookmark: "wp-bookmark",

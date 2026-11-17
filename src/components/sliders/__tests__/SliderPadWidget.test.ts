@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import SliderPadWidget from "../SliderPadWidget.vue";
-import { padConfig, type SliderRow, type SlidersConfig } from "../../../extension/sliders";
+import { orbitPreset, padConfig, type SliderRow, type SlidersConfig } from "../../../extension/sliders";
 
 const cfg: SlidersConfig = padConfig({
   rows: [
@@ -84,6 +84,69 @@ describe("SliderPadWidget", () => {
     document.body.querySelector<HTMLElement>('[data-test="sl-window-done"]')?.click();
     await flushPromises();
     expect(rows(last(w))[1]).toMatchObject({ var: "mood", pin: true, out: 2, out_type: "float" });
+    w.unmount();
+  });
+});
+
+describe("SliderPadWidget, 3D", () => {
+  const three = padConfig("", 3);
+
+  it("shows three axes, sets Z from the fader and rings the point", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: three, dims: 3 } });
+    expect(w.find('[data-test="pad-axis-2"]').text()).toContain("Z");
+    expect(w.find(".wp-xypad__ring").exists()).toBe(true);
+    const fader = w.find('[data-test="pad-z"] [role="slider"]');
+    await fader.trigger("keydown", { key: "ArrowUp" });
+    expect(rows(last(w)).map((s) => s.value)).toEqual([0.5, 0.5, 0.55]);
+    w.unmount();
+  });
+
+  it("moves Z with the mouse wheel over the pad", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: three, dims: 3 } });
+    const box = w.find('[data-test="pad"]').element.parentElement;
+    box?.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true }));
+    expect(rows(last(w))[2]?.value).toBeCloseTo(0.45);
+    w.unmount();
+  });
+
+  it("turns to Orbit with the camera words, then the light words", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: three, dims: 3, editRequest: 0 } });
+    await w.setProps({ editRequest: 1 });
+    await w.find('[data-test="pad-style-orbit"]').trigger("click");
+    const cam = last(w);
+    expect(cam?.pad).toEqual({ style: "orbit" });
+    expect(rows(cam).map((s) => s.var)).toEqual(["view_side", "view_height", "view_shot", "view"]);
+    await w.setProps({ modelValue: cam });
+    expect(w.find('[data-test="orbit"]').exists()).toBe(true);
+    expect(w.find('[data-test="pad-phrase"]').text()).toContain("front-left view, high angle, medium shot");
+    expect(w.find('[data-test="pad-swap"]').exists()).toBe(false);
+    await w.find('[data-test="orbit-light"]').trigger("click");
+    expect(last(w)?.pad).toEqual({ style: "orbit", light: true });
+    await w.setProps({ modelValue: last(w) });
+    expect(w.find(".wp-orbit").attributes("data-variant")).toBe("light");
+    await w.find('[data-test="orbit-look-camera"]').trigger("click");
+    expect(last(w)?.pad).toEqual({ style: "orbit" });
+    // The orbit's keys move the around axis and keep the phrase row.
+    await w.find('[data-test="orbit"] [role="slider"]').trigger("keydown", { key: "ArrowRight" });
+    expect(rows(last(w)).map((s) => s.value).slice(0, 3)).toEqual([-30, 30, 0.5]);
+    expect(rows(last(w))[3]?.var).toBe("light");
+    w.unmount();
+  });
+
+  it("opens the phrase row in the slider window, named Phrase", async () => {
+    const plain = mount(SliderPadWidget, { props: { modelValue: three, dims: 3, editRequest: 1 } });
+    await plain.setProps({ editRequest: 2 });
+    expect(plain.find('[data-test="pad-edit-phrase"]').exists()).toBe(false);
+    plain.unmount();
+    const cam = orbitPreset(three, "camera");
+    const w = mount(SliderPadWidget, { props: { modelValue: cam, dims: 3, editRequest: 1 }, attachTo: document.body });
+    await w.setProps({ editRequest: 2 });
+    await w.find('[data-test="pad-edit-phrase"]').trigger("click");
+    await flushPromises();
+    await vi.dynamicImportSettled();
+    await flushPromises();
+    expect(document.body.textContent).toContain("Phrase");
+    expect(document.body.querySelector('[data-test="sl-pin"]')).toBeNull();
     w.unmount();
   });
 });

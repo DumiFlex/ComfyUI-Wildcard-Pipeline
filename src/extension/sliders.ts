@@ -90,12 +90,15 @@ export interface SliderLabelRow {
 
 export type SlidersItem = SliderRow | SliderLabelRow;
 
-/** WP Slider 2D's pad looks (the kit XYPad's props). */
+/** WP Slider 2D / 3D's pad looks (the kit XYPad's and OrbitPad's props). */
 export interface PadLooks {
   /** Absent: the plain pad. size = area, ratio guides and a W × H readout;
    *  stick = round with zero in the middle; map = each Words axis's ranges
-   *  as labelled stripes. */
-  style?: "size" | "stick" | "map";
+   *  as labelled stripes; orbit (3D only) = the kit OrbitPad: X turns
+   *  round the subject, Y is the height angle, Z the distance. */
+  style?: "size" | "stick" | "map" | "orbit";
+  /** Orbit: drawn as a light (an amber sun) instead of a camera. */
+  light?: true;
   /** Width over height of the pad (1 = square). */
   ratio?: number;
   /** The shape follows the two ranges (a 0–1024 × 0–1344 pad is 3:4). */
@@ -118,7 +121,7 @@ export interface PadLooks {
 export interface SlidersConfig {
   version: 1;
   rows: SlidersItem[];
-  /** WP Slider 2D only. */
+  /** WP Slider 2D / 3D only. */
   pad?: PadLooks;
 }
 
@@ -294,7 +297,7 @@ function hasRows(raw: unknown): boolean {
   return !!data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows);
 }
 
-const PAD_STYLES = new Set(["size", "stick", "map"]);
+const PAD_STYLES = new Set(["size", "stick", "map", "orbit"]);
 function parsePad(raw: unknown): PadLooks | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
@@ -308,6 +311,7 @@ function parsePad(raw: unknown): PadLooks | undefined {
   if (typeof o.grid === "number" && Number.isInteger(o.grid) && o.grid >= 0 && o.grid <= 16) pad.grid = o.grid;
   if (o.snap_dots === true) pad.snap_dots = true;
   if (o.size === "s" || o.size === "m") pad.size = o.size;
+  if (o.light === true) pad.light = true;
   return pad;
 }
 
@@ -327,27 +331,138 @@ export function padBands(s: SliderRow): { to: number; label: string }[] {
   return (s.words ?? []).map((w) => ({ to: w.upto ?? s.max, label: w.word }));
 }
 
-/** A new pad axis: X across, Y up, 0 to 1. */
-function padAxis(cfg: SlidersConfig, axis: "x" | "y"): SliderRow {
+export type PadAxis = "x" | "y" | "z";
+const AXES: readonly PadAxis[] = ["x", "y", "z"];
+
+/** A new pad axis: X across, Y up, Z the third number, 0 to 1. */
+function padAxis(cfg: SlidersConfig, axis: PadAxis): SliderRow {
   const s = newSlider(cfg, axis.toUpperCase());
-  return { ...s, var: uniqueVar(axis, cfg), value: 0.5, pin: true, out: axis === "x" ? 1 : 2 };
+  return { ...s, var: uniqueVar(axis, cfg), value: 0.5, pin: true, out: AXES.indexOf(axis) + 1 };
 }
 
 /**
- * WP Slider 2D's config: exactly two slider rows, X then Y, both with an
- * output (slot 1 and 2); labels and extra rows are dropped, a missing axis
- * is added.
+ * WP Slider 2D / 3D's config: exactly `dims` slider rows (X, Y and for 3D
+ * Z), each with an output (slot 1, 2, 3); a missing axis is added. 3D also
+ * keeps the first later row in text mode (the phrase, `padPhrase`, no
+ * output); labels and any other rows are dropped.
  */
-export function padConfig(raw: unknown): SlidersConfig {
+export function padConfig(raw: unknown, dims: 2 | 3 = 2): SlidersConfig {
   const parsed = parseSlidersConfig(raw);
   // An empty or broken value parses to WP Slider's default slider: start clean.
-  const axes = hasRows(raw) ? sliderRows(parsed).slice(0, 2) : [];
+  const rows = hasRows(raw) ? sliderRows(parsed) : [];
+  const axes = rows.slice(0, dims);
+  const phrase = dims === 3 ? rows.slice(dims).find((s) => s.mode === "text") : undefined;
   const cfg: SlidersConfig = { version: 1, rows: axes };
   if (parsed.pad) cfg.pad = parsed.pad;
-  if (!axes[0]) cfg.rows.push(padAxis(cfg, "x"));
-  if (!cfg.rows[1]) cfg.rows.push(padAxis(cfg, "y"));
+  if (dims === 2 && cfg.pad?.style === "orbit") delete cfg.pad.style;
+  for (let i = axes.length; i < dims; i++) cfg.rows.push(padAxis(cfg, AXES[i] ?? "z"));
   cfg.rows = sliderRows(cfg).map((s, i) => ({ ...s, pin: true, out: i + 1, style: "row" }));
+  if (phrase) cfg.rows.push({ ...phrase, pin: false, out: 0, style: "row" });
   return cfg;
+}
+
+/** The pad's axes: X, Y (and Z on WP Slider 3D), without the phrase row. */
+export function padAxes(cfg: SlidersConfig, dims: 2 | 3): SliderRow[] {
+  return sliderRows(cfg).slice(0, dims);
+}
+
+/** WP Slider 3D's phrase row (text mode, after the axes), if any. */
+export function padPhrase(cfg: SlidersConfig): SliderRow | undefined {
+  return sliderRows(cfg).slice(3).find((s) => s.mode === "text");
+}
+
+/** The phrase as it reads now: each `$var` of the axes swapped for what it
+ *  holds (the node resolves the rest at run time). */
+export function phrasePreview(cfg: SlidersConfig): string {
+  const p = padPhrase(cfg);
+  if (!p?.text) return "";
+  const vals = resolveSliders({ version: 1, rows: padAxes(cfg, 3) });
+  return p.text.replace(/\$([a-zA-Z][a-zA-Z0-9_]*)/g, (m, name: string) => vals[name] ?? m);
+}
+
+export type OrbitKind = "camera" | "light";
+
+const w = (word: string, upto?: number): SliderWord => (upto === undefined ? { word } : { word, upto });
+/** Eight sides round the subject, each 45° wide, centred on its angle;
+ *  the back takes both ends of -180..180. */
+function sides(names: readonly string[]): SliderWord[] {
+  const cuts = [-157.5, -112.5, -67.5, -22.5, 22.5, 67.5, 112.5, 157.5];
+  return [...cuts.map((c, i) => w(names[i] ?? "", c)), w(names[0] ?? "")];
+}
+
+/** The Orbit style's word sets: one per axis, then the phrase. */
+export const ORBIT_WORDS: Record<OrbitKind, {
+  vars: [string, string, string, string];
+  names: [string, string, string, string];
+  side: SliderWord[]; height: SliderWord[]; distance: SliderWord[];
+  heightMin: number; phrase: string;
+}> = {
+  camera: {
+    vars: ["view_side", "view_height", "view_shot", "view"],
+    names: ["Around", "Height", "Distance", "View"],
+    side: sides(["back", "back-left", "left side", "front-left", "front", "front-right", "right side", "back-right"]),
+    height: [w("worm's-eye view", -30), w("low angle", -10), w("eye level", 15), w("high angle", 60), w("bird's-eye view")],
+    distance: [w("extreme close-up", 0.15), w("close-up", 0.35), w("medium shot", 0.55), w("full shot", 0.75), w("wide shot")],
+    heightMin: -45,
+    phrase: "$view_side view, $view_height, $view_shot",
+  },
+  light: {
+    vars: ["light_side", "light_height", "light_soft", "light"],
+    names: ["Around", "Height", "Distance", "Light"],
+    side: sides([
+      "backlight", "rim light from the back-left", "side light from the left", "light from the front-left",
+      "front light", "light from the front-right", "side light from the right", "rim light from the back-right",
+    ]),
+    height: [w("low light", 20), w("high light", 60), w("overhead light")],
+    distance: [w("soft light", 0.35), w("diffused light", 0.65), w("hard light")],
+    heightMin: 0,
+    phrase: "$light_side, $light_height, $light_soft",
+  },
+};
+
+/**
+ * Orbit's ready-made axes: around -180..180 by 15°, height by 5°, distance
+ * 0..1, each in words mode (kept out of the prompt), plus the phrase that
+ * joins them. Keeps each axis's id, output type and looks; variable names
+ * already used by other rows get a number.
+ */
+export function orbitPreset(cfg: SlidersConfig, kind: OrbitKind): SlidersConfig {
+  const set = ORBIT_WORDS[kind];
+  const old = padAxes(cfg, 3);
+  const others: SlidersConfig = { version: 1, rows: [] };
+  const base = (i: number): SliderRow => old[i] ?? padAxis(others, AXES[i] ?? "z");
+  const ranges = [
+    { min: -180, max: 180, step: 15, decimals: 0, value: -45, words: set.side },
+    { min: set.heightMin, max: 90, step: 5, decimals: 0, value: 30, words: set.height },
+    { min: 0, max: 1, step: 0.05, decimals: 2, value: 0.5, words: set.distance },
+  ];
+  const axes: SliderRow[] = ranges.map((r, i) => {
+    const s = base(i);
+    const row: SliderRow = {
+      ...s, ...r, name: set.names[i] ?? s.name, var: set.vars[i] ?? s.var, mode: "words",
+      internal: true, pin: true, out: i + 1, style: "row",
+    };
+    delete row.text;
+    delete row.free;
+    return row;
+  });
+  const prev = padPhrase(cfg);
+  const phrase: SliderRow = {
+    ...(prev ?? newSlider(others, set.names[3])),
+    name: set.names[3], var: set.vars[3], mode: "text", text: set.phrase, pin: false, out: 0, style: "row",
+  };
+  delete phrase.internal;
+  const next: SlidersConfig = { version: 1, rows: [...axes, phrase] };
+  next.pad = { ...(cfg.pad ?? {}), style: "orbit" };
+  if (kind === "light") next.pad.light = true;
+  else delete next.pad.light;
+  return next;
+}
+
+/** Orbit fits these axes as they are: X turns -180..180 and Y is an angle. */
+export function orbitReady(cfg: SlidersConfig): boolean {
+  const [x, y] = padAxes(cfg, 3);
+  return !!x && !!y && x.min === -180 && x.max === 180 && y.min >= -90 && y.max <= 90 && y.max > y.min;
 }
 
 /**
@@ -633,9 +748,11 @@ export function sliderMarks(s: SliderRow): { value: number; label?: string }[] {
 export const SLIDER_NODE = "WP_Slider";
 /** WP Slider 2D: the same widget JSON with two rows, X then Y (+ `pad`). */
 export const SLIDER_2D_NODE = "WP_Slider2D";
+/** WP Slider 3D: three rows, X, Y, Z, then an optional text-mode phrase. */
+export const SLIDER_3D_NODE = "WP_Slider3D";
 /** Nodes whose `wp_sliders` widget graph walkers read as sliders. */
 export function isSliderNode(type: string | undefined): boolean {
-  return type === SLIDER_NODE || type === SLIDER_2D_NODE;
+  return type === SLIDER_NODE || type === SLIDER_2D_NODE || type === SLIDER_3D_NODE;
 }
 
 interface SlidersNodeLike {

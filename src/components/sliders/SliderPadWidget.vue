@@ -1,6 +1,11 @@
 <script setup lang="ts">
 /**
- * SliderPadWidget — DOM widget for WP_Slider2D: one XY pad (kit `XYPad`).
+ * SliderPadWidget — DOM widget for WP_Slider2D: one XY pad (kit `XYPad`),
+ * and with `dims` 3 for WP_Slider3D: the pad plus a Z fader (kit `Slider`,
+ * the pad's `ring` showing Z), or the Orbit style (kit `OrbitPad`: X turns
+ * round the subject, Y is the height, Z the distance) for a camera or a
+ * light, whose word presets (`orbitPreset`) add a phrase row joining the
+ * three words.
  *
  * The config is a `SlidersConfig` with two slider rows, X then Y
  * (`padConfig`), so each axis is a slider: its window
@@ -12,11 +17,13 @@
  * shape (or Auto from the ranges), width, looks, dots (Auto = one per step)
  * with Snap to dots, and Swap.
  */
-import { computed, defineAsyncComponent, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from "vue";
 import Button from "@/kit/Button.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
+import OrbitPad from "@/kit/OrbitPad.vue";
+import Slider from "@/kit/Slider.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import XYPad from "@/kit/XYPad.vue";
 import { stepDots } from "@/kit/xy-pad";
@@ -26,10 +33,15 @@ import { varColorClass } from "../shared/var-color";
 import {
   fineStepOf,
   fmtSlider,
+  orbitPreset,
+  orbitReady,
+  padAxes,
   padBands,
+  padPhrase,
   padRatio,
+  phrasePreview,
+  type OrbitKind,
   sliderProblems,
-  sliderRows,
   wordFor,
   type PadLooks,
   type SliderRow,
@@ -42,6 +54,8 @@ const SliderEditWindow = defineAsyncComponent(() => import("./SliderEditWindow.v
 const props = withDefaults(
   defineProps<{
     modelValue: SlidersConfig;
+    /** 2: WP Slider 2D (X, Y); 3: WP Slider 3D (X, Y, Z + a phrase). */
+    dims?: 2 | 3;
     /** Litegraph mode: 2 = muted, 4 = bypassed (dims the widget). */
     nodeMode?: number;
     /** Bumped by the pencil in ComfyUI's selection toolbar. */
@@ -50,7 +64,7 @@ const props = withDefaults(
     varProducers?: Map<string, VarProducerLike> | undefined;
     nodeTitle?: string;
   }>(),
-  { nodeMode: 0, editRequest: 0, upstreamVars: () => [], varProducers: undefined, nodeTitle: "" },
+  { dims: 2, nodeMode: 0, editRequest: 0, upstreamVars: () => [], varProducers: undefined, nodeTitle: "" },
 );
 const emit = defineEmits<{ "update:modelValue": [next: SlidersConfig] }>();
 
@@ -59,6 +73,11 @@ const STYLES = [
   { value: "size", label: "Size", icon: "pi-expand", hint: "A picture size: the box is shaded, with 1:1, 4:3, 16:9 … guide lines and a W × H readout" },
   { value: "stick", label: "Stick", icon: "pi-circle", hint: "Round, with zero in the middle (set both ranges from -1 to 1)" },
   { value: "map", label: "Map", icon: "pi-map", hint: "Each Words axis shows its words on the pad" },
+];
+const ORBIT_STYLE = { value: "orbit", label: "Orbit", icon: "pi-video", hint: "A camera or a light round the subject: X turns round it, Y is the height, Z the distance" };
+const LOOKS = [
+  { value: "camera", label: "Camera", icon: "pi-camera", hint: "Drawn as a camera" },
+  { value: "light", label: "Light", icon: "pi-sun", hint: "Drawn as a light (an amber sun)" },
 ];
 const SHAPES = [
   { value: "1", label: "Square", hint: "A square pad" },
@@ -73,15 +92,24 @@ const SIZES = [
 ];
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
-const axes = computed(() => sliderRows(props.modelValue));
+const axes = computed(() => padAxes(props.modelValue, props.dims));
 const ax = computed(() => axes.value[0]);
 const ay = computed(() => axes.value[1]);
+const az = computed(() => (props.dims === 3 ? axes.value[2] : undefined));
+const phrase = computed(() => (props.dims === 3 ? padPhrase(props.modelValue) : undefined));
+const phraseText = computed(() => phrasePreview(props.modelValue));
+const styles = computed(() => (props.dims === 3 ? [...STYLES, ORBIT_STYLE] : STYLES));
+/** The rows to show and edit by number: the axes, then the phrase. */
+const editRows = computed(() => [...axes.value, ...(phrase.value ? [phrase.value] : [])]);
+const TAGS = ["X", "Y", "Z"] as const;
+const windowAxis = computed(() => (editing.value === null ? undefined : (TAGS[editing.value] ?? "Phrase")));
 const pad = computed<PadLooks>(() => props.modelValue.pad ?? {});
 const problems = computed(() => sliderProblems(props.modelValue));
 const problemText = computed(() => [...problems.value.values()].join(" · "));
 
-function emitRows(rows: SliderRow[], padNext: PadLooks = pad.value): void {
-  const next: SlidersConfig = { version: 1, rows };
+/** New axes (and the phrase kept unless `withPhrase` says otherwise). */
+function emitRows(rows: SliderRow[], padNext: PadLooks = pad.value, withPhrase = phrase.value): void {
+  const next: SlidersConfig = { version: 1, rows: [...rows, ...(withPhrase ? [withPhrase] : [])] };
   if (Object.keys(padNext).length) next.pad = padNext;
   emit("update:modelValue", next);
 }
@@ -90,11 +118,49 @@ function setPad(p: Partial<PadLooks>): void {
   for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
   emitRows(axes.value, next as PadLooks);
 }
-function setValues([x, y]: [number, number]): void {
-  const [sx, sy] = axes.value;
-  if (!sx || !sy) return;
-  emitRows([{ ...sx, value: x }, { ...sy, value: y }]);
+function setValues(vals: number[]): void {
+  emitRows(axes.value.map((s, i) => (vals[i] === undefined ? s : { ...s, value: vals[i] ?? s.value })));
 }
+function setZ(v: number): void {
+  const z = az.value;
+  if (z) setValues([ax.value?.value ?? 0, ay.value?.value ?? 0, v]);
+}
+/** The mouse wheel over the pad moves Z by a step. */
+function onWheel(ev: WheelEvent): void {
+  const z = az.value;
+  if (!z || style.value === "orbit" || ev.deltaY === 0) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const next = z.value + (ev.deltaY < 0 ? 1 : -1) * z.step;
+  setZ(Math.min(z.max, Math.max(z.min, Number(next.toFixed(z.decimals)))));
+}
+const zMax = computed(() => (az.value && az.value.max > az.value.min ? az.value.max : (az.value?.min ?? 0) + 1));
+const ring = computed(() => (az.value ? (az.value.value - az.value.min) / (zMax.value - az.value.min) : undefined));
+const fmtZ = (v: number): string => fmtSlider({ value: v, decimals: az.value?.decimals ?? 2 });
+/** The Z fader stands as tall as the pad (less its value and name lines). */
+const zLen = ref(120);
+let zObs: ResizeObserver | null = null;
+function watchPadHeight(el: unknown): void {
+  zObs?.disconnect();
+  zObs = null;
+  const box = el instanceof HTMLElement ? el : null;
+  const padEl = box?.querySelector<HTMLElement>(".wp-xypad");
+  if (!padEl || typeof ResizeObserver === "undefined") return;
+  zObs = new ResizeObserver(() => { zLen.value = Math.max(60, Math.round(padEl.getBoundingClientRect().height) - 76); });
+  zObs.observe(padEl);
+}
+onBeforeUnmount(() => zObs?.disconnect());
+/** Orbit: the light look, and the word sets. */
+const orbitLook = computed<OrbitKind>(() => (pad.value.light ? "light" : "camera"));
+function usePreset(kind: OrbitKind): void {
+  emit("update:modelValue", orbitPreset(props.modelValue, kind));
+}
+const fmtOrbit = (v: number, part: "around" | "height" | "distance"): string => {
+  const s = part === "around" ? ax.value : part === "height" ? ay.value : az.value;
+  if (!s) return String(v);
+  const row = { ...s, value: v };
+  return s.mode === "words" ? (wordFor(row)?.word ?? fmtSlider(row)) : part === "distance" ? fmtSlider(row) : `${fmtSlider(row)}°`;
+};
 /** Swap the axes: X's settings go up, Y's across (outputs keep their slot). */
 function swap(): void {
   const [sx, sy] = axes.value;
@@ -133,6 +199,8 @@ const yDots = computed(() => (ay.value ? dotsOf(ay.value) : []));
 const xBands = computed(() => (style.value === "map" && ax.value ? padBands(ax.value) : []));
 const yBands = computed(() => (style.value === "map" && ay.value ? padBands(ay.value) : []));
 function setStyle(v: string): void {
+  // Orbit needs an angle round (-180..180) and a height: start from the camera words.
+  if (v === "orbit" && !orbitReady(props.modelValue)) return usePreset(orbitLook.value);
   setPad({ style: v === "pad" ? undefined : (v as PadLooks["style"]) });
 }
 function setShape(v: string): void {
@@ -148,44 +216,76 @@ const fmtAxis = (v: number, axis: "x" | "y"): string => {
 /* ── edit strip + windows ─────────────────────────────────────────────── */
 
 const editMode = ref(false);
-const editing = ref<0 | 1 | null>(null);
+const editing = ref<number | null>(null);
 watch(() => props.editRequest, () => {
   editMode.value = !editMode.value;
   if (!editMode.value) editing.value = null;
 });
-const editingRow = computed(() => (editing.value === null ? undefined : axes.value[editing.value]));
+const editingRow = computed(() => (editing.value === null ? undefined : editRows.value[editing.value]));
 const valueVars = computed(() => [...new Set([...props.upstreamVars, ...axes.value.map((s) => s.var).filter(Boolean)])]);
 function applyWindow(next: SliderRow): void {
   const i = editing.value;
   editing.value = null;
   if (i === null) return;
+  if (i >= axes.value.length) {
+    const p = phrase.value;
+    if (p) emitRows(axes.value, pad.value, { ...next, id: p.id, kind: "slider", pin: false, out: 0 });
+    return;
+  }
   emitRows(axes.value.map((s, j) => (j === i ? { ...next, id: s.id, kind: "slider", pin: true, out: j + 1 } : s)));
 }
 </script>
 
 <template>
   <div class="wp-pad" :class="{ 'wp-pad--skipped': isSkipped }" data-wp-reveal>
-    <div class="wp-pad__read">
+    <div class="wp-pad__read" :data-dims="dims">
       <template v-for="(s, i) in axes" :key="s.id">
         <span class="wp-pad__axis" :style="s.text_color ? { '--wp-pad-text': s.text_color } : undefined" :data-wp-vars="s.var || undefined" :data-test="`pad-axis-${i}`">
-          <span class="wp-pad__tag">{{ i === 0 ? 'X' : 'Y' }}</span>
+          <span class="wp-pad__tag">{{ TAGS[i] }}</span>
           <i v-if="s.icon" class="pi wp-pad__icon" :class="`pi-${s.icon}`" :style="s.icon_color ? { color: s.icon_color } : undefined" aria-hidden="true" />
           <span class="wp-pad__name">
             <b>{{ s.name }}</b>
             <span v-if="!s.hide_var" class="wp-pad__sub">
               <span :class="s.var ? varColorClass(s.var) : 'is-dim'">{{ s.var ? `$${s.var}` : "no variable" }}</span>
-              <span v-if="holds(s)" class="wp-pad__holds">{{ holds(s) }}</span>
+              <span v-if="holds(s) && !phrase" class="wp-pad__holds">{{ holds(s) }}</span>
             </span>
           </span>
           <span class="wp-pad__num">{{ fmtSlider(s) }}</span>
-          <WpIconButton v-if="editMode" icon="pi-pencil" :pressed="editing === i" :label="`Edit ${s.name}`" :data-test="`pad-edit-${i}`" @click="editing = editing === i ? null : (i as 0 | 1)" />
+          <WpIconButton v-if="editMode" icon="pi-pencil" :pressed="editing === i" :label="`Edit ${s.name}`" :data-test="`pad-edit-${i}`" @click="editing = editing === i ? null : i" />
         </span>
       </template>
       <i v-if="problemText" v-tooltip="problemText" class="pi pi-exclamation-triangle wp-pad__warn" role="img" :aria-label="problemText" />
     </div>
+    <div v-if="phrase" class="wp-pad__phrase" :data-wp-vars="phrase.var || undefined" data-test="pad-phrase">
+      <span :class="phrase.var ? varColorClass(phrase.var) : 'is-dim'">{{ phrase.var ? `$${phrase.var}` : "no variable" }}</span>
+      <span class="wp-pad__phrase-text">{{ phraseText }}</span>
+      <WpIconButton v-if="editMode" icon="pi-pencil" :pressed="editing === axes.length" :label="`Edit ${phrase.name}`" data-test="pad-edit-phrase" @click="editing = editing === axes.length ? null : axes.length" />
+    </div>
     <!-- Stops the pointer here so a drag on the pad never drags the node. -->
     <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
-    <div v-if="ax && ay" class="wp-pad__box" :data-size="pad.size ?? 'l'" :style="ay.tint || ax.tint ? { '--wp-accent': ax.tint ?? ay.tint } : undefined" @pointerdown.stop>
+    <div v-if="ax && ay && az && style === 'orbit'" class="wp-pad__box" :data-size="pad.size ?? 'l'" @pointerdown.stop>
+      <OrbitPad
+        :model-value="[ax.value, ay.value, az.value]"
+        :around-step="stepOf(ax)"
+        :height-min="Math.max(-90, ay.min)"
+        :height-max="Math.min(90, ay.max > ay.min ? ay.max : ay.min + 1)"
+        :height-step="stepOf(ay)"
+        :distance-min="az.min"
+        :distance-max="zMax"
+        :distance-step="stepOf(az)"
+        :variant="orbitLook"
+        :around-label="ax.name"
+        :height-label="ay.name"
+        :distance-label="az.name"
+        :format="fmtOrbit"
+        :aria-label="phrase?.name ?? 'Orbit'"
+        size="sm"
+        data-test="orbit"
+        @update:model-value="setValues"
+      />
+    </div>
+    <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
+    <div v-else-if="ax && ay" :ref="az ? watchPadHeight : undefined" class="wp-pad__box" :data-size="pad.size ?? 'l'" :data-z="az ? '' : undefined" :style="ay.tint || ax.tint ? { '--wp-accent': ax.tint ?? ay.tint } : undefined" @pointerdown.stop @wheel="onWheel">
       <XYPad
         :model-value="[ax.value, ay.value]"
         :x-min="ax.min"
@@ -209,22 +309,47 @@ function applyWindow(next: SliderRow): void {
         :y-label="ay.name"
         :format="fmtAxis"
         :aria-label="`${ax.name} and ${ay.name}`"
+        :ring="ring"
         size="sm"
         data-test="pad"
         @update:model-value="setValues"
       />
+      <Slider
+        v-if="az"
+        class="wp-pad__z"
+        :model-value="az.value"
+        variant="fader"
+        :min="az.min"
+        :max="zMax"
+        :step="stepOf(az)"
+        :format="fmtZ"
+        :style="{ '--wp-slider-len': `${zLen}px` }"
+        :aria-label="az.name"
+        size="sm"
+        data-test="pad-z"
+        @update:model-value="setZ"
+      ><template #label>{{ az.name }}</template></Slider>
     </div>
     <div v-if="editMode" class="wp-pad__looks" data-test="pad-looks">
       <div class="wp-pad__looks-row">
         <span class="wp-pad__lbl">Style</span>
-        <WpSegmented :model-value="style" :options="STYLES" size="sm" aria-label="Pad style" test-prefix="pad-style" @update:model-value="setStyle" />
+        <WpSegmented :model-value="style" :options="styles" size="sm" aria-label="Pad style" test-prefix="pad-style" @update:model-value="setStyle" />
       </div>
-      <div class="wp-pad__looks-row">
+      <div v-if="style === 'orbit'" class="wp-pad__looks-row">
+        <span class="wp-pad__lbl">Look</span>
+        <WpSegmented :model-value="orbitLook" :options="LOOKS" size="sm" aria-label="Orbit look" test-prefix="orbit-look" @update:model-value="(v: string) => setPad({ light: v === 'light' ? true : undefined })" />
+      </div>
+      <div v-if="style === 'orbit'" class="wp-pad__looks-row">
+        <span class="wp-pad__lbl">Words</span>
+        <Button size="sm" icon="pi-camera" hint="Camera words on all three axes: front-left view, high angle, medium shot (replaces their ranges and words)" data-test="orbit-camera" @click="usePreset('camera')">Camera words</Button>
+        <Button size="sm" icon="pi-sun" hint="Light words on all three axes: light from the front-left, high light, soft light (replaces their ranges and words)" data-test="orbit-light" @click="usePreset('light')">Light words</Button>
+      </div>
+      <div v-if="style !== 'orbit'" class="wp-pad__looks-row">
         <span class="wp-pad__lbl">Shape</span>
         <WpSegmented :model-value="shape" :options="SHAPES" size="sm" aria-label="Pad shape" test-prefix="pad-shape" :disabled="style === 'stick'" @update:model-value="setShape" />
         <WpSegmented :model-value="pad.size ?? 'l'" :options="SIZES" size="sm" aria-label="Pad size" test-prefix="pad-size" @update:model-value="(v: string) => setPad({ size: v === 'l' ? undefined : (v as 's' | 'm') })" />
       </div>
-      <div class="wp-pad__looks-row">
+      <div v-if="style !== 'orbit'" class="wp-pad__looks-row">
         <label v-tooltip="'Dots per side. Empty (Auto) puts one on every step, 0 hides them'" class="wp-pad__grid">
           <span>Dots</span>
           <WpNumber class="wp-pad__grid-num" :model-value="pad.grid ?? null" nullable placeholder="Auto" :min="0" :max="16" :step="1" size="sm" aria-label="Dots per side" data-test="pad-grid" @update:model-value="(v: number | null) => setPad({ grid: v === null ? undefined : v })" />
@@ -247,7 +372,7 @@ function applyWindow(next: SliderRow): void {
         </span>
       </div>
       <div class="wp-pad__looks-row wp-pad__looks-end">
-        <Button size="sm" icon="pi-arrow-right-arrow-left" hint="Swap the axes: X's settings go up, Y's across" data-test="pad-swap" @click="swap">Swap</Button>
+        <Button v-if="style !== 'orbit'" size="sm" icon="pi-arrow-right-arrow-left" hint="Swap the axes: X's settings go up, Y's across" data-test="pad-swap" @click="swap">Swap</Button>
         <Button size="sm" variant="primary" icon="pi-check" data-test="pad-done" @click="editMode = false; editing = null">Done</Button>
       </div>
     </div>
@@ -261,8 +386,8 @@ function applyWindow(next: SliderRow): void {
       :outputs-full="false"
       :var-suggestions="valueVars"
       :var-producers="varProducers"
-      :node-title="nodeTitle || 'WP Slider 2D'"
-      :axis="editing === 0 ? 'X' : 'Y'"
+      :node-title="nodeTitle || (dims === 3 ? 'WP Slider 3D' : 'WP Slider 2D')"
+      :axis="windowAxis"
       @done="(next: SliderRow) => applyWindow(next)"
       @cancel="editing = null"
     />
@@ -281,6 +406,15 @@ function applyWindow(next: SliderRow): void {
 }
 .wp-pad--skipped { opacity: 0.45; }
 .wp-pad__read { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; min-width: 0; }
+.wp-pad__read[data-dims="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+.wp-pad__phrase {
+  display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 6px;
+  font: 10.5px/16px var(--wp-font-mono, monospace);
+  background: var(--wp-bg2, var(--wp-bg-1)); border-radius: min(4px, var(--wp-radius-cap, 999px));
+}
+.wp-pad__phrase > span { flex: none; }
+.wp-pad__phrase .is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-pad__phrase .wp-pad__phrase-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--wp-font-sans, sans-serif); font-size: 11.5px; color: var(--wp-text); }
 .wp-pad__axis {
   display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 34px;
   padding: 2px 6px; box-sizing: border-box;
@@ -297,6 +431,9 @@ function applyWindow(next: SliderRow): void {
 .wp-pad__num { flex: none; font: 500 12px var(--wp-font-mono, monospace); }
 .wp-pad__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-pad__box { display: flex; justify-content: center; min-width: 0; }
+.wp-pad__box[data-z] { gap: 8px; align-items: stretch; }
+.wp-pad__box[data-z] > .wp-xypad { flex: 1 1 auto; min-width: 0; }
+.wp-pad__box > .wp-pad__z { flex: none; }
 .wp-pad__box > * { max-height: 420px; }
 .wp-pad__box[data-size="s"] > * { max-width: 160px; }
 .wp-pad__box[data-size="m"] > * { max-width: 260px; }
