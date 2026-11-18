@@ -12,7 +12,7 @@ import {
   dropRedundantFrameLockNulls,
   toggleFrameEnabled,
 } from "./frame-overrides";
-import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock } from "./lock-cycle";
+import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock, withoutLockOwner } from "./lock-cycle";
 import {
   animateEnterBatch,
   captureFlipSnapshot,
@@ -80,7 +80,9 @@ export function createModuleOps(
     const inst = m.instance ?? {};
     const seed = typeof lastUsed === "number" ? lastUsed : stored;
     const next = nextLockState(lockStateOf(inst), pick);
-    let nextInst = withBaseLock(inst, lockFields(next, seed, pick));
+    // A hand click makes the row the user's: a WP Toggles toggle that locked
+    // it no longer unlocks it when it goes off.
+    let nextInst = withoutLockOwner(withBaseLock(inst, lockFields(next, seed, pick)));
     // Drop the bundle master_lock marker — the user is now hand-
     // managing this row's lock state, so a future master OFF on the
     // bundle should leave it alone. Strips both legacy `master_lock`

@@ -24,7 +24,8 @@ import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
 import ToggleRowView from "./ToggleRow.vue";
 import { varColorClass } from "../shared/var-color";
-import type { PickStyle, ToggleControl, ToggleRow, ToggleStyle } from "../../extension/toggles";
+import type { LockTarget, PickStyle, ToggleControl, ToggleLock, ToggleRow, ToggleStyle } from "../../extension/toggles";
+import { missingTargets, targetKey, type LockChoice } from "../../extension/toggle-lock";
 import type { ControlState } from "../../extension/toggle-control";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
@@ -54,6 +55,8 @@ const props = defineProps<{
   varSuggestions?: string[] | undefined;
   varProducers?: Map<string, VarProducerLike> | undefined;
   nodeTitle?: string | undefined;
+  /** Rows of the canvas's WP Contexts the lock setting can pick. */
+  lockChoices?: LockChoice[] | undefined;
 }>();
 const emit = defineEmits<{ done: [next: ToggleRow, groupId: string]; cancel: [] }>();
 
@@ -87,6 +90,34 @@ function setGroups(v: string[] | string | null): void {
   const first = list.length && !d.value.groups?.length && !props.controlState;
   patch({ groups: list.length ? list : undefined, ...(first ? { hide_dot: true as const } : {}) });
 }
+
+const LOCKS = [
+  { value: "", label: "Nothing", hint: "On doesn't lock anything" },
+  { value: "seed", label: "Lock seed", hint: "On locks the seed each picked row rolled last run" },
+  { value: "value", label: "Lock value", hint: "On locks the option each picked wildcard took last run (others lock their seed)" },
+];
+function setLock(v: string): void {
+  patch(v ? { lock: v as ToggleLock } : { lock: undefined, lock_targets: undefined });
+}
+/** Picked targets the canvas no longer has (node or row gone). */
+const goneTargets = computed(() => (props.lockChoices ? missingTargets(d.value.lock_targets, props.lockChoices) : []));
+const lockOptions = computed(() => [
+  ...(props.lockChoices ?? []).map((c) => ({ value: targetKey(c), label: c.label, ...(c.wildcard ? {} : { hint: "seed only" }) })),
+  ...goneTargets.value.map((t) => ({ value: targetKey(t), label: `${t.node} · missing row`, hint: "not on the canvas" })),
+]);
+function setTargets(v: string[] | string | null): void {
+  const keys = Array.isArray(v) ? v : [];
+  const known = new Map<string, LockTarget>([
+    ...(props.lockChoices ?? []).map((c): [string, LockTarget] => [targetKey(c), { node: c.node, uid: c.uid }]),
+    ...goneTargets.value.map((t): [string, LockTarget] => [targetKey(t), t]),
+  ]);
+  const list = keys.map((k) => known.get(k)).filter((t): t is LockTarget => !!t);
+  patch({ lock_targets: list.length ? list : undefined });
+}
+const goneNote = computed(() => {
+  const n = goneTargets.value.length;
+  return `${n} picked row${n === 1 ? " is" : "s are"} no longer on the canvas (${[...new Set(goneTargets.value.map((t) => t.node))].join(", ")}). Untick ${n === 1 ? "it" : "them"} or put the node back.`;
+});
 
 const STYLES: { value: ToggleStyle; label: string; hint: string }[] = [
   { value: "switch", label: "Switch", hint: "A sliding switch" },
@@ -391,6 +422,32 @@ function onKey(ev: KeyboardEvent): void {
           />
           <span aria-hidden="true">Wire dot in front of the row</span>
         </span>
+        <div class="wp-tgr__field">
+          <span>When on <em>also lock rows of WP Context nodes</em></span>
+          <WpSegmented
+            :model-value="d.lock ?? ''"
+            :options="LOCKS"
+            size="sm"
+            block
+            aria-label="When on"
+            test-prefix="tg-lock"
+            @update:model-value="setLock"
+          />
+        </div>
+        <div v-if="d.lock" class="wp-tgr__field">
+          <span>Rows to lock <em>any WP Context on the canvas, no wire needed</em></span>
+          <Combobox
+            :model-value="(d.lock_targets ?? []).map(targetKey)"
+            multiple
+            :options="lockOptions"
+            placeholder="No rows"
+            size="sm"
+            aria-label="Rows to lock"
+            data-test="tg-lock-targets"
+            @update:model-value="setTargets"
+          />
+        </div>
+        <Banner v-if="d.lock && goneTargets.length" tone="danger" size="sm" data-test="tg-lock-missing">{{ goneNote }}</Banner>
         <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" v-toggle-row class="wp-tgr__check">
           <Checkbox
             :model-value="!!d.upstream"

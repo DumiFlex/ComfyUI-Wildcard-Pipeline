@@ -52,6 +52,11 @@ export interface ToggleRow {
   hide_dot?: true;
   /** Clean view: no `$variable` line under the name. */
   hide_var?: true;
+  /** Frontend only: while on, lock the seed or the value of `lock_targets`
+   *  (rows of WP Context nodes, `toggle-lock.ts`); off lets go of them. */
+  lock?: ToggleLock;
+  /** The rows `lock` covers: a WP Context's codename + the row's `_uid`. */
+  lock_targets?: LockTarget[];
   /** In no group though a label is above it: dropped below a group. Only on
    *  toggles after the first label (`rowsOf` sets it). */
   ungrouped?: true;
@@ -80,6 +85,11 @@ export interface ToggleRow {
 }
 
 export const TOGGLE_CONTROLS = ["mute", "bypass"] as const;
+export const TOGGLE_LOCKS = ["seed", "value"] as const;
+export type ToggleLock = (typeof TOGGLE_LOCKS)[number];
+/** One row a toggle locks: the WP Context's codename (`node-codename.ts`)
+ *  and the row's `_uid`. Wireless, so the Context can sit anywhere. */
+export interface LockTarget { node: string; uid: string }
 /** The toggle has a control dot (`ctl_<id>` input) in front of its row. */
 export const hasCtlDot = (t: Pick<ToggleRow, "control" | "hide_dot">): boolean => !!t.control && !t.hide_dot;
 export type ToggleControl = (typeof TOGGLE_CONTROLS)[number];
@@ -243,6 +253,23 @@ const iconName = (v: unknown): string => {
   return ICON_RE.test(s) ? s : "";
 };
 
+/** Lock targets from saved JSON: well-formed, each one once. */
+export function parseLockTargets(raw: unknown): LockTarget[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LockTarget[] = [];
+  const seen = new Set<string>();
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+    const node = str((x as Record<string, unknown>).node);
+    const uid = str((x as Record<string, unknown>).uid);
+    const key = `${node}|${uid}`;
+    if (!node || !uid || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ node, uid });
+  }
+  return out;
+}
+
 export function parseTogglesConfig(raw: unknown): TogglesConfig {
   let data: unknown = raw;
   if (typeof raw === "string") {
@@ -304,6 +331,9 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (hex(o.icon_color)) t.icon_color = hex(o.icon_color);
     if (hex(o.text_color)) t.text_color = hex(o.text_color);
     if (hex(o.tint)) t.tint = hex(o.tint);
+    if (TOGGLE_LOCKS.includes(o.lock as ToggleLock)) t.lock = o.lock as ToggleLock;
+    const targets = parseLockTargets(o.lock_targets);
+    if (targets.length) t.lock_targets = targets;
     const groups = Array.isArray(o.groups) ? o.groups.map(str).filter(Boolean) : [];
     if (groups.length) t.groups = [...new Set(groups)];
     rows.push(t);

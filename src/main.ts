@@ -777,6 +777,19 @@ if (typeof origQueuePrompt === "function") {
           },
         );
       }
+      // WP Toggles lock targets whose WP Context or row is gone: the lock
+      // can't reach them, so say so before the run (the run still goes).
+      for (const { node, graph: home, count } of togglesMod.missingLocksOnCanvas(graph)) {
+        const targetNode = node;
+        toastStoreMod.pushToast(
+          `Toggles #${node.id}: ${count} lock target${count === 1 ? " is" : "s are"} missing, so ${count === 1 ? "it isn't" : "they aren't"} locked.`,
+          {
+            severity: "warning",
+            lifeMs: 8000,
+            action: { label: "Focus", onSelect: () => focusNode(targetNode as unknown as FocusableNode, home) },
+          },
+        );
+      }
     } catch (err) {
       // Validation must never block the queue — log and proceed.
       console.warn("[wildcard-pipeline] pre-run scan failed:", err);

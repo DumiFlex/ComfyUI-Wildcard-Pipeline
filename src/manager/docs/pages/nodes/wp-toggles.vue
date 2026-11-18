@@ -120,6 +120,26 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </Banner>
     </DocSection>
 
+    <DocSection title="Lock rows of WP Context nodes">
+      <p>
+        Set a toggle's <b>When on</b> to <b>Lock seed</b> or <b>Lock value</b> and pick the rows in
+        <b>Rows to lock</b>: any row of any WP Context on the canvas, named by the node's codename,
+        its title and the row. No wires. Switching the toggle on locks those rows to what the last
+        run did, as the row's own lock button would: Lock value keeps the option each wildcard
+        picked (a row without one single pick, like a multi-pick or a fixed value, keeps its seed),
+        Lock seed keeps the seed. A run over several frames keeps each frame's pick or seed.
+        Switching it off unlocks only the rows this toggle locked. A row you locked by hand, or
+        another toggle did, is left alone both ways, and clicking a row's lock yourself makes it
+        yours again.
+      </p>
+      <p>
+        A lock icon next to the name shows the setting, lit while it holds. When a picked row or
+        its whole node is gone, the row gets a red lock, the node a red badge and a
+        <b>Remove missing targets</b> button, and queueing a run warns you; the rest still lock.
+        Run the workflow once before switching a lock on, so there is a last run to keep.
+      </p>
+    </DocSection>
+
     <DocSection title="Pick one">
       <p>
         One toggle is on. Which one, first match wins: the toggle the upstream picked variable

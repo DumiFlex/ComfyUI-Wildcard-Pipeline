@@ -57,6 +57,8 @@ const props = defineProps<{
   varSuggestions?: string[];
   /** Who writes each upstream `$var`, for the Value's chip hover card. */
   varProducers?: Map<string, VarProducerLike> | undefined;
+  /** Codenames of this toggle's lock targets no longer on the canvas. */
+  lockMissing?: string[] | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -115,6 +117,17 @@ function flipFromLit(e: MouseEvent): void {
   const opt = e.target instanceof Element ? e.target.closest(".wp-segmented__opt") : null;
   if (opt?.getAttribute("data-active") === "true") emit("set-on", !props.t.on);
 }
+
+const lockHint = computed(() => {
+  const n = props.t.lock_targets?.length ?? 0;
+  const what = props.t.lock === "value" ? "the value" : "the seed";
+  const rows = `${n} row${n === 1 ? "" : "s"}`;
+  return props.effOn ? `Locks ${what} of ${rows} now` : `Locks ${what} of ${rows} while on`;
+});
+const missingHint = computed(() => {
+  const gone = props.lockMissing ?? [];
+  return `${gone.length} lock target${gone.length === 1 ? " is" : "s are"} missing (${[...new Set(gone)].join(", ")}): the node or row is gone`;
+});
 </script>
 
 <template>
@@ -155,6 +168,15 @@ function flipFromLit(e: MouseEvent): void {
             role="img"
             :aria-label="controlState.hint"
           />
+          <i
+            v-if="t.lock && t.lock_targets?.length"
+            v-tooltip="lockHint"
+            class="pi wp-tgr__ctlicon is-lock"
+            :class="['pi-lock', { 'is-active': effOn }]"
+            role="img"
+            :aria-label="lockHint"
+            :data-test="`tg-lock-icon-${t.id}`"
+          />
       </template>
       <template v-else>
       <!-- The icon is a column of its own, centred against the name and
@@ -171,6 +193,15 @@ function flipFromLit(e: MouseEvent): void {
             role="img"
             :aria-label="controlState.hint"
           />
+          <i
+            v-if="t.lock && t.lock_targets?.length"
+            v-tooltip="lockHint"
+            class="pi wp-tgr__ctlicon is-lock"
+            :class="['pi-lock', { 'is-active': effOn }]"
+            role="img"
+            :aria-label="lockHint"
+            :data-test="`tg-lock-icon-${t.id}`"
+          />
         </span>
         <span v-if="parentName || !t.hide_var" class="wp-tgr__sub" :class="subClass()">
           <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
@@ -178,6 +209,14 @@ function flipFromLit(e: MouseEvent): void {
         </span>
       </span>
       </template>
+      <i
+        v-if="lockMissing?.length"
+        v-tooltip="missingHint"
+        class="pi pi-lock wp-tgr__missing"
+        role="img"
+        :aria-label="missingHint"
+        :data-test="`tg-lock-missing-${t.id}`"
+      />
       <i
         v-if="problem"
         v-tooltip="problem"
@@ -389,6 +428,8 @@ function flipFromLit(e: MouseEvent): void {
 .wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
 .wp-tgr__ctlicon.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgr__ctlicon.is-active.is-lock { color: var(--wp-accent); }
+.wp-tgr__missing { font-size: 11px; color: var(--wp-red, var(--wp-danger)); }
 .wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-tgr__ctl { display: inline-flex; flex: none; }
 .wp-tgr__radio {

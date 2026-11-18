@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModuleEntry } from "../../widgets/_shared";
-import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock } from "./lock-cycle";
+import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock, withoutLockOwner } from "./lock-cycle";
 import { dropRedundantFrameLockNulls } from "./frame-overrides";
 
 function wc(instance: ModuleEntry["instance"] = {}, iteration_overrides?: ModuleEntry["iteration_overrides"]): ModuleEntry {
@@ -65,5 +65,14 @@ describe("lock cycle", () => {
   it("sweeps stale value-lock nulls once the base is unlocked", () => {
     const m = wc({}, { "3": { locked_option_id: null }, "4": { locked_option_id: null, option_weights: { a: 1 } } });
     expect(dropRedundantFrameLockNulls(m).iteration_overrides).toEqual({ "4": { option_weights: { a: 1 } } });
+  });
+});
+
+describe("withoutLockOwner", () => {
+  it("drops the WP Toggles mark and keeps the rest", () => {
+    const inst = { locked_seed: 4, _ui: { locked_by: "toggles:1:t", last_locked_seed: 4 } };
+    expect(withoutLockOwner(inst)).toEqual({ locked_seed: 4, _ui: { last_locked_seed: 4 } });
+    const plain = { locked_seed: 4 };
+    expect(withoutLockOwner(plain)).toBe(plain);
   });
 });
