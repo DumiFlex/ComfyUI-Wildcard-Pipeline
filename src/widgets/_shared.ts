@@ -1367,6 +1367,10 @@ export interface ModuleEntry {
        *  toggle — owner-tag so nested bundles don't unlock each
        *  other's rows. */
       master_lock_by?: string;
+      /** The WP Toggles toggle that locked this row (`toggle-lock.ts`:
+       *  `lockOwner`). Switching it off unlocks only rows it marked; a
+       *  hand click on the lock drops the mark. */
+      locked_by?: string;
     };
   };
   /** Per-frame override patches: stringified 0-based iteration index ->

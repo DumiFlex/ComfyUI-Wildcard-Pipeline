@@ -34,6 +34,10 @@ import {
   type TogglesConfig,
 } from "../extension/toggles";
 import { ctlInputName } from "../extension/toggle-control";
+import { lockPlan, missingByToggle, withoutMissingTargets, type LockChoice } from "../extension/toggle-lock";
+import { applyLockActions, lockChoices, setMissingBadge, type LockOutcome } from "./toggle-lock-canvas";
+export { missingLocksOnCanvas } from "./toggle-lock-canvas";
+import { pushToast } from "../components/shared/toast-store";
 
 const TogglesWidget = defineAsyncComponent(
   () => import("../components/toggles/TogglesWidget.vue"),
@@ -147,6 +151,13 @@ export function create(node: TogglesHostNode, inputName: string) {
     });
   }
 
+  // `app.graph` is the subgraph while inside one, so climb from the node's
+  // own graph.
+  const rootGraph = (): LiteGraphLike | null => {
+    const start = (node as unknown as { graph?: LiteGraphLike }).graph ?? (app.graph as unknown as LiteGraphLike);
+    return start ? findRootGraph(start) : null;
+  };
+
   function store(next: TogglesConfig): void {
     config.value = next;
     host.setValue(serializeWidgetJson(next));
@@ -185,8 +196,10 @@ export function create(node: TogglesHostNode, inputName: string) {
       releaseTargets(targets.filter((t) => !kept.has(t)), was.control);
     }
     fitCtlInputs(node, plan.config, ctlNames);
+    const locks = lockPlan(config.value, plan.config);
     store(plan.config);
     applyControl(ctlNode, plan.config);
+    if (locks.length) tellLocks(applyLockActions(rootGraph(), node.id ?? "", locks));
     node.setDirtyCanvas?.(true, true);
     queueRowOutputs();
   }
@@ -225,12 +238,7 @@ export function create(node: TogglesHostNode, inputName: string) {
       );
       // `$` suggestions for the Pick one Value: every upstream variable
       // (the node resolves the value against the whole upstream Context,
-      // internal ones too). `app.graph` is the subgraph while inside one,
-      // so climb from the node's own graph.
-      const rootGraph = (): LiteGraphLike | null => {
-        const start = (node as unknown as { graph?: LiteGraphLike }).graph ?? (app.graph as unknown as LiteGraphLike);
-        return start ? findRootGraph(start) : null;
-      };
+      // internal ones too).
       const upstreamVars = reactiveFromGraph<string[]>(
         node as unknown as Parameters<typeof reactiveFromGraph>[0],
         () => {
@@ -239,6 +247,19 @@ export function create(node: TogglesHostNode, inputName: string) {
         },
         stringArrayEqual,
       );
+      // Rows of every WP Context the lock setting can pick (and the targets
+      // that went missing), polled like the wiring.
+      const choices = reactiveFromGraph<LockChoice[]>(
+        node as unknown as Parameters<typeof reactiveFromGraph>[0],
+        () => lockChoices(rootGraph()),
+        sameChoices,
+      );
+      const missing = computed(() => {
+        const m: Record<string, string[]> = {};
+        for (const [id, gone] of missingByToggle(config.value, choices.value)) m[id] = gone.map((t) => t.node);
+        return m;
+      });
+      if (!mirrored) watch(missing, (now) => setMissingBadge(node, Object.values(now).reduce((n, l) => n + l.length, 0)), { immediate: true });
       const varProducers = computed(() => {
         void upstreamVars.value;
         const g = rootGraph();
@@ -262,7 +283,10 @@ export function create(node: TogglesHostNode, inputName: string) {
           nodeTitle: (node as { title?: string }).title ?? "",
           upstreamVars: upstreamVars.value,
           varProducers: varProducers.value,
+          lockChoices: choices.value,
+          missingLocks: missing.value,
           "onUpdate:modelValue": onUpdate,
+          onRemoveMissing: () => onUpdate(withoutMissingTargets(config.value, choices.value)),
         });
       };
     },
@@ -289,6 +313,20 @@ export function create(node: TogglesHostNode, inputName: string) {
   host.onCleanup(attachRowOutputs(node, host.element, inputName, isToggleOutput));
   host.onCleanup(attachFieldSockets(node as unknown as FieldSocketNode, host.element, inputName, ctlNames));
   return host;
+}
+
+/** Say what a lock change did when some rows could not follow it. */
+function tellLocks(o: LockOutcome): void {
+  if (o.noRun) {
+    pushToast(`${o.noRun} row${o.noRun === 1 ? " has" : "s have"} no run to lock yet. Run the workflow once, then switch the toggle on again.`, { severity: "warning", lifeMs: 8000 });
+  }
+  if (o.kept) {
+    pushToast(`${o.kept} row${o.kept === 1 ? " was" : "s were"} already locked by hand and stay${o.kept === 1 ? "s" : ""} as ${o.kept === 1 ? "it is" : "they are"}.`, { severity: "info", lifeMs: 6000 });
+  }
+}
+
+function sameChoices(a: LockChoice[], b: LockChoice[]): boolean {
+  return a.length === b.length && a.every((c, i) => c.node === b[i]?.node && c.uid === b[i]?.uid && c.label === b[i]?.label && c.wildcard === b[i]?.wildcard);
 }
 
 function sameWiring(a: Map<string, CtlNode[]>, b: Map<string, CtlNode[]>): boolean {

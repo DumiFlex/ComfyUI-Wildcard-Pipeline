@@ -31,6 +31,8 @@ leaves the switch alone.
 
 ``control`` / ``groups`` (mute or bypass other nodes) are frontend-only: the
 canvas sets node modes when a toggle flips, and the run never sees them.
+So are ``lock`` / ``lock_targets`` (lock rows of WP Context nodes): the
+canvas writes the locks into those nodes' values when a toggle flips.
 
 Every toggle writes ``"true"`` / ``"false"`` to its variable. It is
 internal (for rules only) unless the row carries ``visible: true`` (stored

@@ -38,6 +38,8 @@ Several on/off switches in one node. Each toggle writes `$its_variable` as `true
 - **Invert**: Mute or bypass while the toggle is ON instead, for a node used only as a switchboard.
 - **Canvas groups**: Groups on the canvas whose nodes When off also covers, by title. No wires needed.
 - **Wire dot in front of the row**: Untick it for a toggle that drives only canvas groups: the row, or its line under a grid, loses its dot, so nothing hangs there unwired. Picking the first group for a toggle with nothing wired unticks it for you. Unticking drops a wire that is in the dot.
+- **When on**: Nothing, Lock seed or Lock value: switching the toggle on locks the Rows to lock to what the last run did (Lock value keeps each wildcard's pick, other rows their seed); off unlocks only the rows it locked. Rows locked by hand stay as they are.
+- **Rows to lock**: Rows of any WP Context on the canvas, named by the node's codename, its title and the row. No wires. A row or node that is gone shows red on the toggle and the node, with a Remove missing targets button.
 - **Upstream can set it**: When the upstream Context holds this toggle's variable as a yes/no word (true, yes, on, 1, false, no, off, 0), that value sets the switch for the run.
 - **Group**: Which label it sits under. You can also drag the toggle's grip under another label, or above the first one.
 - **BOOLEAN output**: Show an output for switch nodes. Off for a new toggle; leave it off for a toggle only rules read.

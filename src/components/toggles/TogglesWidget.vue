@@ -61,6 +61,8 @@ import {
 } from "../../extension/toggles";
 import { revealTarget } from "../../widgets/flash-target";
 import { ctlInputName, type ControlState } from "../../extension/toggle-control";
+import type { LockChoice } from "../../extension/toggle-lock";
+import Banner from "@/kit/Banner.vue";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { vToggleRow } from "@/kit/toggle-row";
 
@@ -85,13 +87,18 @@ const props = withDefaults(
     varProducers?: Map<string, VarProducerLike> | undefined;
     /** The node's title, for the toggle window's header. */
     nodeTitle?: string;
+    /** Rows of the canvas's WP Contexts the lock setting can pick. */
+    lockChoices?: LockChoice[];
+    /** Toggle id → codenames of its lock targets that are gone. */
+    missingLocks?: Record<string, string[]>;
   }>(),
   {
     nodeMode: 0, controls: () => ({}), canvasGroups: () => [], editRequest: 0, upstreamVars: () => [],
-    varProducers: undefined, nodeTitle: "",
+    varProducers: undefined, nodeTitle: "", lockChoices: () => [], missingLocks: () => ({}),
   },
 );
-const emit = defineEmits<{ "update:modelValue": [next: TogglesConfig] }>();
+const emit = defineEmits<{ "update:modelValue": [next: TogglesConfig]; "remove-missing": [] }>();
+const missingCount = computed(() => Object.values(props.missingLocks).reduce((n, l) => n + l.length, 0));
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const cfg = computed(() => props.modelValue);
@@ -304,7 +311,7 @@ function toggleEdit(t: ToggleRow): void {
 /** The toggle whose window is open (gone if it was removed meanwhile). */
 const editingRow = computed(() => (editing.value ? byId.value.get(editing.value) : undefined));
 function windowProps(t: ToggleRow) {
-  return { ...rowProps(t), nodeTitle: props.nodeTitle };
+  return { ...rowProps(t), nodeTitle: props.nodeTitle, lockChoices: props.lockChoices };
 }
 /** Done in a toggle's window: store its draft, moving it to its group. */
 function applyWindow(t: ToggleRow, next: ToggleRow, groupId: string): void {
@@ -359,6 +366,7 @@ function rowProps(t: ToggleRow) {
     canvasGroups: props.canvasGroups,
     varSuggestions: valueVars.value,
     varProducers: props.varProducers,
+    lockMissing: props.missingLocks[t.id],
   };
 }
 
@@ -549,6 +557,12 @@ function foldedOuts(g: ToggleGroup): string | undefined {
       </span>
     </div>
 
+    <Banner v-if="missingCount" tone="danger" size="sm" data-test="tg-lock-missing-banner">
+      {{ missingCount }} lock target{{ missingCount === 1 ? " is" : "s are" }} gone: a WP Context or a row was removed.
+      <template #actions>
+        <Button size="sm" variant="ghost" data-test="tg-remove-missing" @click="emit('remove-missing')">Remove missing targets</Button>
+      </template>
+    </Banner>
     <template v-for="(g, gi) in groups" :key="groupKey(g, gi)">
       <!-- Clean view: plain rows, no grips. -->
       <div

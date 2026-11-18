@@ -49,6 +49,16 @@ export function withBaseLock(
   return next as Instance;
 }
 
+/** The instance without its WP Toggles lock mark (`_ui.locked_by`): a hand
+ *  click on the lock makes the row the user's again, so the toggle that
+ *  locked it no longer unlocks it. */
+export function withoutLockOwner(inst: Instance): Instance {
+  if (!inst._ui?.locked_by) return inst;
+  const { locked_by: _drop, ...ui } = inst._ui;
+  void _drop;
+  return { ...inst, _ui: ui };
+}
+
 /** Frame `k`'s lock fields set to `want`, against the base: a field equal to
  *  the base drops out of the frame's patch, a base lock the frame doesn't
  *  want is overridden with `null`. */
