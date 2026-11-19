@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@dumiflex/wp-kit": "github:DumiFlex/wp-kit#5ed326fd41b0815e6cbdc6870c7e174a1fc056df",
-    "pinia": "^2.2.6",
+    "pinia": "^3.0.4",
     "primeicons": "^8.0.2",
     "vue": "^3.5.45",
     "vue-router": "^4.4.5",
