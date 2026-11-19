@@ -45,7 +45,7 @@
   "devDependencies": {
     "@comfyorg/comfyui-frontend-types": "^1.57.6",
     "@commitlint/cli": "^19.5.0",
-    "@commitlint/config-conventional": "^19.5.0",
+    "@commitlint/config-conventional": "^21.2.4",
     "@tailwindcss/postcss": "^4.3.5",
     "@typescript-eslint/eslint-plugin": "^8.72.1",
     "@typescript-eslint/parser": "^8.72.1",
