@@ -443,7 +443,7 @@ function applyWindow(next: SliderRow): void {
   font: 12px var(--wp-font-sans, sans-serif);
 }
 .wp-pad--skipped { opacity: 0.45; }
-/* The axis chips share the row and grow to fill it; a chip never squeezes
+/* The axis chips share the row equally and fill it; a chip never squeezes
    below its own name and variable but wraps onto the next line instead
    (only a chip wider than the whole node cuts its text). */
 .wp-pad__read { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
@@ -456,7 +456,7 @@ function applyWindow(next: SliderRow): void {
 .wp-pad__phrase .is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-pad__phrase .wp-pad__phrase-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--wp-font-sans, sans-serif); font-size: 11.5px; color: var(--wp-text); }
 .wp-pad__axis {
-  display: flex; align-items: center; gap: 6px; flex: 1 1 auto; max-width: 100%; min-height: 34px;
+  display: flex; align-items: center; gap: 6px; flex: 1 1 0; max-width: 100%; min-height: 34px;
   padding: 2px 6px; box-sizing: border-box;
   background: var(--wp-bg2, var(--wp-bg-1)); border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
