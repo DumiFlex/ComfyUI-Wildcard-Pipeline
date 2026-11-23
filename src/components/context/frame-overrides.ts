@@ -141,7 +141,7 @@ export function dropRedundantFrameLockNulls(module: ModuleEntry): ModuleEntry {
   if (!ov) return module;
   // The same for a value lock's `locked_option_id: null`.
   const base = (module.instance ?? {}) as Record<string, unknown>;
-  const keys = (["locked_seed", "locked_option_id"] as const)
+  const keys = (["locked_seed", "locked_option_id", "locked_option_ids"] as const)
     .filter((key) => base[key] === undefined || base[key] === null);
   if (!keys.length) return module;
   const next: IterationOverrides = {};

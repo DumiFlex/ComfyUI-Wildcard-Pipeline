@@ -7,8 +7,8 @@
  * codename (`node-codename.ts`) + the row's `_uid`.
  *
  * Switching on captures the last run: a value lock takes the option the row
- * picked (falling back to its seed when it has no single pick, e.g. a
- * multi-pick or a fixed value), a seed lock the seed it rolled. A run with
+ * picked (every pick of a multi-pick row; falling back to its seed when it
+ * has no pick, e.g. a fixed value), a seed lock the seed it rolled. A run with
  * several frames gets the other frames' picks / seeds as frame overrides.
  * Each row it locks is marked `_ui.locked_by = owner`, and switching off
  * unlocks only rows with that mark: a row locked by hand (or by another
@@ -19,7 +19,7 @@
  * nodes, reads the last run and writes the values back.
  */
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
-import { lockStateOf, withBaseLock, withFrameLock } from "../components/context/lock-cycle";
+import { hasPick, lockStateOf, valueLock, withBaseLock, withFrameLock, type LockPick } from "../components/context/lock-cycle";
 import { effectiveToggles, toggleRows, type LockTarget, type ToggleLock, type TogglesConfig } from "./toggles";
 
 type Instance = NonNullable<ModuleEntry["instance"]>;
@@ -38,10 +38,11 @@ export interface LastRun {
   seeds: Record<string, number>;
   /** The chain seed, for a row `seeds` doesn't list. */
   chainSeed: number | null;
-  /** Row → the option it picked (`module_picks`, the first frame). */
-  picks: Record<string, string>;
-  /** Frame → row → option, one entry per frame run. */
-  framePicks: ReadonlyMap<number, Record<string, string>>;
+  /** Row → the option it picked (`module_picks`, the first frame); a
+   *  multi-pick row's ids. */
+  picks: Record<string, LockPick>;
+  /** Frame → row → option(s), one entry per frame run. */
+  framePicks: ReadonlyMap<number, Record<string, LockPick>>;
   /** Frame → the seed the node ran that frame with. */
   frameSeeds: ReadonlyMap<number, number>;
 }
@@ -92,17 +93,18 @@ function released(m: ModuleEntry): ModuleEntry {
 function locked(m: ModuleEntry, mode: ToggleLock, owner: string, run: LastRun): ModuleEntry | null {
   const key = rowKey(m);
   const canPick = m.type === "wildcard";
-  const pick = mode === "value" && canPick ? run.picks[key] ?? null : null;
+  const got = mode === "value" && canPick ? run.picks[key] : undefined;
+  const pick = hasPick(got) ? got : null;
   const lastSeed = m.instance?._ui?.last_locked_seed;
   const seed = run.seeds[key] ?? run.chainSeed ?? (typeof lastSeed === "number" ? lastSeed : null);
   if (!pick && seed == null) return null;
-  const base = pick ? { locked_option_id: pick } : { locked_seed: seed ?? 0 };
+  const base = pick ? valueLock(pick) : { locked_seed: seed ?? 0 };
   let next: ModuleEntry = { ...m, instance: withOwner(withBaseLock(m.instance ?? {}, base), owner) };
   // Several frames ran: each frame keeps what it had.
   if (pick && run.framePicks.size > 1) {
     for (const [frame, picks] of run.framePicks) {
       const p = picks[key];
-      if (p) next = withFrameLock(next, frame, { locked_option_id: p });
+      if (hasPick(p)) next = withFrameLock(next, frame, valueLock(p));
     }
   } else if (!pick && run.frameSeeds.size > 1) {
     for (const [frame, s] of run.frameSeeds) next = withFrameLock(next, frame, { locked_seed: s });

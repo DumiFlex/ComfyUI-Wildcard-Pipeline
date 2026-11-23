@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModuleEntry } from "../../widgets/_shared";
-import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock, withoutLockOwner } from "./lock-cycle";
+import { lockedOptionIds, lockedText, lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock, withoutLockOwner } from "./lock-cycle";
 import { dropRedundantFrameLockNulls } from "./frame-overrides";
 
 function wc(instance: ModuleEntry["instance"] = {}, iteration_overrides?: ModuleEntry["iteration_overrides"]): ModuleEntry {
@@ -74,5 +74,29 @@ describe("withoutLockOwner", () => {
     expect(withoutLockOwner(inst)).toEqual({ locked_seed: 4, _ui: { last_locked_seed: 4 } });
     const plain = { locked_seed: 4 };
     expect(withoutLockOwner(plain)).toBe(plain);
+  });
+});
+
+describe("value lock on a multi-pick row", () => {
+  it("steps to value with a list of picks and writes them in order", () => {
+    expect(nextLockState("seed", ["a", "b"])).toBe("value");
+    expect(nextLockState("seed", [])).toBe("off");
+    expect(lockFields("value", 5, ["b", "a"])).toEqual({ locked_option_ids: ["b", "a"] });
+  });
+
+  it("reads as a value lock and shows its options", () => {
+    const inst = { locked_option_ids: ["o2", "gone"] };
+    expect(lockStateOf(inst)).toBe("value");
+    expect(lockedOptionIds(inst)).toEqual(["o2", "gone"]);
+    const m = { id: "w", type: "wildcard", enabled: true, entries: [], payload: { options: [{ id: "o2", value: "hat" }] } } as unknown as ModuleEntry;
+    expect(lockedText(m, inst)).toBe("hat, gone");
+  });
+
+  it("drops the list when it switches to a seed lock, and a frame keeps its own", () => {
+    const inst = withBaseLock({ locked_option_ids: ["a"] }, { locked_seed: 3 });
+    expect(inst.locked_option_ids).toBeUndefined();
+    const m = { id: "w", type: "wildcard", enabled: true, entries: [], instance: { locked_option_ids: ["a", "b"] } } as unknown as ModuleEntry;
+    expect(withFrameLock(m, 1, { locked_option_ids: ["a", "b"] }).iteration_overrides).toBeUndefined();
+    expect(withFrameLock(m, 1, { locked_option_ids: ["b"] }).iteration_overrides).toEqual({ "1": { locked_option_ids: ["b"] } });
   });
 });

@@ -12,7 +12,7 @@ import {
   dropRedundantFrameLockNulls,
   toggleFrameEnabled,
 } from "./frame-overrides";
-import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock, withoutLockOwner } from "./lock-cycle";
+import { lockFields, lockStateAt, lockStateOf, nextLockState, withBaseLock, withFrameLock, withoutLockOwner, type LockPick } from "./lock-cycle";
 import {
   animateEnterBatch,
   captureFlipSnapshot,
@@ -30,7 +30,7 @@ export interface ModuleOpsProps {
   readonly frameSeedReader?: (frame: number) => number | null;
   /** The option this use (by `_uid`) picked last run, at frame `k` when one
    *  is active; null when unknown or a multi-pick. */
-  readonly lastPickReader?: (uid: string, frame: number | null) => string | null;
+  readonly lastPickReader?: (uid: string, frame: number | null) => LockPick | null;
 }
 
 /**
@@ -54,7 +54,7 @@ export function createModuleOps(
    *  Lock seed captures the seed THIS use rolled last run, by its own `_uid`
    *  (siblings share `m.id`), else the frame's seed when a frame is active,
    *  else `_ui.last_locked_seed`, else 0. Lock value pins the option THIS use
-   *  picked last run (wildcards with a single pick only); with no such pick
+   *  picked last run (every pick of a multi-pick row); with no such pick
    *  the seed lock steps straight to off. A seed lock that turns into a value
    *  lock drops the seed: the option no longer depends on it. */
   function toggleLockOnCard(idx: number) {

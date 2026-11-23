@@ -95,6 +95,8 @@ def _fresh_instance() -> dict[str, Any]:
         # Value lock — the row lock's second state: always take this option
         # id (what the last run picked). ``None`` = not value-locked.
         "locked_option_id": None,
+        # The same for a multi-pick row: every option id the last run picked.
+        "locked_option_ids": None,
         # Internal — when True, every binding this module produces is
         # marked engine-only by `PipelineEngine.run` (via
         # `__wp_internal_flags__`). Downstream modules still see the

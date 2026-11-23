@@ -30,7 +30,7 @@ const terms = [
   { term: "Chaining", desc: "Wiring one WP Context into another. The second starts with the first one's variables and can add to or replace them." },
   { term: "Hide from prompt", desc: "A variable that prints nothing, while other modules can still use it. The globe button on a row." },
   { term: "Lock pick", desc: "Keeps the same pick on every Generate until you unlock it." },
-  { term: "Lock value", desc: "The row lock's second click on a wildcard: always takes the option the last run picked, and rules above it keep fitting it." },
+  { term: "Lock value", desc: "The row lock's second click on a wildcard: always takes the option the last run picked (every pick on a multi-pick row), and rules above it keep fitting it." },
   { term: "Hold across run", desc: "The same pick on every frame of one loop run, and a new one next Generate." },
   { term: "Negative", desc: "Words that go to the negative prompt when a variable is printed. Options, fixed values, combines and derivations can carry them." },
   { term: "Loop", desc: "The WP Context Loop node: runs your pipeline several times in one Generate, one frame each." },

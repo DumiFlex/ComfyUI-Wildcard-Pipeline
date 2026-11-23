@@ -1200,6 +1200,9 @@ export interface ModuleEntry {
      *  the one the last run picked. A sweep pin wins on its frame. `null`
      *  in a frame override unlocks that frame. Wildcards only. */
     locked_option_id?: string | null;
+    /** The same for a multi-pick row: the options it picked, in order.
+     *  `null` in a frame override unlocks that frame. */
+    locked_option_ids?: string[] | null;
     /** Iteration seed scope: "hold" pins this module's RNG to the run base
      *  seed (identical across loop iterations, re-rolls per run); "vary"
      *  (default/absent) rides the per-iteration seed. `locked_seed` wins. */
