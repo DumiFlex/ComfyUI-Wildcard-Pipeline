@@ -6,9 +6,11 @@ from typing import Any
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
+from engine import chain_ahead
 from engine.db.connection import get_connection, resolve_db_path
 from engine.db.migrations import migrate
 from engine.db.repositories import ModuleNotFound, ModuleRepository
+from engine.modules import _backward as backward
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.modules.wildcard_handler import OPTION_PICKS_KEY
 from engine.pipeline import FRAME0_CTX_KEY, PipelineEngine
@@ -218,6 +220,22 @@ def _warn_seed_source_missing(ctx: dict, seed_from: str) -> None:
     })
 
 
+def _modules_ahead(cls: type) -> list[list[dict[str, Any]]]:
+    """The module lists of the WP Context nodes after this one (backward
+    rules look at their targets too). Empty in tests and without a prompt."""
+    hidden = getattr(cls, "hidden", None)
+    prompt = getattr(hidden, "prompt", None) if hidden is not None else None
+    uid = getattr(hidden, "unique_id", None) if hidden is not None else None
+    out: list[list[dict[str, Any]]] = []
+    for raw in chain_ahead.downstream_modules(prompt, uid):
+        try:
+            mods, _catalog, _order = deserialize_node_input(raw)
+        except Exception:  # noqa: BLE001 - a broken later node only ends the line
+            break
+        out.append(mods)
+    return out
+
+
 def _node_id(cls: type) -> str:
     """This node's graph id when ComfyUI supplied it (tests call `execute`
     directly and get "")."""
@@ -262,7 +280,9 @@ class WPContext(io.ComfyNode):
             ],
             outputs=[PipelineContext.Output("context")],
             # The node's graph id, so WP Debug can say which Context ran what.
-            hidden=[io.Hidden.unique_id],
+            # The prompt, so backward rules can see the WP Context nodes after
+            # this one (`engine/chain_ahead.py`).
+            hidden=[io.Hidden.unique_id, io.Hidden.prompt],
             not_idempotent=True,
         )
 
@@ -320,6 +340,9 @@ class WPContext(io.ComfyNode):
             frame0_ctx["__wp_explain__"] = True
             frame0_ctx["__wp_ref_log__"] = []
             ctx[FRAME0_CTX_KEY] = frame0_ctx
+        ahead = _modules_ahead(cls)
+        if ahead:
+            ctx[backward.AHEAD_KEY] = ahead
         ctx = PipelineEngine().run(
             module_list,
             ctx=ctx,
