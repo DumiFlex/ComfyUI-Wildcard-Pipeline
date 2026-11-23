@@ -4,6 +4,7 @@ import { SETTING_ID_IMAGE_FILTER_NOTIFY, SETTING_ID_IMAGE_FILTER_SOUND } from ".
 import {
   _resetImageFilterForTests,
   addRequest,
+  extendTime,
   installImageFilter,
   lastRequestByNode,
   notifyWaiting,
@@ -62,6 +63,21 @@ describe("image filter queue", () => {
       body: JSON.stringify({ token: "a", action: "picks", picks: [[0, 0]] }),
     }));
     expect(waiting.value).toEqual([]);
+  });
+
+  it("adds time: the countdown follows once the server agrees", async () => {
+    const r = addRequest(req("a", "5", 60), 0);
+    expect(r).not.toBeNull();
+    const doFetch = vi.fn(() => Promise.resolve({ ok: true, status: 200 }));
+    expect(await extendTime("a", 300, doFetch)).toBe(true);
+    expect(doFetch).toHaveBeenCalledWith("/wp/api/image-filter/extend", expect.objectContaining({
+      body: JSON.stringify({ token: "a", seconds: 300 }),
+    }));
+    const [entry] = waiting.value;
+    expect(entry && secondsLeft(entry, 0)).toBe(360);
+    const gone = vi.fn(() => Promise.resolve({ ok: false, status: 404 }));
+    expect(await extendTime("a", 60, gone)).toBe(false);
+    expect(waiting.value[0]?.timeout).toBe(360);
   });
 });
 

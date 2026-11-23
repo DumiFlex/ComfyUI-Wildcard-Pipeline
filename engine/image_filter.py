@@ -431,6 +431,28 @@ class PendingAnswers:
         with self._lock:
             return list(self._requests.values())
 
+    def extend(self, token: str, seconds: int) -> int | None:
+        """Give a waiting request ``seconds`` more; returns its new timeout.
+
+        None when nothing waits on ``token`` or it never times out (timeout 0).
+        The total stays under ``MAX_TIMEOUT``.
+        """
+        with self._lock:
+            req = self._requests.get(token)
+            if req is None:
+                return None
+            current = int(req.get("timeout") or 0)
+            if current <= 0:
+                return None
+            req["timeout"] = min(MAX_TIMEOUT, current + max(1, int(seconds)))
+            return int(req["timeout"])
+
+    def timeout(self, token: str, default: int) -> int:
+        """The request's timeout now (it grows when the user adds time)."""
+        with self._lock:
+            req = self._requests.get(token)
+            return int(req.get("timeout") or default) if req else default
+
 
 #: Process-wide registry shared by the node and the route.
 PENDING = PendingAnswers()

@@ -36,6 +36,35 @@ async def post_answer(request: web.Request) -> web.Response:
     return json_ok({"accepted": True})
 
 
+#: Most a single "add time" may add (an hour); the total is capped by the node.
+MAX_EXTEND_SECONDS = 3600
+
+
+async def post_extend(request: web.Request) -> web.Response:
+    """POST /wp/api/image-filter/extend
+
+    Body: ``{token, seconds}``. Adds time to a waiting request's countdown and
+    returns the new ``timeout`` (seconds from when the run started waiting).
+    404 when nothing waits on ``token``, or it never times out.
+    """
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 - any parse failure is a bad request
+        return json_error("Body must be JSON.", status=400)
+    if not isinstance(body, dict):
+        return json_error("Body must be an object.", status=400)
+    token = body.get("token")
+    if not isinstance(token, str) or not token:
+        return json_error("Missing token.", status=400)
+    seconds = body.get("seconds")
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or seconds <= 0:
+        return json_error("seconds must be a positive number.", status=400)
+    timeout = _f.PENDING.extend(token, min(MAX_EXTEND_SECONDS, int(seconds)))
+    if timeout is None:
+        return json_error("Nothing is waiting with a countdown for this token.", status=404)
+    return json_ok({"timeout": timeout})
+
+
 async def get_pending(_request: web.Request) -> web.Response:
     """GET /wp/api/image-filter/pending — requests still waiting for a pick."""
     return json_ok({"pending": _f.PENDING.pending()})
@@ -44,3 +73,4 @@ async def get_pending(_request: web.Request) -> web.Response:
 def register(router: web.UrlDispatcher) -> None:
     router.add_post("/wp/api/image-filter/answer", post_answer)
     router.add_get("/wp/api/image-filter/pending", get_pending)
+    router.add_post("/wp/api/image-filter/extend", post_extend)

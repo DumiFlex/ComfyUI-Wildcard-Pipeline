@@ -27,6 +27,8 @@ const props = defineProps<{
   aspect?: number;
   /** A tile's "1024 × 1536" mark at this tile size ("" for none). */
   sizeOf?: (key: string, tilePx: number) => string;
+  /** Hide the tiles that aren't picked (their cells stay, so the table keeps its shape). */
+  pickedOnly?: boolean;
 }>();
 const emit = defineEmits<{
   "update:layout": [layout: GridLayout];
@@ -138,6 +140,7 @@ function isEdited(key: string): boolean {
               >
                 <PickerTile
                   v-for="(img, i) in frames[f]"
+                  v-show="!pickedOnly || picked.has(pickKey(f, i))"
                   :key="i"
                   :src="viewUrl(img)"
                   :picked="picked.has(pickKey(f, i))"

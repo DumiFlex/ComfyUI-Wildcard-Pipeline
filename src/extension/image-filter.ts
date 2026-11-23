@@ -89,6 +89,33 @@ export async function submitAnswer(
   return ok;
 }
 
+/** Minutes the picker offers to add to a countdown. */
+export const ADD_TIME_MINUTES = [1, 5, 10, 30] as const;
+
+/**
+ * Give a waiting request more time. The node reads its timeout on every poll,
+ * so the server's answer is the new total; the queue entry follows it so the
+ * countdown jumps up at once. False when the request already ended.
+ */
+export async function extendTime(
+  token: string,
+  seconds: number,
+  doFetch: FetchLike = fetch,
+): Promise<boolean> {
+  try {
+    const res = await doFetch("/wp/api/image-filter/extend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, seconds }),
+    });
+    if (!res.ok) return false;
+  } catch {
+    return false;
+  }
+  waiting.value = waiting.value.map((r) => (r.token === token && r.timeout ? { ...r, timeout: r.timeout + seconds } : r));
+  return true;
+}
+
 let audio: AudioContext | null = null;
 
 /**
