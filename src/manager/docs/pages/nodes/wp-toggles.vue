@@ -125,18 +125,21 @@ import VarToken from "../../../components/docs/VarToken.vue";
 
     <DocSection title="Lock rows of WP Context nodes">
       <p>
-        Set a toggle's <b>When on</b> to <b>Lock seed</b> or <b>Lock value</b> and pick the rows in
-        <b>Rows to lock</b>: any row of any WP Context on the canvas, named by the node's codename,
-        its title and the row. No wires. Switching the toggle on locks those rows to what the last
-        run did, as the row's own lock button would: Lock value keeps the option each wildcard
-        picked (all picks of a multi-pick row; a row with no pick, like a fixed value, keeps its seed),
-        Lock seed keeps the seed. A run over several frames keeps each frame's pick or seed.
+        In the toggle's window, open <b>Advanced</b>, set <b>When on</b> to <b>Lock seed</b> or
+        <b>Lock value</b> and pick the rows in <b>Rows to lock</b>: any row of any WP Context on the
+        canvas, named by the node's codename, its title and the row, with its module's icon. No
+        wires. Constraints aren't listed (they have no seed to lock), and Lock value lists only
+        wildcards, since only a wildcard has a value to keep. Switching the toggle on locks those
+        rows to what the last run did, as the row's own lock button would: Lock value keeps the
+        option each wildcard picked (all picks of a multi-pick row), Lock seed keeps the seed. A run over several frames keeps each frame's pick or seed.
         Switching it off unlocks only the rows this toggle locked. A row you locked by hand, or
         another toggle did, is left alone both ways, and clicking a row's lock yourself makes it
         yours again.
       </p>
       <p>
-        A lock icon next to the name shows the setting, lit while it holds. When a picked row or
+        A lock icon next to the name shows the setting, lit while it holds. Click it to see the
+        row: the canvas glides to its WP Context and the row blinks; with several rows it opens a
+        list to pick from. When a picked row or
         its whole node is gone, the row gets a red lock, the node a red badge and a
         <b>Remove missing targets</b> button, and queueing a run warns you; the rest still lock.
         Run the workflow once before switching a lock on, so there is a last run to keep.

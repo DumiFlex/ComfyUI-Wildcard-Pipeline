@@ -9,6 +9,7 @@
  */
 import WpIconButton from "@/kit/WpIconButton.vue";
 import ToggleCtlButton from "./ToggleCtlButton.vue";
+import ToggleLockButton, { type LockSpot } from "./ToggleLockButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Checkbox from "@/kit/Checkbox.vue";
@@ -62,6 +63,8 @@ const props = defineProps<{
   varProducers?: Map<string, VarProducerLike> | undefined;
   /** Codenames of this toggle's lock targets no longer on the canvas. */
   lockMissing?: string[] | undefined;
+  /** The rows it locks; the lock icon's click shows them. */
+  lockSpots?: LockSpot[] | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -71,6 +74,8 @@ const emit = defineEmits<{
   remove: [];
   /** Glide the canvas to one of `focusSpots` (by key). */
   "show-target": [key: string];
+  /** Glide the canvas to one of `lockSpots` (by key) and blink the row. */
+  "show-lock": [key: string];
 }>();
 
 /** The row's icon and name colours as CSS variables (absent: the theme's). */
@@ -129,6 +134,7 @@ const lockHint = computed(() => {
   const rows = `${n} row${n === 1 ? "" : "s"}`;
   return props.effOn ? `Locks ${what} of ${rows} now` : `Locks ${what} of ${rows} while on`;
 });
+const upstreamHint = computed(() => `Upstream can set it: a yes/no ${props.t.var ? `$${props.t.var}` : "value"} from the Context above switches it`);
 const missingHint = computed(() => {
   const gone = props.lockMissing ?? [];
   return `${gone.length} lock target${gone.length === 1 ? " is" : "s are"} missing (${[...new Set(gone)].join(", ")}): the node or row is gone`;
@@ -172,14 +178,21 @@ const missingHint = computed(() => {
             :toggle-id="t.id"
             @show="(key: string) => emit('show-target', key)"
           />
-          <i
+          <ToggleLockButton
             v-if="t.lock && t.lock_targets?.length"
-            v-tooltip="lockHint"
-            class="pi wp-tgr__ctlicon is-lock"
-            :class="['pi-lock', { 'is-active': effOn }]"
+            :spots="lockSpots ?? []"
+            :hint="lockHint"
+            :active="effOn"
+            :toggle-id="t.id"
+            @show="(key: string) => emit('show-lock', key)"
+          />
+          <i
+            v-if="t.upstream"
+            v-tooltip="upstreamHint"
+            class="pi pi-arrow-down-right wp-tgr__ctlicon wp-tgr__up"
             role="img"
-            :aria-label="lockHint"
-            :data-test="`tg-lock-icon-${t.id}`"
+            :aria-label="upstreamHint"
+            :data-test="`tg-upstream-icon-${t.id}`"
           />
       </template>
       <template v-else>
@@ -196,19 +209,25 @@ const missingHint = computed(() => {
             :toggle-id="t.id"
             @show="(key: string) => emit('show-target', key)"
           />
-          <i
+          <ToggleLockButton
             v-if="t.lock && t.lock_targets?.length"
-            v-tooltip="lockHint"
-            class="pi wp-tgr__ctlicon is-lock"
-            :class="['pi-lock', { 'is-active': effOn }]"
+            :spots="lockSpots ?? []"
+            :hint="lockHint"
+            :active="effOn"
+            :toggle-id="t.id"
+            @show="(key: string) => emit('show-lock', key)"
+          />
+          <i
+            v-if="t.upstream"
+            v-tooltip="upstreamHint"
+            class="pi pi-arrow-down-right wp-tgr__ctlicon wp-tgr__up"
             role="img"
-            :aria-label="lockHint"
-            :data-test="`tg-lock-icon-${t.id}`"
+            :aria-label="upstreamHint"
+            :data-test="`tg-upstream-icon-${t.id}`"
           />
         </span>
         <span v-if="parentName || !t.hide_var" class="wp-tgr__sub" :class="subClass()">
           <i v-if="parentName" class="pi pi-link" aria-hidden="true" />{{ sub() }}
-          <i v-if="t.upstream" v-tooltip="'Upstream can set it'" class="pi pi-arrow-down-right wp-tgr__up" aria-label="Upstream can set it" />
         </span>
       </span>
       </template>
@@ -435,7 +454,7 @@ const missingHint = computed(() => {
 .wp-tgr__ctlicon.is-active { opacity: 1; }
 .wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
 .wp-tgr__ctlicon.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }
-.wp-tgr__up { font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgr__up { font-size: 10px; opacity: 0.85; }
 .wp-tgr__ctlicon.is-active.is-lock { color: var(--wp-accent); }
 .wp-tgr__missing { font-size: 11px; color: var(--wp-red, var(--wp-danger)); }
 .wp-tgr__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }

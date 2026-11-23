@@ -22,11 +22,13 @@ import ConfirmModal from "@/kit/ConfirmModal.vue";
 import Button from "@/kit/Button.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
+import Disclosure from "@/kit/Disclosure.vue";
 import ToggleRowView from "./ToggleRow.vue";
 import { varColorClass } from "../shared/var-color";
 import type { LockTarget, PickStyle, ToggleControl, ToggleLock, ToggleRow, ToggleStyle } from "../../extension/toggles";
-import { missingTargets, targetKey, type LockChoice } from "../../extension/toggle-lock";
-import type { ControlState } from "../../extension/toggle-control";
+import { canLock, missingTargets, targetKey, unfitTargets, type LockChoice } from "../../extension/toggle-lock";
+import { drivesOff, type ControlState } from "../../extension/toggle-control";
+import { kindColorVar, kindIcon } from "../shared/kind-icons";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
 
@@ -94,17 +96,38 @@ function setGroups(v: string[] | string | null): void {
 const LOCKS = [
   { value: "", label: "Nothing", hint: "On doesn't lock anything" },
   { value: "seed", label: "Lock seed", hint: "On locks the seed each picked row rolled last run" },
-  { value: "value", label: "Lock value", hint: "On locks the option each picked wildcard took last run (others lock their seed)" },
+  { value: "value", label: "Lock value", hint: "On locks the option each picked wildcard took last run" },
 ];
+/** Rows dropped when the mode changed to Lock value (they can only lock a seed). */
+const droppedForValue = ref(0);
 function setLock(v: string): void {
-  patch(v ? { lock: v as ToggleLock } : { lock: undefined, lock_targets: undefined });
+  if (!v) {
+    droppedForValue.value = 0;
+    patch({ lock: undefined, lock_targets: undefined });
+    return;
+  }
+  const mode = v as ToggleLock;
+  const unfit = new Set(unfitTargets(d.value.lock_targets, props.lockChoices ?? [], mode).map(targetKey));
+  droppedForValue.value = unfit.size;
+  const kept = (d.value.lock_targets ?? []).filter((t) => !unfit.has(targetKey(t)));
+  patch({ lock: mode, lock_targets: kept.length ? kept : undefined });
 }
 /** Picked targets the canvas no longer has (node or row gone). */
 const goneTargets = computed(() => (props.lockChoices ? missingTargets(d.value.lock_targets, props.lockChoices) : []));
-const lockOptions = computed(() => [
-  ...(props.lockChoices ?? []).map((c) => ({ value: targetKey(c), label: c.label, ...(c.wildcard ? {} : { hint: "seed only" }) })),
-  ...goneTargets.value.map((t) => ({ value: targetKey(t), label: `${t.node} · missing row`, hint: "not on the canvas" })),
-]);
+/** The rows the picked mode can lock (Lock value: wildcards only), each
+ *  with its module's icon, plus picked rows that are gone. */
+const lockOptions = computed(() => {
+  const mode = d.value.lock ?? "seed";
+  return [
+    ...(props.lockChoices ?? []).filter((c) => canLock(c, mode)).map((c) => ({
+      value: targetKey(c),
+      label: c.label,
+      icon: kindIcon(c.kind),
+      iconColor: kindColorVar(c.kind),
+    })),
+    ...goneTargets.value.map((t) => ({ value: targetKey(t), label: `${t.node} · missing row`, hint: "not on the canvas", icon: "pi pi-exclamation-triangle", iconColor: "var(--wp-danger)" })),
+  ];
+});
 function setTargets(v: string[] | string | null): void {
   const keys = Array.isArray(v) ? v : [];
   const known = new Map<string, LockTarget>([
@@ -114,6 +137,10 @@ function setTargets(v: string[] | string | null): void {
   const list = keys.map((k) => known.get(k)).filter((t): t is LockTarget => !!t);
   patch({ lock_targets: list.length ? list : undefined });
 }
+const droppedNote = computed(() => {
+  const n = droppedForValue.value;
+  return `Lock value takes wildcards only, so ${n} picked row${n === 1 ? " that can only lock its seed was" : "s that can only lock their seed were"} taken off. Pick Lock seed to lock ${n === 1 ? "it" : "them"}.`;
+});
 const goneNote = computed(() => {
   const n = goneTargets.value.length;
   return `${n} picked row${n === 1 ? " is" : "s are"} no longer on the canvas (${[...new Set(goneTargets.value.map((t) => t.node))].join(", ")}). Untick ${n === 1 ? "it" : "them"} or put the node back.`;
@@ -156,6 +183,18 @@ function pickColor(v: string): string | undefined {
 
 /** The preview's switch: Any on shows (and flips) the draft's own choice. */
 const previewOn = computed(() => (props.pickOne ? props.shownOn : d.value.on));
+/** The preview's mute / bypass icon, from the draft: it shows as soon as
+ *  When off is set, and follows Invert and the switch. */
+const previewControl = computed<ControlState | null>(() => {
+  const c = d.value.control;
+  if (!c) return null;
+  const on = props.pickOne ? props.effOn : d.value.on && !props.blocked;
+  const word = c === "mute" ? "Mutes" : "Bypasses";
+  const hint = props.controlState && props.controlState.control === c
+    ? props.controlState.hint
+    : `${word} when ${d.value.invert ? "on" : "off"}: what is wired into the dot${d.value.groups?.length ? " and the picked groups" : ""}`;
+  return { control: c, active: drivesOff(on, d.value.invert), hint };
+});
 /** The header wears the toggle's own looks: icon colour (else its control
  *  colour), control colour on the chip, name colour on the name line. */
 const headStyle = computed(() => {
@@ -169,6 +208,18 @@ function previewSet(on: boolean): void {
   if (!props.pickOne) patch({ on });
 }
 
+/** One line on the Advanced header: what the toggle also does. */
+const advSummary = computed(() => {
+  const parts: string[] = [];
+  const c = d.value.control;
+  if (c) parts.push(`${c === "mute" ? "Mutes" : "Bypasses"} when ${d.value.invert ? "on" : "off"}`);
+  const n = d.value.lock_targets?.length ?? 0;
+  if (d.value.lock) parts.push(`Locks ${d.value.lock === "value" ? "the value of" : "the seed of"} ${n} row${n === 1 ? "" : "s"}`);
+  if (d.value.upstream) parts.push("Upstream can set it");
+  return parts.join(" · ");
+});
+/** Advanced starts open when anything in it is set. */
+const advOpen = ref(!!(props.t.control || props.t.lock || props.t.upstream));
 // Closing with changes (Escape, ×, Cancel) asks first.
 const asking = ref(false);
 function cancel(): void {
@@ -219,7 +270,7 @@ function onKey(ev: KeyboardEvent): void {
         group-id=""
         :outputs-full="outputsFull"
         :editable="false"
-        :control-state="controlState"
+        :control-state="previewControl"
         @set-on="previewSet"
       />
     </div>
@@ -372,92 +423,101 @@ function onKey(ev: KeyboardEvent): void {
             @update:model-value="(v: string) => patch({ needs: v || undefined })"
           />
         </div>
-        <div class="wp-tgr__field">
-          <span>When off <em>also mute or bypass other nodes</em></span>
-          <WpSegmented
-            :model-value="d.control ?? ''"
-            :options="CONTROLS"
-            size="sm"
-            block
-            aria-label="When off"
-            test-prefix="tg-control"
-            @update:model-value="setControl"
-          />
-        </div>
-        <span v-if="d.control" v-tooltip="'Mute or bypass while the toggle is ON instead, for a node used only as a switchboard'" v-toggle-row class="wp-tgr__check">
-          <Checkbox
-            :model-value="!!d.invert"
-            size="sm"
-            aria-label="Invert"
-            data-test="tg-invert"
-            @update:model-value="(v: boolean) => patch({ invert: v ? true : undefined })"
-          />
-          <span aria-hidden="true">Invert: {{ d.control === "mute" ? "mute" : "bypass" }} while on</span>
-        </span>
-        <div v-if="d.control" class="wp-tgr__field">
-          <span>Canvas groups <em>wire nodes into the dot in front of the row, or pick groups</em></span>
-          <Combobox
-            :model-value="d.groups ?? []"
-            multiple
-            :options="(canvasGroups ?? []).map((g) => ({ value: g, label: g }))"
-            placeholder="No groups"
-            size="sm"
-            aria-label="Canvas groups"
-            data-test="tg-groups"
-            @update:model-value="setGroups"
-          />
-        </div>
-        <span
-          v-if="d.control"
-          v-tooltip="d.hide_dot ? 'Only the groups above are muted or bypassed' : 'Untick for a toggle that drives only canvas groups; a wire in the dot is dropped'"
-          v-toggle-row
-          class="wp-tgr__check"
-        >
-          <Checkbox
-            :model-value="!d.hide_dot"
-            size="sm"
-            aria-label="Wire dot"
-            data-test="tg-dot"
-            @update:model-value="(v: boolean) => patch({ hide_dot: v ? undefined : true })"
-          />
-          <span aria-hidden="true">Wire dot in front of the row</span>
-        </span>
-        <div class="wp-tgr__field">
-          <span>When on <em>also lock rows of WP Context nodes</em></span>
-          <WpSegmented
-            :model-value="d.lock ?? ''"
-            :options="LOCKS"
-            size="sm"
-            block
-            aria-label="When on"
-            test-prefix="tg-lock"
-            @update:model-value="setLock"
-          />
-        </div>
-        <div v-if="d.lock" class="wp-tgr__field">
-          <span>Rows to lock <em>any WP Context on the canvas, no wire needed</em></span>
-          <Combobox
-            :model-value="(d.lock_targets ?? []).map(targetKey)"
-            multiple
-            :options="lockOptions"
-            placeholder="No rows"
-            size="sm"
-            aria-label="Rows to lock"
-            data-test="tg-lock-targets"
-            @update:model-value="setTargets"
-          />
-        </div>
-        <Banner v-if="d.lock && goneTargets.length" tone="danger" size="sm" data-test="tg-lock-missing">{{ goneNote }}</Banner>
-        <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" v-toggle-row class="wp-tgr__check">
-          <Checkbox
-            :model-value="!!d.upstream"
-            size="sm"
-            aria-label="Upstream can set it"
-            data-test="tg-upstream"
-            @update:model-value="(v: boolean) => patch({ upstream: v ? true : undefined })"
-          />
-          <span aria-hidden="true">Upstream can set it</span>
-        </span>
+        <Disclosure v-model:open="advOpen" boxed size="sm" label="Advanced" :trigger-attrs="{ 'data-test': 'tg-advanced' }">
+          <template #summary>
+            <span class="wp-tgw__adv">Advanced</span>
+            <span v-if="advSummary" class="wp-tgw__adv-sum" data-test="tg-advanced-summary">{{ advSummary }}</span>
+          </template>
+          <div class="wp-tgw__adv-body">
+          <div class="wp-tgr__field">
+            <span>When off <em>also mute or bypass other nodes</em></span>
+            <WpSegmented
+              :model-value="d.control ?? ''"
+              :options="CONTROLS"
+              size="sm"
+              block
+              aria-label="When off"
+              test-prefix="tg-control"
+              @update:model-value="setControl"
+            />
+          </div>
+          <span v-if="d.control" v-tooltip="'Mute or bypass while the toggle is ON instead, for a node used only as a switchboard'" v-toggle-row class="wp-tgr__check">
+            <Checkbox
+              :model-value="!!d.invert"
+              size="sm"
+              aria-label="Invert"
+              data-test="tg-invert"
+              @update:model-value="(v: boolean) => patch({ invert: v ? true : undefined })"
+            />
+            <span aria-hidden="true">Invert: {{ d.control === "mute" ? "mute" : "bypass" }} while on</span>
+          </span>
+          <div v-if="d.control" class="wp-tgr__field">
+            <span>Canvas groups <em>wire nodes into the dot in front of the row, or pick groups</em></span>
+            <Combobox
+              :model-value="d.groups ?? []"
+              multiple
+              :options="(canvasGroups ?? []).map((g) => ({ value: g, label: g }))"
+              placeholder="No groups"
+              size="sm"
+              aria-label="Canvas groups"
+              data-test="tg-groups"
+              @update:model-value="setGroups"
+            />
+          </div>
+          <span
+            v-if="d.control"
+            v-tooltip="d.hide_dot ? 'Only the groups above are muted or bypassed' : 'Untick for a toggle that drives only canvas groups; a wire in the dot is dropped'"
+            v-toggle-row
+            class="wp-tgr__check"
+          >
+            <Checkbox
+              :model-value="!d.hide_dot"
+              size="sm"
+              aria-label="Wire dot"
+              data-test="tg-dot"
+              @update:model-value="(v: boolean) => patch({ hide_dot: v ? undefined : true })"
+            />
+            <span aria-hidden="true">Wire dot in front of the row</span>
+          </span>
+          <div class="wp-tgr__field">
+            <span>When on <em>also lock rows of WP Context nodes</em></span>
+            <WpSegmented
+              :model-value="d.lock ?? ''"
+              :options="LOCKS"
+              size="sm"
+              block
+              aria-label="When on"
+              test-prefix="tg-lock"
+              @update:model-value="setLock"
+            />
+          </div>
+          <div v-if="d.lock" class="wp-tgr__field">
+            <span>Rows to lock <em>any WP Context on the canvas, no wire needed</em></span>
+            <Combobox
+              :model-value="(d.lock_targets ?? []).map(targetKey)"
+              multiple
+              :options="lockOptions"
+              placeholder="No rows"
+              size="sm"
+              aria-label="Rows to lock"
+              data-test="tg-lock-targets"
+              @update:model-value="setTargets"
+            />
+          </div>
+          <Banner v-if="d.lock && goneTargets.length" tone="danger" size="sm" data-test="tg-lock-missing">{{ goneNote }}</Banner>
+          <Banner v-if="d.lock === 'value' && droppedForValue" tone="info" size="sm" data-test="tg-lock-dropped">{{ droppedNote }}</Banner>
+          <span v-tooltip="'When the upstream Context holds this variable as a yes/no word (true, on, 1, no …), it sets the switch'" v-toggle-row class="wp-tgr__check">
+            <Checkbox
+              :model-value="!!d.upstream"
+              size="sm"
+              aria-label="Upstream can set it"
+              data-test="tg-upstream"
+              @update:model-value="(v: boolean) => patch({ upstream: v ? true : undefined })"
+            />
+            <span aria-hidden="true">Upstream can set it</span>
+          </span>
+          </div>
+        </Disclosure>
         <div v-if="groupOptions.length" class="wp-tgr__field">
           <span>Group</span>
           <WpSelect
@@ -539,6 +599,9 @@ function onKey(ev: KeyboardEvent): void {
 /* The window is the panel: no second box around it. */
 .wp-tgw__body .wp-tgr__edit { padding: 0; border: 0; background: none; }
 .wp-tgr__edit { display: flex; flex-direction: column; gap: 10px; }
+.wp-tgw__adv { font-size: 11px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-tgw__adv-sum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
+.wp-tgw__adv-body { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 6px; }
 .wp-tgr__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wp-tgr__field > span { font-size: 10.5px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-tgr__field em { font-style: normal; font-weight: 400; color: var(--wp-text-dim, var(--wp-text3)); margin-left: 4px; }

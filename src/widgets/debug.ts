@@ -64,9 +64,14 @@ function nodeInfo(id: string): { title: string; codename: string } {
  *  or the field that writes a variable) blinks once the node is in view. */
 export function focusNode(id: string, target?: FlashTarget): void {
   const hit = findExecNode(id);
+  if (hit) revealNode(hit.node, hit.graph, target);
+}
+
+/** Select + centre `node`, which lives in `graph` (opened first when it
+ *  isn't the one on screen); with a `target`, blink that row of it. */
+export function revealNode(node: LiteNodeLike, graph: LiteGraphLike, target?: FlashTarget): void {
   const canvas = (app as unknown as { canvas?: CanvasLike }).canvas;
-  if (!hit || !canvas) return;
-  const node = hit.node;
+  if (!canvas) return;
   const show = (): void => {
     const c = node as unknown as CollapsibleNode;
     if (c.flags?.collapsed && typeof c.collapse === "function") c.collapse(true);
@@ -75,7 +80,7 @@ export function focusNode(id: string, target?: FlashTarget): void {
     canvas.setDirty?.(true, true);
     if (target) flashInNode(node, target);
   };
-  showGraph(canvas, hit.graph, show);
+  showGraph(canvas, graph, show);
 }
 
 export function create(node: DebugNode, inputName: string) {
