@@ -17,6 +17,7 @@ import {
   comboFromEvent,
   defaultBookmarkConfig,
   easeInOutCubic,
+  frameRect,
   jumpDuration,
   jumpFields,
   jumpOffset,
@@ -721,6 +722,34 @@ export function jumpTo(node: BookmarkNode): void {
     const config = readConfig(node);
     const scale = jumpScale(config, c.ds.scale);
     const offset = landingOffset(c, nodeRect(node), config, scale);
+    animateView(c, offset, scale);
+  });
+  notify();
+}
+
+/** Glide the view to frame canvas `rect` of `graph` (WP Toggles' "show the
+ *  targets"), clear of the host's bars, the minimap and the dock. Zooms out
+ *  to fit, but never in past 100% or the current zoom, whichever is more.
+ *  The view before goes on the Back stack like a bookmark jump. */
+export function jumpToRect(graph: LiteGraphLike | null | undefined, rect: readonly [number, number, number, number]): void {
+  const c = canvasOf();
+  if (!c?.ds) return;
+  history.push(currentView(c));
+  if (history.length > HISTORY_MAX) history.shift();
+  showGraph(c, graph, () => {
+    if (!c.ds) return;
+    const cr = c.canvas?.getBoundingClientRect();
+    const area = freeArea(c.canvas);
+    const [vw, vh] = viewportSize(c);
+    const left = area.free[0] - (cr?.left ?? 0);
+    const top = area.free[1] - (cr?.top ?? 0);
+    const inset: [number, number, number, number] = [
+      Math.max(0, left),
+      Math.max(0, top),
+      Math.max(0, vw - (area.free[2] - (cr?.left ?? 0))),
+      Math.max(0, vh - (area.free[3] - (cr?.top ?? 0))),
+    ];
+    const { scale, offset } = frameRect(rect, [vw, vh], inset, BOOKMARK_MARGIN * 2, Math.max(1, c.ds.scale));
     animateView(c, offset, scale);
   });
   notify();

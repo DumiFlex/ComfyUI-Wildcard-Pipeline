@@ -106,7 +106,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         a toggle that is off because of them drives its nodes off too. A toggle can do all of it at
         once: write <VarToken>$its_variable</VarToken>, send its BOOLEAN and mute or bypass. Once
         something is wired, an icon next to the name shows it: coloured while it is muting or
-        bypassing, dim while not; hover it for the nodes.
+        bypassing, dim while not; hover it for the nodes. Click it to see them: the canvas glides to
+        the wired node or group. When it drives several (a WP Node Group's nodes, or canvas groups
+        you picked) the click opens a list: <b>All targets</b> frames them together, or pick one.
+        The Bookmarks dock's Back takes you where you were.
       </p>
       <DocImage
         src="images/docs/wp-node-group.png"
