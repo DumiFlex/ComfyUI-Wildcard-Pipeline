@@ -247,7 +247,74 @@ def test_filter_variable_set_between_source_and_target_is_looked_ahead():
         assert not [w for w in ctx["__wp_warnings__"] if w["type"] == "backward_late_variable"]
 
 
-def test_filter_variable_that_depends_on_the_source_warns():
+def test_filter_variable_that_depends_on_the_source_is_tried_per_option():
+    # want = bed for lying, else seat: lying → beds, sitting → seats, both fit;
+    # standing → seats, which only accept sitting, so standing is dropped.
+    places = _places({"category_filter": "$want"})
+    seen = set()
+    for seed in range(60):
+        ctx = _run([_poses(), _writer("want", "bed", reads="pose"), _rule(), places], seed)
+        assert ctx["pose"] != "standing", seed
+        assert _fits(ctx["pose"], ctx["place"]), seed
+        assert not [w for w in ctx["__wp_warnings__"] if w["type"] == "backward_late_variable"]
+        seen.add(ctx["pose"])
+    assert seen == {"sitting", "lying"}
+
+
+def test_too_many_source_values_to_try_warns(monkeypatch):
+    from engine.modules import _backward
+
+    monkeypatch.setattr(_backward, "MAX_ENUM", 1)
     places = _places({"category_filter": "$want"})
     ctx = _run([_poses(), _writer("want", "bed", reads="pose"), _rule(), places], 4)
     assert any(w["type"] == "backward_late_variable" for w in ctx["__wp_warnings__"])
+
+
+def _need_rule() -> dict:
+    """pose → $pose_need: sitting → seat, lying → bed, else street."""
+    def act(v: str) -> dict:
+        return {"mode": "replace", "target_var": "pose_need", "value": v}
+
+    rules = [{"id": "r1", "branches": [
+        {"condition": {"var": "pose", "op": "equals", "value": "sitting"}, "action": act("seat")},
+        {"condition": {"var": "pose", "op": "equals", "value": "lying"}, "action": act("bed")},
+    ], "else": {"action": act("street")}}]
+    return {"type": "derivation", "id": "der00002", "_uid": "der00002",
+            "payload": {"rules": rules}, "instance": {}}
+
+
+def _mirror() -> dict:
+    """Takes the option named by $pose_need (Match variable)."""
+    return _wildcard("mirr0001", "need_kind", [
+        _opt("seat", ["seat"]), _opt("bed", ["bed"]), _opt("street", ["street"]),
+    ], {"match_variable": "pose_need"})
+
+
+def _mirror_rule() -> dict:
+    return {
+        "type": "constraint", "id": "con00009", "_uid": "con00009",
+        "payload": {
+            "source_wildcard_id": "mirr0001", "target_wildcard_id": "plac0001",
+            "matrix": {k: {k: {"mode": "only", "factor": 1}} for k in ("seat", "bed", "street")},
+            "exceptions": [],
+        },
+        "instance": {},
+    }
+
+
+def test_rule_and_mirror_between_pose_and_place():
+    # The WP Parts chain: no constraint from the pose itself. The pose sets
+    # $pose_need through a rule, a mirror matches it, the mirror rules the
+    # place. Only beds are left, so the pose must be the one that needs a bed.
+    beds = _places({"category_filter": "bed"})
+    for seed in range(40):
+        ctx = _run([_poses(), _need_rule(), _mirror(), _mirror_rule(), beds], seed)
+        assert ctx["pose"] == "lying", seed
+        assert ctx["need_kind"] == "bed", seed
+        assert ctx["place"] in {"bed", "hammock"}, seed
+
+
+def test_rule_and_mirror_with_nothing_narrowed_rolls_as_before():
+    plain = [_poses(), _need_rule(), _mirror(), _mirror_rule(), _places()]
+    seen = {_run(plain, seed)["pose"] for seed in range(40)}
+    assert seen == {"sitting", "lying", "standing"}

@@ -105,16 +105,22 @@ const reachModes = [
       <p>
         If a module between the source and the target sets a variable the target's filter reads
         (a rule, say), the source runs it ahead to see what it will be. When that variable comes
-        from the source's own pick, nothing can know it in advance: that part of the filter is not
-        counted and WP Debug warns (<code>backward_late_variable</code>). The run is one pass, so
-        nothing is ever re-picked and a circle of rules can't loop.
+        from the source's own pick, the source tries each of its options in turn and keeps the
+        ones that lead somewhere the target can follow. The same works through a rule and a
+        mirror with no constraint from the source itself: the pose sets
+        <VarToken>$pose_need</VarToken> through a rule, a mirror wildcard matches it and a
+        constraint from the mirror rules the place; with only beds left, the pose picks something
+        that needs a bed. Past 32 different options it stops trying: that part of the filter is
+        not counted and WP Debug warns (<code>backward_late_variable</code>). The run is one pass,
+        so nothing is ever re-picked and a circle of rules can't loop.
         This follows chains (mood → pose → place) and every reach setting. A source with a locked
         seed still rolls inside what fits, as it does under a normal constraint; a source with a
         locked value is never changed, and WP Debug warns when it clashes with the locked target
         (<code>locked_value_conflict</code>). When nothing fits, the source takes its fallback, or
         rolls as usual with a <code>backward_no_fit</code> warning. A target nothing narrows never
         pushes back, so those runs roll exactly as before. For now it looks at targets in the same
-        Context, used directly (not inside a reference), and at constraints only, not derivations.
+        Context, used directly (not inside a reference), and a rule sees only the source's own
+        variable (not its axes or picks).
         WP Debug marks the dropped options "doesn't fit <VarToken>$place</VarToken>".
       </p>
     </DocSection>
