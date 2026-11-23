@@ -443,8 +443,10 @@ function applyWindow(next: SliderRow): void {
   font: 12px var(--wp-font-sans, sans-serif);
 }
 .wp-pad--skipped { opacity: 0.45; }
-.wp-pad__read { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; min-width: 0; }
-.wp-pad__read[data-dims="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+/* The axis chips share the row and grow to fill it; a chip never squeezes
+   below its own name and variable but wraps onto the next line instead
+   (only a chip wider than the whole node cuts its text). */
+.wp-pad__read { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
 .wp-pad__phrase {
   display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 6px;
   font: 10.5px/16px var(--wp-font-mono, monospace);
@@ -452,9 +454,9 @@ function applyWindow(next: SliderRow): void {
 }
 .wp-pad__phrase > span { flex: none; }
 .wp-pad__phrase .is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
-.wp-pad__phrase .wp-pad__phrase-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--wp-font-sans, sans-serif); font-size: 11.5px; color: var(--wp-text); }
+.wp-pad__phrase .wp-pad__phrase-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--wp-font-sans, sans-serif); font-size: 11.5px; color: var(--wp-text); }
 .wp-pad__axis {
-  display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 34px;
+  display: flex; align-items: center; gap: 6px; flex: 1 1 auto; max-width: 100%; min-height: 34px;
   padding: 2px 6px; box-sizing: border-box;
   background: var(--wp-bg2, var(--wp-bg-1)); border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
@@ -467,7 +469,7 @@ function applyWindow(next: SliderRow): void {
 .wp-pad__sub .is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-pad__holds { font-family: var(--wp-font-sans, sans-serif); color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-pad__num { flex: none; font: 500 12px var(--wp-font-mono, monospace); }
-.wp-pad__warn { font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
+.wp-pad__warn { flex: none; font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-pad__box { display: flex; justify-content: center; min-width: 0; }
 .wp-pad__box[data-z] { gap: 8px; align-items: stretch; }
 .wp-pad__box[data-z] > .wp-xypad { flex: 1 1 auto; min-width: 0; }
