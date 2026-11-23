@@ -84,6 +84,8 @@ export interface RawDetail {
   separator?: string;
   /** `match_variable`: the value the variable held. */
   match_value?: string;
+  /** Matched an option of the wildcard a lone-ref option points at. */
+  deep?: boolean;
   /** Every option of the use: library weight, final weight (null when the
    *  filter or a toggle took it out), why it can't be drawn. */
   options?: RawOptionRow[];

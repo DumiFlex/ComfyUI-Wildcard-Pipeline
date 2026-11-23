@@ -606,6 +606,46 @@ def _warn_locked_conflict(
         )
 
 
+def _editor_text(value: str, catalog: dict[str, Any]) -> str:
+    """``value`` as the editor shows it: each ``@{uuid…}`` ref as ``@Name``
+    (the referenced wildcard's name, else the name cached in the ref)."""
+    from engine.syntax.tokenize import _REF_RE
+
+    def name(m: Any) -> str:
+        row = catalog.get(m.group(1))
+        got = row.get("name") if isinstance(row, dict) else None
+        return "@" + str(got or m.group(2) or m.group(1)).strip()
+
+    return _REF_RE.sub(name, value)
+
+
+def _deep_match(
+    options: list[dict[str, Any]], wanted: str, catalog: dict[str, Any],
+) -> tuple[dict[str, Any], str, str] | None:
+    """(outer option, ref uuid, inner option id) for the first option that is
+    a lone ``@{uuid}`` ref whose wildcard has an option equal to ``wanted``
+    (stored or editor text). One level deep."""
+    from engine.syntax.tokenize import _REF_RE
+
+    for o in options:
+        m = _REF_RE.fullmatch(str(o.get("value") or "").strip())
+        if not m:
+            continue
+        row = catalog.get(m.group(1))
+        payload = row.get("payload") if isinstance(row, dict) else None
+        inner = payload.get("options") if isinstance(payload, dict) else None
+        for i in inner if isinstance(inner, list) else []:
+            if not isinstance(i, dict) or i.get("value") is None or i.get("is_null"):
+                continue
+            text = str(i.get("value", ""))
+            if text.strip().lower() == wanted or (
+                "@{" in text and _editor_text(text, catalog).strip().lower() == wanted
+            ):
+                if i.get("id") is not None:
+                    return o, m.group(1), str(i.get("id"))
+    return None
+
+
 def _match_variable_option(
     ctx: Any, options: list[dict[str, Any]], var_name: str,
 ) -> tuple[dict[str, Any] | None, str]:
@@ -618,11 +658,30 @@ def _match_variable_option(
     raw = ctx.get(name) if ctx is not None else None
     wanted = "" if raw is None else str(raw).strip().lower()
     if wanted:
+        catalog = ctx.get("__wp_catalog__") if ctx is not None else None
+        catalog = catalog if isinstance(catalog, dict) else {}
         for o in options:
             if o.get("value") is None:
                 continue
             if str(o.get("value", "")).strip().lower() == wanted:
                 return o, "match_variable"
+        # As the editor shows it: `red @Hat` for `red @{1a2b3c4d}`.
+        for o in options:
+            if o.get("value") is None or "@{" not in str(o.get("value")):
+                continue
+            if _editor_text(str(o.get("value")), catalog).strip().lower() == wanted:
+                return o, "match_variable"
+        # Deep: an option that is just a ref (`@Places`) matches when one of
+        # the referenced wildcard's options does; the ref is then told to
+        # take that option (`REF_PINS_KEY`).
+        deep = _deep_match(options, wanted, catalog)
+        if deep is not None:
+            outer, uuid, inner_id = deep
+            if isinstance(ctx, dict):
+                from engine.modules import REF_PINS_KEY
+
+                ctx[REF_PINS_KEY] = {uuid: inner_id}
+            return outer, "match_deep"
     fallback = find_fallback(options)
     if fallback is not None:
         return fallback, "match_fallback"
@@ -1137,14 +1196,24 @@ class WildcardHandler(ModuleHandler):
                 ):
                     detail["swept"] = True
                 if pin_mode not in ("pinned", "locked"):
+                    if pin_mode == "match_deep":
+                        detail["mode"] = "match_variable"
+                        detail["deep"] = True
                     detail["match_variable"] = match_var.strip()
                     raw_match = ctx.get(match_var.strip())
                     detail["match_value"] = "" if raw_match is None else str(raw_match)
             value = str(pinned.get("value", ""))
-            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
-                int(ctx.get("__wp_node_seed__", 0) or 0),
-                f"{instance_key(ctx, binding)}/{pinned.get('id')}",
-            ))
+            from engine.modules import REF_PINS_KEY
+
+            if pin_mode != "match_deep":
+                ctx.pop(REF_PINS_KEY, None)
+            try:
+                resolve_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
+                    int(ctx.get("__wp_node_seed__", 0) or 0),
+                    f"{instance_key(ctx, binding)}/{pinned.get('id')}",
+                ))
+            finally:
+                ctx.pop(REF_PINS_KEY, None)
             with negatives.collecting(resolve_ctx) as col:
                 out_value = resolve_text(value, resolve_ctx) if value else ""
             _file_negatives(

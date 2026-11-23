@@ -258,7 +258,10 @@ def _domain(
     if isinstance(match_var, str) and match_var.strip():
         name = match_var.strip().lstrip("$")
         if get(name) is not None:
-            hit, _how = _match_variable_option({name: get(name)}, pool, match_var.strip())
+            hit, _how = _match_variable_option(
+                {name: get(name), "__wp_catalog__": ctx.get("__wp_catalog__")},
+                pool, match_var.strip(),
+            )
             if hit is not None:
                 return [hit]
     overrides = inst.get("option_weights")
