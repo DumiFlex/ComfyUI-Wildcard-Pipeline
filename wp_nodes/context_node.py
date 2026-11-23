@@ -369,15 +369,16 @@ class WPContext(io.ComfyNode):
             es = entry.get("seed")
             if isinstance(key, str) and key and isinstance(es, int):
                 module_seeds[key] = es
-        # The option each wildcard use of THIS node picked (single picks only),
+        # The option each wildcard use of THIS node picked,
         # by `_uid`, so the row lock's second state can pin it (lock value).
         own_uids = {
             e.get("_uid") for e in ctx.get("__wp_trace__", []) if isinstance(e, dict)
         }
         raw_picks = ctx.get(OPTION_PICKS_KEY)
-        module_picks: dict[str, str] = {
+        # A multi-pick use lists every option it picked.
+        module_picks: dict[str, str | list[str]] = {
             str(uid): oid for uid, oid in (raw_picks.items() if isinstance(raw_picks, dict) else [])
-            if uid in own_uids and isinstance(oid, str)
+            if uid in own_uids and (isinstance(oid, str) or isinstance(oid, list))
         }
         # The Loop's full derived per-iteration series (present only when the
         # Loop drives seeds via override). Captured by the frontend so the

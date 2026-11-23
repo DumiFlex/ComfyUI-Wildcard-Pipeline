@@ -65,6 +65,7 @@ def test_freeze_snapshot_includes_required_fields():
         "pinned_option_id": None,
         "locked_seed": None,
         "locked_option_id": None,
+        "locked_option_ids": None,
         "internal": None,
         "disabled_rule_ids": None,
         "disabled_exception_keys": None,

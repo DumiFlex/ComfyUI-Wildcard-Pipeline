@@ -26,7 +26,7 @@ import { collectCrossNodePairingsFull, collectFullChainModules } from "../extens
 import { deriveLoopSeeds, applySeedLocks, effectiveChainSeed } from "../components/shared/seed-derive";
 import type { ChainModule, PairingBadge, RowPairings, TargetSelect } from "../extension/constraint-pairs";
 import { reactiveFromGraph, stringArrayEqual } from "../extension/reactive";
-import { nodeFrameSeeds, nodeLastPicks, nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds, nodeSeedSource } from "../extension/_stashes";
+import { nodeFrameSeeds, nodeLastPicks, nodeLastUsedPerModule, nodeLastUsedSeed, nodeLoopSeeds, nodeSeedSource, type LastPick } from "../extension/_stashes";
 import { parseSeedsConfig, seedRows, SEED_FROM_AUTO, SEED_FROM_OWN } from "../extension/seeds";
 import { applyVarAccessor, type ResolvedValue } from "./richTokenize";
 import { inputLinkId } from "../extension/slot-links";
@@ -525,11 +525,11 @@ export function create(node: ContextNode, inputName: string) {
 
       // The option a wildcard use picked last run (lock value). With a frame
       // active, what it picked on that frame; null when unknown.
-      function lastPickReader(uid: string, frame: number | null): string | null {
+      function lastPickReader(uid: string, frame: number | null): LastPick | null {
         const picks = nodeLastPicks.get(node);
         if (!picks) return null;
         const v = frame != null ? picks.frames.get(frame)?.[uid] : picks.all[uid];
-        return typeof v === "string" && v ? v : null;
+        return v ?? null;
       }
 
       // Per-frame seed reader for the iteration-frame lock. Computes the seed
@@ -703,9 +703,16 @@ export function create(node: ContextNode, inputName: string) {
     }
     return undefined;
   }
-  function stringMap(raw: object): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(raw)) if (typeof v === "string" && v) out[k] = v;
+  /** Row → its pick: an option id, or a multi-pick row's ids. */
+  function pickMap(raw: object): Record<string, LastPick> {
+    const out: Record<string, LastPick> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === "string" && v) out[k] = v;
+      else if (Array.isArray(v)) {
+        const ids = v.filter((i): i is string => typeof i === "string" && !!i);
+        if (ids.length) out[k] = ids;
+      }
+    }
     return out;
   }
   function onExecuted(ev: Event) {
@@ -755,12 +762,12 @@ export function create(node: ContextNode, inputName: string) {
     // a list run's UI outputs).
     const rawPicks = pickArrayValue(out, "module_picks");
     if (rawPicks && typeof rawPicks === "object" && !Array.isArray(rawPicks)) {
-      const all = stringMap(rawPicks);
-      const frames = new Map<number, Record<string, string>>();
+      const all = pickMap(rawPicks);
+      const frames = new Map<number, Record<string, LastPick>>();
       if (Array.isArray(out.frame_picks)) {
         for (const f of out.frame_picks) {
           const { frame, picks } = (f ?? {}) as { frame?: unknown; picks?: unknown };
-          if (typeof frame === "number" && picks && typeof picks === "object") frames.set(frame, stringMap(picks));
+          if (typeof frame === "number" && picks && typeof picks === "object") frames.set(frame, pickMap(picks));
         }
       }
       nodeLastPicks.set(node, { all, frames });

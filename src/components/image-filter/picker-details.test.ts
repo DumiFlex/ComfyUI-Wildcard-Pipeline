@@ -42,6 +42,23 @@ describe("picker details", () => {
     ]);
   });
 
+  it("marks a value the cleaner trimmed or reordered piece by piece", () => {
+    const rows = [{ name: "subject", value: "adult, petite, medium breasts, ", axis: -1 }];
+    // As written (trailing comma trimmed off the value).
+    expect(promptRuns("1girl, adult, petite, medium breasts", rows)).toEqual([
+      { text: "1girl, " },
+      { text: "adult, petite, medium breasts", name: "subject", axis: -1 },
+    ]);
+    // Reordered by a cleaner: each part is marked where it is.
+    expect(promptRuns("medium breasts, 1girl, adult, petite", rows)).toEqual([
+      { text: "medium breasts", name: "subject", axis: -1 },
+      { text: ", 1girl, " },
+      { text: "adult", name: "subject", axis: -1 },
+      { text: ", " },
+      { text: "petite", name: "subject", axis: -1 },
+    ]);
+  });
+
   it("copies values as $name: value lines", () => {
     expect(valuesText([{ name: "hair", value: "red", axis: 0 }], 42)).toBe("$hair: red\nseed: 42");
   });

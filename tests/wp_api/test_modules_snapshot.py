@@ -32,7 +32,7 @@ async def test_snapshot_returns_frozen_shape(wp_client):
         "exclude_null": None, "pick_min": None, "pick_max": None, "pick_separator": None,
         "pick_independent": None,
         "mode": None, "pinned_option_id": None,
-        "locked_seed": None, "locked_option_id": None, "internal": None,
+        "locked_seed": None, "locked_option_id": None, "locked_option_ids": None, "internal": None,
         "disabled_rule_ids": None, "disabled_exception_keys": None,
         "disabled_matrix_cells": None,
     }

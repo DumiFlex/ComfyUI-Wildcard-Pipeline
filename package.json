@@ -35,7 +35,7 @@
     "announce": "node scripts/discord-announce.mjs"
   },
   "dependencies": {
-    "@dumiflex/wp-kit": "github:DumiFlex/wp-kit#5ed326fd41b0815e6cbdc6870c7e174a1fc056df",
+    "@dumiflex/wp-kit": "github:DumiFlex/wp-kit#2ed885c53e32e4b767c50bbcaa7145ef1809234d",
     "pinia": "^2.2.6",
     "primeicons": "^8.0.2",
     "vue": "^3.5.45",

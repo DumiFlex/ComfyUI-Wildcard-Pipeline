@@ -555,6 +555,24 @@ def note_option_pick(ctx: dict[str, Any] | None, option_id: Any) -> None:
     ctx.setdefault(OPTION_PICKS_KEY, {})[uid] = option_id
 
 
+def note_option_picks(ctx: dict[str, Any] | None, option_ids: list[Any]) -> None:
+    """The multi-pick twin of :func:`note_option_pick`: every option the use
+    picked, in order (lock value on a multi-pick row)."""
+    if not isinstance(ctx, dict):
+        return
+    ids = [i for i in option_ids if isinstance(i, str) and i]
+    uid = ctx.get("__wp_current_module_uid__")
+    if not ids or not isinstance(uid, str) or not uid:
+        return
+    ctx.setdefault(OPTION_PICKS_KEY, {})[uid] = ids
+
+
+def locked_option_ids(instance: dict[str, Any]) -> list[str]:
+    """A multi-pick row's value lock (``locked_option_ids``), cleaned."""
+    raw = instance.get("locked_option_ids")
+    return [i for i in raw if isinstance(i, str) and i] if isinstance(raw, list) else []
+
+
 def _warn_pinned_missing(ctx: dict[str, Any] | None, pinned_id: Any) -> None:
     """A ``pinned`` instance whose option the library no longer has rolls
     normally; say so (a sweep frame relies on the pin, so a deleted option
@@ -1444,7 +1462,25 @@ class WildcardHandler(ModuleHandler):
                 ))
                 if detail is not None:
                     detail["fallback"] = True
-            if use_fallback:
+            locked_ids = locked_option_ids(instance)
+            locked_picks = [
+                o for o in (
+                    next((x for x in options if x.get("id") == i), None) for i in locked_ids
+                ) if o is not None
+            ]
+            if locked_ids and len(locked_picks) < len(locked_ids):
+                _warn_pinned_missing(ctx, next(
+                    i for i in locked_ids if not any(o.get("id") == i for o in options)
+                ))
+            if locked_picks:
+                # Value lock on a multi-pick row: the options the last run
+                # picked, in its order, whatever the count, seed or rules.
+                picks = locked_picks
+                for o in picks:
+                    _warn_locked_conflict(ctx, o, payload)
+                if detail is not None:
+                    detail["mode"] = "locked"
+            elif use_fallback:
                 # One fallback, never repeated: it stands in for the whole
                 # pick, so a `2-3` range doesn't render "hair, hair".
                 picks = [fallback] if hi > 0 and fallback is not None else []
@@ -1499,6 +1535,7 @@ class WildcardHandler(ModuleHandler):
                 for o in picks
             ]
             _record_pick_multi(ctx, picks, sep, payload, rolled_list)
+            note_option_picks(ctx, [o.get("id") for o in picks])
             if detail is not None:
                 detail["option_ids"] = [o.get("id") for o in picks]
                 detail["range"] = [lo, hi]

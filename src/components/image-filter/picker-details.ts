@@ -50,20 +50,33 @@ function onWordEdges(text: string, start: number, end: number): boolean {
     && !(after && WORD.test(after) && WORD.test(text[end - 1] ?? ""));
 }
 
+/** What to look for in the prompt for one value: the whole value (edge
+ *  commas trimmed) when it is there as written, else each of its
+ *  comma-separated parts, since a prompt cleaner can drop a repeated tag or
+ *  reorder them. */
+function needles(text: string, value: string): string[] {
+  const whole = value.trim().replace(/^[,\s]+|[,\s]+$/g, "");
+  if (whole.length < 2) return [];
+  if (text.includes(whole)) return [whole];
+  return whole.split(",").map((p) => p.trim()).filter((p) => p.length >= 2);
+}
+
 /** Split `text` so every place a value appears as whole words is its own
  *  run ("toe" never marks part of "cameltoe"). Longer values win where two
- *  overlap; values under 2 characters are skipped. */
+ *  overlap; values under 2 characters are skipped. A value the prompt only
+ *  holds in pieces (a cleaner dropped or moved a tag) marks each piece. */
 export function promptRuns(text: string, rows: readonly ValueRow[]): PromptRun[] {
   const marks: { start: number; end: number; row: ValueRow }[] = [];
-  const sorted = rows.filter((r) => r.value.trim().length >= 2).sort((a, b) => b.value.length - a.value.length);
-  for (const row of sorted) {
-    let at = text.indexOf(row.value);
+  const wanted = rows.flatMap((row) => needles(text, row.value).map((needle) => ({ needle, row })));
+  wanted.sort((a, b) => b.needle.length - a.needle.length);
+  for (const { needle, row } of wanted) {
+    let at = text.indexOf(needle);
     while (at >= 0) {
-      const end = at + row.value.length;
+      const end = at + needle.length;
       if (onWordEdges(text, at, end) && !marks.some((m) => at < m.end && end > m.start)) {
         marks.push({ start: at, end, row });
       }
-      at = text.indexOf(row.value, end);
+      at = text.indexOf(needle, end);
     }
   }
   marks.sort((a, b) => a.start - b.start);

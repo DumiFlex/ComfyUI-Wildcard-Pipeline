@@ -189,6 +189,24 @@ describe("PickerModal", () => {
     expect(w.find('[data-test="image-filter-zoom"]').exists()).toBe(true);
   });
 
+  it("clicking the clear space beside the picture in Detail steps left or right", async () => {
+    const w = mk(request([3]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    await root.trigger("keydown", { key: "d" });
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("1 / 3");
+    const fig = w.find('[data-test="image-filter-fig"]');
+    // jsdom lays nothing out: the figure's middle is x = 0.
+    await fig.trigger("click", { clientX: 5 });
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("2 / 3");
+    await fig.trigger("click", { clientX: -5 });
+    await fig.trigger("click", { clientX: -5 });
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("3 / 3");
+    // A click on the picture itself picks it, never steps.
+    await w.find('[data-test="image-filter-detail-img"]').trigger("click", { clientX: 5 });
+    expect(w.find('[data-test="image-filter-meta"]').text()).toContain("3 / 3");
+  });
+
   it("the strip in Detail jumps to an image; double-clicking it opens Zoom", async () => {
     const w = mk(request([4]));
     await w.vm.$nextTick();

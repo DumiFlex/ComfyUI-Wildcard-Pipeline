@@ -232,6 +232,20 @@ def test_frame_labels_carry_the_frames_variables_as_text():
     assert len(label["vars"]["long"]) == node_mod._MAX_VAR_TEXT
 
 
+def test_frame_vars_put_what_the_prompt_shows_first_so_the_cap_never_drops_it():
+    # WP Parts sets ~170 variables, most of them switches; $subject came 140th.
+    switches = {f"chip_{i}": "true" for i in range(node_mod._MAX_LABEL_VARS + 20)}
+    ctx = types.SimpleNamespace(
+        internals={},
+        context={**switches, "subject": "adult, petite, medium breasts, ", "place": "beach"},
+    )
+    prompt = "1girl, adult, medium breasts, petite, beach"
+    [label] = node_mod._frame_labels([ctx], [prompt], None, 1)
+    names = list(label["vars"])
+    assert names[:2] == ["subject", "place"]
+    assert len(names) == node_mod._MAX_LABEL_VARS
+
+
 def _fake_server(monkeypatch, reply=None, interrupt=False):
     """ComfyUI's PromptServer and interrupt check, and no preview files. The
     picker answers `reply` as soon as the request goes out."""

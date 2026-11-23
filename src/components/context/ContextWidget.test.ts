@@ -1426,6 +1426,30 @@ describe("ContextWidget inline actions", () => {
     expect(btn().attributes("data-lock")).toBe("off");
   });
 
+  it("lock value on a multi-pick row pins every pick", async () => {
+    const onChange = vi.fn();
+    const mod = {
+      id: "abc12345", _uid: "row00003", type: "wildcard", enabled: true,
+      meta: { name: "place", description: "", tags: [] }, entries: [], instance: { pick_min: 2, pick_max: 2 },
+      payload: { options: [{ id: "o-bed", value: "bedroom" }, { id: "o-bath", value: "bathroom" }] },
+    };
+    const wrapper = mount(ContextWidget, {
+      props: {
+        nodeId: 9052, initialJson: JSON.stringify({ version: 1, modules: [mod] }), upstreamVars: [], onChange,
+        lastUsedSeedReader: () => 4, lastPickReader: () => ["o-bath", "o-bed"],
+      },
+    });
+    const btn = () => wrapper.find('[data-test="row-action-lock"]');
+    const last = () => JSON.parse(onChange.mock.calls.at(-1)?.[0] as string).modules[0].instance;
+    await btn().trigger("click");
+    await btn().trigger("click");
+    expect(last().locked_option_ids).toEqual(["o-bath", "o-bed"]);
+    expect(wrapper.find('[data-test="mod-locked-value"]').text()).toContain("bathroom, bedroom");
+    await btn().trigger("click");
+    expect(last().locked_option_ids).toBeUndefined();
+    expect(btn().attributes("data-lock")).toBe("off");
+  });
+
   it("lock seed steps straight to off when the last run picked nothing", async () => {
     const onChange = vi.fn();
     const mod = { id: "abc12345", _uid: "row00002", type: "wildcard", enabled: true,
