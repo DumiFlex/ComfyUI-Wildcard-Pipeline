@@ -554,7 +554,11 @@ class PipelineEngine:
         self._hold_base_pass(modules, ctx, loop_index)
         # Backward rules (engine/modules/_backward.py) look down this node's
         # chain from the running wildcard; dropped again after the run.
-        ctx[backward.CHAIN_KEY] = modules
+        ahead = ctx.pop(backward.AHEAD_KEY, None)
+        ctx[backward.CHAIN_KEY] = list(modules) + [
+            m for node in (ahead if isinstance(ahead, list) else [])
+            if isinstance(node, list) for m in node
+        ]
         try:
             for index, module in enumerate(modules):
                 ctx[backward.POS_KEY] = index
