@@ -318,3 +318,39 @@ def test_rule_and_mirror_with_nothing_narrowed_rolls_as_before():
     plain = [_poses(), _need_rule(), _mirror(), _mirror_rule(), _places()]
     seen = {_run(plain, seed)["pose"] for seed in range(40)}
     assert seen == {"sitting", "lying", "standing"}
+
+
+# ── value lock on a multi-pick row ──────────────────────────────────────
+
+def _multi_places(instance: dict | None = None) -> dict:
+    return _places({"pick_min": 2, "pick_max": 2, **(instance or {})})
+
+
+def test_multi_pick_lock_takes_the_locked_options_in_order():
+    locked = _multi_places({"locked_option_ids": ["hammock", "bed"]})
+    for seed in range(20):
+        ctx = _run([locked], seed)
+        assert str(ctx["place"]) == "hammock, bed"
+
+
+def test_multi_pick_lock_keeps_the_source_fitting_all_of_them():
+    # Both locked places are beds: the pose must be lying.
+    locked = _multi_places({"locked_option_ids": ["bed", "hammock"]})
+    for seed in range(40):
+        assert _run([_poses(), _rule(), locked], seed)["pose"] == "lying"
+
+
+def test_multi_pick_lock_across_kinds_leaves_no_pose_that_fits_all():
+    # A seat and a bed: no pose allows both, so nothing is pruned to death;
+    # the lock still holds and the run warns instead of failing.
+    locked = _multi_places({"locked_option_ids": ["armchair", "bed"]})
+    for seed in range(10):
+        ctx = _run([_poses(), _rule(), locked], seed)
+        assert str(ctx["place"]) == "armchair, bed"
+
+
+def test_multi_pick_lock_with_a_missing_option_keeps_the_rest():
+    locked = _multi_places({"locked_option_ids": ["gone", "street"]})
+    ctx = _run([locked], 1)
+    assert str(ctx["place"]) == "street"
+    assert any(w.get("type") == "pinned_option_missing" for w in ctx["__wp_warnings__"])

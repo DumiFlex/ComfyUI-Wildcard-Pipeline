@@ -286,6 +286,7 @@ const RELEVANT_INSTANCE_KEYS = new Set([
   "match_variable",
   "locked_seed",
   "locked_option_id",
+  "locked_option_ids",
   "internal",
   // combine v2 (2026-05-08 syntax-parity cycle):
   "template_override",

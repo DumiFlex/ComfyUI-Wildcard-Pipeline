@@ -237,6 +237,14 @@ def _domain(
             pinned = next((o for o in options if o.get("id") == want), None)
             if pinned is not None:
                 return [pinned]
+    from engine.modules.wildcard_handler import locked_option_ids
+
+    held_ids = locked_option_ids(inst)
+    if held_ids and not _single_pick(inst):
+        held = [o for o in options if o.get("id") in held_ids]
+        if held:
+            # Every one of them shows, so the source must keep them all.
+            return AllOf(held)
     pool = options
     expr = inst.get("category_filter")
     exclude_null = bool(inst.get("exclude_null", False))
@@ -291,6 +299,20 @@ def _domain(
     return live
 
 
+class AllOf(list):  # type: ignore[type-arg]
+    """A target domain whose options ALL show (a value-locked multi-pick
+    row), so a source option must keep every one of them, not just one."""
+
+
+def _single_pick(inst: dict[str, Any]) -> bool:
+    """True when the instance picks exactly one option (count range 1..1)."""
+    from engine.modules.wildcard_handler import _coerce_pick_int
+
+    lo = _coerce_pick_int(inst.get("pick_min"), 1)
+    hi = _coerce_pick_int(inst.get("pick_max"), lo)
+    return max(0, min(lo, hi)) == 1 and max(lo, hi) == 1
+
+
 def _supported(
     option: dict[str, Any], payload: dict[str, Any],
     constraints: list[dict[str, Any]], domain: list[dict[str, Any]],
@@ -306,7 +328,8 @@ def _supported(
         opts = domain
         for c in constraints:
             opts = _apply_constraint_to_options(opts, c, src, None, target_axes)
-        if any(_weight(o) > 0 for o in opts):
+        live = (_weight(o) > 0 for o in opts)
+        if all(live) if isinstance(domain, AllOf) else any(live):
             return True
     return False
 

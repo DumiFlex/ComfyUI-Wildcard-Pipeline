@@ -11,6 +11,7 @@ import Input from "@/kit/Input.vue";
 import { computed } from "vue";
 import type { ModuleEntry } from "../../../../../widgets/_shared";
 import SeedLockControls from "../../_shared/SeedLockControls.vue";
+import { lockedOptionIds, lockedText } from "../../../lock-cycle";
 import WpSwitch from "@/kit/WpSwitch.vue";
 
 const props = defineProps<{ module: ModuleEntry; frameActive?: boolean }>();
@@ -31,17 +32,13 @@ function onHoldClick(): void {
 // Value lock (the row lock's third state): shown only while set, so it can
 // be turned off here too. Turning it on happens on the row, after a run.
 const lockedValue = computed(() => {
-  const id = instance.value.locked_option_id;
-  if (typeof id !== "string" || !id) return null;
-  const options = (props.module.payload as { options?: unknown } | undefined)?.options;
-  const hit = Array.isArray(options)
-    ? options.find((o) => (o as { id?: unknown })?.id === id) as { value?: unknown } | undefined
-    : undefined;
-  return typeof hit?.value === "string" ? hit.value : id;
+  if (!lockedOptionIds(instance.value).length) return null;
+  return lockedText(props.module, instance.value);
 });
 function onUnlockValue(): void {
   const next: Record<string, unknown> = { ...instance.value };
   delete next.locked_option_id;
+  delete next.locked_option_ids;
   emit("update", { instance: next as ModuleEntry["instance"] });
 }
 

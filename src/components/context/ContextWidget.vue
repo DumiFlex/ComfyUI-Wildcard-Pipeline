@@ -48,6 +48,7 @@ import { dragState } from "./drag-store";
 import { useContextDrag } from "./context-drag";
 import type { WidgetState } from "./widget-state";
 import { createModuleOps } from "./module-ops";
+import type { LockPick } from "./lock-cycle";
 import { useContextMenus } from "./context-menus";
 import { useContextConflicts } from "./context-conflicts";
 import { siblingInfo, summaryFor, summaryTokens } from "./module-summary";
@@ -175,7 +176,7 @@ const props = withDefaults(defineProps<{
   frameSeedReader?: (frame: number) => number | null;
   /** The option a wildcard use (by `_uid`) picked last run, at frame `k`
    *  when one is active. Drives the row lock's "lock value" step. */
-  lastPickReader?: (uid: string, frame: number | null) => string | null;
+  lastPickReader?: (uid: string, frame: number | null) => LockPick | null;
   /** What "Seed from" can pick: a Context Loop upstream, and the row names of
    *  the WP Seeds nodes upstream. Absent in headless mounts. */
   seedSources?: { loop: boolean; rows: string[] };
