@@ -9,6 +9,7 @@ import { varBaseName } from "../widgets/richTokenize";
 import { computePairingsFull, type ChainModule } from "./constraint-pairs";
 import { clauseActions, conditionLeaves, derivationTargets } from "./derivation-conditions";
 import { NEGATIVES_VAR } from "./assembler-vars";
+import { exprVariables } from "../manager/parsing/subcatFilter";
 
 /** Resolve a module's effective var-binding name. Mirrors engine
  *  precedence: per-instance override (`instance.variable_binding`)
@@ -142,6 +143,10 @@ export type ConflictType =
   // Commonest cause is a group that exists but was never promoted; second
   // commonest is an axis renamed after the read was written.
   | "unknown_tag_axis"
+  // A wildcard's Pool filter or Match variable reads a variable that only a
+  // LATER module of this node sets: it is unset when the wildcard rolls, so
+  // the filter or match does nothing (and backward rules can't see it).
+  | "variable_set_later"
   | "constraint_source_missing"
   | "constraint_target_missing"
   | "constraint_orphan_source"   // no source instance upstream
@@ -191,6 +196,7 @@ export function labelFor(type: ConflictType): string {
   if (type === "duplicate_variable") return "duplicate";
   if (type === "missing_template_variable") return "missing";
   if (type === "unknown_tag_axis") return "unknown tag axis — is that group marked 'accepts'?";
+  if (type === "variable_set_later") return "set only by a later row — move that row above this one";
   if (type === "constraint_source_missing") return "source missing";
   if (type === "constraint_target_missing") return "target missing";
   if (type === "constraint_orphan_source") return "source missing — no upstream instance";
@@ -213,6 +219,7 @@ export function shortConflictLabel(type: ConflictType): string {
     case "duplicate_variable":          return "duplicate";
     case "missing_template_variable":   return "missing var";
     case "unknown_tag_axis":            return "unknown axis";
+    case "variable_set_later":          return "set later";
     case "constraint_source_missing":   return "src missing";
     case "constraint_target_missing":   return "tgt missing";
     case "constraint_orphan_source":    return "no src upstream";
@@ -404,6 +411,16 @@ function varReadsOf(m: ModuleEntry): string[] {
       }
     }
   }
+  return out;
+}
+
+/** The variables a wildcard use reads before it rolls: its Pool filter's
+ *  `$name` terms and its Match variable. */
+function wildcardVarReads(m: ModuleEntry): string[] {
+  const inst = (m.instance ?? {}) as { category_filter?: unknown; match_variable?: unknown };
+  const out = [...exprVariables(inst.category_filter)];
+  const match = typeof inst.match_variable === "string" ? inst.match_variable.replace(/^\$/, "").trim() : "";
+  if (match) out.push(match);
   return out;
 }
 
@@ -708,6 +725,12 @@ export function scanConflicts(
   // the chain), so a ref to any known library wildcard is NOT a broken ref.
   const isNestedRefResolvable = (uuid: string, i: number): boolean =>
     isUuidResolvable(uuid, i) || knownLibraryUuids.has(uuid);
+  // Where each variable is first written in this node (for 1c).
+  const firstWrite = new Map<string, number>();
+  value.modules.forEach((m, i) => {
+    if (!isModuleEffectivelyEnabled(m, bundleEnabled)) return;
+    for (const name of writesOf(m)) if (!firstWrite.has(name)) firstWrite.set(name, i);
+  });
   for (let i = 0; i < value.modules.length; i++) {
     const m = value.modules[i];
     if (!isModuleEffectivelyEnabled(m, bundleEnabled)) continue;
@@ -763,6 +786,19 @@ export function scanConflicts(
     for (const ref of conditionAxisRefsIn(m)) flagAxis(ref);
     for (const tpl of templatesOf(m)) {
       for (const ref of templateAxisRefsIn(tpl)) flagAxis(ref);
+    }
+
+    // 1c. A wildcard's Pool filter `$name` or Match variable that only a
+    //     later row of this node sets: unset when it rolls. A variable set
+    //     nowhere here (a WP Toggles chip, say) is left alone.
+    if (m.type === "wildcard") {
+      const seenLate = new Set<string>();
+      for (const v of wildcardVarReads(m)) {
+        if (upstream.has(v) || written.has(v) || seenLate.has(v)) continue;
+        if ((firstWrite.get(v) ?? -1) <= i) continue;
+        seenLate.add(v);
+        out.push({ moduleId: m._uid ?? m.id, variable: v, type: "variable_set_later", severity: "warning" });
+      }
     }
 
     // 2. Writes from this module — order-dependent, so happens AFTER

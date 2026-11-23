@@ -30,6 +30,7 @@ const instanceOptions = [
   { term: "Per-use weights", desc: "Change an option's weight for this use only. The library editor doesn't show them." },
   { term: "Category filter", desc: 'Only pick options with certain tags, e.g. "feline and warm, not lynx" (a comma means or). Click the tag pills or type it under Advanced. Pick a variable under By variable (or type $model_variant) to filter by its value when the prompt runs. A wildcard whose options have no tags says so in the Pool, since there is nothing to filter by.' },
   { term: "Pick, separator, Allow repeats", desc: "Pick several options at once. See below." },
+  { term: "Read too early", desc: "When the Category filter's $variables or Match variable are set only by a later row of the same node, the row gets a \"set later\" warning: the variable is still empty when it rolls. Move the row that sets it above." },
   { term: "Exclude null", desc: "Leaves the null option out for this use, so something always prints." },
   { term: "Fallback", desc: "Untick the fallback to switch it off for this use; then nothing prints when nothing is left." },
   { term: "Match variable", desc: "Instead of rolling, pick the option whose text equals a variable's value (case doesn't matter), e.g. $model_variant from WP Model Info. An option with a reference matches as the editor shows it (red @Hat), and an option that is only a reference (@Places) matches when one of that wildcard's options does, then takes that option. No match uses the fallback, or rolls as usual. This is how a variable can drive a constraint." },

@@ -13,6 +13,7 @@
 - **Match variable sees through references.** An option with a reference matches the variable as the editor shows it, so `$want` = "red @Hat" picks "red @Hat". An option that is only a reference (`@Places`) matches when one of Places' options does, and then takes that option: `$want` = "forest" gives forest. WP Debug says "inside its ref" when it matched that way.
 - **Lock value works on multi-pick rows.** The row lock's second click on a wildcard that picks several options (Pick 2–3 and the like) now locks all of them, in the order the last run had them: the row shows "= hat, scarf", WP Toggles' Lock value does the same, and constraints above it keep their source fitting every locked pick. Before, a multi-pick row could only lock its seed.
 - **Constraints look ahead into the next WP Context nodes.** A target locked, filtered or toggled down in a later WP Context (down a straight line of WP nodes, up to four Contexts) now keeps its source in this node fitting, as one in the same node always did. Lock the place in the second Context and the pose in the first follows.
+- **A "set later" warning when a wildcard reads a variable too early.** When a row's Category filter `$variable` or Match variable is set only by a row further down the same WP Context, the row now shows a "set later" chip: the variable is still empty when it rolls, so the filter or match does nothing. Move the row that sets it above.
 
 ### Fixes
 

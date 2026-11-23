@@ -1690,6 +1690,36 @@ describe("scanConflicts — unknown_tag_axis", () => {
   });
 });
 
+describe("scanConflicts — variable_set_later", () => {
+  const place = (instance: Record<string, unknown>): ContextWidgetValue["modules"][number] => ({
+    id: "p1", _uid: "row-p", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+    payload: { var_binding: "place", options: [{ id: "a", value: "bed", sub_categories: ["bed"] }] },
+    instance: { variable_binding: "place", ...instance },
+  } as ContextWidgetValue["modules"][number]);
+  const late = cmb("c1", "bed");
+  (late.payload as { output_var: string }).output_var = "need";
+
+  it("flags a Pool filter variable only a later row sets", () => {
+    const out = scanConflicts({ version: 1, modules: [place({ category_filter: "$need" }), late] }, []);
+    expect(out).toContainEqual(expect.objectContaining({
+      moduleId: "row-p", type: "variable_set_later", variable: "need", severity: "warning",
+    }));
+  });
+
+  it("flags a Match variable only a later row sets", () => {
+    const out = scanConflicts({ version: 1, modules: [place({ match_variable: "$need" }), late] }, []);
+    expect(out).toContainEqual(expect.objectContaining({ type: "variable_set_later", variable: "need" }));
+  });
+
+  it("stays quiet when it is set before, upstream, or nowhere in this node", () => {
+    const quiet = (modules: ContextWidgetValue["modules"], up: string[] = []) =>
+      scanConflicts({ version: 1, modules }, up).every((c) => c.type !== "variable_set_later");
+    expect(quiet([late, place({ category_filter: "$need" })])).toBe(true);
+    expect(quiet([place({ category_filter: "$need" }), late], ["need"])).toBe(true);
+    expect(quiet([place({ category_filter: "$pick_home, $pick_beach" })])).toBe(true);
+  });
+});
+
 describe("scanTemplateConflicts — Assembler negative template", () => {
   it("reports $vars missing from the negative template, never $negatives", () => {
     const out = scanTemplateConflicts("$hair", ["hair"], "lowres, not $mood, $negatives");
