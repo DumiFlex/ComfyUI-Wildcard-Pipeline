@@ -557,6 +557,22 @@ describe("PickerModal", () => {
     expect(w.find('[data-test="image-filter-add-time"]').text()).toContain("1:30 left");
   });
 
+  it("Zoom takes the whole window and its edge arrows step", async () => {
+    const w = mk(request([3]));
+    await w.vm.$nextTick();
+    const root = w.find('[data-test="image-filter-picker"]');
+    expect(w.find('[data-test="modal"]').classes()).toContain("wp-modal--full");
+    await root.trigger("keydown", { key: "z" });
+    expect(w.find('[data-test="modal"]').classes()).toContain("wp-modal--screen");
+    await w.find('[data-test="imgzoom-step-next"]').trigger("click");
+    expect(w.find('[data-test="image-filter-zoom-cap"]').text()).toContain("2 / 3");
+    await w.find('[data-test="imgzoom-step-prev"]').trigger("click");
+    await w.find('[data-test="imgzoom-step-prev"]').trigger("click");
+    expect(w.find('[data-test="image-filter-zoom-cap"]').text()).toContain("3 / 3");
+    await root.trigger("keydown", { key: "d" });
+    expect(w.find('[data-test="modal"]').classes()).toContain("wp-modal--full");
+  });
+
   it("tile size S / M / L / Fit (or F) sizes the grid and is remembered", async () => {
     const w = mk(request([3]));
     await w.vm.$nextTick();

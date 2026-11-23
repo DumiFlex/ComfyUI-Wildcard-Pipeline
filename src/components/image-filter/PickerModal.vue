@@ -695,14 +695,14 @@ function indexOf(frame: number, image: number): number {
 const subLine = computed(() => {
   if (mode.value === "grid") return "Click or Space picks · double-click or a frame's border opens Detail · Enter keeps the picks";
   if (mode.value === "detail") return "←/→ or the wheel: next image · P picks · C compares · M paints a mask · Esc back to Grid";
-  return "Drag to move · scroll to zoom · ←/→ keeps the spot on the next image · Esc back";
+  return "The whole window · drag to move · scroll to zoom · ←/→, Shift+scroll or a click beside the picture: next image · Esc back";
 });
 </script>
 
 <template>
   <Modal
     :open="true"
-    size="full"
+    :size="mode === 'zoom' ? 'screen' : 'full'"
     flush
     accent="var(--wp-accent)"
     icon="filter"
@@ -1142,14 +1142,13 @@ const subLine = computed(() => {
           :alt="cellName(compareCell ?? cell)"
           :second="compareCell ? viewUrl(cell.ref) : null"
           :second-alt="cellName(cell)"
-          :hint="compareCell ? 'Both sides move together · ←/→ changes the right one · C stops comparing' : 'Drag to move · scroll to zoom · C compares · F fullscreen · Esc back'"
+          :hint="compareCell ? 'Both sides move together · ←/→ changes the right one · C stops comparing' : 'Drag to move · scroll to zoom · Shift+scroll or click beside: next · C compares · F fullscreen'"
           fullscreen
           minimap
           autohide
+          steppable
+          @step="step"
         >
-          <template #bar-start>
-            <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
-          </template>
           <template #bar-end>
             <Button
               size="sm"
@@ -1170,7 +1169,6 @@ const subLine = computed(() => {
               data-test="image-filter-pick"
               @click="pickCurrent"
             >{{ isPicked ? "Picked" : "Pick" }}</Button>
-            <Button size="sm" variant="ghost" icon="pi-chevron-right" aria-label="Next image" kbd="→" data-test="image-filter-next" @click="step(1)" />
           </template>
           <template #first>
             <span class="wp-ifp__zoom-cap" data-test="image-filter-zoom-cap">
@@ -1207,6 +1205,17 @@ const subLine = computed(() => {
               </div>
               <span class="wp-ifp__full-sep" aria-hidden="true" />
             </template>
+            <span class="wp-ifp__full-count" data-test="image-filter-full-pos"><strong>{{ current + 1 }}</strong> / {{ total }}</span>
+            <Button
+              size="sm"
+              :variant="isPicked ? 'primary' : 'secondary'"
+              :icon="isPicked ? 'pi-check' : 'pi-circle'"
+              kbd="P"
+              :aria-pressed="isPicked"
+              data-test="image-filter-full-pick"
+              @click="pickCurrent"
+            >{{ isPicked ? "Picked" : "Pick" }}</Button>
+            <span class="wp-ifp__full-sep" aria-hidden="true" />
             <span class="wp-ifp__full-count"><strong>{{ pickedList.length }}</strong> of {{ total }} picked</span>
             <Button size="sm" variant="primary" kbd="Enter" :disabled="pickedList.length === 0" data-test="image-filter-full-keep" @click="keepPicked">{{ pickedList.length ? `Keep ${pickedList.length} picked` : "Keep picked" }}</Button>
           </template>
