@@ -118,9 +118,12 @@ const reachModes = [
         locked value is never changed, and WP Debug warns when it clashes with the locked target
         (<code>locked_value_conflict</code>). When nothing fits, the source takes its fallback, or
         rolls as usual with a <code>backward_no_fit</code> warning. A target nothing narrows never
-        pushes back, so those runs roll exactly as before. For now it looks at targets in the same
-        Context, used directly (not inside a reference), and a rule sees only the source's own
-        variable (not its axes or picks).
+        pushes back, so those runs roll exactly as before. It also sees targets in the WP Context
+        nodes after this one, as long as the line runs straight (no branch, no Loop or Image
+        Filter in between); a variable that a WP node between them sets (WP Toggles, a slider)
+        isn't known ahead, so it doesn't narrow the target there. It looks at targets used
+        directly (not inside a reference), and a rule sees only the source's own variable (not
+        its axes or picks).
         WP Debug marks the dropped options "doesn't fit <VarToken>$place</VarToken>".
       </p>
     </DocSection>
@@ -129,7 +132,8 @@ const reachModes = [
       <p>
         A constraint in one Context also applies to its target in a later, chained Context. You can
         keep all your pairing rules in a separate "constraints" Context placed before the one with
-        the wildcards.
+        the wildcards. Looking ahead works across them too: a place locked in the next Context
+        keeps the pose in this one fitting.
       </p>
     </DocSection>
 

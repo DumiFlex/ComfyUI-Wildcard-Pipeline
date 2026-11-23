@@ -159,3 +159,29 @@ def test_ui_reports_each_use_pick_for_the_lock_value():
     out = cn.WPContext.execute(seed=3, wp_modules={"modules": [row]}, upstream=None)
     assert out.ui["module_picks"] == [{"row00001": "o-red"}]
     assert out.ui["frame_picks"] == [{"frame": 0, "picks": {"row00001": "o-red"}}]
+
+
+def test_backward_rules_see_a_locked_target_in_the_next_context_node():
+    """The node reads the prompt and hands the next WP Context's modules to
+    the look-ahead, so a pose here keeps to a place locked there."""
+    import json
+    from types import SimpleNamespace
+
+    from tests.engine.test_backward_rules import _places, _poses, _rule
+    from wp_nodes import context_node as cn
+
+    later = {"modules": [_places({"mode": "pinned", "pinned_option_id": "bed"})]}
+    prompt = {
+        "1": {"class_type": "WP_Context", "inputs": {"seed": 0, "wp_modules": "{}"}},
+        "2": {"class_type": "WP_Context",
+              "inputs": {"seed": 0, "wp_modules": json.dumps(later), "upstream": ["1", 0]}},
+    }
+    cn.WPContext.hidden = SimpleNamespace(unique_id="1", prompt=prompt)  # type: ignore[attr-defined]
+    try:
+        for seed in range(15):
+            out = cn.WPContext.execute(
+                seed=seed, wp_modules={"modules": [_poses(), _rule()]}, upstream=None,
+            )
+            assert out.values[0].context["pose"] == "lying", seed
+    finally:
+        del cn.WPContext.hidden  # type: ignore[attr-defined]

@@ -31,7 +31,12 @@ Match variable a rule fills from the source (the WP Parts mirror chain pose →
 rule → mirror → place): a source option is dropped when that wildcard would
 be left with nothing its own narrowed targets accept.
 
-Limits: targets in the same Context node, top-level instances (a target
+Targets in later WP Context nodes count too: the node hands over the module
+lists of the WP Context nodes down a straight line after it (`AHEAD_KEY`),
+which join the chain the look-ahead sees. Variables set by other WP nodes
+between them are not known, so a target that reads one is not narrowed by it.
+
+Limits: top-level instances (a target
 reached through a nested ``@{}`` ref is not looked at), and the look-ahead
 sets only the source's variable (an axis or pick read by the rule is not).
 """
@@ -41,6 +46,10 @@ from typing import Any
 
 #: The node's module list + the running module's index (set by the pipeline).
 CHAIN_KEY = "__wp_chain__"
+#: The module lists of the WP Context nodes after this one, nearest first
+#: (`engine/chain_ahead.py`), set by the node before the run. They join the
+#: chain the look-ahead sees, never the modules that run.
+AHEAD_KEY = "__wp_chain_ahead__"
 POS_KEY = "__wp_chain_pos__"
 #: Per-run cache of compiled downstream constraint metas, keyed by uid.
 CACHE_KEY = "__wp_backward_cache__"
