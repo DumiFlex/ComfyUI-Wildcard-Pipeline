@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import SeedsWidget from "./SeedsWidget.vue";
+import { currentFrame, setFrame } from "../context-loop/frame-cursor";
+import type { SeedLabel } from "../../extension/seeds";
 import { namedSeed, rowSeed, type SeedRow, type SeedsConfig } from "../../extension/seeds";
 
 const row = (patch: Partial<SeedRow> = {}): SeedRow => ({
@@ -136,6 +138,42 @@ describe("SeedsWidget", () => {
     expect(w.find('[data-test="seeds-reroll"]').attributes("disabled")).toBeDefined();
     await w.find('[data-test="seeds-from-loop"]').trigger("click");
     expect(emittedConfig(w)?.base_from_loop).toBeUndefined();
+    w.unmount();
+  });
+
+  it("follows the Loop's Edit frame and moves it when stepped", async () => {
+    setFrame(2);
+    const r = row({ mode: "follow" });
+    const w = mount(SeedsWidget, { props: { modelValue: cfg(r), baseSeed: 7, frames: 4 } });
+    await flushPromises();
+    expect(w.find('[data-test="seeds-row-aaaa0001"]').text()).toContain(
+      String(rowSeed(r, 7, 2)).replace(/\B(?=(\d{3})+(?!\d))/g, " "),
+    );
+    setFrame(null);
+    await flushPromises();
+    expect(w.find('[data-test="seeds-row-aaaa0001"]').text()).toContain(
+      String(rowSeed(r, 7, 0)).replace(/\B(?=(\d{3})+(?!\d))/g, " "),
+    );
+    const stepper = w.findComponent({ name: "WpNumber" });
+    stepper.vm.$emit("update:modelValue", 4);
+    await flushPromises();
+    expect(currentFrame.value).toBe(3);
+    setFrame(null);
+    w.unmount();
+  });
+
+  it("draws a label's icon and own colour, and a row's icon and looks", async () => {
+    const label: SeedLabel = { id: "lab00001", kind: "label", name: "Faces", icon: "user", hex: "#ff8800" };
+    const r = row({ icon: "star", icon_color: "#00ff00", text_color: "#0000ff", tint: "#ff0000" });
+    const w = mount(SeedsWidget, { props: { modelValue: { version: 1, rows: [label, r] }, baseSeed: 1 } });
+    await flushPromises();
+    const head = w.get('[data-test="seeds-label-lab00001"]');
+    expect(head.find(".pi-user").exists()).toBe(true);
+    expect(head.attributes("style")).toContain("rgb(255, 136, 0)");
+    const rowEl = w.get('[data-test="seeds-row-aaaa0001"]');
+    expect(rowEl.find('[data-test="seeds-icon-aaaa0001"]').classes()).toContain("pi-star");
+    expect(rowEl.attributes("style")).toContain("--wp-sdr-tint: #ff0000");
+    expect(rowEl.classes()).toContain("has-tint");
     w.unmount();
   });
 });

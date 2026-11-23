@@ -11,6 +11,8 @@
 
 // ── Snapshot shapes (as the engine writes them) ─────────────────────────
 
+import { runSeed, type RunSeed } from "./debug-seed";
+
 export interface RawWrite {
   variable?: string;
   value?: unknown;
@@ -296,6 +298,8 @@ export interface NodeInfo {
 export interface TraceGroup {
   nodeId: string;
   seed: string;
+  /** Where the node's seed came from ("loop", "Seeds · Face", "own"; "" when unknown). */
+  seedSource: string;
   steps: TraceStep[];
 }
 
@@ -354,6 +358,8 @@ export interface DebugModel {
   groups: TraceGroup[];
   warnings: WarningRow[];
   seed: string;
+  /** The seed most of the run depends on, and every Context's seed. */
+  runSeed: RunSeed;
   loopIndex: number | null;
   counts: { info: number; warning: number; error: number };
   /** How many variables carry negative words. */
@@ -887,11 +893,15 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
   // without node ids fall into one unnamed group.
   const seedByNode = new Map<string, string>();
   for (const n of nodes) if (n && n.node_id) seedByNode.set(String(n.node_id), n.seed != null ? String(n.seed) : "");
+  const run = runSeed(snap);
+  // A source is worth showing once Contexts don't all share one root.
+  const sourceByNode = new Map<string, string>();
+  if (run.others > 0) for (const n of run.nodes) if (n.source) sourceByNode.set(n.nodeId, n.source);
   const groups: TraceGroup[] = [];
   for (const s of steps) {
     const last = groups[groups.length - 1];
     if (last && last.nodeId === s.nodeId) last.steps.push(s);
-    else groups.push({ nodeId: s.nodeId, seed: seedByNode.get(s.nodeId) ?? "", steps: [s] });
+    else groups.push({ nodeId: s.nodeId, seed: seedByNode.get(s.nodeId) ?? "", seedSource: sourceByNode.get(s.nodeId) ?? "", steps: [s] });
   }
 
   // Variables: the public ctx at the top level, plus who wrote each one.
@@ -972,6 +982,7 @@ export function buildModel(snap: Record<string, unknown>): DebugModel {
     groups,
     warnings,
     seed: typeof seedRaw === "number" || typeof seedRaw === "string" ? String(seedRaw) : "",
+    runSeed: run,
     loopIndex: typeof loopRaw === "number" ? loopRaw : null,
     counts,
     negativeCount: variables.filter((v) => v.negatives.length > 0).length,

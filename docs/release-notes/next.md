@@ -17,6 +17,10 @@
 - **A "set later" warning when a wildcard reads a variable too early.** When a row's Category filter `$variable` or Match variable is set only by a row further down the same WP Context, the row now shows a "set later" chip: the variable is still empty when it rolls, so the filter or match does nothing. Move the row that sets it above.
 
 - **WP Image Filter: quicker picking.** Values has a search box and can hide on/off switches; while comparing two images it lists what differs between them first. The countdown has an Add time menu (+1, +5, +10 or +30 min), and the node waits that much longer. Grid's **Picked only** hides what you left out, and **Same in every frame** (or Detail's **Image N in every frame**) picks the 1st, 2nd … image of every frame at once. The mouse wheel steps images in Detail.
+- **WP Seeds takes WP Toggles' looks.** Labels get an icon and a colour in the edit view, and a row's window has Looks: an icon, its colour, the name's colour and the seed's colour.
+- **One frame across WP Seeds, WP Debug and the Loop.** Picking a frame under the Context Loop's Edit frame shows that frame's seeds in WP Seeds and that frame's run in WP Debug, and stepping the frame in either picks it on the Loop too, as the Assembler already did.
+- **WP Debug shows the seed the run depends on.** The head's seed is the Context Loop's seed, a WP Seeds base seed or a Seeds row when the Contexts run on it, labelled so, not just the last Context's chain seed. When Contexts use different seeds, a "+N seeds" chip lists each one and where it came from, and the Trace headers say it beside each node's seed.
+- **Base edits say which frames override the module.** Opening a WP Context row's window with Edit frame on base now names the frames that change that module (`#2 off`, `#4 2 changes`), since a base edit doesn't reach what a frame overrides.
 
 ### Fixes
 

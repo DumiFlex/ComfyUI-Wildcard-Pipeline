@@ -14,7 +14,7 @@ from engine.modules import _backward as backward
 from engine.modules.snapshot import ref_seed_uuids, walk_transitive_refs
 from engine.modules.wildcard_handler import OPTION_PICKS_KEY
 from engine.pipeline import FRAME0_CTX_KEY, PipelineEngine
-from engine.seed_derive import SEED_FROM_AUTO, resolve_context_seed
+from engine.seed_derive import SEED_FROM_AUTO, resolve_context_seed, seed_root
 from wp_nodes.types import (
     FRAME0_KEY,
     ContextModulesInput,
@@ -363,6 +363,7 @@ class WPContext(io.ComfyNode):
             upstream_debug=upstream_debug,
             seed=chain_seed,
             node_id=_node_id(cls),
+            seed_root=seed_root(seed_source, upstream_internals),
         )
         # Emit two seed-tracking values via the UI payload so the
         # frontend `executed` listener (widgets/context.ts) gets

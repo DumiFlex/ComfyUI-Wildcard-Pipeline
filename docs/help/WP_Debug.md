@@ -11,6 +11,12 @@ See what happened at this point of the chain: every variable, which module set i
 
 - **context (in)** `context`: Any WP node's context output. The node has no output and changes nothing; drag its corner to resize.
 
+## On the node
+
+- **Run seed**: The seed most of the run depends on, labelled by where it comes from: loop seed (the Context Loop's seed, which every frame's seed is made from), seeds base (a WP Seeds base seed its Follow rows are made from), seed · Name (a Random or Fixed WP Seeds row) or seed (a Context's own). Click to copy it; pointing at it says how many Contexts run on it.
+- **+N seeds**: Shown when some Contexts run on another seed: pointing at it lists every Context's seed and where it came from; clicking opens the Trace, where each node's header shows its seed and source.
+- **Frame arrows**: After a Context Loop: ‹ frame 2 / 4 › steps through the frames this Debug received. It follows the Loop's Edit frame pick, and stepping it picks that frame there too.
+
 ## Tabs
 
 - **Variables**: Every $variable and its value at this point, with the module or node that set it (its icon and colour on the left edge say which kind: wildcard, derivation, Toggles, Model Info, Context Loop, Injector …). The quickest way to check what your wildcards picked. Negative words show under the value in red, with the module they came from when it isn't the variable's own.
