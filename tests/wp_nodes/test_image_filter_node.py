@@ -295,6 +295,25 @@ async def test_ask_times_out_to_the_chosen_fallback(monkeypatch):
     assert sent[-1][0] == node_mod.EVENT_DONE
 
 
+async def test_added_time_pushes_the_timeout_back(monkeypatch):
+    sent = _fake_server(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(node_mod.time, "monotonic", lambda: clock[0])
+
+    async def tick(_s):
+        # The picker adds a minute once, right after the request goes out.
+        if clock[0] == 100.0:
+            assert f.PENDING.extend(sent[0][1]["token"], 60) == 90
+        clock[0] += 10
+
+    monkeypatch.setattr(node_mod.asyncio, "sleep", tick)
+    answer = await WPImageFilter._ask(
+        [FakeBatch("a", [0, 1])], [{}], [2],
+        {"timeout": 30, "send_as": "list", "on_timeout": "keep_first"}, "12")
+    assert answer.picks == ((0, 0),)
+    assert clock[0] == 190.0  # 30 s + the added 60 s, not 30 s
+
+
 async def test_cancelling_the_run_ends_the_wait(monkeypatch):
     sent = _fake_server(monkeypatch, interrupt=True)
     with pytest.raises(RuntimeError, match="interrupted"):

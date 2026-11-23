@@ -17,6 +17,8 @@
 - **A "set later" warning when a wildcard reads a variable too early.** When a row's Category filter `$variable` or Match variable is set only by a row further down the same WP Context, the row now shows a "set later" chip: the variable is still empty when it rolls, so the filter or match does nothing. Move the row that sets it above.
 - **WP Toggles: a tidier window and lock targets that make sense.** The toggle's window keeps the everyday settings on top and folds When off, When on and Upstream can set it into **Advanced**, whose header says in one line what the toggle also does; it opens on its own when any of them is set. **Rows to lock** shows each row's module icon, leaves out constraints (they have no seed), and with Lock value lists only wildcards; switching to Lock value takes off rows that can only lock their seed and says so. The lock icon on a row is now a button: click it and the canvas glides to that WP Context and blinks the row (several rows open a list). The Upstream can set it arrow sits next to the name, so it shows on a Chip too.
 
+- **WP Image Filter: quicker picking.** Values has a search box and can hide on/off switches; while comparing two images it lists what differs between them first. The countdown has an Add time menu (+1, +5, +10 or +30 min), and the node waits that much longer. Grid's **Picked only** hides what you left out, and **Same in every frame** (or Detail's **Image N in every frame**) picks the 1st, 2nd … image of every frame at once. The mouse wheel steps images in Detail.
+
 ### Fixes
 
 - **WP Toggles' window preview shows the mute / bypass icon as you set it.** It used to wait until you pressed Done.

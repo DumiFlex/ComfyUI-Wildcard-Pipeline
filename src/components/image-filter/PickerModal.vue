@@ -28,20 +28,24 @@ import PickerTile from "./PickerTile.vue";
 import SweepGrid from "./SweepGrid.vue";
 import { pickKey, viewUrl, type Pick, type PickAnswer, type PickEdits, type ImageRef } from "./types";
 import type { WaitingRequest } from "../../extension/image-filter";
-import { draftPicks, saveDraftPicks, secondsLeft } from "../../extension/image-filter";
+import { ADD_TIME_MINUTES, draftPicks, extendTime, saveDraftPicks, secondsLeft } from "../../extension/image-filter";
 import type { LiteGraphLike } from "../../extension/graph";
 import { editLoopConfig } from "../../widgets/context_loop";
 import { pushToast } from "../shared/toast-store";
 import { defaultGridLayout, findLoop, frameParts, loopEdit, sweepGrid, type GridLayout } from "./picker-loop";
 import {
-  draftEdits, dropDraftEdits, editsFor, fitTileSize, isRefined, readModePref, readTilePref, saveDraftEdits,
+  draftEdits, dropDraftEdits, editsFor, fitTileSize, isRefined, readFlagPref, readModePref, readTilePref, saveDraftEdits, writeFlagPref,
   MAX_LABEL, TILE_PX, withLabel, withMask, withText, writeModePref, writeTilePref, type PickerMode, type TileSize,
 } from "./picker-state";
 import { axisHueAt } from "../shared/axis-color";
 import { cellAspect, containSize, mixedSizes, sizeText, type Size } from "./picker-sizes";
-import { frameValues, promptRuns, valuesText } from "./picker-details";
+import { filterValues, frameValues, promptRuns, valueDiff, valuesText } from "./picker-details";
 import Button from "@/kit/Button.vue";
 import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
+import SearchInput from "@/kit/SearchInput.vue";
+import DropdownMenu from "@/kit/DropdownMenu.vue";
+import type { ContextMenuEntry } from "@/kit/ContextMenu.vue";
+import Checkbox from "@/kit/Checkbox.vue";
 import { vTooltip } from "@/kit/tooltip";
 
 const props = withDefaults(
@@ -94,6 +98,40 @@ function toggleFrames(list: readonly number[]): void {
   }
   picked.value = next;
 }
+/** The image at position `image` in every frame that has one. */
+function imageKeys(image: number): string[] {
+  return frames.value.flatMap((imgs, f) => (image < imgs.length ? [pickKey(f, image)] : []));
+}
+function allPicked(keys: readonly string[]): boolean {
+  return keys.length > 0 && keys.every((k) => picked.value.has(k));
+}
+/** Pick image N of every frame (the same seed slot of each), or clear them when all are picked. */
+function toggleImageEverywhere(image: number): void {
+  const keys = imageKeys(image);
+  if (!keys.length) return;
+  const off = allPicked(keys);
+  const next = new Set(picked.value);
+  for (const k of keys) {
+    if (off) next.delete(k);
+    else next.add(k);
+  }
+  picked.value = next;
+}
+/** The most images any frame has; "image N in every frame" needs 2+ frames with 2+ images. */
+const mostImages = computed(() => Math.max(0, ...frames.value.map((imgs) => imgs.length)));
+const canPickAcross = computed(() => multiFrame.value && mostImages.value > 1);
+const acrossItems = computed<ContextMenuEntry[]>(() => Array.from({ length: mostImages.value }, (_, i) => ({
+  label: `Image ${i + 1}`,
+  subtitle: allPicked(imageKeys(i)) ? "Picked in every frame: clear" : `In ${imageKeys(i).length} frames`,
+  checked: allPicked(imageKeys(i)),
+  onSelect: () => toggleImageEverywhere(i),
+})));
+
+/** Grid shows only the picks (remembered). */
+const pickedOnly = ref(readFlagPref("picked-only"));
+watch(pickedOnly, (on) => writeFlagPref("picked-only", on));
+/** With nothing picked yet the switch waits, so a new run never opens on an empty grid. */
+const onlyPicks = computed(() => pickedOnly.value && picked.value.size > 0);
 function toggleAll(): void {
   picked.value = picked.value.size === total.value ? new Set() : new Set(cells.value.map((c) => c.key));
 }
@@ -361,6 +399,24 @@ function onFigClick(ev: MouseEvent): void {
   const side = sideOf(ev);
   if (side) step(side);
 }
+/** Wheel steps images in Detail: one notch (or a trackpad swipe's worth) is one image. */
+const WHEEL_STEP = 60;
+const WHEEL_REST_MS = 140;
+let wheelSum = 0;
+let wheelAt = 0;
+function onDetailWheel(ev: WheelEvent): void {
+  if (painting.value || total.value < 2) return;
+  ev.preventDefault();
+  const delta = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX) ? ev.deltaY : ev.deltaX;
+  const px = ev.deltaMode === 1 ? delta * 20 : ev.deltaMode === 2 ? delta * 400 : delta;
+  const t = ev.timeStamp || Date.now();
+  if (t - wheelAt > WHEEL_REST_MS) wheelSum = 0;
+  wheelAt = t;
+  wheelSum += px;
+  if (Math.abs(wheelSum) < WHEEL_STEP) return;
+  step(wheelSum > 0 ? 1 : -1);
+  wheelSum = 0;
+}
 /** The picture's box in Detail (its 3px border included), or nothing until its size is known. */
 const detailStyle = computed((): Record<string, string> => {
   const size = cell.value ? natural.value[cell.value.key] : undefined;
@@ -373,6 +429,17 @@ const detailStyle = computed((): Record<string, string> => {
 const label = computed(() => (cell.value ? labels.value[cell.value.frame] : undefined));
 const values = computed(() => frameValues(label.value, axes.value));
 const valuesCopy = computed(() => valuesText(values.value, label.value?.seed));
+/** Values search and the "hide on/off switches" box (remembered). */
+const valuesQuery = ref("");
+const hideSwitches = ref(readFlagPref("hide-switches"));
+watch(hideSwitches, (on) => writeFlagPref("hide-switches", on));
+const shownValues = computed(() => filterValues(values.value, valuesQuery.value, hideSwitches.value));
+/** Comparing: the values that differ between the pinned image (left) and this one (right). */
+const compareDiff = computed(() => {
+  const pin = compareCell.value;
+  if (!pin) return null;
+  return valueDiff(frameValues(labels.value[pin.frame], axes.value), values.value);
+});
 const editingPositive = ref(false);
 watch(current, () => { editingPositive.value = false; });
 const positiveRuns = computed(() => promptRuns(textValue("positive"), values.value));
@@ -397,7 +464,7 @@ function valueHue(axis: number, name?: string): Record<string, string> {
 
 type SideTab = "values" | "prompt" | "mask";
 const sideTabs = computed<TabItem<SideTab>[]>(() => [
-  ...(values.value.length ? [{ id: "values" as const, label: "Values", count: values.value.length }] : []),
+  ...(values.value.length ? [{ id: "values" as const, label: "Values", count: compareDiff.value ? `${compareDiff.value.length} differ` : values.value.length }] : []),
   { id: "prompt", label: "Prompt", count: isEdited("positive") || isEdited("negative") ? "edited" : undefined },
   { id: "mask", label: "Mask", count: maskValue.value ? "painted" : undefined },
 ]);
@@ -531,6 +598,12 @@ const leftLabel = computed(() => {
   const s = String(left.value % 60).padStart(2, "0");
   return `${m}:${s} left`;
 });
+/** "Add time" presets on the countdown; the node reads the new total on its next poll. */
+const addTimeItems = computed<ContextMenuEntry[]>(() => ADD_TIME_MINUTES.map((m) => ({
+  label: `+${m} min`,
+  icon: "pi-clock",
+  onSelect: () => { void extendTime(props.request.token, m * 60); },
+})));
 
 /* ── answers + keys ───────────────────────────────────────────────────── */
 
@@ -621,7 +694,7 @@ function indexOf(frame: number, image: number): number {
 
 const subLine = computed(() => {
   if (mode.value === "grid") return "Click or Space picks · double-click or a frame's border opens Detail · Enter keeps the picks";
-  if (mode.value === "detail") return "←/→ next image · P picks · C compares · M paints a mask · Esc back to Grid";
+  if (mode.value === "detail") return "←/→ or the wheel: next image · P picks · C compares · M paints a mask · Esc back to Grid";
   return "Drag to move · scroll to zoom · ←/→ keeps the spot on the next image · Esc back";
 });
 </script>
@@ -666,6 +739,12 @@ const subLine = computed(() => {
         <div v-if="!showTable" class="wp-ifp__tools">
           <span class="wp-ifp__tool-label">Tile size</span>
           <WpSegmented v-model="tile" :options="TILE_OPTIONS" size="sm" aria-label="Tile size" test-prefix="image-filter-tile-size" />
+          <Checkbox v-model="pickedOnly" size="sm" label="Picked only" data-test="image-filter-picked-only" />
+          <DropdownMenu v-if="canPickAcross" :items="acrossItems" label="Pick an image in every frame" placement="bottom-start">
+            <template #trigger="{ props: triggerProps }">
+              <Button v-bind="triggerProps" size="sm" variant="ghost" icon="pi-clone" icon-right="pi-chevron-down" hint="Pick the same image (1st, 2nd …) in every frame" data-test="image-filter-pick-across">Same in every frame</Button>
+            </template>
+          </DropdownMenu>
           <template v-if="grid">
             <span class="wp-ifp__tool-label">Layout</span>
             <WpSegmented v-model="arrange" :options="ARRANGE_OPTIONS" size="sm" aria-label="Layout" test-prefix="image-filter-view" />
@@ -684,6 +763,7 @@ const subLine = computed(() => {
             :tile="tableTile"
             :aspect="aspect"
             :size-of="(key: string, px: number) => sizeMark(key, px)"
+            :picked-only="onlyPicks"
             @toggle="toggle"
             @toggle-frames="toggleFrames"
             @zoom="(f, i) => setMode('detail', indexOf(f, i))"
@@ -692,6 +772,12 @@ const subLine = computed(() => {
             <template #tools>
               <span class="wp-ifp__tool-label">Tile size</span>
               <WpSegmented v-model="tile" :options="TILE_OPTIONS" size="sm" aria-label="Tile size" test-prefix="image-filter-tile-size" />
+              <Checkbox v-model="pickedOnly" size="sm" label="Picked only" data-test="image-filter-picked-only" />
+              <DropdownMenu v-if="canPickAcross" :items="acrossItems" label="Pick an image in every frame" placement="bottom-start">
+                <template #trigger="{ props: triggerProps }">
+                  <Button v-bind="triggerProps" size="sm" variant="ghost" icon="pi-clone" icon-right="pi-chevron-down" hint="Pick the same image (1st, 2nd …) in every frame" data-test="image-filter-pick-across">Same in every frame</Button>
+                </template>
+              </DropdownMenu>
               <span class="wp-ifp__tool-label">Layout</span>
               <WpSegmented v-model="arrange" :options="ARRANGE_OPTIONS" size="sm" aria-label="Layout" test-prefix="image-filter-view" />
             </template>
@@ -701,6 +787,7 @@ const subLine = computed(() => {
         <div v-else ref="body" class="wp-ifp__body" :class="{ 'is-flat': !multiFrame, 'is-fit': isFit }" data-test="image-filter-frames">
           <section
             v-for="(imgs, f) in frames"
+            v-show="!onlyPicks || pickedIn(f)"
             :key="f"
             class="wp-ifp__frame"
             :class="{ 'is-flat': !multiFrame }"
@@ -727,7 +814,7 @@ const subLine = computed(() => {
               </template>
             </div>
             <div class="wp-ifp__tiles">
-              <div v-for="(img, i) in imgs" :key="i" class="wp-ifp__tile-cell">
+              <div v-for="(img, i) in imgs" v-show="!onlyPicks || picked.has(pickKey(f, i))" :key="i" class="wp-ifp__tile-cell">
                 <PickerTile
                   :src="viewUrl(img)"
                   :picked="picked.has(pickKey(f, i))"
@@ -761,7 +848,7 @@ const subLine = computed(() => {
       <!-- Detail -->
       <div v-else-if="mode === 'detail' && cell" class="wp-ifp__detail" data-test="image-filter-detail">
         <div class="wp-ifp__stage">
-          <div class="wp-ifp__view">
+          <div class="wp-ifp__view" data-test="image-filter-view" @wheel="onDetailWheel">
             <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
             <!-- The arrows and ←/→ are the keyboard way; this is a bigger mouse target for them. -->
             <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions, vuejs-accessibility/mouse-events-have-key-events -->
@@ -881,6 +968,15 @@ const subLine = computed(() => {
               @click="pickCurrent"
             >{{ isPicked ? "Picked" : "Pick" }}</Button>
             <Button
+              v-if="canPickAcross && imageKeys(cell.image).length > 1"
+              size="sm"
+              icon="pi-clone"
+              :pressed="allPicked(imageKeys(cell.image))"
+              :hint="allPicked(imageKeys(cell.image)) ? `Leave out image ${cell.image + 1} of every frame` : `Pick image ${cell.image + 1} of every frame, like this one`"
+              data-test="image-filter-pick-across-detail"
+              @click="cell && toggleImageEverywhere(cell.image)"
+            >Image {{ cell.image + 1 }} in every frame</Button>
+            <Button
               v-if="total > 1"
               size="sm"
               :variant="comparePin !== null ? 'secondary' : 'ghost'"
@@ -896,20 +992,40 @@ const subLine = computed(() => {
           <WpTabs v-model="sideTab" :tabs="sideTabs" size="sm" aria-label="Image details" test-prefix="image-filter-tab" />
 
           <section v-if="sideTab === 'values' && values.length" class="wp-ifp__section" data-test="image-filter-details">
-            <div v-if="values.length" class="wp-ifp__field-head">
-              <span class="wp-ifp__hint">Each colour is the one its words have in the prompt.</span>
-              <span class="wp-ifp__spacer" />
+            <div v-if="compareDiff && compareCell" class="wp-ifp__diff" data-test="image-filter-diff">
+              <div class="wp-ifp__field-head">
+                <span>Differs from {{ cellName(compareCell) }}</span>
+              </div>
+              <p v-if="!compareDiff.length" class="wp-ifp__hint">Every value is the same; only the seed or the noise differs.</p>
+              <div v-for="d in compareDiff" :key="d.name" class="wp-ifp__value is-diff">
+                <span v-tooltip="`$${d.name}`" class="wp-ifp__value-name" :class="{ 'is-swept': d.axis >= 0 }" :style="valueHue(d.axis, d.name)"><i class="wp-ifp__swatch" aria-hidden="true" />${{ d.name }}</span>
+                <span class="wp-ifp__value-text">
+                  <span v-tooltip="d.left || '(not set)'" class="wp-ifp__diff-old">{{ d.left || "—" }}</span>
+                  <i class="pi pi-arrow-right wp-ifp__diff-arrow" aria-hidden="true" />
+                  <span v-tooltip="d.right || '(not set)'">{{ d.right || "—" }}</span>
+                </span>
+              </div>
+            </div>
+            <div class="wp-ifp__field-head">
+              <SearchInput v-model="valuesQuery" size="sm" placeholder="Find a value" aria-label="Find a value" class="wp-ifp__values-find" data-test="image-filter-values-find" />
               <CopyButton :text="valuesCopy" label="Copy values" size="sm" />
             </div>
-            <div v-if="values.length" class="wp-ifp__values" data-test="image-filter-values">
-              <div v-for="r in values" :key="r.name" class="wp-ifp__value">
+            <div class="wp-ifp__field-head">
+              <Checkbox v-model="hideSwitches" size="sm" label="Hide on/off switches" data-test="image-filter-hide-switches" />
+              <span class="wp-ifp__spacer" />
+              <span class="wp-ifp__hint">{{ shownValues.length }} of {{ values.length }}</span>
+            </div>
+            <div class="wp-ifp__values" data-test="image-filter-values">
+              <div v-for="r in shownValues" :key="r.name" class="wp-ifp__value">
                 <span v-tooltip="`$${r.name}`" class="wp-ifp__value-name" :class="{ 'is-swept': r.axis >= 0 }" :style="valueHue(r.axis, r.name)"><i class="wp-ifp__swatch" aria-hidden="true" />${{ r.name }}</span>
                 <span v-tooltip="r.value" class="wp-ifp__value-text">{{ r.value }}</span>
               </div>
+              <p v-if="!shownValues.length" class="wp-ifp__hint">No value matches.</p>
               <div v-if="typeof label?.seed === 'number'" class="wp-ifp__value">
                 <span class="wp-ifp__value-name">seed</span><span class="wp-ifp__value-text">{{ label.seed }}</span>
               </div>
             </div>
+            <p class="wp-ifp__hint">Each colour is the one its words have in the prompt.</p>
           </section>
 
           <template v-if="sideTab === 'prompt'">
@@ -1102,7 +1218,11 @@ const subLine = computed(() => {
       <div class="wp-ifp__status" data-test="image-filter-status">
         <span><strong>{{ pickedList.length }}</strong> of {{ total }} picked<template v-if="multiFrame"> from {{ pickedFrames }} {{ pickedFrames === 1 ? "frame" : "frames" }}</template></span>
         <span v-if="editCount" class="wp-ifp__edits">{{ editCount }} refined</span>
-        <span v-if="leftLabel" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }">{{ leftLabel }}</span>
+        <DropdownMenu v-if="leftLabel" :items="addTimeItems" label="Add time" placement="top-start">
+          <template #trigger="{ props: triggerProps }">
+            <Button v-bind="triggerProps" size="sm" variant="ghost" icon-right="pi-chevron-up" hint="Add time before the node gives up waiting" class="wp-ifp__left" :class="{ 'is-low': (left ?? 99) <= 30 }" data-test="image-filter-add-time">{{ leftLabel }}</Button>
+          </template>
+        </DropdownMenu>
       </div>
       <span class="wp-ifp__spacer" />
       <Button v-if="canSendToLoop" size="sm" :disabled="pickedFrames === 0" hint="Lock the picked frames' seeds in the Context Loop and bypass the rest, so the next run repeats only your picks" data-test="image-filter-send-loop" @click="sendToLoop">Send to Loop</Button>
@@ -1208,6 +1328,12 @@ const subLine = computed(() => {
 .wp-ifp__value-name[style] { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, var(--wp-text)); }
 .wp-ifp__value-name.is-swept { color: color-mix(in srgb, var(--wp-ifp-hue) 85%, var(--wp-text)); font-weight: 600; }
 .wp-ifp__value-text { flex: 1; min-width: 0; color: var(--wp-text); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.wp-ifp__values-find { flex: 1; min-width: 0; }
+.wp-ifp__diff { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: min(6px, var(--wp-radius-cap, 999px)); background: color-mix(in srgb, var(--wp-accent) 8%, transparent); font: 11px/1.45 var(--wp-font-mono, monospace); }
+.wp-ifp__value.is-diff .wp-ifp__value-text { display: flex; align-items: baseline; gap: 6px; -webkit-line-clamp: unset; line-clamp: none; }
+.wp-ifp__value.is-diff .wp-ifp__value-text > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-ifp__diff-old { color: var(--wp-text-dim, var(--wp-text3)); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 50%, transparent); }
+.wp-ifp__diff-arrow { flex: none; font-size: 9px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-ifp__marked { white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; min-height: 60px; }
 .wp-ifp__marked mark { padding: 0 2px; border-radius: min(3px, var(--wp-radius-cap, 999px)); color: var(--wp-text); background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 20%, transparent); box-shadow: inset 0 -1.5px 0 var(--wp-ifp-hue, var(--wp-accent)); }
 .wp-ifp__marked mark:hover { background: color-mix(in srgb, var(--wp-ifp-hue, var(--wp-accent)) 38%, transparent); }

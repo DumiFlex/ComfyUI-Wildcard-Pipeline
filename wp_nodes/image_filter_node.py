@@ -515,7 +515,7 @@ class WPImageFilter(io.ComfyNode):
         }
         f.PENDING.open(token, request)
         server.send_sync(EVENT_REQUEST, request)
-        deadline = time.monotonic() + timeout if timeout > 0 else None
+        start = time.monotonic()
         try:
             while True:
                 raw = f.PENDING.take(token)
@@ -527,7 +527,9 @@ class WPImageFilter(io.ComfyNode):
                 # Cancelling the run from the queue sets ComfyUI's interrupt
                 # flag; raising here ends the wait like any other node.
                 throw_exception_if_processing_interrupted()
-                if deadline is not None and time.monotonic() >= deadline:
+                # The picker can add time (``PENDING.extend``), so read the
+                # timeout afresh on every poll.
+                if timeout > 0 and time.monotonic() - start >= f.PENDING.timeout(token, timeout):
                     return f.resolve_timeout(cfg["on_timeout"], batch_sizes)
                 await asyncio.sleep(POLL_SECONDS)
         finally:

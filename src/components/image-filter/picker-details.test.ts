@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { frameValues, promptRuns, valuesText } from "./picker-details";
+import { filterValues, frameValues, isSwitchValue, promptRuns, valueDiff, valuesText } from "./picker-details";
 import type { SweepAxisInfo } from "./picker-loop";
 
 const hair: SweepAxisInfo = { uid: "h1", name: "$hair", labels: { b: "blonde hair" } };
@@ -61,5 +61,31 @@ describe("picker details", () => {
 
   it("copies values as $name: value lines", () => {
     expect(valuesText([{ name: "hair", value: "red", axis: 0 }], 42)).toBe("$hair: red\nseed: 42");
+  });
+});
+
+describe("Values search and Compare differences", () => {
+  const rows = [
+    { name: "subject", value: "adult, petite", axis: -1 },
+    { name: "pick_beach", value: "true", axis: -1 },
+    { name: "place", value: "beach", axis: 0 },
+    { name: "outdoor", value: "No", axis: -1 },
+  ];
+  it("filters by name or value and can hide on/off switches", () => {
+    expect(filterValues(rows, "", false)).toHaveLength(4);
+    expect(filterValues(rows, "", true).map((r) => r.name)).toEqual(["subject", "place"]);
+    expect(filterValues(rows, "BEACH", false).map((r) => r.name)).toEqual(["pick_beach", "place"]);
+    expect(filterValues(rows, "$sub", true).map((r) => r.name)).toEqual(["subject"]);
+    expect(isSwitchValue(" off ")).toBe(true);
+    expect(isSwitchValue("offset")).toBe(false);
+  });
+  it("lists only the values two images don't share", () => {
+    const right = [rows[0], { name: "place", value: "office", axis: 0 }, { name: "time", value: "night", axis: -1 }];
+    expect(valueDiff(rows, right)).toEqual([
+      { name: "place", left: "beach", right: "office", axis: 0 },
+      { name: "time", left: "", right: "night", axis: -1 },
+      { name: "pick_beach", left: "true", right: "", axis: -1 },
+      { name: "outdoor", left: "No", right: "", axis: -1 },
+    ]);
   });
 });

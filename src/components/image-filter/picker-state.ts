@@ -143,6 +143,16 @@ export function writeTilePref(size: TileSize): void {
   write(OLD_FIT_KEY, null);
 }
 
+/** On/off picker preferences remembered between runs (hide switches in
+ *  Values, Grid shows only the picks). */
+export type FlagPref = "hide-switches" | "picked-only";
+export function readFlagPref(name: FlagPref): boolean {
+  return read(`wp-image-filter-${name}`) === "1";
+}
+export function writeFlagPref(name: FlagPref, on: boolean): void {
+  write(`wp-image-filter-${name}`, on ? "1" : null);
+}
+
 /** The largest side of a tile at each size: a lone batch, a frame card, a sweep table cell. */
 export const TILE_PX: Record<Exclude<TileSize, "fit">, { flat: number; frame: number; table: number }> = {
   s: { flat: 120, frame: 96, table: 80 },
