@@ -126,3 +126,22 @@ describe("accessor-aware suggestions", () => {
     expect(axesOf("outfit.EXP")).toEqual(["outfit.EXPOSES"]);
   });
 });
+
+describe("slider and toggle accessors in the plain list", () => {
+  const producers = new Map([
+    ["width", { kind: "slider", shadowed: 0 }],
+    ["glasses", { kind: "toggle", shadowed: 0 }],
+    ["mood", { kind: "wildcard", shadowed: 0 }],
+  ]);
+  it("offers $name.num after a slider variable and $name.bool after a toggle", () => {
+    expect(expandVarsWithAxes(["width", "glasses", "mood"], producers)).toEqual([
+      "width", "width.num", "glasses", "glasses.bool", "mood",
+    ]);
+  });
+  it("draws them as accessor rows", () => {
+    const [num, bool] = varRows(["width.num", "glasses.bool"], producers, true);
+    expect(num?.kind).toBe("num");
+    expect(num?.isAxis).toBe(true);
+    expect(bool?.facts).toEqual(["on / off"]);
+  });
+});

@@ -195,6 +195,11 @@ export function expandVarsWithAxes(
     for (const a of axes.slice(0, MAX_AXIS_ROWS_PER_VAR)) {
       if (a.axis) out.push(`${name}.${a.axis}`);
     }
+    // A slider's number and a toggle's on/off are read with an accessor, so
+    // they're offered with the variable, not only once the dot is typed.
+    const kind = producers?.get(name)?.kind;
+    if (kind === "slider") out.push(`${name}.num`);
+    else if (kind === "toggle") out.push(`${name}.bool`);
   }
   return out;
 }
@@ -219,6 +224,20 @@ export function varRows(
         icon: "pi pi-minus-circle",
         kind: "neg",
         facts: ["its negatives"],
+        producer: undefined,
+        badge: undefined,
+        internal: p?.internal === true,
+        isAxis: true,
+      };
+    }
+    // `$name.num` (a slider's number) / `$name.bool` (a toggle's on/off).
+    if (axisName === "num" || axisName === "bool") {
+      return {
+        token: name,
+        label: name,
+        icon: axisName === "num" ? "pi pi-sliders-h" : "pi pi-check-square",
+        kind: axisName,
+        facts: [axisName === "num" ? "its number" : "on / off"],
         producer: undefined,
         badge: undefined,
         internal: p?.internal === true,

@@ -28,6 +28,8 @@ const props = defineProps<{
   editable: boolean;
   /** Draw a fader as a row (the edit view's list). */
   flat?: boolean | undefined;
+  /** What the variable gets now (`sliderWrites`), for the hover. */
+  writes?: string | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -52,6 +54,14 @@ const holds = computed(() => {
   return "";
 });
 const marks = computed(() => sliderMarks(props.s));
+/** The hover: the whole name and what the variable gets, which a narrow
+ *  row or a long word cuts short. */
+const tip = computed(() => {
+  const head = props.s.name || "Slider";
+  if (!props.s.var) return head;
+  const got = props.writes ?? "";
+  return `${head}\n$${props.s.var} → ${got === "" ? "(empty)" : got}`;
+});
 const fmt = (v: number): string => fmtSlider({ value: v, decimals: props.s.decimals });
 const broken = computed(() => props.s.max <= props.s.min);
 const variant = computed(() => {
@@ -71,6 +81,7 @@ function internalHint(): string {
 <template>
   <div class="wp-slr" :class="`wp-slr--${variant}`" :data-wp-vars="s.var || undefined">
     <div
+      v-tooltip="editable ? undefined : tip"
       class="wp-slr__row"
       :class="{ 'is-editing': editing, 'is-editable': editable, 'has-text-color': !!s.text_color }"
       :data-wp-out="s.pin && s.out && variant !== 'fader' ? `value_${s.out}` : undefined"
@@ -97,7 +108,7 @@ function internalHint(): string {
           :step="s.step"
           :fine-step="fine"
           :free="!!s.free && !!fine"
-          :marks="marks.length && variant !== 'fader' ? marks : undefined"
+          :marks="marks.length ? marks : undefined"
           :format="fmt"
           :disabled="broken"
           :variant="variant"
@@ -110,9 +121,11 @@ function internalHint(): string {
         >
           <template v-if="variant !== 'line'" #label>
             <span class="wp-slr__in">
-              <i v-if="s.icon" class="pi wp-slr__icon" :class="`pi-${s.icon}`" aria-hidden="true" />
-              <span class="wp-slr__in-name">{{ s.name }}</span>
-              <span v-if="variant === 'bar' && !s.hide_var && s.var" class="wp-slr__in-var" :class="varColorClass(s.var)">${{ s.var }}</span>
+              <span class="wp-slr__in-head">
+                <i v-if="s.icon" class="pi wp-slr__icon" :class="`pi-${s.icon}`" aria-hidden="true" />
+                <span class="wp-slr__in-name">{{ s.name }}</span>
+              </span>
+              <span v-if="!s.hide_var && s.var" class="wp-slr__in-var" :class="varColorClass(s.var)">${{ s.var }}</span>
               <span v-if="variant === 'bar' && holds" class="wp-slr__holds">{{ holds }}</span>
             </span>
           </template>
@@ -198,6 +211,7 @@ function internalHint(): string {
 .wp-slr__ctl > * { flex: 1 1 auto; min-width: 0; }
 /* Bar and fader: the name sits in the kit Slider's label slot. */
 .wp-slr__in { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.wp-slr__in-head { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .wp-slr__in-name { font-weight: 600; font-size: 11.5px; color: var(--wp-sl-text, inherit); overflow: hidden; text-overflow: ellipsis; }
 .wp-slr__in-var { font: 10.5px var(--wp-font-mono, monospace); overflow: hidden; text-overflow: ellipsis; }
 .wp-slr__row.has-text-color .wp-slr__in-var { color: var(--wp-sl-text); }
@@ -206,8 +220,12 @@ function internalHint(): string {
 .wp-slr--fader .wp-slr__row { flex-direction: column; min-height: 0; padding: 4px 2px; background: transparent; }
 .wp-slr--fader .wp-slr__ctl { --wp-slider-len: 104px; justify-content: center; }
 .wp-slr--fader .wp-slr__ctl > * { flex: none; }
-.wp-slr--fader .wp-slr__in { flex-direction: column; gap: 1px; max-width: 64px; }
+.wp-slr--fader .wp-slr__in { flex-direction: column; gap: 1px; max-width: 72px; }
+/* One line for icon + name, so faders with and without an icon line up. */
+.wp-slr--fader .wp-slr__in-head { max-width: 100%; }
+.wp-slr--fader .wp-slr__icon { width: 12px; height: 12px; font-size: 11px; }
 .wp-slr--fader .wp-slr__in-name { font-size: 10.5px; text-align: center; }
+.wp-slr--fader .wp-slr__in-var { max-width: 100%; font-size: 9.5px; }
 .wp-slr__warn { flex: none; font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-slr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 </style>
