@@ -60,7 +60,7 @@ import {
   unfoldForVars,
 } from "../../extension/toggles";
 import { revealTarget } from "../../widgets/flash-target";
-import { ctlInputName, type ControlState } from "../../extension/toggle-control";
+import { ctlInputName, type ControlState, type FocusSpotView } from "../../extension/toggle-control";
 import type { LockChoice } from "../../extension/toggle-lock";
 import Banner from "@/kit/Banner.vue";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
@@ -76,6 +76,9 @@ const props = withDefaults(
     nodeMode?: number;
     /** Toggle id → its mute / bypass icon state (absent: nothing wired). */
     controls?: Record<string, ControlState>;
+    /** Toggle id → the places its mute / bypass reaches, for the icon's
+     *  "show on the canvas" click (absent or empty: nothing to show). */
+    focusSpots?: Record<string, FocusSpotView[]>;
     /** Canvas group titles, for the control's group picker. */
     canvasGroups?: string[];
     /** Bumped by the pencil in ComfyUI's selection toolbar: opens the
@@ -93,11 +96,16 @@ const props = withDefaults(
     missingLocks?: Record<string, string[]>;
   }>(),
   {
-    nodeMode: 0, controls: () => ({}), canvasGroups: () => [], editRequest: 0, upstreamVars: () => [],
+    nodeMode: 0, controls: () => ({}), focusSpots: () => ({}), canvasGroups: () => [], editRequest: 0, upstreamVars: () => [],
     varProducers: undefined, nodeTitle: "", lockChoices: () => [], missingLocks: () => ({}),
   },
 );
-const emit = defineEmits<{ "update:modelValue": [next: TogglesConfig]; "remove-missing": [] }>();
+const emit = defineEmits<{
+  "update:modelValue": [next: TogglesConfig];
+  "remove-missing": [];
+  /** Glide the canvas to place `key` of toggle `toggleId`'s targets. */
+  "focus-target": [toggleId: string, key: string];
+}>();
 const missingCount = computed(() => Object.values(props.missingLocks).reduce((n, l) => n + l.length, 0));
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
@@ -311,7 +319,8 @@ function toggleEdit(t: ToggleRow): void {
 /** The toggle whose window is open (gone if it was removed meanwhile). */
 const editingRow = computed(() => (editing.value ? byId.value.get(editing.value) : undefined));
 function windowProps(t: ToggleRow) {
-  return { ...rowProps(t), nodeTitle: props.nodeTitle, lockChoices: props.lockChoices };
+  const { focusSpots: _spots, onShowTarget: _show, ...row } = rowProps(t);
+  return { ...row, nodeTitle: props.nodeTitle, lockChoices: props.lockChoices };
 }
 /** Done in a toggle's window: store its draft, moving it to its group. */
 function applyWindow(t: ToggleRow, next: ToggleRow, groupId: string): void {
@@ -363,6 +372,8 @@ function rowProps(t: ToggleRow) {
     outputsFull: pinCount.value >= MAX_OUTPUTS,
     editable: editMode.value,
     controlState: props.controls[t.id] ?? null,
+    focusSpots: props.focusSpots[t.id] ?? [],
+    onShowTarget: (key: string) => emit("focus-target", t.id, key),
     canvasGroups: props.canvasGroups,
     varSuggestions: valueVars.value,
     varProducers: props.varProducers,

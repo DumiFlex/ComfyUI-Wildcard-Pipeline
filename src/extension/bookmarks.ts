@@ -226,6 +226,29 @@ export function jumpOffset(input: JumpInput): [number, number] {
   return [ox, oy];
 }
 
+/**
+ * Scale + offset that frame canvas `rect` in the free part of the screen
+ * (`viewport` less `inset` = [left, top, right, bottom]), `margin` px clear
+ * of its edges, centred. Never zooms in past `maxScale` (a lone node isn't
+ * blown up to fill the screen) nor out past the bookmark zoom floor.
+ */
+export function frameRect(
+  rect: readonly [number, number, number, number],
+  viewport: readonly [number, number],
+  inset: readonly [number, number, number, number] = [0, 0, 0, 0],
+  margin = BOOKMARK_MARGIN,
+  maxScale = 1,
+): { scale: number; offset: [number, number] } {
+  const [x, y, w, h] = rect;
+  const fw = Math.max(1, viewport[0] - inset[0] - inset[2] - 2 * margin);
+  const fh = Math.max(1, viewport[1] - inset[1] - inset[3] - 2 * margin);
+  const fit = Math.min(fw / Math.max(1, w), fh / Math.max(1, h));
+  const scale = Math.max(BOOKMARK_ZOOM_MIN, Math.min(maxScale, fit));
+  const cx = inset[0] + margin + fw / 2;
+  const cy = inset[1] + margin + fh / 2;
+  return { scale, offset: [cx / scale - (x + w / 2), cy / scale - (y + h / 2)] };
+}
+
 // ── dock spots ────────────────────────────────────────────────────────
 
 /** One of the 3×3 spots the dock snaps to. */

@@ -41,11 +41,15 @@ export interface CtlNode {
   subgraph?: { nodes?: CtlNode[] } | null;
   isVirtualNode?: boolean;
   properties?: Record<string, unknown>;
+  pos?: ArrayLike<number>;
+  size?: ArrayLike<number>;
+  getBounding?: (out?: Float32Array) => ArrayLike<number>;
 }
 export interface CtlGroup {
   title?: string;
   /** `[w, h]`; older litegraph keeps it in `_bounding[2..3]`. */
   size?: ArrayLike<number>;
+  pos?: ArrayLike<number>;
   _bounding?: ArrayLike<number>;
   recomputeInsideNodes?: () => void;
   _children?: Iterable<unknown>;
@@ -315,4 +319,106 @@ export function controlState(
   if (targets.length > 4) names.push(`${targets.length - 4} more`);
   if (groups.length) names.push(groups.length === 1 ? `group ${groups[0]}` : `${groups.length} groups`);
   return { control, active: off, hint: `${verb}: ${names.join(", ")}` };
+}
+
+// ── focus: show a toggle's targets on the canvas ──────────────────────
+
+/** `[x, y, w, h]` in canvas units. */
+export type CanvasRect = [number, number, number, number];
+
+/** One place the row's mute / bypass button can show: a node it drives,
+ *  a canvas group, or (several places) all of them at once. */
+export interface FocusSpot {
+  key: string;
+  label: string;
+  kind: "node" | "group" | "all";
+  /** Nodes it holds (a group's or all of them); 1 for a node. */
+  count: number;
+  rect: CanvasRect;
+}
+
+/** A focus place as the row lists it (no rect: read again on the click). */
+export type FocusSpotView = Pick<FocusSpot, "key" | "label" | "kind" | "count">;
+
+/** Title bar height LiteGraph draws above `pos` when a node has no `getBounding`. */
+const TITLE_H = 30;
+
+export function nodeRect(n: CtlNode): CanvasRect | null {
+  try {
+    const b = n.getBounding?.(new Float32Array(4));
+    if (b && b.length >= 4 && (b[2] ?? 0) > 0) return [b[0] ?? 0, b[1] ?? 0, b[2] ?? 0, b[3] ?? 0];
+  } catch { /* a half-built node: fall back to pos + size */ }
+  if (!n.pos || !n.size) return null;
+  return [n.pos[0] ?? 0, (n.pos[1] ?? 0) - TITLE_H, n.size[0] ?? 0, (n.size[1] ?? 0) + TITLE_H];
+}
+
+export function groupRect(g: CtlGroup): CanvasRect | null {
+  const b = g._bounding;
+  if (b && b.length >= 4) return [b[0] ?? 0, b[1] ?? 0, b[2] ?? 0, b[3] ?? 0];
+  if (!g.pos || !g.size) return null;
+  return [g.pos[0] ?? 0, g.pos[1] ?? 0, g.size[0] ?? 0, g.size[1] ?? 0];
+}
+
+/** The smallest rect holding every one of `rects`. */
+export function unionRect(rects: readonly CanvasRect[]): CanvasRect | null {
+  if (!rects.length) return null;
+  let [x1, y1, x2, y2] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y, w, h] of rects) {
+    x1 = Math.min(x1, x);
+    y1 = Math.min(y1, y);
+    x2 = Math.max(x2, x + w);
+    y2 = Math.max(y2, y + h);
+  }
+  return [x1, y1, x2 - x1, y2 - y1];
+}
+
+/** Most places listed one by one; past it the menu still offers All. */
+export const MAX_FOCUS_SPOTS = 12;
+
+/** The wired node, past reroutes (null when nothing real is at the end). */
+function wiredThrough(node: CtlNode, input: CtlInput | undefined, seen = new Set<CtlNode>()): CtlNode | null {
+  const o = originOf(node, input);
+  if (!o || seen.has(o)) return null;
+  seen.add(o);
+  if (o.type !== "Reroute") return o;
+  return wiredThrough(o, (o.inputs ?? [])[0], seen);
+}
+
+/**
+ * Where a toggle's mute / bypass reaches, as places to show: the node wired
+ * into its dot; for a WP Node Group the canvas groups it covers, else the
+ * nodes wired into it; then every canvas group named in `groups`. With more
+ * than one place, an `all` spot first frames them together.
+ */
+export function focusSpots(node: CtlNode, toggleId: string, groups: readonly string[] = [], dot = true): FocusSpot[] {
+  const spots: FocusSpot[] = [];
+  const seenGroups = new Set<CtlGroup>();
+  const addGroup = (g: CtlGroup, i: number): void => {
+    if (seenGroups.has(g)) return;
+    seenGroups.add(g);
+    const rect = groupRect(g);
+    if (!rect) return;
+    const count = nodesOfGroup(g).filter((n) => n !== node && !n.isVirtualNode).length;
+    spots.push({ key: `g:${i}`, label: g.title || "Untitled group", kind: "group", count, rect });
+  };
+  const addNode = (n: CtlNode): void => {
+    if (n === node || spots.some((s) => s.key === `n:${n.id}`)) return;
+    const rect = nodeRect(n);
+    if (rect) spots.push({ key: `n:${n.id}`, label: n.title || `#${n.id}`, kind: "node", count: 1, rect });
+  };
+  const all = graphGroups(node);
+  const input = dot ? node.inputs?.find((i) => i.name === ctlInputName(toggleId)) : undefined;
+  const wired = wiredThrough(node, input);
+  if (wired?.type === NODE_GROUP_TYPE) {
+    const covered = canvasGroupsOf(wired);
+    if (covered.length) for (const g of covered) addGroup(g, all.indexOf(g));
+    else for (const n of expandTargets(wired)) if (!n.isVirtualNode) addNode(n);
+  } else if (wired) {
+    addNode(wired);
+  }
+  for (const g of groupsByTitle(node.graph, groups)) addGroup(g, all.indexOf(g));
+  if (spots.length < 2) return spots;
+  const rect = unionRect(spots.map((s) => s.rect));
+  const count = toggleTargets(node, toggleId, groups, dot).length;
+  return rect ? [{ key: "all", label: "All targets", kind: "all", count, rect }, ...spots.slice(0, MAX_FOCUS_SPOTS)] : spots;
 }

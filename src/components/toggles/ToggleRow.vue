@@ -8,6 +8,7 @@
  * `extension/row-outputs.ts` puts that BOOLEAN dot at the row's right edge.
  */
 import WpIconButton from "@/kit/WpIconButton.vue";
+import ToggleCtlButton from "./ToggleCtlButton.vue";
 import WpSegmented from "@/kit/WpSegmented.vue";
 import WpSwitch from "@/kit/WpSwitch.vue";
 import Checkbox from "@/kit/Checkbox.vue";
@@ -15,7 +16,7 @@ import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
 import { computed } from "vue";
 import { hasCtlDot, type PickStyle, type ToggleRow, type ToggleStyle } from "../../extension/toggles";
-import { ctlInputName, type ControlState } from "../../extension/toggle-control";
+import { ctlInputName, type ControlState, type FocusSpotView } from "../../extension/toggle-control";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 
 interface Choice { value: string; label: string }
@@ -51,6 +52,8 @@ const props = defineProps<{
   editable: boolean;
   /** Mute / bypass icon state; null while nothing is wired. */
   controlState?: ControlState | null;
+  /** Where its mute / bypass reaches; the icon's click shows them. */
+  focusSpots?: FocusSpotView[] | undefined;
   /** Canvas group titles to offer in the edit panel. */
   canvasGroups?: string[];
   /** `$` suggestions for the Pick one Value: upstream + the toggles' own. */
@@ -66,6 +69,8 @@ const emit = defineEmits<{
   patch: [patch: Partial<ToggleRow>];
   edit: [];
   remove: [];
+  /** Glide the canvas to one of `focusSpots` (by key). */
+  "show-target": [key: string];
 }>();
 
 /** The row's icon and name colours as CSS variables (absent: the theme's). */
@@ -160,13 +165,12 @@ const missingHint = computed(() => {
           </WpSwitch>
         </span>
         <span v-if="parentName" class="wp-tgr__sub" :class="subClass()"><i class="pi pi-link" aria-hidden="true" />{{ sub() }}</span>
-        <i
+        <ToggleCtlButton
             v-if="controlState"
-            v-tooltip="controlState.hint"
-            class="pi wp-tgr__ctlicon"
-            :class="[controlState.control === 'mute' ? 'pi-volume-off' : 'pi-forward', `is-${controlState.control}`, { 'is-active': controlState.active }]"
-            role="img"
-            :aria-label="controlState.hint"
+            :state="controlState"
+            :spots="focusSpots ?? []"
+            :toggle-id="t.id"
+            @show="(key: string) => emit('show-target', key)"
           />
           <i
             v-if="t.lock && t.lock_targets?.length"
@@ -185,13 +189,12 @@ const missingHint = computed(() => {
       <span class="wp-tgr__name">
         <span class="wp-tgr__title">
           <b>{{ t.name }}</b>
-          <i
+          <ToggleCtlButton
             v-if="controlState"
-            v-tooltip="controlState.hint"
-            class="pi wp-tgr__ctlicon"
-            :class="[controlState.control === 'mute' ? 'pi-volume-off' : 'pi-forward', `is-${controlState.control}`, { 'is-active': controlState.active }]"
-            role="img"
-            :aria-label="controlState.hint"
+            :state="controlState"
+            :spots="focusSpots ?? []"
+            :toggle-id="t.id"
+            @show="(key: string) => emit('show-target', key)"
           />
           <i
             v-if="t.lock && t.lock_targets?.length"
@@ -424,6 +427,11 @@ const missingHint = computed(() => {
   box-shadow: var(--wp-shadow-sm), inset 0 0 0 1px var(--wp-accent);
 }
 .wp-tgr__ctlicon { flex: none; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); opacity: 0.7; }
+/* A grid chip stretches to its tile's height; the icons after it stay on
+ * the chip's middle instead of riding up to the tile's top. */
+.wp-tgr__row.is-chip > :deep(.wp-tgr__ctlicon),
+.wp-tgr__row.is-chip > :deep(.wp-dropdown-anchor),
+.wp-tgr__row.is-chip > .wp-tgr__sub { align-self: center; }
 .wp-tgr__ctlicon.is-active { opacity: 1; }
 .wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
 .wp-tgr__ctlicon.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }

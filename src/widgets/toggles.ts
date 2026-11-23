@@ -12,7 +12,9 @@ import { attachFieldSockets, type FieldSocketNode } from "../extension/field-soc
 import {
   applyControl,
   controlState,
+  focusSpots,
   type ControlState,
+  type FocusSpotView,
   groupTitles,
   isCtlInput,
   releaseTargets,
@@ -38,6 +40,7 @@ import { lockPlan, missingByToggle, withoutMissingTargets, type LockChoice } fro
 import { applyLockActions, lockChoices, setMissingBadge, type LockOutcome } from "./toggle-lock-canvas";
 export { missingLocksOnCanvas } from "./toggle-lock-canvas";
 import { pushToast } from "../components/shared/toast-store";
+import { jumpToRect } from "./bookmark";
 
 const TogglesWidget = defineAsyncComponent(
   () => import("../components/toggles/TogglesWidget.vue"),
@@ -267,17 +270,23 @@ export function create(node: TogglesHostNode, inputName: string) {
       });
       return () => {
         const controls: Record<string, ControlState> = {};
+        const spots: Record<string, FocusSpotView[]> = {};
         const eff = effectiveToggles(config.value);
         for (const t of toggleRows(config.value)) {
           if (!t.control) continue;
           const st = controlState(drives.value.get(t.id) ?? [], t.control, t.groups ?? [], !!eff.get(t.id), t.invert);
           if (st) controls[t.id] = st;
+          // Labels only: where each place is gets read again on the click,
+          // so a node moved since still lands in view.
+          spots[t.id] = focusSpots(ctlNode, t.id, t.groups ?? [], !t.hide_dot).map(({ key, label, kind, count }) => ({ key, label, kind, count }));
         }
         void drives.value;
         return h(TogglesWidget, {
           modelValue: config.value,
           nodeMode: nodeMode.value,
           controls,
+          focusSpots: spots,
+          onFocusTarget: (toggleId: string, key: string) => focusTarget(ctlNode, config.value, toggleId, key),
           canvasGroups: canvasGroups.value,
           editRequest: editRequest.value,
           nodeTitle: (node as { title?: string }).title ?? "",
@@ -313,6 +322,14 @@ export function create(node: TogglesHostNode, inputName: string) {
   host.onCleanup(attachRowOutputs(node, host.element, inputName, isToggleOutput));
   host.onCleanup(attachFieldSockets(node as unknown as FieldSocketNode, host.element, inputName, ctlNames));
   return host;
+}
+
+/** Glide the canvas to one of a toggle's mute / bypass targets. */
+function focusTarget(node: CtlNode, cfg: TogglesConfig, toggleId: string, key: string): void {
+  const t = toggleRows(cfg).find((r) => r.id === toggleId);
+  if (!t) return;
+  const spot = focusSpots(node, t.id, t.groups ?? [], !t.hide_dot).find((s) => s.key === key);
+  if (spot) jumpToRect(node.graph as LiteGraphLike | null | undefined, spot.rect);
 }
 
 /** Say what a lock change did when some rows could not follow it. */
