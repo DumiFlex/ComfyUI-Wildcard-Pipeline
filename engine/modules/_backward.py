@@ -22,9 +22,18 @@ Research + decisions: /pr-drafts/backward-rules-locked-values-2026-11-17.md
 (Dumi, 17/11/2026: seed-locked sources are narrowed like forward constraints
 narrow them; value-locked sources are never changed).
 
-Phase 1 limits: targets in the same Context node, top-level instances (a
-target reached through a nested ``@{}`` ref is not looked at), constraints
-only (rules/derivations are not walked backward yet).
+Rules between source and target: when a module between them (a derivation,
+say) sets a variable the target's filter or Match variable reads FROM the
+source's pick, each distinct source value (up to `MAX_ENUM`) is run ahead on a
+scratch copy, so every option is tried with what it leads to. The same goes
+for a later wildcard no constraint from the source covers, whose filter or
+Match variable a rule fills from the source (the WP Parts mirror chain pose →
+rule → mirror → place): a source option is dropped when that wildcard would
+be left with nothing its own narrowed targets accept.
+
+Limits: targets in the same Context node, top-level instances (a target
+reached through a nested ``@{}`` ref is not looked at), and the look-ahead
+sets only the source's variable (an axis or pick read by the rule is not).
 """
 from __future__ import annotations
 
@@ -41,6 +50,11 @@ MAX_DEPTH = 4
 DRY_KEY = "__wp_backward_dry__"
 #: Accepts rolls tried per source option (as `pack_tidy._rolls`).
 _MAX_ROLLS = 64
+#: Distinct source values the look-ahead runs one by one when a variable a
+#: target reads depends on the source's own pick (rules between them).
+MAX_ENUM = 32
+#: Later wildcards a source checks for a rule-made dependency on its pick.
+MAX_DEPENDENTS = 8
 
 
 def _weight(o: dict[str, Any]) -> float:
@@ -314,7 +328,7 @@ def prune(
     entries = _entries(ctx)
     hits = ctx.get("__wp_constraint_hits__") or {}
     pairs = _constraints_from(ctx, source_id, source_origin, pos, entries)
-    if not pairs:
+    if not pairs and (depth or ctx.get(DRY_KEY) or not _dependents(entries, pos, set())):
         return options, [], []
     from engine.modules.wildcard_handler import _accepts_axes
 
@@ -326,19 +340,13 @@ def prune(
     removed: list[Any] = []
     names: list[str] = []
     out = options
-    for _idx, (t, cons) in sorted(by_target.items()):
-        lookup = None
-        if depth == 0:
-            lookup = _lookahead(ctx, pos, t, binding, payload, out)
-        domain = _domain(ctx, t, depth, lookup)
-        if domain is None:
-            continue
-        t_payload = t["snapshot"].get("payload") or {}
-        axes = _accepts_axes(t_payload)
+
+    def drop(keep: Any, t: dict[str, Any]) -> None:
+        nonlocal out
         nxt: list[dict[str, Any]] = []
         changed = False
         for o in out:
-            if _weight(o) > 0 and not _supported(o, payload, cons, domain, axes):
+            if _weight(o) > 0 and not keep(o):
                 nxt.append({**o, "weight": 0})
                 removed.append(o.get("id"))
                 changed = True
@@ -346,10 +354,84 @@ def prune(
                 nxt.append(o)
         if changed:
             out = nxt
+            t_payload = t["snapshot"].get("payload") or {}
             name = t["header"].name or str(t_payload.get("var_binding") or t["header"].id)
             if name not in names:
                 names.append(name)
+
+    for _idx, (t, cons) in sorted(by_target.items()):
+        shared: Any = None
+        by_value: dict[str, Any] | None = None
+        if depth == 0:
+            shared, by_value = _lookahead(ctx, pos, t, binding, payload, out)
+        t_payload = t["snapshot"].get("payload") or {}
+        axes = _accepts_axes(t_payload)
+        if by_value is not None:
+            # A rule between them makes what the target reads depend on the
+            # source's pick: each option is tried with what it leads to.
+            doms = {v: _domain(ctx, t, depth, get) for v, get in by_value.items()}
+
+            def keep_each(o: dict[str, Any], doms=doms, cons=cons, axes=axes) -> bool:
+                dom = doms.get(_value(o))
+                return dom is None or _supported(o, payload, cons, dom, axes)
+
+            drop(keep_each, t)
+            continue
+        domain = _domain(ctx, t, depth, shared)
+        if domain is None:
+            continue
+        drop(lambda o, d=domain, c=cons, a=axes: _supported(o, payload, c, d, a), t)
+    if depth == 0 and not ctx.get(DRY_KEY):
+        for d in _dependents(entries, pos, set(by_target)):
+            if not _mentions(ctx, pos, d["index"], binding):
+                continue
+            _shared, by_value = _lookahead(ctx, pos, d, binding, payload, out)
+            if by_value is None:
+                continue
+            fits = {v: _fits_downstream(ctx, d, get) for v, get in by_value.items()}
+            if not any(fits.values()):
+                # Nothing the source picks helps: it is not the source's to fix.
+                continue
+            drop(lambda o, f=fits: f.get(_value(o), True), d)
     return out, list(dict.fromkeys(removed)), names
+
+
+def _value(o: dict[str, Any]) -> str:
+    return str(o.get("value", ""))
+
+
+def _dependents(
+    entries: list[dict[str, Any]], pos: int, done: set[int],
+) -> list[dict[str, Any]]:
+    """Later wildcards (no constraint from the source covers them) whose pool
+    filter or Match variable reads a variable: a rule between may set it from
+    the source's pick (the WP Parts mirror: pose → rule → mirror → place)."""
+    out = []
+    for e in entries:
+        if e["index"] <= pos + 1 or e["index"] in done or not e["on"]:
+            continue
+        if e["header"].type != "wildcard":
+            continue
+        if _names_read(e["snapshot"].get("instance") or {}):
+            out.append(e)
+        if len(out) >= MAX_DEPENDENTS:
+            break
+    return out
+
+
+def _fits_downstream(ctx: dict[str, Any], d: dict[str, Any], get: Any) -> bool:
+    """Does wildcard ``d``, reading its variables through ``get``, keep an
+    option its own narrowed targets accept? True when nothing narrows it."""
+    dom = _domain(ctx, d, 1, get)
+    if dom is None:
+        return True
+    if not dom:
+        return False
+    h = d["header"]
+    kept, _r, _t = prune(
+        ctx, d["snapshot"].get("payload") or {}, dom, h.id, h.bundle_origin, d["index"], 2,
+    )
+    return any(_weight(o) > 0 for o in kept)
 
 
 def _names_read(inst: dict[str, Any]) -> list[str]:
@@ -409,55 +491,96 @@ def _dry(
 def _lookahead(
     ctx: dict[str, Any], pos: int, t: dict[str, Any], binding: str,
     payload: dict[str, Any], options: list[dict[str, Any]],
-) -> Any:
+) -> tuple[Any, dict[str, Any] | None]:
     """What target ``t``'s filter / Match variables will hold when it rolls.
 
     A module between the source and the target may set one (a rule, an
-    injector-like fixed value, …). Those modules run ahead on a scratch copy.
-    When what they set depends on the source's own pick (tried with two
-    different options), nothing can know it now: the variable counts as unset
-    (it narrows nothing) and a `backward_late_variable` warning says to move
-    the module above the source."""
+    injector-like fixed value, …). Those modules run ahead on a scratch copy,
+    once per distinct source value. Returns ``(getter, None)`` when what they
+    set doesn't depend on the source's pick, or ``(None, {value: getter})``
+    when it does, so each source option can be tried with what it leads to.
+    Past `MAX_ENUM` values a dependent variable counts as unset (it narrows
+    nothing) and a `backward_late_variable` warning says to move the module
+    above the source."""
     if ctx.get(DRY_KEY):
-        return None
+        return None, None
     inst = t["snapshot"].get("instance") or {}
     names = _names_read(inst)
     if not names or t["index"] <= pos + 1:
-        return None
+        return None, None
     cache = ctx.setdefault(CACHE_KEY, {}).setdefault("ahead", {})
     key = (pos, t["index"])
     if key in cache:
         return cache[key]
-    values = [str(o.get("value", "")) for o in options if _weight(o) > 0]
-    distinct = list(dict.fromkeys(values))
+    distinct = list(dict.fromkeys(_value(o) for o in options if _weight(o) > 0))
+    # Only a module between that names the source's variable can make what
+    # the target reads depend on it; otherwise one run says it all.
+    tried = distinct[: MAX_ENUM + 1] if _mentions(ctx, pos, t["index"], binding) else distinct[:1]
     try:
-        first = _dry(ctx, pos, t["index"], binding, distinct[0] if distinct else "")
-        second = (
-            _dry(ctx, pos, t["index"], binding, distinct[1])
-            if binding and len(distinct) > 1 else first
-        )
+        runs = {v: _dry_cached(ctx, pos, t["index"], binding, v) for v in (tried or [""])}
     except Exception:
-        cache[key] = None
-        return None
-    known: dict[str, Any] = {}
-    late: list[str] = []
-    for n in names:
-        a, b = first.get(n), second.get(n)
-        if str(a) != str(b):
-            late.append(n)
-            known[n] = None
-        else:
-            known[n] = a
-    if late and isinstance(ctx.get("__wp_warnings__"), list):
-        ctx["__wp_warnings__"].append(late_variable_warning(
-            str(ctx.get("__wp_current_module_id__") or ""), late, binding,
-        ))
+        cache[key] = (None, None)
+        return cache[key]
+    first = next(iter(runs.values()))
+    late = [n for n in names if any(str(r.get(n)) != str(first.get(n)) for r in runs.values())]
 
-    def get(name: str) -> Any:
-        return known[name] if name in known else ctx.get(name)
+    def getter(found: dict[str, Any], blank: list[str]) -> Any:
+        def get(name: str) -> Any:
+            if name in blank:
+                return None
+            return found.get(name) if name in names else ctx.get(name)
+        return get
 
-    cache[key] = get
-    return get
+    if not late:
+        cache[key] = (getter(first, []), None)
+    elif len(distinct) <= MAX_ENUM:
+        cache[key] = (None, {v: getter(r, []) for v, r in runs.items()})
+    else:
+        if isinstance(ctx.get("__wp_warnings__"), list):
+            ctx["__wp_warnings__"].append(late_variable_warning(
+                str(ctx.get("__wp_current_module_id__") or ""), late, binding,
+            ))
+        cache[key] = (getter(first, late), None)
+    return cache[key]
+
+
+def _mentions(ctx: dict[str, Any], pos: int, end: int, binding: str) -> bool:
+    """Does a module between ``pos`` and ``end`` name ``$binding`` (or the
+    bare name, as a derivation condition does)? A cheap text check: a false
+    yes only costs look-ahead runs."""
+    if not binding:
+        return False
+    import json
+    import re
+
+    cache = ctx.setdefault(CACHE_KEY, {}).setdefault("mentions", {})
+    key = (pos, end, binding)
+    if key not in cache:
+        pat = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(binding)}(?![A-Za-z0-9_])")
+        modules = ctx.get(CHAIN_KEY) or []
+        hit = False
+        for m in modules[pos + 1: end]:
+            try:
+                text = json.dumps(m, default=str)
+            except (TypeError, ValueError):
+                hit = True
+                break
+            if pat.search(text):
+                hit = True
+                break
+        cache[key] = hit
+    return bool(cache[key])
+
+
+def _dry_cached(
+    ctx: dict[str, Any], pos: int, end: int, binding: str, value: Any,
+) -> dict[str, Any]:
+    """`_dry`, once per (source, target, value) in a run."""
+    cache = ctx.setdefault(CACHE_KEY, {}).setdefault("dry", {})
+    key = (pos, end, binding, str(value))
+    if key not in cache:
+        cache[key] = _dry(ctx, pos, end, binding, value)
+    return cache[key]
 
 
 def late_variable_warning(module_id: str, names: list[str], binding: str) -> dict[str, Any]:
