@@ -123,7 +123,9 @@ export const nodeLoopSeeds: WeakMap<object, number[]> = new WeakMap();
 export const nodeFrameSeeds: WeakMap<object, Map<number, number>> = new WeakMap();
 /** WP_Context: the option each wildcard use picked last run, by `_uid`
  *  (`module_picks`), and per frame (`frame_picks`), for the row's lock value. */
-export const nodeLastPicks: WeakMap<object, { all: Record<string, string>; frames: Map<number, Record<string, string>> }> = new WeakMap();
+export const nodeLastPicks: WeakMap<object, { all: Record<string, LastPick>; frames: Map<number, Record<string, LastPick>> }> = new WeakMap();
+/** One use's last-run pick: an option id, or a multi-pick row's ids. */
+export type LastPick = string | string[];
 /** WP_Context: the source its last run's seed came from (`seed_source`). */
 export const nodeSeedSource: WeakMap<object, string> = new WeakMap();
 

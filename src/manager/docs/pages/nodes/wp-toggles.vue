@@ -129,7 +129,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <b>Rows to lock</b>: any row of any WP Context on the canvas, named by the node's codename,
         its title and the row. No wires. Switching the toggle on locks those rows to what the last
         run did, as the row's own lock button would: Lock value keeps the option each wildcard
-        picked (a row without one single pick, like a multi-pick or a fixed value, keeps its seed),
+        picked (all picks of a multi-pick row; a row with no pick, like a fixed value, keeps its seed),
         Lock seed keeps the seed. A run over several frames keeps each frame's pick or seed.
         Switching it off unlocks only the rows this toggle locked. A row you locked by hand, or
         another toggle did, is left alone both ways, and clicking a row's lock yourself makes it

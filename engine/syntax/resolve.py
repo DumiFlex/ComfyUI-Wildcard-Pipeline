@@ -778,6 +778,15 @@ def ref_option_pool(tok: Token, ctx: ResolveContext) -> list[dict]:
     # rolls normally and returns as the whole pool when the constraints below
     # leave nothing to pick.
     from engine.modules._fallback import fallback_warning, find_fallback, pool_is_dead
+    # A deep Match variable chose this ref's option already: take it.
+    ref_pin: Any = getattr(ctx, "ref_pin", None)
+    if callable(ref_pin):
+        want = ref_pin(uuid)
+        hit = next(
+            (o for o in options if isinstance(o, dict) and want and o.get("id") == want), None,
+        )
+        if hit is not None:
+            return [{**hit, "weight": 1}]
     fallback = find_fallback(options)
     any_applied = False
 

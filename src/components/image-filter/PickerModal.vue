@@ -345,6 +345,22 @@ watch(figEl, (el) => {
   figObserver.observe(el);
 });
 onBeforeUnmount(() => figObserver?.disconnect());
+/** The clear space beside the picture steps: its left half to the previous
+ *  image, its right half to the next (the arrows and ←/→ do the same). */
+const figSide = ref<-1 | 0 | 1>(0);
+function sideOf(ev: MouseEvent): -1 | 0 | 1 {
+  const el = figEl.value;
+  if (!el || ev.target !== el || painting.value || total.value < 2) return 0;
+  const r = el.getBoundingClientRect();
+  return ev.clientX < r.left + r.width / 2 ? -1 : 1;
+}
+function onFigMove(ev: MouseEvent): void {
+  figSide.value = sideOf(ev);
+}
+function onFigClick(ev: MouseEvent): void {
+  const side = sideOf(ev);
+  if (side) step(side);
+}
 /** The picture's box in Detail (its 3px border included), or nothing until its size is known. */
 const detailStyle = computed((): Record<string, string> => {
   const size = cell.value ? natural.value[cell.value.key] : undefined;
@@ -747,7 +763,18 @@ const subLine = computed(() => {
         <div class="wp-ifp__stage">
           <div class="wp-ifp__view">
             <Button size="sm" variant="ghost" icon="pi-chevron-left" aria-label="Previous image" kbd="←" data-test="image-filter-prev" @click="step(-1)" />
-            <figure ref="figEl" class="wp-ifp__fig" :style="detailStyle">
+            <!-- The arrows and ←/→ are the keyboard way; this is a bigger mouse target for them. -->
+            <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions, vuejs-accessibility/mouse-events-have-key-events -->
+            <figure
+              ref="figEl"
+              class="wp-ifp__fig"
+              :class="{ 'is-prev': figSide === -1, 'is-next': figSide === 1 }"
+              :style="detailStyle"
+              data-test="image-filter-fig"
+              @mousemove="onFigMove"
+              @mouseleave="figSide = 0"
+              @click="onFigClick"
+            >
               <MaskPainter
                 v-if="painting"
                 ref="painter"
@@ -1130,6 +1157,8 @@ const subLine = computed(() => {
 /* The figure takes all the room between the arrows; the picture is sized
  * to fill it (--wp-ifp-pic-w/h, set once its size is known). */
 .wp-ifp__fig { margin: 0; flex: 1; align-self: stretch; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.wp-ifp__fig.is-prev { cursor: w-resize; }
+.wp-ifp__fig.is-next { cursor: e-resize; }
 .wp-ifp__detail { --wp-ifp-stage-h: calc(90vh - 240px); }
 .wp-ifp__img { display: block; box-sizing: content-box; width: var(--wp-ifp-pic-w, auto); height: var(--wp-ifp-pic-h, auto); max-width: var(--wp-ifp-pic-w, 100%); max-height: var(--wp-ifp-pic-h, var(--wp-ifp-stage-h)); border: 3px solid transparent; border-radius: min(6px, var(--wp-radius-cap, 999px)); cursor: pointer; }
 .wp-ifp__img.is-picked { border-color: var(--wp-green); }

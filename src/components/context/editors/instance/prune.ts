@@ -70,6 +70,14 @@ export function pruneStaleInstanceRefs(
       warnings.push(`locked_option_id: dropped stale id '${out.locked_option_id}'`);
       delete out.locked_option_id;
     }
+    if (Array.isArray(out.locked_option_ids)) {
+      const kept = out.locked_option_ids.filter((id) => optionIds.has(id));
+      for (const id of out.locked_option_ids) {
+        if (!optionIds.has(id)) warnings.push(`locked_option_ids: dropped stale id '${id}'`);
+      }
+      if (kept.length) out.locked_option_ids = kept;
+      else delete out.locked_option_ids;
+    }
     if (typeof out.category_filter === "string" && out.category_filter.trim()) {
       const stale = [...new Set(exprTags(parseSubcatExpr(out.category_filter)))]
         .filter((c) => !subCats.has(c));

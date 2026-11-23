@@ -61,7 +61,8 @@ const LOCK: Master = {
   isOn: isLocked,
   // A value-locked row counts as locked, so master ON leaves it alone.
   has: (inst) => typeof inst.locked_seed === "number"
-    || (typeof inst.locked_option_id === "string" && inst.locked_option_id !== ""),
+    || (typeof inst.locked_option_id === "string" && inst.locked_option_id !== "")
+    || (Array.isArray(inst.locked_option_ids) && inst.locked_option_ids.length > 0),
   field: "locked_seed",
   flag: "master_lock",
   claim: "master_lock_by",

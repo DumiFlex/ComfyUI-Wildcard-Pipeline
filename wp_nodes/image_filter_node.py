@@ -87,8 +87,10 @@ def _save_previews(images: list[Any]) -> list[list[dict[str, Any]]]:
 #: there; anything longer is cut, and an untouched prompt is never sent back).
 _MAX_LABEL_TEXT = 20_000
 #: The zoom's Details panel lists the frame's variables; cap what one label
-#: carries so a huge context can't bloat the websocket message.
-_MAX_LABEL_VARS = 80
+#: carries so a huge context can't bloat the websocket message. Variables
+#: whose value shows in the frame's prompt go first, so a big workflow (WP
+#: Parts sets ~170, most of them switches) never pushes them past the cap.
+_MAX_LABEL_VARS = 200
 _MAX_VAR_TEXT = 300
 
 
@@ -106,12 +108,20 @@ def _frame_seed(internals: dict[str, Any]) -> int | None:
     return None
 
 
-def _frame_vars(ctx: Any) -> dict[str, str]:
-    """The frame's resolved `$variables` as text, for the zoom's Details panel."""
+def _in_prompt(text: str, prompts: list[str]) -> bool:
+    """True when the value (or one of its comma-separated parts) is in a prompt."""
+    whole = text.strip().strip(",").strip()
+    parts = [whole] + [p.strip() for p in whole.split(",")]
+    return any(len(p) >= 2 and any(p in prompt for prompt in prompts) for p in parts)
+
+
+def _frame_vars(ctx: Any, prompts: list[str] | None = None) -> dict[str, str]:
+    """The frame's resolved `$variables` as text, for the zoom's Details panel.
+    The ones its prompt shows come first, then the rest, up to the cap."""
     values = getattr(ctx, "context", None)
-    out: dict[str, str] = {}
     if not isinstance(values, dict):
-        return out
+        return {}
+    rows: list[tuple[str, str]] = []
     for name, raw in values.items():
         if not isinstance(name, str) or name.startswith("__"):
             continue
@@ -120,10 +130,12 @@ def _frame_vars(ctx: Any) -> dict[str, str]:
         except Exception:  # noqa: BLE001 - a value we can't render is just skipped
             continue
         if isinstance(text, str) and text.strip():
-            out[name] = text[:_MAX_VAR_TEXT]
-            if len(out) >= _MAX_LABEL_VARS:
-                break
-    return out
+            rows.append((name, text[:_MAX_VAR_TEXT]))
+    texts = [p for p in (prompts or []) if p]
+    if texts:
+        used = [r for r in rows if _in_prompt(r[1], texts)]
+        rows = used + [r for r in rows if r not in used]
+    return dict(rows[:_MAX_LABEL_VARS])
 
 
 def _frame_labels(
@@ -152,7 +164,7 @@ def _frame_labels(
         seed = _frame_seed(internals)
         if seed is not None:
             label["seed"] = seed
-        frame_vars = _frame_vars(ctx)
+        frame_vars = _frame_vars(ctx, [t for t in (pos, neg) if isinstance(t, str)])
         if frame_vars:
             label["vars"] = frame_vars
         if isinstance(pos, str):

@@ -555,6 +555,24 @@ def note_option_pick(ctx: dict[str, Any] | None, option_id: Any) -> None:
     ctx.setdefault(OPTION_PICKS_KEY, {})[uid] = option_id
 
 
+def note_option_picks(ctx: dict[str, Any] | None, option_ids: list[Any]) -> None:
+    """The multi-pick twin of :func:`note_option_pick`: every option the use
+    picked, in order (lock value on a multi-pick row)."""
+    if not isinstance(ctx, dict):
+        return
+    ids = [i for i in option_ids if isinstance(i, str) and i]
+    uid = ctx.get("__wp_current_module_uid__")
+    if not ids or not isinstance(uid, str) or not uid:
+        return
+    ctx.setdefault(OPTION_PICKS_KEY, {})[uid] = ids
+
+
+def locked_option_ids(instance: dict[str, Any]) -> list[str]:
+    """A multi-pick row's value lock (``locked_option_ids``), cleaned."""
+    raw = instance.get("locked_option_ids")
+    return [i for i in raw if isinstance(i, str) and i] if isinstance(raw, list) else []
+
+
 def _warn_pinned_missing(ctx: dict[str, Any] | None, pinned_id: Any) -> None:
     """A ``pinned`` instance whose option the library no longer has rolls
     normally; say so (a sweep frame relies on the pin, so a deleted option
@@ -606,6 +624,46 @@ def _warn_locked_conflict(
         )
 
 
+def _editor_text(value: str, catalog: dict[str, Any]) -> str:
+    """``value`` as the editor shows it: each ``@{uuid…}`` ref as ``@Name``
+    (the referenced wildcard's name, else the name cached in the ref)."""
+    from engine.syntax.tokenize import _REF_RE
+
+    def name(m: Any) -> str:
+        row = catalog.get(m.group(1))
+        got = row.get("name") if isinstance(row, dict) else None
+        return "@" + str(got or m.group(2) or m.group(1)).strip()
+
+    return _REF_RE.sub(name, value)
+
+
+def _deep_match(
+    options: list[dict[str, Any]], wanted: str, catalog: dict[str, Any],
+) -> tuple[dict[str, Any], str, str] | None:
+    """(outer option, ref uuid, inner option id) for the first option that is
+    a lone ``@{uuid}`` ref whose wildcard has an option equal to ``wanted``
+    (stored or editor text). One level deep."""
+    from engine.syntax.tokenize import _REF_RE
+
+    for o in options:
+        m = _REF_RE.fullmatch(str(o.get("value") or "").strip())
+        if not m:
+            continue
+        row = catalog.get(m.group(1))
+        payload = row.get("payload") if isinstance(row, dict) else None
+        inner = payload.get("options") if isinstance(payload, dict) else None
+        for i in inner if isinstance(inner, list) else []:
+            if not isinstance(i, dict) or i.get("value") is None or i.get("is_null"):
+                continue
+            text = str(i.get("value", ""))
+            if text.strip().lower() == wanted or (
+                "@{" in text and _editor_text(text, catalog).strip().lower() == wanted
+            ):
+                if i.get("id") is not None:
+                    return o, m.group(1), str(i.get("id"))
+    return None
+
+
 def _match_variable_option(
     ctx: Any, options: list[dict[str, Any]], var_name: str,
 ) -> tuple[dict[str, Any] | None, str]:
@@ -618,11 +676,30 @@ def _match_variable_option(
     raw = ctx.get(name) if ctx is not None else None
     wanted = "" if raw is None else str(raw).strip().lower()
     if wanted:
+        catalog = ctx.get("__wp_catalog__") if ctx is not None else None
+        catalog = catalog if isinstance(catalog, dict) else {}
         for o in options:
             if o.get("value") is None:
                 continue
             if str(o.get("value", "")).strip().lower() == wanted:
                 return o, "match_variable"
+        # As the editor shows it: `red @Hat` for `red @{1a2b3c4d}`.
+        for o in options:
+            if o.get("value") is None or "@{" not in str(o.get("value")):
+                continue
+            if _editor_text(str(o.get("value")), catalog).strip().lower() == wanted:
+                return o, "match_variable"
+        # Deep: an option that is just a ref (`@Places`) matches when one of
+        # the referenced wildcard's options does; the ref is then told to
+        # take that option (`REF_PINS_KEY`).
+        deep = _deep_match(options, wanted, catalog)
+        if deep is not None:
+            outer, uuid, inner_id = deep
+            if isinstance(ctx, dict):
+                from engine.modules import REF_PINS_KEY
+
+                ctx[REF_PINS_KEY] = {uuid: inner_id}
+            return outer, "match_deep"
     fallback = find_fallback(options)
     if fallback is not None:
         return fallback, "match_fallback"
@@ -1137,14 +1214,24 @@ class WildcardHandler(ModuleHandler):
                 ):
                     detail["swept"] = True
                 if pin_mode not in ("pinned", "locked"):
+                    if pin_mode == "match_deep":
+                        detail["mode"] = "match_variable"
+                        detail["deep"] = True
                     detail["match_variable"] = match_var.strip()
                     raw_match = ctx.get(match_var.strip())
                     detail["match_value"] = "" if raw_match is None else str(raw_match)
             value = str(pinned.get("value", ""))
-            resolve_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
-                int(ctx.get("__wp_node_seed__", 0) or 0),
-                f"{instance_key(ctx, binding)}/{pinned.get('id')}",
-            ))
+            from engine.modules import REF_PINS_KEY
+
+            if pin_mode != "match_deep":
+                ctx.pop(REF_PINS_KEY, None)
+            try:
+                resolve_ctx = build_resolve_ctx(ctx, surface="wildcard", stream=stream_key(
+                    int(ctx.get("__wp_node_seed__", 0) or 0),
+                    f"{instance_key(ctx, binding)}/{pinned.get('id')}",
+                ))
+            finally:
+                ctx.pop(REF_PINS_KEY, None)
             with negatives.collecting(resolve_ctx) as col:
                 out_value = resolve_text(value, resolve_ctx) if value else ""
             _file_negatives(
@@ -1375,7 +1462,25 @@ class WildcardHandler(ModuleHandler):
                 ))
                 if detail is not None:
                     detail["fallback"] = True
-            if use_fallback:
+            locked_ids = locked_option_ids(instance)
+            locked_picks = [
+                o for o in (
+                    next((x for x in options if x.get("id") == i), None) for i in locked_ids
+                ) if o is not None
+            ]
+            if locked_ids and len(locked_picks) < len(locked_ids):
+                _warn_pinned_missing(ctx, next(
+                    i for i in locked_ids if not any(o.get("id") == i for o in options)
+                ))
+            if locked_picks:
+                # Value lock on a multi-pick row: the options the last run
+                # picked, in its order, whatever the count, seed or rules.
+                picks = locked_picks
+                for o in picks:
+                    _warn_locked_conflict(ctx, o, payload)
+                if detail is not None:
+                    detail["mode"] = "locked"
+            elif use_fallback:
                 # One fallback, never repeated: it stands in for the whole
                 # pick, so a `2-3` range doesn't render "hair, hair".
                 picks = [fallback] if hi > 0 and fallback is not None else []
@@ -1430,6 +1535,7 @@ class WildcardHandler(ModuleHandler):
                 for o in picks
             ]
             _record_pick_multi(ctx, picks, sep, payload, rolled_list)
+            note_option_picks(ctx, [o.get("id") for o in picks])
             if detail is not None:
                 detail["option_ids"] = [o.get("id") for o in picks]
                 detail["range"] = [lo, hi]

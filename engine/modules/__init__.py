@@ -51,6 +51,9 @@ class _RuntimeResolveContext:
     # occurrence matches on. None outside any carrier option.
     _carrier_uid: str | None = None
     _carrier_option_id: str | None = None
+    # Deep Match variable (`wildcard_handler._match_variable_option`): the
+    # inner option a lone `@{uuid}` option must take, uuid → option id.
+    _ref_pins: dict[str, str] = field(default_factory=dict)
     # Rolled `accepts`-axis choices, keyed by VARIABLE BINDING (the namespace
     # `$outfit.SHOES` addresses) rather than module uuid like `_picks`. A
     # projection of `ctx["__wp_axes__"]`, built once here so the resolver stays
@@ -225,6 +228,12 @@ class _RuntimeResolveContext:
         self._carrier_uid = carrier_uid
         self._carrier_option_id = option_id
 
+    def ref_pin(self, uuid: str) -> str | None:
+        """The option a ``@{uuid}`` ref must take (a deep Match variable),
+        or None to roll as usual."""
+        got = self._ref_pins.get(uuid)
+        return got if isinstance(got, str) and got else None
+
     def get_carrier(self) -> tuple[str | None, str | None]:
         """Return the current ``(carrier_uid, option_id)`` so the
         resolver can save it before a recursion and restore it after."""
@@ -240,6 +249,11 @@ class _RuntimeResolveContext:
         if self._carrier_uid is None and self._carrier_option_id is None:
             return None
         return {"carrier_uid": self._carrier_uid, "option_id": self._carrier_option_id}
+
+
+#: Set by a deep Match variable for the length of one resolve: uuid → the
+#: option id that ``@{uuid}`` must take.
+REF_PINS_KEY = "__wp_ref_pins__"
 
 
 def build_resolve_ctx(
@@ -263,6 +277,7 @@ def build_resolve_ctx(
     negs = ctx.get("__wp_negatives__")
     bools = ctx.get("__wp_toggle_bools__")
     nums = ctx.get("__wp_slider_nums__")
+    pins = ctx.get(REF_PINS_KEY)
     return _RuntimeResolveContext(  # type: ignore[return-value]
         rng=ctx["__wp_rng__"],
         max_ref_depth=int(ctx.get("__wp_max_ref_depth__", 8)),
@@ -293,6 +308,7 @@ def build_resolve_ctx(
         _negs=negs if isinstance(negs, dict) else None,
         _bools=bools if isinstance(bools, dict) else None,
         _nums=nums if isinstance(nums, dict) else None,
+        _ref_pins=pins if isinstance(pins, dict) else {},
         stream_key=stream,
     )
 

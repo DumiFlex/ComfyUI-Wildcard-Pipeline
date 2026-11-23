@@ -75,6 +75,17 @@ describe("lockRows", () => {
     expect(m?.iteration_overrides).toEqual({ "1": { locked_option_id: "opt-b" } });
   });
 
+  it("locks every pick of a multi-pick row, frame by frame", () => {
+    const framePicks = new Map([[0, { a: ["x", "y"] }], [1, { a: ["y"] }]]);
+    const r = lockRows(ctx(mod("a")), new Set(["a"]), "value", OWNER, run({ picks: { a: ["x", "y"] }, framePicks }));
+    const m = r.value.modules[0];
+    expect(m?.instance?.locked_option_ids).toEqual(["x", "y"]);
+    expect(m?.iteration_overrides).toEqual({ "1": { locked_option_ids: ["y"] } });
+    const back = releaseRows(r.value, OWNER).value.modules[0];
+    expect(back?.instance?.locked_option_ids).toBeUndefined();
+    expect(back?.iteration_overrides).toBeUndefined();
+  });
+
   it("keeps each frame's seed in seed mode", () => {
     const frameSeeds = new Map([[0, 11], [1, 40]]);
     const r = lockRows(ctx(mod("a")), new Set(["a"]), "seed", OWNER, run({ frameSeeds }));

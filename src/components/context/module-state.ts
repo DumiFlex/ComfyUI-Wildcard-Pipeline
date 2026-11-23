@@ -1,6 +1,6 @@
 import type { ModuleEntry } from "../../widgets/_shared";
 import { currentFrame } from "../context-loop/frame-cursor";
-import { lockStateAt, type LockState } from "./lock-cycle";
+import { lockedText, lockStateAt, type LockState } from "./lock-cycle";
 import {
   withFrameInstance,
   effectiveEnabled as feEffectiveEnabled,
@@ -140,16 +140,12 @@ export function isLocked(m: ModuleEntry): boolean {
 export function lockState(m: ModuleEntry): LockState {
   return lockStateAt(m, currentFrame.value);
 }
-/** The text of the option a value lock holds (its id when the option is gone). */
+/** The text of the option(s) a value lock holds (an id when its option is
+ *  gone), a multi-pick row's joined by ", ". */
 export function lockedValueText(m: ModuleEntry): string {
-  const id = withFrameInstance(m, currentFrame.value).instance?.locked_option_id;
-  if (typeof id !== "string") return "";
-  const options = (m.payload as { options?: unknown } | undefined)?.options;
-  const hit = Array.isArray(options)
-    ? options.find((o) => (o as { id?: unknown })?.id === id) as { value?: unknown } | undefined
-    : undefined;
-  return typeof hit?.value === "string" ? hit.value : id;
+  return lockedText(m, withFrameInstance(m, currentFrame.value).instance);
 }
+
 export function isInternal(m: ModuleEntry): boolean {
   return !!m.instance?.internal;
 }

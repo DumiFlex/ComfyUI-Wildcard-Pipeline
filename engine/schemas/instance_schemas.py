@@ -36,6 +36,8 @@ INSTANCE_SCHEMAS: dict[str, dict[str, InstanceFieldType]] = {
         # Row lock, second state: always take this option (the one the last
         # run picked). A sweep pin wins over it on its frame.
         "locked_option_id": "string",
+        # The same for a multi-pick row: the options it picked, in order.
+        "locked_option_ids": "list[string]",
         # Iteration seed scope: "hold" pins RNG to the run base seed (same
         # across loop iterations, re-rolls per run); "vary" (default/absent)
         # rides the per-iteration seed. `locked_seed` takes priority when set.

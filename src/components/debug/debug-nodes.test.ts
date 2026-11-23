@@ -89,6 +89,7 @@ describe("node rows in the view", () => {
       wcRow({ mode: "pinned", swept: true }),
       wcRow({ mode: "match_variable", match_variable: "model_variant" }),
       wcRow({ filter: "$model_variant", filter_vars: { model_variant: "pony" } }),
+      wcRow({ mode: "match_variable", match_variable: "want", match_value: "forest", deep: true }),
     ] });
     const at = (i: number) => mount(DebugStepDetail, {
       props: { step: m.steps[i], warnings: [], uuidToName: new Map(), uuidToKind: new Map(), canFocus: false },
@@ -97,6 +98,8 @@ describe("node rows in the view", () => {
     expect(at(0).text()).not.toContain("pinned option");
     expect(at(1).find('[data-test="dbg-match-var"]').text()).toContain("$model_variant");
     expect(at(2).find('[data-test="dbg-filter-var"]').text()).toContain("pony");
+    expect(at(3).find('[data-test="dbg-match-var"]').text()).toContain("inside its ref");
+    expect(at(1).find('[data-test="dbg-match-var"]').text()).not.toContain("inside its ref");
   });
 
   it("groups variables by the node that wrote them, each node drawn its own way", () => {

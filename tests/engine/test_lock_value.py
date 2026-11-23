@@ -52,9 +52,11 @@ def test_picks_are_noted_by_uid():
     assert ctx["pose"] == picks["pose0001"]
 
 
-def test_multi_pick_is_not_noted():
+def test_multi_pick_notes_every_pick_in_order():
     ctx = _run([_poses({"pick_min": 2, "pick_max": 2})], 3)
-    assert "pose0001" not in (ctx.get(OPTION_PICKS_KEY) or {})
+    got = ctx[OPTION_PICKS_KEY]["pose0001"]
+    assert isinstance(got, list) and len(got) == 2
+    assert str(ctx["pose"]) == ", ".join(got)
 
 
 def test_locked_value_clash_warns():
