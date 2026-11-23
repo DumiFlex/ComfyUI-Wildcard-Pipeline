@@ -1175,6 +1175,7 @@ const subLine = computed(() => {
               <template v-if="compareCell">{{ cellName(compareCell) }} · pinned</template>
               <template v-else>{{ cellName(cell) }} · {{ current + 1 }} / {{ total }}</template>
               <span v-if="picked.has((compareCell ?? cell).key)" class="wp-ifp__zoom-picked" data-test="image-filter-zoom-picked"><i class="pi pi-check" aria-hidden="true" /> Picked</span>
+              <span v-if="leftLabel" class="wp-ifp__zoom-left" :class="{ 'is-low': (left ?? 99) <= 30 }" data-test="image-filter-zoom-left"><i class="pi pi-clock" aria-hidden="true" /> {{ leftLabel }}</span>
             </span>
           </template>
           <template #second>
@@ -1358,6 +1359,8 @@ const subLine = computed(() => {
 /* Zoom */
 .wp-ifp__zoom { flex: 1; min-height: 0; padding: 8px; }
 .wp-ifp__zoom-cap { position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: rgb(0 0 0 / 0.6); color: white; font: 11px/1.5 var(--wp-font-sans); pointer-events: none; }
+.wp-ifp__zoom-left { display: inline-flex; align-items: center; gap: 4px; padding-left: 6px; border-left: 1px solid rgb(255 255 255 / 0.3); font-family: var(--wp-font-mono, monospace); }
+.wp-ifp__zoom-left.is-low { color: var(--wp-amber); }
 .wp-ifp__zoom-cap.is-right { left: auto; right: 10px; }
 .wp-ifp__zoom-picked { display: inline-flex; align-items: center; gap: 3px; margin: 0 -6px 0 2px; padding: 0 6px; border-radius: min(3px, var(--wp-radius-cap, 999px)); background: var(--wp-green); color: white; font-weight: 600; }
 .wp-ifp__zoom-picked .pi { font-size: 9px; }

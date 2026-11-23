@@ -554,7 +554,11 @@ describe("PickerModal", () => {
 
   it("a countdown offers to add time", async () => {
     const w = mk(request([1], { timeout: 90 }));
+    await w.vm.$nextTick();
     expect(w.find('[data-test="image-filter-add-time"]').text()).toContain("1:30 left");
+    // Zoom (and its fullscreen, which hides the footer) shows it by the caption.
+    await w.find('[data-test="image-filter-picker"]').trigger("keydown", { key: "z" });
+    expect(w.find('[data-test="image-filter-zoom-left"]').text()).toContain("1:30 left");
   });
 
   it("Zoom takes the whole window and its edge arrows step", async () => {
