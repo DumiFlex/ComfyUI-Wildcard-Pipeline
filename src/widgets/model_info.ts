@@ -86,8 +86,7 @@ export function create(node: ModelInfoHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 220,
-    minWidth: 330,
-    autoHeight: true,
+    sizing: { width: { min: 330, content: true }, height: "content", container: true },
     onValueRestored: (raw: string) => {
       config.value = parseModelInfoConfig(raw);
     },

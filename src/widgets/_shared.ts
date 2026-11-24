@@ -570,10 +570,21 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
    *  changes it. */
   function measureContentMin(): void {
     if (!sizing.contentWidth) return;
+    // Text cut with an ellipsis is meant to shrink: it counts as empty here
+    // (`contain: inline-size`), or a long name would widen the floor.
+    const cut: Array<[HTMLElement, string]> = [];
+    if (typeof getComputedStyle === "function") {
+      for (const el of inner.querySelectorAll<HTMLElement>("*")) {
+        if (getComputedStyle(el).textOverflow !== "ellipsis") continue;
+        cut.push([el, el.style.contain]);
+        el.style.contain = "inline-size";
+      }
+    }
     const was = inner.style.width;
     inner.style.width = "min-content";
     const w = inner.offsetWidth;
     inner.style.width = was;
+    for (const [el, c] of cut) el.style.contain = c;
     if (w > 0) contentMinW = w;
   }
   if (minWidthGetter) {

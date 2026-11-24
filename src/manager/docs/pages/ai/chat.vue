@@ -255,6 +255,15 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         still loading, or reading a long prompt. The server can't tell which.
       </p>
       <p>
+        You can close the chat while it works: the answer keeps coming. When it lands with the chat
+        closed, a note with <b>Open</b> shows in the corner (also when it asks you something or
+        asks to search the web). While the tab is in the background, a dot goes in front of the
+        tab's title until you come back, and with <b>Notify when AI work finishes</b> on (under
+        <b>Settings › AI assistant › Chat</b>) the browser shows a notification; click it to come
+        back to the chat. Your browser asks once when you turn it on, and only allows it on
+        <code>localhost</code>, <code>127.0.0.1</code> or an https address.
+      </p>
+      <p>
         A thanks or a 👍 gets an emoji reaction straight away, without asking the model. If you
         delete an item the answer mentioned, its chip is struck through.
       </p>

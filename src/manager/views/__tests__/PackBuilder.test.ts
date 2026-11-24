@@ -6,6 +6,7 @@ import PackBuilder from "../PackBuilder.vue";
 import { api } from "../../api/client";
 import { _resetAiConfigForTests } from "../../composables/useAiConfig";
 import { _resetPackBuilderForTests, usePackBuilder } from "../../composables/usePackBuilder";
+import { useToast } from "@/kit/useToast";
 import type { AiConfig, AiPackItem, AiPackPlanResult } from "../../api/types";
 
 const CONFIG = {
@@ -98,6 +99,62 @@ describe("PackBuilder", () => {
     await flushPromises();
     return { w, router };
   }
+
+  it("comes back on the Settings step while the first plan is still asked", async () => {
+    let finish: (r: AiPackPlanResult) => void = () => {};
+    vi.mocked(api.ai.packPlan).mockReset().mockImplementation(() => new Promise((res) => { finish = res; }));
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    expect(w.find('[data-test="pack-working"]').exists()).toBe(true);
+    w.unmount();
+    expect(usePackBuilder().onPage.value).toBe(false);
+    // Back on the page: the planner is still working, so the Settings step
+    // and its working line show, not the Describe box.
+    const again = await mountIt();
+    expect(usePackBuilder().onPage.value).toBe(true);
+    expect(again.w.find('[data-test="pack-working"]').exists()).toBe(true);
+    expect(again.w.find('[data-test="pack-request"]').exists()).toBe(false);
+    finish(structuredClone(PLAN));
+    await flushPromises();
+    expect(again.w.text()).toContain("Seasons");
+  });
+
+  it("says so when the plan or the build ends while the page is closed", async () => {
+    let finish: (r: AiPackPlanResult) => void = () => {};
+    vi.mocked(api.ai.packPlan).mockReset().mockImplementation(() => new Promise((res) => { finish = res; }));
+    useToast().toasts.value = [];
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    await w.get('[data-test="pack-plan"]').trigger("click");
+    await flushPromises();
+    w.unmount();
+    finish(structuredClone(PLAN));
+    await flushPromises();
+    expect(useToast().toasts.value.map((t) => t.summary)).toEqual(["Pack plan ready: Seasons"]);
+    expect(useToast().toasts.value[0]?.action?.label).toBe("Open");
+    // The build, with the page open: nothing; closed: one notice in place of the old one.
+    const again = await mountIt();
+    useToast().toasts.value = [];
+    await again.w.get('[data-test="pack-build"]').trigger("click");
+    await flushPromises();
+    expect(useToast().toasts.value).toHaveLength(0);
+    again.w.unmount();
+    await usePackBuilder().rebuild("i4");
+    expect(useToast().toasts.value.map((t) => t.summary)).toEqual(["Pack items rebuilt"]);
+  });
+
+  it("Start over clears the Settings step", async () => {
+    const { w } = await mountIt();
+    await w.get('[data-test="pack-request"]').setValue("season outfits");
+    await w.get('[data-test="pack-next"]').trigger("click");
+    expect(usePackBuilder().settingUp.value).toBe(true);
+    usePackBuilder().reset();
+    expect(usePackBuilder().settingUp.value).toBe(false);
+  });
 
   it("doesn't send a problem again when a rebuild brought it back unchanged", async () => {
     vi.mocked(api.ai.packCheck).mockReset().mockResolvedValue({
