@@ -36,8 +36,8 @@ _ACTION = obj({
     "value": s(),
 }, ("target_var", "value"))
 _COND_OP = s("equals, not_equals, contains, not_contains, matches, not_matches, exists, "
-              "not_exists, is_empty, is_not_empty, is_set (set and not empty) or is_unset "
-              "(missing or empty)")
+              "not_exists, is_empty, is_not_empty, is_set (set and not empty), is_unset "
+              "(missing or empty), is_above or is_below (numbers only)")
 #: Text, or a bare number for a frame test ($iteration equals 1): under a
 #: JSON grammar small models garble a digit inside a string ("}]}],").
 _COND_VALUE = any_of(s(), n(integer=True), desc="text, or a number for $iteration")
@@ -289,7 +289,7 @@ TOOLS: list[Tool] = [
         '"rules": [{"summary", "branches": '
         '[{"match": "all"|"any", "conditions": [{"var", "op": equals|not_equals|contains|'
         "not_contains|matches|not_matches|exists|not_exists|is_empty|is_not_empty|is_set|"
-        "is_unset, "
+        "is_unset|is_above|is_below, "
         '"value"} or a '
         'nested group {"match", "conditions": [tests]}], "actions": [{"target_var", "mode": '
         'replace|append|prepend|negative|negative_replace, "value"}]}], "else_actions": '
