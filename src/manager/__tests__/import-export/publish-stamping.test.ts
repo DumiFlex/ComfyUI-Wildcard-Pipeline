@@ -629,6 +629,13 @@ describe("schemaVersionForPayload: $name.num (v13)", () => {
     })).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
   });
 
+  it("stamps 13 for the number tests on any variable, nested too", () => {
+    expect(schemaVersionForPayload({
+      rules: [{ branches: [{ condition: { match: "all", conditions: [{ var: "age", op: "is_above", value: "30" }] } }] }],
+    })).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
+    expect(schemaVersionForPayload({ children: [{ var: "age", op: "is_below", value: "3" }] })).toBe(NUM_ACCESSOR_SCHEMA_VERSION);
+  });
+
   it("leaves look-alikes at the chain head", () => {
     expect(schemaVersionForPayload({ template: "a $shot.number b" })).toBe(CURRENT_SCHEMA_VERSION);
     expect(schemaVersionForPayload({ template: "file.num" })).toBe(CURRENT_SCHEMA_VERSION);

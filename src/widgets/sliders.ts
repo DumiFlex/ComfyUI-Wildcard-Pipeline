@@ -156,8 +156,8 @@ export function create(node: SlidersHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 60,
-    minWidth: 320,
-    autoHeight: true,
+    // Rows stack their name over the track below 300 px (SliderRow.vue).
+    sizing: { width: { min: 260, content: true }, height: "content", breakpoints: { narrow: 300 }, container: true },
     onValueRestored: (raw: string) => {
       const parsed = normalizeOuts(parseSlidersConfig(raw));
       if (JSON.stringify(parsed) === JSON.stringify(config.value)) return;

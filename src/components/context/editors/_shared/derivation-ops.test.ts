@@ -35,6 +35,9 @@ describe("derivation-ops registry", () => {
       // Schema v10: the NOT toggle's negations of contains / matches.
       "not_contains",
       "not_matches",
+      // Schema v13: the number tests that came with `.num`.
+      "is_above",
+      "is_below",
     ]);
   });
 

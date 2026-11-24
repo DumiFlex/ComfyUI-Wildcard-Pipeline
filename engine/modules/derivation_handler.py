@@ -49,7 +49,19 @@ _VALID_OPS = {
     # The editor's NOT toggle (schema v10): the negations of `contains` and
     # `matches`, the only tests that had none.
     "not_contains", "not_matches",
+    # Number tests (schema v13, with `$name.num`): both sides read as
+    # numbers; when either is not a number the test is false.
+    "is_above", "is_below",
 }
+# A plain decimal number, written the way the sliders write one. Stricter
+# than float() (no "inf", "nan", "1e3" or "1_000") so the TS preview agrees.
+_NUMBER_RE = re.compile(r"\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*")
+
+
+def _as_number(text: Any) -> float | None:
+    if not isinstance(text, str) or not _NUMBER_RE.fullmatch(text):
+        return None
+    return float(text)
 _VALID_MATCHES = {"all", "any"}
 # Groups nest; the editor stops at three levels, the cap here only guards a
 # hand-built payload against runaway recursion.
@@ -263,6 +275,11 @@ def _match_condition(condition: dict[str, Any], ctx: Any) -> bool:
         return value in actual
     if op == "not_contains":
         return value not in actual
+    if op in ("is_above", "is_below"):
+        a, b = _as_number(actual), _as_number(value)
+        if a is None or b is None:
+            return False
+        return a > b if op == "is_above" else a < b
     if op in ("matches", "not_matches"):
         try:
             hit = re.search(value, actual) is not None

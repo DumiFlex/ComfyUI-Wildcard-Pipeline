@@ -51,8 +51,11 @@ defineSlots<{ lead?(): unknown; actions?(): unknown }>();
 
 /** The dropdown lists the plain tests; the NOT toggle beside it picks the
  *  negated op (equals → not_equals, contains → not_contains, …). */
-type BaseOp = "equals" | "contains" | "matches" | "exists";
-const BASE_OPS: BaseOp[] = ["equals", "contains", "matches", "exists"];
+type BaseOp = "equals" | "contains" | "matches" | "exists" | "is_above" | "is_below";
+const BASE_OPS: BaseOp[] = ["equals", "contains", "matches", "exists", "is_above", "is_below"];
+/** Above and below take no NOT: "NOT above" is "below or equal", which
+ *  reads better as the other test. */
+const NO_NOT = new Set<BaseOp>(["is_above", "is_below"]);
 const OP_OPTIONS: Array<{ label: string; value: BaseOp; title: string }> =
   BASE_OPS.map((op) => ({ label: OP_LABELS[op], value: op, title: OP_TOOLTIPS[op] }));
 
@@ -83,6 +86,7 @@ function partsOf(op: DerivationOp): Parts {
     case "is_not_empty": return { base: "exists", not: false, refinement: "value" };
     case "is_unset": return { base: "exists", not: true, refinement: "value" };
     case "equals": case "contains": case "matches": case "exists":
+    case "is_above": case "is_below":
       return { base: op, not: false, refinement: "any" };
   }
 }
@@ -97,7 +101,7 @@ function composeOp(p: Parts): DerivationOp {
     if (p.refinement === "value") return p.not ? "is_unset" : "is_set";
     return p.not ? "not_exists" : "exists";
   }
-  if (!p.not) return p.base;
+  if (!p.not || NO_NOT.has(p.base)) return p.base;
   return p.base === "equals" ? "not_equals" : p.base === "contains" ? "not_contains" : "not_matches";
 }
 
@@ -153,6 +157,7 @@ function set(patch: Partial<DerivationCondition>): void {
             class="dvr-not"
             :class="{ 'dvr-not--on': partsOf(modelValue.op).not }"
             :pressed="partsOf(modelValue.op).not"
+            :disabled="NO_NOT.has(partsOf(modelValue.op).base)"
             :aria-label="`Negate the test for ${a11yName}`"
             :title="partsOf(modelValue.op).not ? 'NOT: the test holds when this is false. Click to turn off.' : 'Turn the test around: does NOT equal, contain, match or exist'"
             :data-test="`cond-not-${testId}`"

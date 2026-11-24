@@ -2221,11 +2221,24 @@ function matchDerivationCondition(
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);
   if (op === "not_contains") return !actual.includes(value);
+  if (op === "is_above" || op === "is_below") {
+    // Mirrors engine derivation_handler: a non-number side is false.
+    const a = asNumber(actual);
+    const b = asNumber(value);
+    if (a === null || b === null) return false;
+    return op === "is_above" ? a > b : a < b;
+  }
   if (op === "matches" || op === "not_matches") {
     // A broken pattern fires neither (mirrors engine derivation_handler).
     try { return new RegExp(value).test(actual) === (op === "matches"); } catch { return false; }
   }
   return false;
+}
+
+/** A plain decimal number (engine `_NUMBER_RE`), else null. */
+const NUMBER_RE = /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*$/;
+function asNumber(text: string): number | null {
+  return NUMBER_RE.test(text) ? Number(text) : null;
 }
 
 function applyDerivationAction(

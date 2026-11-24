@@ -106,8 +106,8 @@ export function create(node: SliderPadHostNode, inputName: string, dims: 2 | 3 =
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 60,
-    minWidth: 300,
-    autoHeight: true,
+    // The pad's own box (size s / m) raises the floor through `content`.
+    sizing: { width: { min: 240, content: true }, height: "content", container: true },
     onValueRestored: (raw: string) => {
       const parsed = padConfig(raw, dims);
       if (JSON.stringify(parsed) === JSON.stringify(config.value)) return;

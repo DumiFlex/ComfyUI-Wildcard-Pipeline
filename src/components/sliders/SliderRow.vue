@@ -228,4 +228,11 @@ function internalHint(): string {
 .wp-slr--fader .wp-slr__in-var { max-width: 100%; font-size: 9.5px; }
 .wp-slr__warn { flex: none; font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-slr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+/* A narrow node (the host is the `wp-node` container): a line row puts its
+   name over the track, so neither is squeezed. */
+@container wp-node (max-width: 299px) {
+  .wp-slr--line .wp-slr__row { flex-wrap: wrap; row-gap: 2px; padding-block: 4px; }
+  .wp-slr--line .wp-slr__head { flex: 1 0 100%; max-width: none; }
+  .wp-slr--line .wp-slr__ctl { flex-basis: 0; }
+}
 </style>

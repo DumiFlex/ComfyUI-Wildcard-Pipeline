@@ -328,6 +328,75 @@ export function padRatio(pad: PadLooks, x: Pick<SliderRow, "min" | "max">, y: Pi
   return Math.min(4, Math.max(0.25, w / h));
 }
 
+/**
+ * `target` with `from`'s range, decimals, snap, marks and (from a Words
+ * axis) its words: the window's "Match X". The name, the variable, the
+ * output, the looks and the target's own mode and text otherwise stay; the
+ * value is kept inside the new range.
+ */
+export function matchAxis(target: SliderRow, from: SliderRow): SliderRow {
+  const next: SliderRow = { ...target, min: from.min, max: from.max, step: from.step, decimals: from.decimals };
+  next.value = Math.min(Math.max(target.value, from.min), Math.max(from.min, from.max));
+  if (from.free) next.free = true;
+  else delete next.free;
+  if (from.marks) next.marks = true;
+  else delete next.marks;
+  if (from.mode === "words" && from.words) {
+    next.mode = "words";
+    next.words = from.words.map((w) => ({ ...w }));
+  }
+  return next;
+}
+
+/** The axis is still as a new node made it: named X / Y / Z, its variable
+ *  x / y / z (or x_2 …), a plain 0..1 Number with no icon. */
+function untouchedAxis(s: SliderRow, tag: string): boolean {
+  return s.name === tag && new RegExp(`^${tag.toLowerCase()}(_\\d+)?$`).test(s.var)
+    && s.min === 0 && s.max === 1 && s.mode === "number" && !s.icon && !s.text && !s.words;
+}
+
+/** What Size and Stick fill in on axes that are still untouched. */
+const STYLE_AXES: Partial<Record<NonNullable<PadLooks["style"]>, [Partial<SliderRow>, Partial<SliderRow>]>> = {
+  size: [
+    { name: "Width", var: "width", icon: "arrows-h", min: 512, max: 2048, step: 64, decimals: 0, value: 1024 },
+    { name: "Height", var: "height", icon: "arrows-v", min: 512, max: 2048, step: 64, decimals: 0, value: 1024 },
+  ],
+  stick: [
+    { name: "Left / right", var: "stick_x", icon: "arrows-h", min: -1, max: 1, step: 0.05, decimals: 2, value: 0 },
+    { name: "Down / up", var: "stick_y", icon: "arrows-v", min: -1, max: 1, step: 0.05, decimals: 2, value: 0 },
+  ],
+};
+
+/**
+ * The pad with `style` picked: Size and Stick also fill good X and Y
+ * defaults (names, variables, icons, ranges) when both are still untouched,
+ * and Size follows the ranges' shape (Auto) unless a shape was picked.
+ * Anything the user changed stays as it is.
+ */
+export function withPadStyle(cfg: SlidersConfig, dims: 2 | 3, style: PadLooks["style"]): SlidersConfig {
+  const pad: PadLooks = { ...(cfg.pad ?? {}) };
+  if (style) pad.style = style;
+  else delete pad.style;
+  if (style === "size" && !pad.fit && pad.ratio === undefined) pad.fit = true;
+  const rows = sliderRows(cfg);
+  const axes = rows.slice(0, dims);
+  const fill = style ? STYLE_AXES[style] : undefined;
+  const [sx, sy] = axes;
+  let nextAxes = axes;
+  if (fill && sx && sy && untouchedAxis(sx, "X") && untouchedAxis(sy, "Y")) {
+    nextAxes = axes.map((s, i) => {
+      const f = fill[i];
+      if (!f) return s;
+      const others = { ...cfg, rows: rows.filter((r) => r.id !== s.id) };
+      return { ...s, ...f, var: uniqueVar(f.var ?? s.var, others) };
+    });
+  }
+  const next: SlidersConfig = { ...cfg, rows: [...nextAxes, ...cfg.rows.filter((r) => !axes.includes(r as SliderRow))] };
+  if (Object.keys(pad).length) next.pad = pad;
+  else delete next.pad;
+  return next;
+}
+
 /** A Words axis's ranges as the pad's labelled bands (none for other modes). */
 export function padBands(s: SliderRow): { to: number; label: string }[] {
   if (s.mode !== "words") return [];
