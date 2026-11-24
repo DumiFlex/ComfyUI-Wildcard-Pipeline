@@ -47,6 +47,7 @@ import {
   padPhrase,
   padRatio,
   phrasePreview,
+  newPadPhrase,
   type OrbitKind,
   sliderProblems,
   sliderWrites,
@@ -59,6 +60,7 @@ import {
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 
 const SliderEditWindow = defineAsyncComponent(() => import("./SliderEditWindow.vue"));
+const RichTextInput = defineAsyncComponent(() => import("../../manager/components/RichTextInput.vue"));
 
 const props = withDefaults(
   defineProps<{
@@ -81,7 +83,6 @@ const STYLES = [
   { value: "pad", label: "Pad", icon: "pi-stop", hint: "The plain pad" },
   { value: "size", label: "Size", icon: "pi-expand", hint: "A picture size: the box is shaded, with 1:1, 4:3, 16:9 … guide lines and a W × H readout" },
   { value: "stick", label: "Stick", icon: "pi-circle", hint: "Round, with zero in the middle (set both ranges from -1 to 1)" },
-  { value: "map", label: "Map", icon: "pi-map", hint: "Each Words axis shows its words on the pad" },
 ];
 const ORBIT_STYLE = { value: "orbit", label: "Orbit", icon: "pi-video", hint: "A camera or a light round the subject: X turns round it, Y is the height, Z the distance" };
 const MIX_STYLE = { value: "mix", label: "Mix", icon: "pi-percentage", hint: "A blend of three things: the closer the point to a corner, the more of it; the three add up to one" };
@@ -106,8 +107,8 @@ const axes = computed(() => padAxes(props.modelValue, props.dims));
 const ax = computed(() => axes.value[0]);
 const ay = computed(() => axes.value[1]);
 const az = computed(() => (props.dims === 3 ? axes.value[2] : undefined));
-const phrase = computed(() => (props.dims === 3 ? padPhrase(props.modelValue) : undefined));
-const phraseText = computed(() => phrasePreview(props.modelValue));
+const phrase = computed(() => padPhrase(props.modelValue, props.dims));
+const phraseText = computed(() => phrasePreview(props.modelValue, props.dims));
 const styles = computed(() => (props.dims === 3 ? [...STYLES, ORBIT_STYLE, MIX_STYLE] : STYLES));
 /** The rows to show and edit by number: the axes, then the phrase. */
 const editRows = computed(() => [...axes.value, ...(phrase.value ? [phrase.value] : [])]);
@@ -118,7 +119,7 @@ const problems = computed(() => sliderProblems(props.modelValue));
 const problemText = computed(() => [...problems.value.values()].join(" · "));
 
 /** New axes (and the phrase kept unless `withPhrase` says otherwise). */
-function emitRows(rows: SliderRow[], padNext: PadLooks = pad.value, withPhrase = phrase.value): void {
+function emitRows(rows: SliderRow[], padNext: PadLooks = pad.value, withPhrase: SliderRow | null | undefined = phrase.value): void {
   const next: SlidersConfig = { version: 1, rows: [...rows, ...(withPhrase ? [withPhrase] : [])] };
   if (Object.keys(padNext).length) next.pad = padNext;
   emit("update:modelValue", next);
@@ -220,8 +221,11 @@ function dotsOf(s: SliderRow): number[] {
 }
 const xDots = computed(() => (ax.value ? dotsOf(ax.value) : []));
 const yDots = computed(() => (ay.value ? dotsOf(ay.value) : []));
-const xBands = computed(() => (style.value === "map" && ax.value ? padBands(ax.value) : []));
-const yBands = computed(() => (style.value === "map" && ay.value ? padBands(ay.value) : []));
+/** Show words: each Words axis's ranges as labelled sections (pad styles only). */
+const showWords = computed(() => !!pad.value.words && !special.value);
+const hasWordAxis = computed(() => axes.value.slice(0, 2).some((s) => s.mode === "words" && !!s.words?.length));
+const xBands = computed(() => (showWords.value && ax.value ? padBands(ax.value) : []));
+const yBands = computed(() => (showWords.value && ay.value ? padBands(ay.value) : []));
 function setStyle(v: string): void {
   // Orbit needs an angle round (-180..180) and a height: start from the camera words.
   if (v === "orbit" && !orbitReady(props.modelValue)) return usePreset(orbitLook.value);
@@ -302,6 +306,21 @@ function swapWith(next: SliderRow, j: number): void {
   }));
 }
 
+/* ── the template line ──────────────────────────────────────────────── */
+
+/** One line that joins the axes into one variable (`$mood, $light`). */
+function addPhrase(): void {
+  emitRows(axes.value, pad.value, newPadPhrase(props.modelValue, props.dims));
+}
+function setPhraseText(text: string): void {
+  const p = phrase.value;
+  if (p) emitRows(axes.value, pad.value, { ...p, text });
+}
+function removePhrase(): void {
+  if (editing.value === axes.value.length) editing.value = null;
+  emitRows(axes.value, pad.value, null);
+}
+
 function applyWindow(next: SliderRow): void {
   const i = editing.value;
   editing.value = null;
@@ -353,7 +372,21 @@ function applyWindow(next: SliderRow): void {
     </div>
     <div v-if="phrase" v-tooltip="editMode ? undefined : chipTip(phrase)" class="wp-pad__phrase" :data-wp-vars="phrase.var || undefined" data-test="pad-phrase">
       <span :class="phrase.var ? varColorClass(phrase.var) : 'is-dim'">{{ phrase.var ? `$${phrase.var}` : "no variable" }}</span>
-      <span class="wp-pad__phrase-text">{{ phraseText }}</span>
+      <span v-if="editMode" class="wp-pad__phrase-gap" />
+      <RichTextInput
+        v-if="editMode"
+        class="wp-pad__phrase-input"
+        :model-value="phrase.text ?? ''"
+        surface="combine"
+        :placeholder="axes.map((a) => `$${a.var}`).join(', ')"
+        :var-suggestions="valueVars"
+        :var-producers="varProducers"
+        :graph-aware="!!varProducers"
+        aria-label="Template"
+        data-test="pad-phrase-input"
+        @update:model-value="setPhraseText"
+      />
+      <span v-else class="wp-pad__phrase-text">{{ phraseText }}</span>
       <WpIconButton v-if="editMode" icon="pi-pencil" :pressed="editing === axes.length" :label="`Edit ${phrase.name}`" data-test="pad-edit-phrase" @click="editing = editing === axes.length ? null : axes.length" />
       <WpIconButton
         v-if="editMode && phrase.var"
@@ -365,6 +398,8 @@ function applyWindow(next: SliderRow): void {
         data-test="pad-internal-phrase"
         @click="toggleInternal(axes.length)"
       />
+      <WpIconButton v-if="editMode" icon="pi-trash" tone="danger" label="Remove the template" data-test="pad-phrase-remove" @click="removePhrase" />
+      <span v-if="editMode && phraseText" class="wp-pad__phrase-out" data-test="pad-phrase-out">{{ phraseText }}</span>
     </div>
     <!-- Stops the pointer here so a drag on the pad never drags the node. -->
     <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
@@ -416,7 +451,7 @@ function applyWindow(next: SliderRow): void {
         :variant="style === 'size' || style === 'stick' ? style : 'pad'"
         :area="!!pad.area"
         :crosshair="!pad.no_crosshair"
-        :tint="style === 'map' && !pad.no_tint"
+        :tint="showWords && !pad.no_tint"
         :x-dots="xDots"
         :y-dots="yDots"
         :snap-dots="!!pad.snap_dots"
@@ -484,7 +519,11 @@ function applyWindow(next: SliderRow): void {
           <Checkbox :model-value="!!pad.area" size="sm" aria-label="Area" data-test="pad-area" @update:model-value="(v: boolean) => setPad({ area: v ? true : undefined })" />
           <span aria-hidden="true">Area</span>
         </span>
-        <span v-if="style === 'map'" v-tooltip="'A colour for each word section, the point\'s one a little stronger'" v-toggle-row class="wp-pad__check">
+        <span v-tooltip="hasWordAxis ? 'Write each Words axis\'s words on the pad as sections' : 'Set an axis to Words to show its words on the pad'" v-toggle-row class="wp-pad__check">
+          <Checkbox :model-value="!!pad.words" size="sm" :disabled="!hasWordAxis && !pad.words" aria-label="Show words" data-test="pad-words" @update:model-value="(v: boolean) => setPad({ words: v ? true : undefined })" />
+          <span aria-hidden="true">Show words</span>
+        </span>
+        <span v-if="pad.words" v-tooltip="'A colour for each word section, the point\'s one a little stronger'" v-toggle-row class="wp-pad__check">
           <Checkbox :model-value="!pad.no_tint" size="sm" aria-label="Colours" data-test="pad-tint" @update:model-value="(v: boolean) => setPad({ no_tint: v ? undefined : true })" />
           <span aria-hidden="true">Colours</span>
         </span>
@@ -494,6 +533,15 @@ function applyWindow(next: SliderRow): void {
         </span>
       </div>
       <div class="wp-pad__looks-row wp-pad__looks-end">
+        <Button
+          v-if="!phrase"
+          size="sm"
+          variant="ghost"
+          icon="pi-plus"
+          :hint="`One line that joins the axes into one variable, e.g. ${axes.map((a) => '$' + a.var).join(', ')}`"
+          data-test="pad-phrase-add"
+          @click="addPhrase"
+        >Template</Button>
         <Button v-if="!special" size="sm" icon="pi-arrow-right-arrow-left" hint="Swap the axes: X's settings go up, Y's across" data-test="pad-swap" @click="swap">Swap</Button>
         <Button size="sm" variant="primary" icon="pi-check" data-test="pad-done" @click="editMode = false; editing = null">Done</Button>
       </div>
@@ -534,12 +582,16 @@ function applyWindow(next: SliderRow): void {
    (only a chip wider than the whole node cuts its text). */
 .wp-pad__read { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
 .wp-pad__phrase {
-  display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 6px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; padding: 2px 6px;
   font: 10.5px/16px var(--wp-font-mono, monospace);
   background: var(--wp-bg2, var(--wp-bg-1)); border-radius: min(4px, var(--wp-radius-cap, 999px));
 }
 .wp-pad__phrase > span { flex: none; }
 .wp-pad__phrase .is-dim { font-family: var(--wp-font-sans, sans-serif); font-style: italic; color: var(--wp-text-dim, var(--wp-text3)); }
+/* Edit mode: name + tools on top, the wording under them, then the result. */
+.wp-pad__phrase-gap { flex: 1 1 auto; }
+.wp-pad__phrase-input { order: 1; flex: 1 0 100%; min-width: 0; }
+.wp-pad__phrase-out { order: 2; flex: 1 0 100%; color: var(--wp-text-muted, var(--wp-text2)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wp-pad__phrase .wp-pad__phrase-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--wp-font-sans, sans-serif); font-size: 11.5px; color: var(--wp-text); }
 .wp-pad__axis {
   display: flex; align-items: center; gap: 6px; flex: 1 1 0; max-width: 100%; min-height: 34px;

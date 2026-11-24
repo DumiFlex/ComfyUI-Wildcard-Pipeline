@@ -94,12 +94,14 @@ export type SlidersItem = SliderRow | SliderLabelRow;
 /** WP Slider 2D / 3D's pad looks (the kit XYPad's and OrbitPad's props). */
 export interface PadLooks {
   /** Absent: the plain pad. size = area, ratio guides and a W × H readout;
-   *  stick = round with zero in the middle; map = each Words axis's ranges
-   *  as labelled stripes; orbit (3D only) = the kit OrbitPad: X turns
+   *  stick = round with zero in the middle; orbit (3D only) = the kit OrbitPad: X turns
    *  round the subject, Y is the height angle, Z the distance; mix (3D
    *  only) = the kit TrianglePad: the three axes are shares of a blend,
    *  each a part of its own range, the parts adding up to one. */
-  style?: "size" | "stick" | "map" | "orbit" | "mix";
+  style?: "size" | "stick" | "orbit" | "mix";
+  /** Show words: each Words axis's ranges as labelled sections on the pad
+   *  (Pad, Size and Stick). A saved `style: "map"` reads as this. */
+  words?: true;
   /** Orbit: drawn as a light (an amber sun) instead of a camera. */
   light?: true;
   /** Width over height of the pad (1 = square). */
@@ -110,7 +112,7 @@ export interface PadLooks {
   area?: true;
   /** No lines through the point. */
   no_crosshair?: true;
-  /** Map style: no colour per word section (coloured by default). */
+  /** Show words: no colour per word section (coloured by default). */
   no_tint?: true;
   /** Dots per side. Absent: one per step (spread on steps past 16);
    *  0: none; N: up to N per side, on steps. */
@@ -300,12 +302,14 @@ function hasRows(raw: unknown): boolean {
   return !!data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows);
 }
 
-const PAD_STYLES = new Set(["size", "stick", "map", "orbit", "mix"]);
+const PAD_STYLES = new Set(["size", "stick", "orbit", "mix"]);
 function parsePad(raw: unknown): PadLooks | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
   const pad: PadLooks = {};
   if (typeof o.style === "string" && PAD_STYLES.has(o.style)) pad.style = o.style as PadLooks["style"];
+  // Map was a style: it is the plain pad with its words shown.
+  if (o.words === true || o.style === "map") pad.words = true;
   if (typeof o.ratio === "number" && o.ratio >= 0.25 && o.ratio <= 4) pad.ratio = o.ratio;
   if (o.fit === true) pad.fit = true;
   if (o.area === true) pad.area = true;
@@ -414,8 +418,8 @@ function padAxis(cfg: SlidersConfig, axis: PadAxis): SliderRow {
 
 /**
  * WP Slider 2D / 3D's config: exactly `dims` slider rows (X, Y and for 3D
- * Z), each with an output (slot 1, 2, 3); a missing axis is added. 3D also
- * keeps the first later row in text mode (the phrase, `padPhrase`, no
+ * Z), each with an output (slot 1, 2, 3); a missing axis is added. Both
+ * keep the first later row in text mode (the template, `padPhrase`, no
  * output); labels and any other rows are dropped.
  */
 export function padConfig(raw: unknown, dims: 2 | 3 = 2): SlidersConfig {
@@ -423,7 +427,7 @@ export function padConfig(raw: unknown, dims: 2 | 3 = 2): SlidersConfig {
   // An empty or broken value parses to WP Slider's default slider: start clean.
   const rows = hasRows(raw) ? sliderRows(parsed) : [];
   const axes = rows.slice(0, dims);
-  const phrase = dims === 3 ? rows.slice(dims).find((s) => s.mode === "text") : undefined;
+  const phrase = rows.slice(dims).find((s) => s.mode === "text");
   const cfg: SlidersConfig = { version: 1, rows: axes };
   if (parsed.pad) cfg.pad = parsed.pad;
   if (dims === 2 && (cfg.pad?.style === "orbit" || cfg.pad?.style === "mix")) delete cfg.pad.style;
@@ -438,17 +442,27 @@ export function padAxes(cfg: SlidersConfig, dims: 2 | 3): SliderRow[] {
   return sliderRows(cfg).slice(0, dims);
 }
 
-/** WP Slider 3D's phrase row (text mode, after the axes), if any. */
-export function padPhrase(cfg: SlidersConfig): SliderRow | undefined {
-  return sliderRows(cfg).slice(3).find((s) => s.mode === "text");
+/** The pad's template row (text mode, after the axes), if any. */
+export function padPhrase(cfg: SlidersConfig, dims: 2 | 3 = 3): SliderRow | undefined {
+  return sliderRows(cfg).slice(dims).find((s) => s.mode === "text");
+}
+
+/** A new template that joins the axes' variables, e.g. `$x, $y`. */
+export function newPadPhrase(cfg: SlidersConfig, dims: 2 | 3): SliderRow {
+  const vars = padAxes(cfg, dims).map((s) => s.var).filter(Boolean);
+  return {
+    id: newSliderId(), kind: "slider", name: "Template", var: uniqueVar("pad_text", cfg),
+    value: 0, min: 0, max: 1, step: 0.01, decimals: 2, mode: "text",
+    text: vars.map((v) => `$${v}`).join(", "), pin: false, out: 0, style: "row",
+  };
 }
 
 /** The phrase as it reads now: each `$var` of the axes swapped for what it
  *  holds (the node resolves the rest at run time). */
-export function phrasePreview(cfg: SlidersConfig): string {
-  const p = padPhrase(cfg);
+export function phrasePreview(cfg: SlidersConfig, dims: 2 | 3 = 3): string {
+  const p = padPhrase(cfg, dims);
   if (!p?.text) return "";
-  const vals = resolveSliders({ version: 1, rows: padAxes(cfg, 3) });
+  const vals = resolveSliders({ version: 1, rows: padAxes(cfg, dims) });
   return p.text.replace(/\$([a-zA-Z][a-zA-Z0-9_]*)/g, (m, name: string) => vals[name] ?? m);
 }
 

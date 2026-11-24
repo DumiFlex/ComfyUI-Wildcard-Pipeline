@@ -173,7 +173,7 @@ function onKey(ev: KeyboardEvent): void {
       <div class="wp-slw__titles">
         <div class="wp-slw__title-row">
           <h3 :id="titleId" class="wp-slw__title">{{ nodeTitle || 'WP Slider' }}</h3>
-          <span class="wp-slw__chip" :style="headStyle">{{ axis === 'Phrase' ? 'Phrase' : axis ? `${axis} axis` : 'Slider' }}</span>
+          <span class="wp-slw__chip" :style="headStyle">{{ axis === 'Phrase' ? 'Template' : axis ? `${axis} axis` : 'Slider' }}</span>
         </div>
         <div class="wp-slw__sub" :style="headStyle">
           <span class="wp-slw__subname">{{ d.name }}</span>

@@ -52,3 +52,13 @@ def test_problems_name_the_node():
     cfg = {"rows": [{"id": "a", "kind": "slider", "name": "A", "var": "1x"}]}
     payload, *_ = _run(cfg).values
     assert all(w["message"].startswith("WP Slider 2D") for w in payload.debug["__wp_warnings__"])
+
+
+def test_a_later_text_row_is_the_template():
+    tpl = {"id": "t", "kind": "slider", "name": "Template", "var": "look", "mode": "text",
+           "text": "$mood at $width px"}
+    extra = {"id": "n", "kind": "slider", "var": "skip", "value": 1}
+    payload, x, y = _run({"rows": [*CFG["rows"], extra, tpl]}).values
+    assert payload.context["look"] == "wild at 1024 px"
+    assert "skip" not in payload.context
+    assert (x, y) == (1024, 0.8)

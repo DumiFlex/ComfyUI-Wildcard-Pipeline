@@ -38,7 +38,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
           'A picture size: Width across, Height up, wired into an Empty Latent Image, in the Size style with Auto shape so the shaded box looks like the picture and the guide lines show 1:1, 4:3 and 16:9',
           'A camera pan or tilt from -1 to 1 in the Stick style, zero in the middle',
           'Two numbers you tune together: cfg and steps, two LoRA strengths',
-          'A mood map: calm to wild across, dark to bright up, each axis in Words mode, in the Map style so the words are written on the pad',
+          'A mood map: calm to wild across, dark to bright up, each axis in Words mode, with Show words on so the words are written on the pad',
         ]"
         :better="[
           'Numbers you set one at a time: WP Slider',
