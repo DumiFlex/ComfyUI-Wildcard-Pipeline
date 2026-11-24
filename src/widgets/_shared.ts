@@ -1374,6 +1374,9 @@ export interface ModuleEntry {
        *  `lockOwner`). Switching it off unlocks only rows it marked; a
        *  hand click on the lock drops the mark. */
       locked_by?: string;
+      /** The one loop frame `locked_by` locked (it was picked in the Loop's
+       *  Edit frame when the toggle went on); absent: the whole row. */
+      locked_frame?: number;
     };
   };
   /** Per-frame override patches: stringified 0-based iteration index ->

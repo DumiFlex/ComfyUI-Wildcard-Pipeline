@@ -177,3 +177,17 @@ def resolve_context_seed(
     else:
         hold = own()[1]
     return chain, hold, SEED_FROM_AUTO
+
+
+def seed_root(seed_source: str, internals: dict) -> str:
+    """What a Context's chain seed was made from, for WP Debug: ``loop`` (the
+    Loop's per-frame seed: Seed from Loop, or auto while the Loop overrides
+    Context seeds), ``row:<name>`` (a WP Seeds row) or ``own`` (its own seed
+    widget or wire)."""
+    if seed_source.startswith(SEED_FROM_ROW):
+        return seed_source
+    if seed_source == SEED_FROM_LOOP:
+        return SEED_FROM_LOOP
+    if seed_source == SEED_FROM_AUTO and internals.get("__wp_seed_override__") is not None:
+        return SEED_FROM_LOOP
+    return SEED_FROM_OWN

@@ -4,7 +4,7 @@
  * the stashes, and write the locked values back through their widget (the
  * Context widget takes a new value the same way a workflow load gives it).
  */
-import { walkAllNodes, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
+import { upstreamChainOf, walkAllNodes, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
 import { assignCodenames } from "../extension/node-codename";
 import { nodeBadge, nodeFrameSeeds, nodeLastPicks, nodeLastUsedPerModule, nodeLastUsedSeed } from "../extension/_stashes";
 import { bumpBadgeRevision, ensureBadgeSlot, hasBadgeSlot } from "../extension/badge-slot";
@@ -33,6 +33,18 @@ export function contextsByCodename(root: LiteGraphLike | null | undefined): Map<
   const names = assignCodenames(found.map((n) => n.id));
   for (const n of found) out.set(names.get(String(n.id)) ?? String(n.id), n);
   return out;
+}
+
+/** The WP Context a lock target names, and the graph it lives in. */
+export function findLockContext(
+  root: LiteGraphLike | null | undefined,
+  codename: string,
+): { node: LiteNodeLike; graph: LiteGraphLike } | null {
+  if (!root) return null;
+  const found: { node: LiteNodeLike; graph: LiteGraphLike }[] = [];
+  for (const hit of walkAllNodes(root)) if (hit.node.type === "WP_Context") found.push(hit);
+  const names = assignCodenames(found.map((h) => h.node.id));
+  return found.find((h) => (names.get(String(h.node.id)) ?? String(h.node.id)) === codename) ?? null;
 }
 
 /** Last parse per node: the picker polls every Context on the canvas. */
@@ -82,6 +94,9 @@ export function lastRunOf(node: object): LastRun {
 }
 
 export interface LockOutcome {
+  /** Toggle id → the frame it locked (null: every frame), for each toggle
+   *  that locked something. */
+  frames: Map<string, number | null>;
   locked: number;
   released: number;
   /** Rows left alone (locked by hand or by another toggle). */
@@ -95,9 +110,20 @@ export function applyLockActions(
   root: LiteGraphLike | null | undefined,
   togglesId: string | number,
   actions: readonly LockAction[],
+  /** The Loop's Edit frame (0-based), null for the base. */
+  frame: number | null = null,
 ): LockOutcome {
-  const total: LockOutcome = { locked: 0, released: 0, kept: 0, noRun: 0 };
+  const total: LockOutcome = { frames: new Map(), locked: 0, released: 0, kept: 0, noRun: 0 };
   if (!actions.length) return total;
+  const looped = new Map<LiteNodeLike, boolean>();
+  const inLoop = (n: LiteNodeLike): boolean => {
+    let hit = looped.get(n);
+    if (hit === undefined) {
+      hit = !!root && upstreamChainOf(root, n).some((u) => u.type === "WP_ContextLoop");
+      looped.set(n, hit);
+    }
+    return hit;
+  };
   const nodes = contextsByCodename(root);
   // One read and one write per Context, however many toggles touch it.
   const values = new Map<LiteNodeLike, ContextWidgetValue>();
@@ -110,7 +136,10 @@ export function applyLockActions(
       values.set(node, r.value);
     }
     for (const [node, uids] of byNode(nodes, a.lock)) {
-      const r = lockRows(valueOf(node), uids, a.mode, owner, lastRunOf(node));
+      // A Context under a Loop with a frame picked locks that frame only.
+      const at = frame != null && inLoop(node) ? frame : null;
+      const r = lockRows(valueOf(node), uids, a.mode, owner, lastRunOf(node), at);
+      if (r.locked) total.frames.set(a.toggleId, at ?? total.frames.get(a.toggleId) ?? null);
       total.locked += r.locked;
       total.kept += r.kept;
       total.noRun += r.noRun;

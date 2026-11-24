@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
 import {
+  canLock,
   contextChoices,
+  unfitTargets,
   emptyRun,
+  withLockFrames,
   lockOwner,
   lockPlan,
   lockRows,
@@ -93,6 +96,71 @@ describe("lockRows", () => {
   });
 });
 
+describe("lockRows on one frame", () => {
+  const framePicks = new Map([[0, { a: "opt-a" }], [2, { a: "opt-c" }]]);
+  const frameSeeds = new Map([[0, 11], [2, 70]]);
+
+  it("locks that frame only and marks it", () => {
+    const r = lockRows(ctx(mod("a")), new Set(["a"]), "value", OWNER, run({ framePicks, frameSeeds }), 2);
+    const m = r.value.modules[0];
+    expect(r.locked).toBe(1);
+    expect(m?.instance?.locked_option_id).toBeUndefined();
+    expect(m?.iteration_overrides).toEqual({ "2": { locked_option_id: "opt-c" } });
+    expect(m?.instance?._ui).toEqual({ locked_by: OWNER, locked_frame: 2 });
+  });
+
+  it("locks the frame's seed in seed mode", () => {
+    const r = lockRows(ctx(mod("a")), new Set(["a"]), "seed", OWNER, run({ frameSeeds }), 2);
+    expect(r.value.modules[0]?.iteration_overrides).toEqual({ "2": { locked_seed: 70 } });
+  });
+
+  it("skips a frame with no run yet", () => {
+    const r = lockRows(ctx(mod("a")), new Set(["a"]), "seed", OWNER, run({ frameSeeds }), 5);
+    expect(r.locked).toBe(0);
+    expect(r.noRun).toBe(1);
+  });
+
+  it("keeps a frame locked by hand", () => {
+    const hand: ModuleEntry = { ...mod("a"), iteration_overrides: { "2": { locked_seed: 3 } } };
+    const r = lockRows(ctx(hand), new Set(["a"]), "seed", OWNER, run({ frameSeeds }), 2);
+    expect(r.kept).toBe(1);
+    expect(r.value.modules[0]?.iteration_overrides).toEqual({ "2": { locked_seed: 3 } });
+  });
+
+  it("keeps a frame the row's base lock already holds", () => {
+    const r = lockRows(ctx(mod("a", "wildcard", { locked_seed: 9 })), new Set(["a"]), "seed", OWNER, run({ frameSeeds }), 2);
+    expect(r.kept).toBe(1);
+  });
+
+  it("releasing lets go of that frame alone and keeps a base lock set since", () => {
+    const locked = lockRows(ctx(mod("a")), new Set(["a"]), "seed", OWNER, run({ frameSeeds }), 2).value;
+    const row = locked.modules[0] as ModuleEntry;
+    const handSet = ctx({ ...row, instance: { ...row.instance, locked_seed: 9 } });
+    const back = releaseRows(handSet, OWNER).value.modules[0];
+    expect(back?.instance?.locked_seed).toBe(9);
+    expect(back?.iteration_overrides).toBeUndefined();
+    expect(back?.instance?._ui?.locked_by).toBeUndefined();
+    expect(back?.instance?._ui?.locked_frame).toBeUndefined();
+  });
+});
+
+describe("withLockFrames", () => {
+  it("sets the frame on a lock that holds and drops it when off", () => {
+    const targets = [{ node: "n", uid: "a" }];
+    const cfg = cfgOf(toggle({ lock: "seed", lock_targets: targets }), toggle({ id: "t2", on: false, lock: "seed", lock_targets: targets, lock_frame: 1 }));
+    const next = withLockFrames(cfg, new Map([["t1", 3]]));
+    const [t1, t2] = next.rows as ToggleRow[];
+    expect(t1?.lock_frame).toBe(3);
+    expect(t2?.lock_frame).toBeUndefined();
+    expect(withLockFrames(next, new Map([["t1", null]])).rows[0]).not.toHaveProperty("lock_frame");
+  });
+
+  it("returns the same config when nothing changes", () => {
+    const cfg = cfgOf(toggle());
+    expect(withLockFrames(cfg, new Map())).toBe(cfg);
+  });
+});
+
 describe("releaseRows", () => {
   it("unlocks only its own rows, frames included", () => {
     const framePicks = new Map([[0, { a: "opt-a" }], [1, { a: "opt-b" }]]);
@@ -148,8 +216,23 @@ describe("missing targets", () => {
   const choices = contextChoices("slate-marten", "WP Context", ctx(mod("a"), mod("b", "fixed_values")));
 
   it("labels choices", () => {
-    expect(choices[0]).toEqual({ node: "slate-marten", uid: "a", label: "slate-marten · WP Context · Row a", wildcard: true });
+    expect(choices[0]).toEqual({ node: "slate-marten", uid: "a", label: "slate-marten · WP Context · Row a", wildcard: true, kind: "wildcard" });
     expect(choices[1]?.wildcard).toBe(false);
+    expect(choices[1]?.kind).toBe("fixed_values");
+  });
+
+  it("offers no constraint rows: they have no seed to lock", () => {
+    const list = contextChoices("slate-marten", "WP Context", ctx(mod("a"), mod("k", "constraint"), mod("d", "derivation")));
+    expect(list.map((c) => c.uid)).toEqual(["a", "d"]);
+  });
+
+  it("only a wildcard can lock its value", () => {
+    const list = contextChoices("slate-marten", "WP Context", ctx(mod("a"), mod("d", "derivation")));
+    expect(list.map((c) => canLock(c, "value"))).toEqual([true, false]);
+    expect(list.map((c) => canLock(c, "seed"))).toEqual([true, true]);
+    const targets = [{ node: "slate-marten", uid: "a" }, { node: "slate-marten", uid: "d" }, { node: "gone-one", uid: "x" }];
+    expect(unfitTargets(targets, list, "value")).toEqual([{ node: "slate-marten", uid: "d" }]);
+    expect(unfitTargets(targets, list, "seed")).toEqual([]);
   });
 
   it("finds and removes targets that are gone", () => {
@@ -173,5 +256,17 @@ describe("parse", () => {
     expect(t1?.lock).toBe("value");
     expect(t1?.lock_targets).toEqual([{ node: "a-b", uid: "x" }]);
     expect(t2?.lock).toBeUndefined();
+  });
+
+  it("keeps a lock's frame only while it locks", () => {
+    const cfg = parseTogglesConfig({
+      version: 1, mode: "any", group_var: "",
+      rows: [
+        { id: "t1", kind: "toggle", name: "L", var: "l", lock: "seed", lock_frame: 2 },
+        { id: "t2", kind: "toggle", name: "M", var: "m", lock_frame: 2 },
+        { id: "t3", kind: "toggle", name: "N", var: "n", lock: "seed", lock_frame: -1 },
+      ],
+    });
+    expect((cfg.rows as ToggleRow[]).map((r) => r.lock_frame)).toEqual([2, undefined, undefined]);
   });
 });

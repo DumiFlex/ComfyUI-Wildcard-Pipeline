@@ -10,6 +10,9 @@
  * picked (every pick of a multi-pick row; falling back to its seed when it
  * has no pick, e.g. a fixed value), a seed lock the seed it rolled. A run with
  * several frames gets the other frames' picks / seeds as frame overrides.
+ * With a frame picked in the Loop's Edit frame (and the row's Context under
+ * that Loop), it locks that frame only, from that frame's pick or seed, and
+ * marks `_ui.locked_frame`; switching off then lets go of that frame alone.
  * Each row it locks is marked `_ui.locked_by = owner`, and switching off
  * unlocks only rows with that mark: a row locked by hand (or by another
  * toggle) is left alone both ways, and a hand click on the lock drops the
@@ -19,7 +22,8 @@
  * nodes, reads the last run and writes the values back.
  */
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
-import { hasPick, lockStateOf, valueLock, withBaseLock, withFrameLock, type LockPick } from "../components/context/lock-cycle";
+import { LOCK_KEYS, hasPick, lockStateAt, lockStateOf, valueLock, withBaseLock, withFrameLock, type LockPick, type LockWant } from "../components/context/lock-cycle";
+import { SEED_LOCKABLE_KINDS } from "../components/context/module-state";
 import { effectiveToggles, toggleRows, type LockTarget, type ToggleLock, type TogglesConfig } from "./toggles";
 
 type Instance = NonNullable<ModuleEntry["instance"]>;
@@ -63,18 +67,35 @@ function markedBy(inst: Instance | undefined, owner: string): boolean {
   return inst?._ui?.locked_by === owner;
 }
 
-/** Instance with `_ui.locked_by` set to `owner`, or dropped (`null`). */
-function withOwner(inst: Instance, owner: string | null): Instance {
+/** Instance with `_ui.locked_by` set to `owner` (and `locked_frame` to
+ * `frame`), or both dropped (`null`). */
+function withOwner(inst: Instance, owner: string | null, frame: number | null = null): Instance {
   const ui = { ...(inst._ui ?? {}) };
   if (owner) ui.locked_by = owner;
   else delete ui.locked_by;
+  if (owner && frame != null) ui.locked_frame = frame;
+  else delete ui.locked_frame;
   const next = { ...inst, _ui: ui };
   if (!Object.keys(ui).length) delete (next as { _ui?: unknown })._ui;
   return next;
 }
 
-/** One row unlocked: base lock gone, frame lock fields gone, mark gone. */
+/** The base's own lock fields. */
+function baseLock(inst: Instance | undefined): LockWant {
+  const out: Record<string, unknown> = {};
+  for (const k of LOCK_KEYS) if (inst?.[k] != null) out[k] = inst[k];
+  return out as LockWant;
+}
+
+/** One row unlocked: base lock gone, frame lock fields gone, mark gone. A
+ *  row locked on one frame only lets go of that frame. */
 function released(m: ModuleEntry): ModuleEntry {
+  const only = m.instance?._ui?.locked_frame;
+  if (typeof only === "number") {
+    // The frame goes back to the base: its own lock fields drop out.
+    const next = withFrameLock(m, only, baseLock(m.instance));
+    return { ...next, instance: withOwner(next.instance ?? {}, null) };
+  }
   const inst = withOwner(withBaseLock(m.instance ?? {}, {}), null);
   let next: ModuleEntry = { ...m, instance: inst };
   for (const k of Object.keys(m.iteration_overrides ?? {})) {
@@ -89,8 +110,21 @@ function released(m: ModuleEntry): ModuleEntry {
   return next;
 }
 
+/** One frame of a row locked from that frame of `run`, or null when that
+ *  frame has no run yet. */
+function lockedOnFrame(m: ModuleEntry, mode: ToggleLock, owner: string, run: LastRun, frame: number): ModuleEntry | null {
+  const key = rowKey(m);
+  const got = mode === "value" && m.type === "wildcard" ? run.framePicks.get(frame)?.[key] : undefined;
+  const pick = hasPick(got) ? got : null;
+  const seed = run.frameSeeds.get(frame) ?? null;
+  if (!pick && seed == null) return null;
+  const next = withFrameLock(m, frame, pick ? valueLock(pick) : { locked_seed: seed ?? 0 });
+  return { ...next, instance: withOwner(next.instance ?? {}, owner, frame) };
+}
+
 /** One row locked from `run`, or null when there is nothing to lock it to. */
-function locked(m: ModuleEntry, mode: ToggleLock, owner: string, run: LastRun): ModuleEntry | null {
+function locked(m: ModuleEntry, mode: ToggleLock, owner: string, run: LastRun, frame: number | null = null): ModuleEntry | null {
+  if (frame != null) return lockedOnFrame(m, mode, owner, run, frame);
   const key = rowKey(m);
   const canPick = m.type === "wildcard";
   const got = mode === "value" && canPick ? run.picks[key] : undefined;
@@ -113,13 +147,15 @@ function locked(m: ModuleEntry, mode: ToggleLock, owner: string, run: LastRun): 
 }
 
 /** Lock the rows `uids` of one Context for `owner`. A row already marked by
- *  `owner` is locked afresh (the mode may have changed). */
+ *  `owner` is locked afresh (the mode may have changed). With `frame`, only
+ *  that loop frame is locked (and checked for a lock of its own). */
 export function lockRows(
   value: ContextWidgetValue,
   uids: ReadonlySet<string>,
   mode: ToggleLock,
   owner: string,
   run: LastRun,
+  frame: number | null = null,
 ): LockResult {
   let lockedN = 0;
   let kept = 0;
@@ -127,11 +163,12 @@ export function lockRows(
   const modules = value.modules.map((m) => {
     if (!uids.has(rowKey(m))) return m;
     const mine = markedBy(m.instance, owner);
-    if (!mine && lockStateOf(m.instance) !== "off") {
+    const state = frame == null ? lockStateOf(m.instance) : lockStateAt(m, frame);
+    if (!mine && (state !== "off" || m.instance?._ui?.locked_by)) {
       kept++;
       return m;
     }
-    const next = locked(mine ? released(m) : m, mode, owner, run);
+    const next = locked(mine ? released(m) : m, mode, owner, run, frame);
     if (!next) {
       noRun++;
       return m;
@@ -210,12 +247,54 @@ export function lockPlan(prev: TogglesConfig | null, next: TogglesConfig): LockA
   return out;
 }
 
+/** `cfg` with each toggle's `lock_frame` set from `frames` (toggle id → the
+ *  frame its lock went on with, or null for every frame), and dropped for a
+ *  toggle that no longer locks (off, or no lock setting). */
+export function withLockFrames(cfg: TogglesConfig, frames: ReadonlyMap<string, number | null>): TogglesConfig {
+  const live = activeLocks(cfg);
+  let changed = false;
+  const rows = cfg.rows.map((r) => {
+    if (r.kind !== "toggle") return r;
+    const want = live.has(r.id) ? (frames.has(r.id) ? frames.get(r.id) ?? null : r.lock_frame ?? null) : null;
+    if ((r.lock_frame ?? null) === want) return r;
+    changed = true;
+    const next = { ...r };
+    if (want == null) delete next.lock_frame;
+    else next.lock_frame = want;
+    return next;
+  });
+  return changed ? { ...cfg, rows } : cfg;
+}
+
 /** A row the lock picker offers. */
 export interface LockChoice extends LockTarget {
   /** `codename · node title · row name`. */
   label: string;
   /** The row is a wildcard (it can lock its value). */
   wildcard: boolean;
+  /** The row's module kind (`wildcard`, `derivation` …), for its icon. */
+  kind: string;
+}
+
+/** Whether a row can take `mode`: any seeded kind locks its seed (a
+ *  constraint has none), only a wildcard locks its value. */
+export function canLock(c: Pick<LockChoice, "kind">, mode: ToggleLock): boolean {
+  return mode === "value" ? c.kind === "wildcard" : SEED_LOCKABLE_KINDS.has(c.kind);
+}
+
+/** Targets `mode` can't lock (a derivation picked for Lock value, a row
+ *  that is no longer a seeded kind). Missing rows aren't counted here. */
+export function unfitTargets(
+  targets: readonly LockTarget[] | undefined,
+  choices: readonly LockChoice[],
+  mode: ToggleLock,
+): LockTarget[] {
+  if (!targets?.length) return [];
+  const byKey = new Map(choices.map((c) => [targetKey(c), c]));
+  return targets.filter((t) => {
+    const c = byKey.get(targetKey(t));
+    return !!c && !canLock(c, mode);
+  });
 }
 
 /** A toggle's targets that no Context on the canvas has (node or row gone). */
@@ -251,12 +330,14 @@ export function withoutMissingTargets(cfg: TogglesConfig, choices: readonly Lock
   return { ...cfg, rows };
 }
 
-/** The choices one Context offers: each row, labelled. */
+/** The choices one Context offers: each row that has a seed to lock
+ *  (constraints have none), labelled. */
 export function contextChoices(codename: string, title: string, value: ContextWidgetValue): LockChoice[] {
-  return value.modules.map((m) => ({
+  return value.modules.filter((m) => SEED_LOCKABLE_KINDS.has(m.type)).map((m) => ({
     node: codename,
     uid: rowKey(m),
     label: `${codename} · ${title} · ${m.meta?.name || m.id}`,
     wildcard: m.type === "wildcard",
+    kind: m.type,
   }));
 }

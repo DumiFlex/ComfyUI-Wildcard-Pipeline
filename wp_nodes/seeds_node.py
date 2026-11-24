@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from comfy_api.latest import io  # pyright: ignore[reportMissingImports]
 
-from engine import seeds
+from engine import seed_derive, seeds
 from engine.seed_derive import MAX_SAFE_SEED
 from wp_nodes.types import PipelineContext, SeedsWidgetInput, carry_frame0
 
@@ -103,6 +103,7 @@ class WPSeeds(io.ComfyNode):
         if not isinstance(index, int) or isinstance(index, bool) or index < 0:
             index = 0
         base = seeds.node_base(cfg, base_seed, upstream_internals)
+        base_is_loop = isinstance(upstream_internals.get(seed_derive.LOOP_SEED_KEY), dict)
 
         table = seeds.resolve(cfg, base, index)
         out_internals = dict(upstream_internals)
@@ -126,6 +127,10 @@ class WPSeeds(io.ComfyNode):
                     "row": row.name,
                     "mode": row.mode,
                     "frame": index,
+                    # The node's base seed and where it came from, so WP
+                    # Debug can show the seed a run depends on.
+                    "base": base,
+                    **({"base_from_loop": True} if cfg.base_from_loop and base_is_loop else {}),
                     **({"locked": True} if index in row.locks else {}),
                 },
                 **({"node_id": str(node_id)} if node_id is not None else {}),

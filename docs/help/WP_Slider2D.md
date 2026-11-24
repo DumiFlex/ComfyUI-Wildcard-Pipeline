@@ -10,7 +10,7 @@ One XY pad: drag a point to set two numbers at once, X across and Y up. Each axi
 
 - **upstream (in)** `context`: Optional Context to extend. Only nodes after this one see the pad's variables.
 - **Pad**: Drag the point (or click anywhere on the pad) to set both numbers at once: X grows to the right, Y grows upward. Shift while dragging lands on finer values. With the point focused, the arrow keys move it one step (Shift: ten), Home and End put X at its ends.
-- **X and Y**: Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now.
+- **X and Y**: Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now. Hover one for its whole name and what its variable gets. In the edit strip each has a pencil and a globe that keeps its variable internal (for rules only, never printed).
 - **Pencil (toolbar)**: Select the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis, the pad's style, shape, size and looks, Swap and Done.
 - **Style**: Edit strip. Pad is the plain pad. Size is for a picture size: the box from the bottom-left corner to the point is shaded, dashed lines mark 1:1, 4:3, 3:4, 16:9 and 9:16, and the corner reads Width × Height. Stick is round with zero in the middle (set both ranges from -1 to 1) and keeps the point inside the circle. Map writes each Words axis's words on the pad as sections, each in its own soft colour, the one the point is in highlighted.
 - **Shape and size**: Edit strip. Square, Wide (3:2), Tall (2:3) or Auto, which follows the two ranges (0–1024 across and 0–1344 up is a 3:4 pad). S, M or L sets how wide the pad is; L fills the node.

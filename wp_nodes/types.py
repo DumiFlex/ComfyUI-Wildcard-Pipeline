@@ -756,11 +756,16 @@ def build_payload(
     upstream_debug: dict[str, Any],
     seed: int,
     node_id: str = "",
+    seed_root: str = "",
 ) -> ContextPayload:
     """Construct the socket-boundary payload. Strips internals from
     `context`, but carries the cross-node-internal subset on the
     dedicated `internals` field so the next node's execute can merge
     them back into its ctx before running its own pipeline.
+
+    ``seed_root`` says what this node's chain seed was made from (``loop``,
+    ``own`` or ``row:<name>``), so WP Debug can show the seed a run depends
+    on rather than the last Context's.
 
     Trace + warnings accumulate across the chain in `debug.__wp_trace__` /
     `debug.__wp_warnings__` (cumulative-merge pattern matching the
@@ -824,7 +829,11 @@ def build_payload(
             "__wp_ref_log__": list(upstream_debug.get("__wp_ref_log__") or [])
             + (list(this_refs) if isinstance(this_refs, list) else []),
             "__wp_nodes__": list(upstream_debug.get("__wp_nodes__") or [])
-            + [{"node_id": node_id, "seed": seed}],
+            + [{
+                "node_id": node_id,
+                "seed": seed,
+                **({"from": seed_root} if seed_root else {}),
+            }],
         },
         internals=internals,
     )

@@ -61,6 +61,17 @@ const overridable = [
         base</b> clears a frame's changes. Adding or removing options, or anything else that
         changes the module itself, always edits the base.
       </p>
+      <p>
+        Open a row's window on <code>base</code> and a note on top names the frames that override
+        that module (<code>#2 off</code>, <code>#4 2 changes</code>): a base edit to something a
+        frame overrides doesn't reach that frame. Point at a frame for what it changes, and pick it
+        under Edit frame to edit it.
+      </p>
+      <p>
+        Picking a frame moves the other per-frame views with it: <b>WP Seeds</b> shows that frame's
+        seeds, <b>WP Debug</b> shows that frame's run, and the <b>WP Prompt Assembler</b> previews
+        it. Stepping the frame in any of them picks it under Edit frame too.
+      </p>
     </DocSection>
 
     <DocSection title="What you can change per frame">

@@ -15,6 +15,7 @@
  * in 1..N the way WP Toggles does.
  */
 import { hashSeed, maskSeed } from "../components/shared/seed-derive";
+import { hexColor, iconName, labelColorIndex } from "./looks";
 
 export const MAX_OUTPUTS = 16;
 export type SeedMode = "follow" | "random" | "fixed";
@@ -35,6 +36,13 @@ export interface SeedRow {
   out: number;
   /** 0-based frame → locked seed. */
   locks?: Record<string, number> | undefined;
+  /** Looks only, like a WP Toggles row (absent: the theme's). A PrimeIcons
+   *  name without `pi-` before the name; colours are `#rrggbb`. `tint`
+   *  colours the seed number. */
+  icon?: string | undefined;
+  icon_color?: string | undefined;
+  text_color?: string | undefined;
+  tint?: string | undefined;
 }
 
 export interface SeedLabel {
@@ -43,6 +51,12 @@ export interface SeedLabel {
   name: string;
   /** Folded on the node (its rows hidden). */
   collapsed?: boolean | undefined;
+  /** Variable colour 1..8 (absent: made from the name, as before looks). */
+  color?: number | undefined;
+  /** Own colour `#rrggbb`, chosen in the colour picker (wins over `color`). */
+  hex?: string | undefined;
+  /** PrimeIcons name without `pi-`, before the name. */
+  icon?: string | undefined;
 }
 
 export type SeedsItem = SeedRow | SeedLabel;
@@ -227,7 +241,13 @@ export function parseSeedsConfig(raw: unknown): SeedsConfig {
     ids.add(id);
     const name = typeof o.name === "string" ? o.name : "";
     if (o.kind === "label") {
-      rows.push(o.collapsed === true ? { id, kind: "label", name, collapsed: true } : { id, kind: "label", name });
+      const label: SeedLabel = { id, kind: "label", name };
+      if (o.collapsed === true) label.collapsed = true;
+      const color = labelColorIndex(o.color);
+      if (color !== undefined) label.color = color;
+      if (hexColor(o.hex)) label.hex = hexColor(o.hex);
+      if (iconName(o.icon)) label.icon = iconName(o.icon);
+      rows.push(label);
       continue;
     }
     if (o.kind !== undefined && o.kind !== "seed") continue;
@@ -250,6 +270,10 @@ export function parseSeedsConfig(raw: unknown): SeedsConfig {
       out: int(o.out, 0),
     };
     if (Object.keys(locks).length) row.locks = locks;
+    if (iconName(o.icon)) row.icon = iconName(o.icon);
+    for (const key of ["icon_color", "text_color", "tint"] as const) {
+      if (hexColor(o[key])) row[key] = hexColor(o[key]);
+    }
     rows.push(row);
   }
   return fromLoop ? { version: 1, rows, base_from_loop: true } : { version: 1, rows };

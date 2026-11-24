@@ -16,6 +16,7 @@ import WpTabs, { type TabItem } from "@/kit/WpTabs.vue";
 import Button from "@/kit/Button.vue";
 import CopyButton from "@/kit/CopyButton.vue";
 import { copyText } from "@/kit/clipboard";
+import { vTooltip } from "@/kit/tooltip";
 import DebugVariables from "./DebugVariables.vue";
 import DebugTrace from "./DebugTrace.vue";
 import DebugWarnings from "./DebugWarnings.vue";
@@ -83,6 +84,17 @@ const frameTitle = computed(() => {
   return typeof li === "number" && li !== props.iterationIndex
     ? `Loop frame ${li + 1}; item ${props.iterationIndex + 1} of the ${props.iterationCount} this Debug received`
     : "";
+});
+
+/** Every Context's seed and where it came from, for the "+N seeds" hint. */
+const nodeSeedsHint = computed(() => {
+  const rs = model.value?.runSeed;
+  if (!rs) return "";
+  const lines = rs.nodes.map((n) => {
+    const name = (n.nodeId && props.nodeInfo(n.nodeId).title) || (n.nodeId ? `Node ${n.nodeId}` : "Context");
+    return n.source ? `${name}: ${n.seed} (${n.source})` : `${name}: ${n.seed}`;
+  });
+  return `${rs.others} Context${rs.others === 1 ? " runs" : "s run"} on another seed than the ${rs.label}. Each Context's seed: ${lines.join("; ")}. Click for the trace, where each node shows its seed.`;
 });
 
 function gotoIteration(next: number): void {
@@ -407,12 +419,23 @@ function openStepMenu(ev: MouseEvent, s: TraceStep): void {
     <template v-if="model">
       <header class="wp-dbg-head" data-wp-part="summary" data-wp-part-label="Summary" data-test="dbg-head">
         <CopyButton
-          v-if="model.seed"
-          :text="model.seed"
-          label="Copy the chain seed of the last Context"
+          v-if="model.runSeed.value"
+          v-tooltip="model.runSeed.hint"
+          :text="model.runSeed.value"
+          :label="`Copy the ${model.runSeed.label}`"
           class="wp-dbg-head__seed"
+          :class="`is-${model.runSeed.kind}`"
           data-test="dbg-seed"
-        ><span class="wp-dbg-head__seed-label">seed</span>{{ model.seed }}</CopyButton>
+        ><span class="wp-dbg-head__seed-label">{{ model.runSeed.label }}</span>{{ model.runSeed.value }}</CopyButton>
+        <Button
+          v-if="model.runSeed.others > 0"
+          size="sm"
+          variant="ghost"
+          class="wp-dbg-head__seeds"
+          :hint="nodeSeedsHint"
+          data-test="dbg-node-seeds"
+          @click="activeTab = 'trace'"
+        >+{{ model.runSeed.others }} seed{{ model.runSeed.others === 1 ? "" : "s" }}</Button>
         <div v-if="iterationCount > 1" class="wp-dbg-iter" role="navigation" aria-label="loop iteration picker">
           <Button
             size="sm"

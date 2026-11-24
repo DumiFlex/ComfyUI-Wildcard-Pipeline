@@ -183,3 +183,45 @@ export function applyFrameEdit(
   const next = clearFrameOverride(base, frame);
   return Object.keys(delta).length ? setFrameOverride(next, frame, delta) : next;
 }
+
+/** One frame that overrides a module, for the Base view's banner. */
+export interface FrameOverrideSummary {
+  /** 0-based frame. */
+  frame: number;
+  /** "on" / "off" when the frame switches the module the other way than base. */
+  enabled: "on" | "off" | null;
+  /** How many instance fields the frame changes. */
+  changes: number;
+}
+
+/** Every frame that overrides `module` (its own enable state or instance
+ *  fields), in frame order. A frame `locked_seed: null` that only mirrors an
+ *  unlocked base is not counted (`dropRedundantFrameLockNulls` sweeps it). */
+export function frameOverrideSummary(module: ModuleEntry): FrameOverrideSummary[] {
+  const frames = new Map<number, FrameOverrideSummary>();
+  const at = (k: number): FrameOverrideSummary => {
+    let s = frames.get(k);
+    if (!s) {
+      s = { frame: k, enabled: null, changes: 0 };
+      frames.set(k, s);
+    }
+    return s;
+  };
+  const baseLocked = typeof module.instance?.locked_seed === "number";
+  for (const [key, patch] of Object.entries(module.iteration_overrides ?? {})) {
+    const k = Number(key);
+    if (!Number.isInteger(k) || k < 0 || !patch) continue;
+    const fields = Object.entries(patch).filter(([f, v]) => !(f === "locked_seed" && v === null && !baseLocked));
+    if (fields.length) at(k).changes += fields.length;
+  }
+  const keys = new Set<number>([
+    ...Object.keys(module.frame_enabled ?? {}).map(Number),
+    ...(module.disabled_frames ?? []),
+  ]);
+  for (const k of keys) {
+    if (!Number.isInteger(k) || k < 0) continue;
+    const o = frameEnableOverride(module, k);
+    if (o) at(k).enabled = o;
+  }
+  return [...frames.values()].sort((a, b) => a.frame - b.frame);
+}

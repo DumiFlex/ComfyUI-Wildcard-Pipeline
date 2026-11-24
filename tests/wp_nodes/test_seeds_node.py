@@ -130,3 +130,34 @@ def test_ui_reports_each_rows_start_seed():
         "00000002": 1234,
         "00000003": 5,
     }
+
+
+def test_debug_learns_where_each_context_seed_came_from():
+    """WP Debug's run seed: each Context says what its seed was made from,
+    and WP Seeds' trace carries its base seed (and whether the Loop set it)."""
+    frames = _frames(3, json.dumps({"override_seed": True}))
+    up = _seeds(frames[1]).values[0]
+    def nodes(out):
+        return out.values[0].debug["__wp_nodes__"]
+
+    def detail_of(payload):
+        trace = payload.debug["__wp_trace__"]
+        return next(t["detail"] for t in trace if t.get("node") == "WP_Seeds")
+
+    assert nodes(_context(up, "row:Direction"))[-1] == {
+        "node_id": "3",
+        "seed": up.internals[seeds.ROWS_KEY]["direction"]["seed"],
+        "from": "row:Direction",
+    }
+    assert nodes(_context(up))[-1]["from"] == "loop"  # auto while the Loop overrides
+    assert nodes(_context(up, "own"))[-1]["from"] == "own"
+    assert nodes(_context(_frames(2)[1], "loop"))[-1]["from"] == "loop"
+    assert nodes(_context(_frames(2)[1]))[-1]["from"] == "own"  # auto, no override
+    detail = detail_of(up)
+    assert detail["base"] == 42 and "base_from_loop" not in detail
+    looped = _seeds(frames[1], config={**CFG, "base_from_loop": True}).values[0]
+    assert detail_of(looped)["base"] == 5
+    assert detail_of(looped)["base_from_loop"] is True
+    # Without a Loop upstream "From Loop" can't be true.
+    solo = _seeds(config={**CFG, "base_from_loop": True}).values[0]
+    assert "base_from_loop" not in detail_of(solo)

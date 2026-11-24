@@ -53,3 +53,14 @@ def test_bad_entries_fall_back():
     internals = {ROWS_KEY: {"a": {"seed": True, "frame0": 1}}, LOOP_SEED_KEY: "x"}
     assert resolve_context_seed(widget_seed=3, seed_from="row:a", internals=internals)[2] == "auto"
     assert resolve_context_seed(widget_seed=3, seed_from="loop", internals=internals)[2] == "auto"
+
+
+def test_seed_root_names_what_the_seed_was_made_from():
+    from engine.seed_derive import seed_root
+
+    assert seed_root("row:Face", LOOP_ON) == "row:Face"
+    assert seed_root("loop", LOOP_OFF) == "loop"
+    assert seed_root("auto", LOOP_ON) == "loop"
+    assert seed_root("auto", LOOP_OFF) == "own"
+    assert seed_root("own", LOOP_ON) == "own"
+    assert seed_root("auto", {}) == "own"

@@ -14,6 +14,8 @@
  * every higher `out` drops by one; a new pin takes the next free slot.
  */
 
+import { hexColor, iconName } from "./looks";
+
 /** BOOLEAN outputs the node declares. Never lower it (saved links). */
 export const MAX_OUTPUTS = 16;
 export const TOGGLE_STYLES = ["switch", "checkbox", "buttons", "chip"] as const;
@@ -57,6 +59,10 @@ export interface ToggleRow {
   lock?: ToggleLock;
   /** The rows `lock` covers: a WP Context's codename + the row's `_uid`. */
   lock_targets?: LockTarget[];
+  /** Frontend only: the loop frame (0-based) the lock holds while on, when
+   *  it went on with a frame picked in the Loop's Edit frame; absent: every
+   *  frame. Set and cleared by the node, not the window. */
+  lock_frame?: number;
   /** In no group though a label is above it: dropped below a group. Only on
    *  toggles after the first label (`rowsOf` sets it). */
   ungrouped?: true;
@@ -243,15 +249,7 @@ export function toggleRows(cfg: TogglesConfig): ToggleRow[] {
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
-const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-const ICON_RE = /^[a-z0-9-]{1,40}$/;
-/** A `#rrggbb` colour, or "" for anything else. */
-const hex = (v: unknown): string => (typeof v === "string" && HEX_RE.test(v.trim()) ? v.trim().toLowerCase() : "");
-/** A PrimeIcons name (without `pi-`), or "" for anything else. */
-const iconName = (v: unknown): string => {
-  const s = str(v).replace(/^pi-/, "");
-  return ICON_RE.test(s) ? s : "";
-};
+const hex = hexColor;
 
 /** Lock targets from saved JSON: well-formed, each one once. */
 export function parseLockTargets(raw: unknown): LockTarget[] {
@@ -334,6 +332,7 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (TOGGLE_LOCKS.includes(o.lock as ToggleLock)) t.lock = o.lock as ToggleLock;
     const targets = parseLockTargets(o.lock_targets);
     if (targets.length) t.lock_targets = targets;
+    if (t.lock && Number.isInteger(o.lock_frame) && (o.lock_frame as number) >= 0) t.lock_frame = o.lock_frame as number;
     const groups = Array.isArray(o.groups) ? o.groups.map(str).filter(Boolean) : [];
     if (groups.length) t.groups = [...new Set(groups)];
     rows.push(t);

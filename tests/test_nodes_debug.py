@@ -107,6 +107,7 @@ class TestWPDebugExecute:
                 "__wp_axes__": {"outfit": [{"SHOES": "boots"}, {}]},
                 "__wp_constraint_hits__": {"c1": 2},
                 "__wp_loop_index__": 1,
+                "__wp_loop_seed__": {"seed": 5, "frame0": 4, "base": 3},
             },
         )
         snapshot = self._parse_snapshot(WPDebug.execute(context=payload, wp_viewer=None))
@@ -117,5 +118,6 @@ class TestWPDebugExecute:
         assert snapshot["__wp_axes__"] == {"outfit": [{"SHOES": "boots"}, {}]}
         assert snapshot["__wp_constraint_hits__"] == {"c1": 2}
         assert snapshot["__wp_loop_index__"] == 1
+        assert snapshot["__wp_loop_seed__"] == {"seed": 5, "frame0": 4, "base": 3}
         assert snapshot["__wp_ref_log__"][0]["uuid"] == "abcd1234"
         assert snapshot["__wp_nodes__"] == [{"node_id": "3", "seed": 9}]

@@ -49,6 +49,7 @@ import {
   phrasePreview,
   type OrbitKind,
   sliderProblems,
+  sliderWrites,
   wordFor,
   type PadLooks,
   type SliderRow,
@@ -145,7 +146,10 @@ function onWheel(ev: WheelEvent): void {
 const zMax = computed(() => (az.value && az.value.max > az.value.min ? az.value.max : (az.value?.min ?? 0) + 1));
 const ring = computed(() => (az.value ? (az.value.value - az.value.min) / (zMax.value - az.value.min) : undefined));
 const fmtZ = (v: number): string => fmtSlider({ value: v, decimals: az.value?.decimals ?? 2 });
-/** The Z fader stands as tall as the pad (less its value and name lines). */
+/** The Z fader stands as tall as the pad (less its value and name lines).
+ *  Measured in layout pixels (`offsetHeight`), never on screen: the canvas
+ *  zoom scales the screen box, which made the fader change length with the
+ *  zoom and grow a little on every drag at a high zoom. */
 const zLen = ref(120);
 let zObs: ResizeObserver | null = null;
 function watchPadHeight(el: unknown): void {
@@ -154,7 +158,7 @@ function watchPadHeight(el: unknown): void {
   const box = el instanceof HTMLElement ? el : null;
   const padEl = box?.querySelector<HTMLElement>(".wp-xypad");
   if (!padEl || typeof ResizeObserver === "undefined") return;
-  zObs = new ResizeObserver(() => { zLen.value = Math.max(60, Math.round(padEl.getBoundingClientRect().height) - 76); });
+  zObs = new ResizeObserver(() => { zLen.value = Math.max(60, padEl.offsetHeight - 76); });
   zObs.observe(padEl);
 }
 onBeforeUnmount(() => zObs?.disconnect());
@@ -244,6 +248,36 @@ watch(() => props.editRequest, () => {
 });
 const editingRow = computed(() => (editing.value === null ? undefined : editRows.value[editing.value]));
 const valueVars = computed(() => [...new Set([...props.upstreamVars, ...axes.value.map((s) => s.var).filter(Boolean)])]);
+/** The globe beside an axis or the phrase: internal keeps its variable for
+ *  rules only, out of the Assembler (as on WP Slider rows). */
+function toggleInternal(i: number): void {
+  if (i >= axes.value.length) {
+    const p = phrase.value;
+    if (p) emitRows(axes.value, pad.value, withInternal(p, !p.internal));
+    return;
+  }
+  emitRows(axes.value.map((s, j) => (j === i ? withInternal(s, !s.internal) : s)));
+}
+function withInternal(s: SliderRow, on: boolean): SliderRow {
+  const next = { ...s };
+  if (on) next.internal = true;
+  else delete next.internal;
+  return next;
+}
+function internalHint(s: SliderRow): string {
+  const v = `$${s.var}`;
+  return s.internal
+    ? `Internal: ${v} is for rules only and stays out of the Assembler. Click to show it there`
+    : `${v} shows in the Assembler. Mark internal to keep it for rules only`;
+}
+/** The hover on an axis chip or the phrase: the whole name and what the
+ *  variable gets, which a narrow chip or a long word cuts short. */
+function chipTip(s: SliderRow): string {
+  if (!s.var) return s.name || "Slider";
+  const got = s === phrase.value ? phraseText.value : sliderWrites(props.modelValue, s);
+  return `${s.name || "Slider"}\n$${s.var} → ${got === "" ? "(empty)" : got}`;
+}
+
 function applyWindow(next: SliderRow): void {
   const i = editing.value;
   editing.value = null;
@@ -261,7 +295,13 @@ function applyWindow(next: SliderRow): void {
   <div class="wp-pad" :class="{ 'wp-pad--skipped': isSkipped }" data-wp-reveal>
     <div class="wp-pad__read" :data-dims="dims">
       <template v-for="(s, i) in axes" :key="s.id">
-        <span class="wp-pad__axis" :style="s.text_color ? { '--wp-pad-text': s.text_color } : undefined" :data-wp-vars="s.var || undefined" :data-test="`pad-axis-${i}`">
+        <span
+          v-tooltip="editMode ? undefined : chipTip(s)"
+          class="wp-pad__axis"
+          :style="s.text_color ? { '--wp-pad-text': s.text_color } : undefined"
+          :data-wp-vars="s.var || undefined"
+          :data-test="`pad-axis-${i}`"
+        >
           <span class="wp-pad__tag">{{ TAGS[i] }}</span>
           <i v-if="s.icon" class="pi wp-pad__icon" :class="`pi-${s.icon}`" :style="s.icon_color ? { color: s.icon_color } : undefined" aria-hidden="true" />
           <span class="wp-pad__name">
@@ -273,14 +313,34 @@ function applyWindow(next: SliderRow): void {
           </span>
           <span class="wp-pad__num">{{ fmtSlider(s) }}</span>
           <WpIconButton v-if="editMode" icon="pi-pencil" :pressed="editing === i" :label="`Edit ${s.name}`" :data-test="`pad-edit-${i}`" @click="editing = editing === i ? null : i" />
+          <WpIconButton
+            v-if="editMode && s.var"
+            icon="pi-globe"
+            tone="accent"
+            :pressed="!!s.internal"
+            :label="s.internal ? 'Unmark internal' : 'Mark internal'"
+            :hint="internalHint(s)"
+            :data-test="`pad-internal-${i}`"
+            @click="toggleInternal(i)"
+          />
         </span>
       </template>
       <i v-if="problemText" v-tooltip="problemText" class="pi pi-exclamation-triangle wp-pad__warn" role="img" :aria-label="problemText" />
     </div>
-    <div v-if="phrase" class="wp-pad__phrase" :data-wp-vars="phrase.var || undefined" data-test="pad-phrase">
+    <div v-if="phrase" v-tooltip="editMode ? undefined : chipTip(phrase)" class="wp-pad__phrase" :data-wp-vars="phrase.var || undefined" data-test="pad-phrase">
       <span :class="phrase.var ? varColorClass(phrase.var) : 'is-dim'">{{ phrase.var ? `$${phrase.var}` : "no variable" }}</span>
       <span class="wp-pad__phrase-text">{{ phraseText }}</span>
       <WpIconButton v-if="editMode" icon="pi-pencil" :pressed="editing === axes.length" :label="`Edit ${phrase.name}`" data-test="pad-edit-phrase" @click="editing = editing === axes.length ? null : axes.length" />
+      <WpIconButton
+        v-if="editMode && phrase.var"
+        icon="pi-globe"
+        tone="accent"
+        :pressed="!!phrase.internal"
+        :label="phrase.internal ? 'Unmark internal' : 'Mark internal'"
+        :hint="internalHint(phrase)"
+        data-test="pad-internal-phrase"
+        @click="toggleInternal(axes.length)"
+      />
     </div>
     <!-- Stops the pointer here so a drag on the pad never drags the node. -->
     <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
