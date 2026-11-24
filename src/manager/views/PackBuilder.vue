@@ -99,8 +99,10 @@ const bundleStore = useBundleStore();
 const templateStore = useTemplateStore();
 const open = ref(new Set<string>());
 const showSettings = ref(false);
-/** On the Settings step (after Describe, before the first plan). */
-const settingUp = ref(false);
+/** On the Settings step (after Describe, before the first plan): the
+ *  composable keeps it, so coming back while the first plan is asked
+ *  lands on that step, not on Describe. */
+const { settingUp } = pb;
 
 function startOver(): void {
   pb.reset();
@@ -119,8 +121,14 @@ function onSettingsKey(ev: KeyboardEvent): void {
     void pb.askPlan();
   }
 }
-onMounted(() => window.addEventListener("keydown", onSettingsKey));
-onBeforeUnmount(() => window.removeEventListener("keydown", onSettingsKey));
+onMounted(() => {
+  window.addEventListener("keydown", onSettingsKey);
+  pb.onPage.value = true;
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onSettingsKey);
+  pb.onPage.value = false;
+});
 const editBox = ref<HTMLTextAreaElement | null>(null);
 const requestBox = ref<HTMLTextAreaElement | null>(null);
 const sampleBox = ref<HTMLTextAreaElement | null>(null);

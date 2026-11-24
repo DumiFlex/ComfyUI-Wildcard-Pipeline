@@ -28,8 +28,15 @@ import { SUGGESTIONS_SOURCE_NOTE, suggestionsFor } from "../ai-models";
 import { useUiStore } from "../../../stores/uiStore";
 import { isThinking, thinkingChoices } from "../../../utils/ai-thinking";
 import { useAiThinking } from "../../../composables/useAiThinking";
+import { useAiDone } from "../../../composables/useAiDone";
 
 const ui = useUiStore();
+const aiDone = useAiDone();
+/** Why "Notify when AI work finishes" stayed off (the browser said no). */
+const doneBlocked = ref("");
+async function setDoneNotify(on: boolean): Promise<void> {
+  doneBlocked.value = await aiDone.setAiDoneDesktop(on);
+}
 // vue-tsc 3 reads a `//` written in the template as a comment and loses the
 // template's types after it, so the texts with an address in them live here.
 const SEARXNG_PLACEHOLDER = "http://127.0.0.1:8888";
@@ -1194,6 +1201,21 @@ const off = computed(() => !config.value?.enabled);
               @update:model-value="(v: boolean) => ui.setChatShow('typing', v)"
             />
           </SettingRow>
+          <SettingRow
+            label="Notify when AI work finishes"
+            recommended="Off"
+            hint="When the chat answers or a Pack Builder plan, build or review ends while this tab is in the background, the browser shows a notification; clicking it brings you back to that view. Your browser asks once when you turn this on. In the manager itself a short note with Open shows whenever the job's view is closed, with this on or off. Saved in this browser."
+            setting-key="ai-done-notify"
+          >
+            <WpSwitch
+              size="md"
+              :model-value="aiDone.desktop.value"
+              aria-label="Notify when AI work finishes"
+              data-test="ai-done-notify"
+              @update:model-value="(v: boolean) => void setDoneNotify(v)"
+            />
+          </SettingRow>
+          <Banner v-if="doneBlocked" tone="warn" size="sm" class="wp-ai-set__ctx" data-test="ai-done-notify-blocked">{{ doneBlocked }}</Banner>
         </SettingGroup>
 
         <SettingGroup title="Permissions" note="The assistant can't change these itself.">
