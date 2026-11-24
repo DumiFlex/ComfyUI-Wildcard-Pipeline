@@ -87,8 +87,7 @@ export function mountModeRelay(node: RelayHostNode) {
   return createDomWidgetHost(node, "wp_mode_relay", wrapper, {
     initialValue: "",
     minHeight: 40,
-    minWidth: 300,
-    autoHeight: true,
+    sizing: { width: { min: 300, content: true }, height: "content", container: true },
   });
 }
 

@@ -122,6 +122,7 @@ sizing: {
 }
 ```
 
+- **What `content` measures.** The content's min-content width, with every element that cuts its text with an ellipsis counted as empty, so a long name never widens the floor. Give a name that may shrink `text-overflow: ellipsis`; anything else (a fixed box, a control, a word that can't wrap) raises the floor.
 - **Height.** `content` follows the content and undoes a drag; `grow` grows with it and keeps a drag taller; `fill` belongs to the user and the content fills and scrolls; `fit` never grows past the content; `own` makes the node exactly its content.
 - **Floors reach both renderers.** The width floor goes to litegraph (`computeLayoutSize`) and, under Nodes 2.0, to the node element's `min-width`, so a node can't be dragged narrower than its content.
 - **A saved size is the user's.** Before the host's first resize, a node wider than its floor, or (under `grow` / `fit`) taller than its content, was sized by hand and keeps that size after a load.
