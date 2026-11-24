@@ -153,7 +153,20 @@ describe("DerivationRuleCard.vue", () => {
     const selectComp = wrap.find('[data-test="cond-op-0-0"]')
       .findComponent({ name: "Select" });
     const opts = selectComp.props("options") as Array<{ value: string }>;
-    expect(opts.map((o) => o.value)).toEqual(["equals", "contains", "matches", "exists"]);
+    expect(opts.map((o) => o.value)).toEqual(["equals", "contains", "matches", "exists", "is_above", "is_below"]);
+  });
+
+  it("is above / is below take no NOT", () => {
+    const rule = makeRule({
+      branches: [{
+        condition: { var: "x.num", op: "is_above", value: "0.5" },
+        action: { target_var: "out", mode: "replace", value: "v" },
+      }],
+    });
+    const wrap = mountCard(rule, 0);
+    const not = wrap.find('[data-test="cond-not-0-0"]');
+    expect(not.attributes("disabled")).toBeDefined();
+    expect(not.attributes("aria-pressed")).toBe("false");
   });
 
   it.each([

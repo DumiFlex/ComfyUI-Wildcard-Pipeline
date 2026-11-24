@@ -299,8 +299,8 @@ def uses_bool_accessor(node: Any) -> bool:
 
 
 def uses_num_accessor(node: Any) -> bool:
-    """Any text reading ``$name.num``, or a derivation test whose ``var``
-    is ``name.num``, at any depth."""
+    """Any text reading ``$name.num``, a derivation test whose ``var``
+    is ``name.num``, or an ``is_above`` / ``is_below`` test, at any depth."""
     if isinstance(node, list):
         return any(uses_num_accessor(child) for child in node)
     if isinstance(node, str):
@@ -309,6 +309,9 @@ def uses_num_accessor(node: Any) -> bool:
         return False
     var = node.get("var")
     if isinstance(var, str) and _NUM_VAR_RE.match(var.strip()):
+        return True
+    # The number tests came with ``.num`` (v13) and stamp it on any variable.
+    if node.get("op") in ("is_above", "is_below") and "var" in node:
         return True
     return any(uses_num_accessor(value) for value in node.values())
 

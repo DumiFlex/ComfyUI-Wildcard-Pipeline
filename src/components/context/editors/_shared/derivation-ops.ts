@@ -31,6 +31,8 @@ export const DERIVATION_OPS = [
   "is_not_empty",
   "not_contains",
   "not_matches",
+  "is_above",
+  "is_below",
 ] as const;
 
 export type DerivationOp = (typeof DERIVATION_OPS)[number];
@@ -51,6 +53,8 @@ export const OP_LABELS: Record<DerivationOp, string> = {
   is_not_empty: "is not empty",
   not_contains: "does not contain",
   not_matches: "does not match (regex)",
+  is_above: "is above",
+  is_below: "is below",
 };
 
 /** Semantic tooltip text shown on hover of each option. Surfaced via
@@ -71,6 +75,8 @@ export const OP_TOOLTIPS: Record<DerivationOp, string> = {
   is_not_empty: "Variable resolved to a non-empty string",
   not_contains: "The value is not a substring (case-sensitive)",
   not_matches: "The Python regex (re.search) finds nothing; a broken pattern never fires",
+  is_above: "Both are numbers and the variable's is greater (e.g. $detail.num is above 0.5); text never passes",
+  is_below: "Both are numbers and the variable's is smaller (e.g. $detail.num is below 0.5); text never passes",
 };
 
 /** Operator-specific placeholder for the condition-value input. Drives
@@ -90,6 +96,8 @@ export const OP_PLACEHOLDERS: Record<DerivationOp, string> = {
   is_not_empty: "no value needed",
   not_contains: "cold",
   not_matches: "^a.*z$",
+  is_above: "0.5",
+  is_below: "0.5",
 };
 
 /** Ops where the condition-value input is purely informational —

@@ -13,6 +13,7 @@ const OPS: Record<string, string> = {
   matches: "matches", not_matches: "does not match", exists: "exists",
   not_exists: "does not exist", is_set: "has a value", is_unset: "has no value",
   is_empty: "is empty", is_not_empty: "has a value",
+  is_above: "is above", is_below: "is below",
 };
 const NO_VALUE = new Set(["exists", "not_exists", "is_set", "is_unset", "is_empty", "is_not_empty"]);
 const MODES: Record<string, string> = {
