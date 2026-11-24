@@ -132,6 +132,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         wildcards, since only a wildcard has a value to keep. Switching the toggle on locks those
         rows to what the last run did, as the row's own lock button would: Lock value keeps the
         option each wildcard picked (all picks of a multi-pick row), Lock seed keeps the seed. A run over several frames keeps each frame's pick or seed.
+        When the row's WP Context runs under a WP Context Loop and a frame is picked in the Loop's
+        <b>Edit frame</b>, switching on locks that frame only (its pick or seed from the last run),
+        and the lock icon carries the frame's number (<b>#3</b>). Switching off then lets go of that
+        frame alone. To lock another frame, pick it in Edit frame and switch the toggle off and on.
         Switching it off unlocks only the rows this toggle locked. A row you locked by hand, or
         another toggle did, is left alone both ways, and clicking a row's lock yourself makes it
         yours again.

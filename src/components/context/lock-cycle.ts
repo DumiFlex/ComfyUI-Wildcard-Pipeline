@@ -89,8 +89,9 @@ export function withBaseLock(inst: Instance, want: LockWant): Instance {
  *  locked it no longer unlocks it. */
 export function withoutLockOwner(inst: Instance): Instance {
   if (!inst._ui?.locked_by) return inst;
-  const { locked_by: _drop, ...ui } = inst._ui;
+  const { locked_by: _drop, locked_frame: _frame, ...ui } = inst._ui;
   void _drop;
+  void _frame;
   return { ...inst, _ui: ui };
 }
 

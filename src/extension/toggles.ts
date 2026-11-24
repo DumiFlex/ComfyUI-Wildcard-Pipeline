@@ -57,6 +57,10 @@ export interface ToggleRow {
   lock?: ToggleLock;
   /** The rows `lock` covers: a WP Context's codename + the row's `_uid`. */
   lock_targets?: LockTarget[];
+  /** Frontend only: the loop frame (0-based) the lock holds while on, when
+   *  it went on with a frame picked in the Loop's Edit frame; absent: every
+   *  frame. Set and cleared by the node, not the window. */
+  lock_frame?: number;
   /** In no group though a label is above it: dropped below a group. Only on
    *  toggles after the first label (`rowsOf` sets it). */
   ungrouped?: true;
@@ -334,6 +338,7 @@ export function parseTogglesConfig(raw: unknown): TogglesConfig {
     if (TOGGLE_LOCKS.includes(o.lock as ToggleLock)) t.lock = o.lock as ToggleLock;
     const targets = parseLockTargets(o.lock_targets);
     if (targets.length) t.lock_targets = targets;
+    if (t.lock && Number.isInteger(o.lock_frame) && (o.lock_frame as number) >= 0) t.lock_frame = o.lock_frame as number;
     const groups = Array.isArray(o.groups) ? o.groups.map(str).filter(Boolean) : [];
     if (groups.length) t.groups = [...new Set(groups)];
     rows.push(t);
