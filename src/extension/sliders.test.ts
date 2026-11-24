@@ -18,7 +18,9 @@ import {
   orbitPreset,
   orbitReady,
   padAxes,
+  matchAxis,
   padConfig,
+  withPadStyle,
   padPhrase,
   padRatio,
   phrasePreview,
@@ -405,5 +407,40 @@ describe("fitRange", () => {
   it("keeps min below max", () => {
     expect(fitRange(base, { min: 2 })).toEqual({ min: 2, max: 2.05, step: 0.05, decimals: 2 });
     expect(fitRange(base, { max: -1 }).min).toBe(-1.05);
+  });
+});
+
+describe("pad tools", () => {
+  const fresh = () => padConfig("", 2);
+
+  it("matchAxis copies the range, snap, marks and words but keeps the name, variable and output", () => {
+    const [x, y] = fresh().rows as [SliderRow, SliderRow];
+    const from: SliderRow = { ...y, min: 0, max: 10, step: 0.5, decimals: 1, free: true, marks: true, mode: "words", words: [{ upto: 5, word: "low" }, { word: "high" }] };
+    const got = matchAxis({ ...x, value: 0.4 }, from);
+    expect(got).toMatchObject({ id: x.id, name: "X", var: x.var, out: x.out, min: 0, max: 10, step: 0.5, decimals: 1, free: true, marks: true, mode: "words", value: 0.4 });
+    expect(got.words).toEqual(from.words);
+    expect(got.words).not.toBe(from.words);
+    // From a Number axis, a Text axis keeps its own text and mode.
+    const text = matchAxis({ ...x, mode: "text", text: "$x.num" }, { ...y, min: 5, max: 9 });
+    expect(text).toMatchObject({ mode: "text", text: "$x.num", min: 5, max: 9, value: 5 });
+    expect(matchAxis({ ...x, free: true, marks: true }, y)).not.toHaveProperty("free");
+  });
+
+  it("withPadStyle fills Size and Stick axes only while X and Y are untouched", () => {
+    const size = withPadStyle(fresh(), 2, "size");
+    expect(size.pad).toEqual({ style: "size", fit: true });
+    expect(size.rows.map((r) => (r as SliderRow).var)).toEqual(["width", "height"]);
+    expect(size.rows[0]).toMatchObject({ name: "Width", min: 512, max: 2048, step: 64, decimals: 0, value: 1024, icon: "arrows-h", out: 1 });
+    const stick = withPadStyle(fresh(), 2, "stick");
+    expect(stick.rows[1]).toMatchObject({ name: "Down / up", var: "stick_y", min: -1, max: 1, value: 0 });
+    // A changed axis is left alone, and Size keeps a picked shape.
+    const touched = fresh();
+    touched.rows[0] = { ...(touched.rows[0] as SliderRow), name: "Mood" };
+    touched.pad = { ratio: 1.5 };
+    const kept = withPadStyle(touched, 2, "size");
+    expect(kept.rows[0]).toMatchObject({ name: "Mood", min: 0, max: 1 });
+    expect(kept.pad).toEqual({ ratio: 1.5, style: "size" });
+    // Back to the plain pad drops the style.
+    expect(withPadStyle({ ...fresh(), pad: { style: "stick" } }, 2, undefined).pad).toBeUndefined();
   });
 });

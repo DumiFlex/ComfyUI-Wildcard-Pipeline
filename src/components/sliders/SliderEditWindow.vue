@@ -24,7 +24,7 @@ import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
 import SliderRowView from "./SliderRow.vue";
 import { varColorClass } from "../shared/var-color";
-import { MAX_DECIMALS, fineStepOf, fitRange, sliderOutputType, wordFor, type SliderMode, type SliderStyle, type SliderRow, type SliderWord } from "../../extension/sliders";
+import { MAX_DECIMALS, fineStepOf, fitRange, matchAxis, sliderOutputType, wordFor, type SliderMode, type SliderStyle, type SliderRow, type SliderWord } from "../../extension/sliders";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
 
@@ -48,8 +48,11 @@ const props = defineProps<{
    *  no Style), and the chip names the axis. "Phrase": WP Slider 3D's text
    *  row (no Style and no output). */
   axis?: "X" | "Y" | "Z" | "Phrase" | undefined;
+  /** A pad axis's other axes: "Match X" copies one's range, decimals,
+   *  snap, marks and words here. */
+  matchRows?: { label: string; row: SliderRow; index: number }[] | undefined;
 }>();
-const emit = defineEmits<{ done: [next: SliderRow, groupId: string]; cancel: [] }>();
+const emit = defineEmits<{ done: [next: SliderRow, groupId: string]; cancel: []; swap: [next: SliderRow, index: number] }>();
 
 // Plain copies: the props are reactive proxies.
 const d = ref<SliderRow>(JSON.parse(JSON.stringify(props.s)) as SliderRow);
@@ -214,7 +217,29 @@ function onKey(ev: KeyboardEvent): void {
         </span>
       </label>
       <div v-if="axis !== 'Phrase'" class="wp-slw__field">
-        <span>Range <em>min, max, step and the decimals it writes (0 makes a whole number)</em></span>
+        <span class="wp-slw__range-head">
+          <span>Range <em>min, max, step and the decimals it writes (0 makes a whole number)</em></span>
+          <Button
+            v-for="m in matchRows ?? []"
+            :key="m.row.id"
+            size="sm"
+            variant="ghost"
+            icon="pi-copy"
+            :hint="`Copy ${m.label}'s range, step, decimals, snap, marks and words (${m.row.name})`"
+            :data-test="`sl-match-${m.label}`"
+            @click="d = matchAxis(d, m.row)"
+          >Match {{ m.label }}</Button>
+          <Button
+            v-for="m in matchRows ?? []"
+            :key="`swap-${m.row.id}`"
+            size="sm"
+            variant="ghost"
+            icon="pi-arrow-right-arrow-left"
+            :hint="`Trade every setting with ${m.label} (${m.row.name}), these edits included; each keeps its output`"
+            :data-test="`sl-swap-${m.label}`"
+            @click="emit('swap', d, m.index)"
+          >Swap with {{ m.label }}</Button>
+        </span>
         <span class="wp-slw__range">
           <label class="wp-slw__num"><span>Min</span><WpNumber :model-value="d.min" :step="d.step" size="sm" aria-label="Min" data-test="sl-min" @update:model-value="(v: number | null) => setRange({ min: v })" /></label>
           <label class="wp-slw__num"><span>Max</span><WpNumber :model-value="d.max" :step="d.step" size="sm" aria-label="Max" data-test="sl-max" @update:model-value="(v: number | null) => setRange({ max: v })" /></label>
@@ -384,6 +409,8 @@ function onKey(ev: KeyboardEvent): void {
 .wp-slw__body { display: flex; flex-direction: column; gap: 10px; }
 .wp-slw__field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .wp-slw__field > span:first-child { font-size: 10.5px; font-weight: 600; color: var(--wp-text-muted, var(--wp-text2)); }
+.wp-slw__range-head { display: flex; align-items: center; gap: 4px; }
+.wp-slw__range-head > span { flex: 1; min-width: 0; }
 .wp-slw__field em { font-style: normal; font-weight: 400; color: var(--wp-text-dim, var(--wp-text3)); margin-left: 4px; }
 .wp-slw__out { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .wp-slw__check { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; cursor: pointer; }

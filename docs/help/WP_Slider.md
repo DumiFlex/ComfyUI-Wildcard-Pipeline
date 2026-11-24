@@ -21,7 +21,7 @@ Several number sliders in one node. Each slider writes `$its_variable` (the numb
 - **Name**: Shown on the row and on its output.
 - **Variable**: What the slider writes. It follows the name until you change it. Show puts it under the name, with the picked word in Words mode.
 - **Range**: Min, Max and Step of the track, and how many decimals the number is written with (0 writes a whole number, and an Auto output is then an INT). The value is rounded to those decimals. The fields keep each other in step: fewer decimals round the step (0 decimals turns a 0.05 step into 1) and the ends, a finer step adds decimals, and a min past the max moves the max with it.
-- **Snap to step**: On (the default), a drag lands on the step: 0, 0.05, 0.1 … Hold Shift while dragging to land on any value the decimals can write (0.37). Off, every drag does that, and the arrows still move by the step.
+- **Snap to step**: On (the default), a drag lands on the step: 0, 0.05, 0.1 … Hold Shift while dragging to land on any value the decimals can write (0.37); Ctrl (⌘ on a Mac) does that and skips the marks too. Off, every drag does that, and the arrows still move by the step.
 - **Value: Number**: The variable gets the number as text, e.g. 0.45 or 28.
 - **Value: Text**: The variable gets your text, which can read the slider's own number as $name.num and any other $variable: (intricate details:$detail.num) prints (intricate details:1.2). A text box like the Assembler's, with $ suggestions.
 - **Value: Words**: Ranges, each with a word and an optional negative: the variable gets the word of the first range whose up to is at least the number; the last range catches the rest. 0 to 0.3 close-up, to 0.7 medium shot, the rest wide shot. The window marks the range the number is in now.
