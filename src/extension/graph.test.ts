@@ -1452,6 +1452,32 @@ describe("collectLocalResolvedForModule", () => {
     expect(collectLocalResolvedForModule(graph, ctx).model).toBe("other");
   });
 
+  it("match_variable matches a ref as the editor shows it, and one level deep", () => {
+    const hat = {
+      id: "aaaa0001", type: "wildcard", enabled: true, meta: { name: "Hat" }, entries: [],
+      payload: { var_binding: "hat", options: [{ id: "h1", value: "beret" }] },
+    };
+    const places = {
+      id: "aaaa0002", type: "wildcard", enabled: true, meta: { name: "Places" }, entries: [],
+      payload: { var_binding: "place_pool", options: [{ id: "p1", value: "beach" }, { id: "p2", value: "forest" }] },
+    };
+    const wc = {
+      id: "wc000003", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+      instance: { match_variable: "want" },
+      payload: { var_binding: "look", options: [
+        { id: "o1", value: "plain" }, { id: "o2", value: "red @{aaaa0001}" }, { id: "o3", value: "@{aaaa0002}" },
+      ] },
+    };
+    const fixed = (want: string) => ({
+      id: "fv000002", type: "fixed_values", enabled: true, meta: { name: "" }, entries: [],
+      payload: { values: [{ id: "v1", name: "want", value: want }] },
+    });
+    let { ctx, graph } = singleNode([hat, places, fixed("Red @Hat"), wc]);
+    expect(collectLocalResolvedForModule(graph, ctx).look).toBe("red beret");
+    ({ ctx, graph } = singleNode([hat, places, fixed("forest"), wc]));
+    expect(collectLocalResolvedForModule(graph, ctx).look).toBe("forest");
+  });
+
   it("excludes the editing module's own binding", () => {
     const { ctx, graph } = singleNode([
       {
