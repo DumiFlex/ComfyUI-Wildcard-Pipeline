@@ -25,6 +25,8 @@
 - **Base edits say which frames override the module.** Opening a WP Context row's window with Edit frame on base now names the frames that change that module (`#2 off`, `#4 2 changes`), since a base edit doesn't reach what a frame overrides.
 - **Know when the AI is done.** When the chat answers, or a Pack builder plan, build, review or fix ends, while its view is closed (another page, the chat shut), a note in the corner says how it went, with **Open** to go back. In a background tab a dot goes in front of the tab's title until you return, and **Settings › AI assistant › Chat › Notify when AI work finishes** adds a browser notification (off by default; the browser asks once).
 
+- **WP Slider: a word inside a text, mute, bypass and lock.** In Words mode, write `{word} clothes` and the variable gets "green clothes". A slider's window now keeps its negative, marks and output under **Advanced**, with **Mute** (writes nothing), **Bypass** (writes only the number) and **Lock value** (a drag can't move it; the lock on the row unlocks it).
+
 ### Fixes
 
 - **The Pack builder no longer drops you on the start page while it plans.** Leaving the page while the first plan was being asked and coming back showed Describe again although the planner was still working; it now comes back on the Settings step with the working line and Stop.

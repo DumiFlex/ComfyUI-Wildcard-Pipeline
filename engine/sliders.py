@@ -23,7 +23,14 @@ What the variable holds (``mode``):
   its own ``$name.num`` (``"(intricate details:$detail.num)"``).
 * ``words``: the word of the first range whose ``upto`` is at least the
   value (a range without ``upto`` catches the rest; past every ``upto`` the
-  last word wins).
+  last word wins). A ``text`` holding ``{word}`` wraps it: ``"{word}
+  clothes"`` writes ``"green clothes"`` (the node resolves it like ``text``).
+
+``off`` (stored only when set): ``"mute"`` writes nothing (no variable, no
+``$name.num``, no negative); ``"bypass"`` writes the plain number, as
+``number`` mode does, with no negative. The row's output still sends its
+number. ``lock`` (stored only as ``true``) stops the value moving on the
+canvas; the engine reads nothing from it.
 
 ``$name.num`` reads the number whatever the variable holds, from the
 cross-node table :data:`NUMS_KEY` (like ``$name.bool`` for WP Toggles).
@@ -54,6 +61,9 @@ from typing import Any
 #: link any slot up to it, and validation indexes RETURN_TYPES by slot.
 MAX_OUTPUTS = 16
 MODES = ("number", "text", "words")
+OFF = ("mute", "bypass")
+#: In ``words`` mode, where the picked word goes in the row's ``text``.
+WORD_SLOT = "{word}"
 STYLES = ("row", "bar", "fader")
 MAX_DECIMALS = 6
 
@@ -92,6 +102,8 @@ class Slider:
     #: ``"int"`` / ``"float"`` picks the output's type; empty follows the
     #: decimals (INT at 0, else FLOAT).
     out_type: str = ""
+    #: ``"mute"`` / ``"bypass"`` (see the module doc); empty runs as set.
+    off: str = ""
 
     @property
     def is_int(self) -> bool:
@@ -165,6 +177,7 @@ def parse_config(raw: Any) -> Config:
         negative = row.get("negative")
         step = _num(row.get("step"), 0.01)
         out_type = row.get("out_type")
+        off = row.get("off")
         sliders.append(Slider(
             id=sid,
             name=_str(row.get("name")) or sid,
@@ -182,6 +195,7 @@ def parse_config(raw: Any) -> Config:
             out=out if isinstance(out, int) and not isinstance(out, bool) else 0,
             internal=row.get("internal") is True,
             out_type=out_type if out_type in ("int", "float") else "",
+            off=off if off in OFF else "",
         ))
     return Config(sliders=sliders)
 
@@ -226,18 +240,32 @@ def _usable(s: Slider) -> bool:
     return bool(s.var) and bool(VAR_RE.match(s.var))
 
 
+def _writes(s: Slider) -> bool:
+    """Whether the row writes its variable at all (a muted row doesn't)."""
+    return _usable(s) and s.off != "mute"
+
+
+def word_text(s: Slider) -> str:
+    """``words`` mode: what the variable holds, the picked word set into
+    ``text`` where it says ``{word}`` (the word alone otherwise)."""
+    w = word_for(s)
+    word = w.word if w else fmt(s)
+    return s.text.replace(WORD_SLOT, word) if WORD_SLOT in s.text else word
+
+
 def resolve(cfg: Config) -> dict[str, str]:
     """Variable → what it holds, in row order (``text`` unresolved; the node
     resolves it). A later row with the same variable wins."""
     values: dict[str, str] = {}
     for s in cfg.sliders:
-        if not _usable(s):
+        if not _writes(s):
             continue
-        if s.mode == "text":
+        if s.off == "bypass":
+            values[s.var] = fmt(s)
+        elif s.mode == "text":
             values[s.var] = s.text
         elif s.mode == "words":
-            w = word_for(s)
-            values[s.var] = w.word if w else fmt(s)
+            values[s.var] = word_text(s)
         else:
             values[s.var] = fmt(s)
     return values
@@ -245,7 +273,7 @@ def resolve(cfg: Config) -> dict[str, str]:
 
 def nums(cfg: Config) -> dict[str, str]:
     """Each slider variable's number as text (`$name.num`); a later row wins."""
-    return {s.var: fmt(s) for s in cfg.sliders if _usable(s)}
+    return {s.var: fmt(s) for s in cfg.sliders if _writes(s)}
 
 
 def own_negatives(cfg: Config) -> dict[str, str]:
@@ -253,7 +281,10 @@ def own_negatives(cfg: Config) -> dict[str, str]:
     empty. A later row writing the same variable decides."""
     out: dict[str, str] = {}
     for s in cfg.sliders:
-        if not _usable(s):
+        if not _writes(s):
+            continue
+        if s.off == "bypass":
+            out.pop(s.var, None)
             continue
         text = s.negative
         if s.mode == "words":

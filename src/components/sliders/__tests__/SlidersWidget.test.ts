@@ -56,6 +56,17 @@ describe("SliderRow", () => {
     w.unmount();
   });
 
+  it("a locked row can't be dragged, and its lock unlocks it", async () => {
+    const s = slider({ id: "a", lock: true, off: "mute" });
+    const w = mount(SliderRowView, { props: { s, editing: false, editable: false } });
+    await w.find('[role="slider"]').trigger("keydown", { key: "ArrowRight" });
+    expect(w.emitted("set-value")).toBeUndefined();
+    expect(w.find('[data-test="sl-off-a"]').exists()).toBe(true);
+    await w.find('[data-test="sl-lock-a"]').trigger("click");
+    expect(w.emitted("patch")?.[0]).toEqual([{ lock: undefined }]);
+    w.unmount();
+  });
+
   it("flips internal from the globe in the edit view", async () => {
     const w = mount(SliderRowView, { props: { s: cfg.rows[0] as SliderRow, editing: false, editable: true } });
     await w.find('[data-test="sl-internal-a"]').trigger("click");
@@ -188,6 +199,29 @@ describe("SliderEditWindow", () => {
     }
     await flushPromises();
     expect(done(w)).toMatchObject({ pin: true, max: 0.5, value: 0.5 });
+    w.unmount();
+  });
+
+  it("mutes and locks from Advanced, which says so when closed", async () => {
+    const w = open(slider({ id: "c" }));
+    await settle();
+    q('[data-test="sl-advanced"]')?.click();
+    await flushPromises();
+    q('[data-test="sl-off-mute"]')?.click();
+    await flushPromises();
+    const lock = [...document.body.querySelectorAll<HTMLElement>(".wp-slw__check > span")].find((x) => x.textContent === "Lock value");
+    lock?.click();
+    await flushPromises();
+    expect(q('[data-test="sl-advanced-summary"]')?.textContent).toContain("Muted · Locked");
+    expect(done(w)).toMatchObject({ off: "mute", lock: true });
+    w.unmount();
+  });
+
+  it("opens Advanced on its own for a muted row and warns on text without {word}", async () => {
+    const w = open(slider({ id: "c", mode: "words", off: "bypass", text: "green clothes", words: [{ word: "a" }] }));
+    await settle();
+    expect(q('[data-test="sl-off-bypass"]')?.getAttribute("aria-pressed") ?? q('[data-test="sl-off-bypass"]')?.getAttribute("aria-checked")).toBe("true");
+    expect(q('[data-test="sl-word-text"]')?.textContent).toContain("Write {word} where the word goes");
     w.unmount();
   });
 
