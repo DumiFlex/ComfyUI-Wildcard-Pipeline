@@ -92,8 +92,7 @@ export function create(node: LabelGridHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 260,
-    minWidth: 360,
-    autoHeight: true,
+    sizing: { width: { min: 360, content: true }, height: "content", container: true },
     onValueRestored: (raw: string) => {
       config.value = parseLabelGridConfig(raw);
     },

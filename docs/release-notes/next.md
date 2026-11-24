@@ -28,7 +28,7 @@
 ### Fixes
 
 - **The Pack builder no longer drops you on the start page while it plans.** Leaving the page while the first plan was being asked and coming back showed Describe again although the planner was still working; it now comes back on the Settings step with the working line and Stop.
-- **WP Slider and the pads can't be dragged narrower than their sliders.** Under Nodes 2.0 a node could be dragged down past what its rows need, which squeezed the tracks and cut names. A narrow WP Slider now puts each row's name over its track, and a node made wider or taller by hand keeps that size when the workflow is opened again.
+- **WP nodes can't be dragged narrower than their content.** Under Nodes 2.0 a node could be dragged down past what its rows need, which squeezed controls and cut names. WP Slider, the pads, WP Toggles, WP Seeds, Mode Relay, Node Group, Prompt Cleaner, Context Loop, Seed List, Var Picker, Image Filter, Model Info and Label & Grid now stop at what they need. A narrow WP Slider puts each row's name over its track, and a node made wider or taller by hand keeps that size when the workflow is opened again.
 - **The canvas preview of a Match variable row now finds the same option a run does.** An option with a wildcard ref matches the text the editor shows (`red @Hat`), and an option that is just a ref (`@Places`) matches when one of that wildcard's options does, showing that option. Before, the preview fell back to the first option until you ran.
 - **WP Toggles' window preview shows the mute / bypass icon as you set it.** It used to wait until you pressed Done.
 - **WP Toggles' mute / bypass icon sits on the chip's middle in grid tiles** instead of riding up to the top of the tile.

@@ -210,7 +210,7 @@ function build(node: VarPickerNode, inputName: string, scope: EffectScope): DomW
     },
     minHeight: isChoice ? 106 : 92,
     ownRunError: isChoice,
-    minWidth: 260,
+    sizing: { width: { min: 260, content: true }, height: "grow", container: true },
   });
 
   // Subscribe to ComfyUI's "executed" event so the widget's `last

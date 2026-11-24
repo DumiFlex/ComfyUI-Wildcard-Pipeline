@@ -227,7 +227,7 @@ function build(node: ContextLoopHostNode, inputName: string, scope: EffectScope)
       config.value = parseContextLoopConfig(raw);
     },
     minHeight: 140,
-    minWidth: 240,
+    sizing: { width: { min: 240, content: true }, height: "grow", container: true },
   });
 
   // Capture the Loop's executed `loop_seeds` series for the modal's "lock

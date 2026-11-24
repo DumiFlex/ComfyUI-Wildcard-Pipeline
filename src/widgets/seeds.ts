@@ -209,8 +209,7 @@ export function create(node: SeedsHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 60,
-    minWidth: 320,
-    autoHeight: true,
+    sizing: { width: { min: 320, content: true }, height: "content", container: true },
     onValueRestored: (raw: string) => {
       const parsed = normalizeOuts(parseSeedsConfig(raw));
       if (JSON.stringify(parsed) === JSON.stringify(config.value)) return;
