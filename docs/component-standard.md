@@ -109,6 +109,25 @@ Better still is one component for both sides, with only `size` changing. `WpSwit
 
 Inside a row (module, injector, bundle and Model Info rows, the Context toolbar), the icon actions are `WpIconButton`: 20 px, a `tone` that tints the icon on hover and the box while `pressed`, `pressed="mixed"` for a bundle's "some children" state, and `variant="bare"` for the fold caret. Every × that closes a canvas dialog is `Button variant="ghost" icon="times" size="sm"`. Every checkmark box is `Checkbox`, including the 12 px on/off box of module, bundle and injector rows (`size="sm"`). The Settings live preview (`components/settings/`) uses the same pieces as the nodes it previews.
 
+## 8b. Node sizing
+
+Every WP node widget is mounted by `createDomWidgetHost` (`widgets/_shared.ts`), and its size comes from one `sizing` policy (`widgets/node-sizing.ts`). A widget states only what differs from the default:
+
+```ts
+sizing: {
+  width: { min: 260, content: true },   // floor in node px (or a getter); `content` raises it to the content's min-content width
+  height: "content",                    // content | grow (default) | fill | fit | own
+  breakpoints: { narrow: 300 },         // data-wp-width="narrow|normal|wide" on the host
+  container: true,                      // the host is the `wp-node` size container
+}
+```
+
+- **Height.** `content` follows the content and undoes a drag; `grow` grows with it and keeps a drag taller; `fill` belongs to the user and the content fills and scrolls; `fit` never grows past the content; `own` makes the node exactly its content.
+- **Floors reach both renderers.** The width floor goes to litegraph (`computeLayoutSize`) and, under Nodes 2.0, to the node element's `min-width`, so a node can't be dragged narrower than its content.
+- **A saved size is the user's.** Before the host's first resize, a node wider than its floor, or (under `grow` / `fit`) taller than its content, was sized by hand and keeps that size after a load.
+- **Reflow with container queries, not fixed widths.** With `container: true`, write `@container wp-node (max-width: 299px) { … }` in the widget's scoped CSS (WP Slider stacks a row's name over its track there). `--wp-node-w` on the host is the node's width in layout px, so the canvas zoom never changes it.
+- The older one-job flags (`minWidth`, `autoHeight`, `fillHost`, `fitContent`, `ownSize`) still work and fold into the same policy; move a widget to `sizing` when you touch it.
+
 ## 9. Isolation
 
 - Every class starts with `.wp-`.
