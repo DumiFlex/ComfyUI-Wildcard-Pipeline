@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Button from "@/kit/Button.vue";
+import ModuleFrameBanner from "./ModuleFrameBanner.vue";
 import { ref, computed, watch } from "vue";
 
 import type { ModuleEntry, ModuleEntryKind } from "../../widgets/_shared";
@@ -437,10 +437,7 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     >
       <template #banner>
-        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
-          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
-        </div>
+        <ModuleFrameBanner :module="module" :current-frame="currentFrame" @revert-frame="emit('revert-frame')" />
       </template>
     </WildcardInstanceModal>
 
@@ -457,10 +454,7 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     >
       <template #banner>
-        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
-          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
-        </div>
+        <ModuleFrameBanner :module="module" :current-frame="currentFrame" @revert-frame="emit('revert-frame')" />
       </template>
     </FixedValuesInstanceModal>
 
@@ -483,10 +477,7 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     >
       <template #banner>
-        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
-          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
-        </div>
+        <ModuleFrameBanner :module="module" :current-frame="currentFrame" @revert-frame="emit('revert-frame')" />
       </template>
     </CombineInstanceModal>
 
@@ -513,10 +504,7 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     >
       <template #banner>
-        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
-          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
-        </div>
+        <ModuleFrameBanner :module="module" :current-frame="currentFrame" @revert-frame="emit('revert-frame')" />
       </template>
     </DerivationInstanceModal>
 
@@ -539,10 +527,7 @@ function cancel() {
       @clear-all-overrides="onClearAllOverrides"
     >
       <template #banner>
-        <div v-if="currentFrame != null" class="wp-modal-frame-banner" data-test="modal-frame-banner">
-          <span>Editing frame #{{ currentFrame + 1 }} — changes affect only this frame.</span>
-          <Button size="sm" variant="outline" icon="pi-replay" data-test="modal-frame-revert" @click="emit('revert-frame')">Revert #{{ currentFrame + 1 }} to base</Button>
-        </div>
+        <ModuleFrameBanner :module="module" :current-frame="currentFrame" @revert-frame="emit('revert-frame')" />
       </template>
     </ConstraintInstanceModal>
   </template>
@@ -583,25 +568,5 @@ function cancel() {
  * `.wp-medit` chrome was the v1 tabbed shell — removed alongside
  * the v1 dispatch in the 2026-05-10 cleanup. */
 
-.wp-modal-frame-banner {
-  display: flex;
-  gap: 10px;
-  margin: 10px 14px 0;
-  align-items: center;
-  justify-content: space-between;
-  padding: 7px 11px;
-  border-radius: min(6px, var(--wp-radius-cap, 999px));
-  /* solid surface (amber mixed into the modal bg, not over the canvas) so the
-   * text stays readable; amber = the override/warning accent used elsewhere. */
-  background: color-mix(in oklab, var(--wp-amber) 14%, var(--wp-bg2));
-  border: 1px solid color-mix(in oklab, var(--wp-amber) 38%, transparent);
-  color: var(--wp-amber);
-  font: 500 11px var(--wp-font-sans);
-}
-.wp-modal-frame-banner .wp-btn {
-  flex-shrink: 0;
-  border-color: color-mix(in oklab, var(--wp-amber) 55%, transparent);
-  color: var(--wp-amber);
-}
 </style>
 

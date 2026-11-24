@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, dropRedundantFrameLockNulls, effectiveEnabled, frameEnableOverride, applyFrameEdit } from "./frame-overrides";
+import { withFrameInstance, diffInstance, setFrameOverride, clearFrameOverride, toggleFrameLock, toggleFrameEnabled, dropRedundantFrameLockNulls, effectiveEnabled, frameEnableOverride, applyFrameEdit, frameOverrideSummary } from "./frame-overrides";
 import type { ModuleEntry } from "../../widgets/_shared";
 
 function mod(extra: Partial<ModuleEntry> = {}): ModuleEntry {
@@ -130,5 +130,19 @@ describe("frame-overrides", () => {
     const base = mod({ instance: { category_filter: "a" }, iteration_overrides: { "1": { category_filter: "z" } } });
     const r = applyFrameEdit(base, mod({ instance: { category_filter: "a" } }), 1, ["category_filter"]);
     expect(r.iteration_overrides).toBeUndefined();
+  });
+  it("frameOverrideSummary lists the frames that override a module, in order", () => {
+    const m = mod({
+      iteration_overrides: { "3": { pinned_option_id: "0", mode: "pinned" }, "1": { locked_seed: null } },
+      frame_enabled: { "1": false, "5": true },
+    });
+    expect(frameOverrideSummary(m)).toEqual([
+      { frame: 1, enabled: "off", changes: 0 },
+      { frame: 3, enabled: null, changes: 2 },
+    ]);
+    // A frame unlocking a locked base is a real change.
+    const locked = mod({ instance: { locked_seed: 5 }, iteration_overrides: { "2": { locked_seed: null } } });
+    expect(frameOverrideSummary(locked)).toEqual([{ frame: 2, enabled: null, changes: 1 }]);
+    expect(frameOverrideSummary(mod())).toEqual([]);
   });
 });

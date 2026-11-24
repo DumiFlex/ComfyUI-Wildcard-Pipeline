@@ -32,6 +32,16 @@ const props = withDefaults(defineProps<{
 }>(), { hint: undefined, problem: undefined, editable: false, editing: false, noDot: false, lastSeed: undefined });
 const emit = defineEmits<{ lock: []; edit: []; remove: []; cycle: []; last: [] }>();
 
+/** The row's looks as CSS variables (absent: the theme's), like WP Toggles:
+ *  icon colour, name colour, and `tint` on the seed number. */
+const looks = computed(() => {
+  const s: Record<string, string> = {};
+  if (props.r.icon_color) s["--wp-sdr-icon"] = props.r.icon_color;
+  if (props.r.text_color) s["--wp-sdr-text"] = props.r.text_color;
+  if (props.r.tint) s["--wp-sdr-tint"] = props.r.tint;
+  return s;
+});
+
 const MODE_TEXT: Record<SeedRow["mode"], string> = { follow: "follows base seed", random: "random", fixed: "fixed" };
 const MODE_NAME: Record<SeedRow["mode"], string> = { follow: "Follow base seed", random: "Random", fixed: "Fixed" };
 const MODE_ICON: Record<SeedRow["mode"], string> = { follow: "pi-link", random: "pi-sync", fixed: "pi-equals" };
@@ -49,10 +59,12 @@ const lastHint = computed(() => {
 <template>
   <div
     class="wp-sdr"
-    :class="{ 'is-editing': editing }"
+    :class="{ 'is-editing': editing, 'has-tint': !!r.tint }"
+    :style="looks"
     :data-wp-out="!noDot && r.pin && r.out ? `seed_${r.out}` : undefined"
     :data-test="`seeds-row-${r.id}`"
   >
+    <i v-if="r.icon" class="pi wp-sdr__icon" :class="`pi-${r.icon}`" aria-hidden="true" :data-test="`seeds-icon-${r.id}`" />
     <span class="wp-sdr__name">
       <b>{{ r.name || "Unnamed" }}</b>
       <span v-tooltip="hint" class="wp-sdr__sub">
@@ -110,6 +122,7 @@ const lastHint = computed(() => {
 .wp-sdr.is-editing { box-shadow: inset 0 0 0 1px var(--wp-accent); }
 .wp-sdr__name { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .wp-sdr__name b {
+  color: var(--wp-sdr-text, inherit);
   font-weight: 600;
   font-size: 12px;
   line-height: 16px;
@@ -127,6 +140,19 @@ const lastHint = computed(() => {
   overflow: hidden;
 }
 .wp-sdr__seed { flex: none; }
+.wp-sdr.has-tint .wp-sdr__seed:not(.is-locked) { color: var(--wp-sdr-tint); }
+/* A fixed box with the glyph centred in it, as on a WP Toggles row. */
+.wp-sdr__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--wp-sdr-icon, var(--wp-text-muted, var(--wp-text2)));
+}
 .wp-sdr__seed.is-locked { color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-sdr__lockmark { flex: none; font-size: 9px; color: var(--wp-accent-text, var(--wp-accent)); }
 .wp-sdr__mode {
