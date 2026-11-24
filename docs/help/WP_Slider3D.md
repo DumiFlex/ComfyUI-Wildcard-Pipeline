@@ -12,7 +12,7 @@ Three numbers set together. The pad styles are an XY pad with a Z fader beside i
 - **Pad and Z fader**: The Pad, Size, Stick and Map styles: the XY pad of WP Slider 2D for X and Y, and an upright fader beside it for Z. A ring round the point grows with Z, and the mouse wheel over the pad moves Z one step.
 - **Orbit**: The Orbit style: a camera or a light round the subject. The top view sets X, the angle round it (0 the front, 90 the right, ±180 the back), and how far from the middle sets Z, the distance; the side view sets Y, the height angle from below to straight above. The arrow keys turn it and move it out and in.
 - **Mix**: The Mix style: a blend of three things, one at each corner of a triangle (X on top, Y bottom left, Z bottom right, named after the axes). The closer the point to a corner, the more of it, and the three shares add up to 100%. Each axis writes its share of its own range: with 0 to 1 a 50% share is 0.50, with 0 to 1.5 it is 0.75. The arrows move the point, Home makes the shares equal and 1, 2, 3 jump to a corner.
-- **X, Y and Z**: Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now.
+- **X, Y and Z**: Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now. Hover one (or the phrase) for its whole name and what its variable gets. In the edit strip each has a pencil and a globe that keeps its variable internal (for rules only, never printed).
 - **Phrase**: Under the axes once the Orbit words or the Mix example are on: one $variable that joins the three, like front-left view, high angle, medium shot, or (watercolor:0.40), (ink sketch:0.30), (oil painting:0.30). It is a Text value reading the axes' variables, so you can change its wording in its pencil.
 - **Pencil (toolbar)**: Select the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis and the phrase, the style and its looks, and Done.
 - **Style**: Edit strip. Pad, Size, Stick and Map work as in WP Slider 2D, with the Z fader beside the pad. Orbit draws the camera or light round the subject; picking it puts the camera words on the axes unless X already turns from -180 to 180. Mix draws the triangle; picking it puts the style example on the axes unless there is a phrase already.
@@ -25,5 +25,5 @@ Three numbers set together. The pad styles are an XY pad with a Z fader beside i
 ## Editing
 
 - **Axis window**: An axis's pencil opens the same window as a WP Slider slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way. Output picks Auto, INT or FLOAT; an axis always has its output.
-- **Phrase window**: The phrase's pencil opens the same window in Text mode: change the variable's name or the wording, for example $view_side shot from $view_height. It has no output.
+- **Phrase window**: The phrase's pencil opens the same window with only what a phrase needs: its name, variable, wording (for example $view_side shot from $view_height) and negative. It is always text and has no output.
 <!-- fields:end -->

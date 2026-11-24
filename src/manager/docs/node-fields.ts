@@ -316,7 +316,7 @@ export const NODE_FIELDS = {
   WP_Slider: {
     controls: [
       { term: "upstream (in)", sockets: ["in:upstream"], desc: "Optional Context to extend. Only nodes after this one see the slider variables." },
-      { term: "Sliders", desc: "Drag a slider's track or type the number in the box after it (its arrows step by the slider's step). Each slider writes its $variable when the run reaches the node: the number, your text, or the word of the range it is in." },
+      { term: "Sliders", desc: "Drag a slider's track or type the number in the box after it (its arrows step by the slider's step). Each slider writes its $variable when the run reaches the node: the number, your text, or the word of the range it is in. Hover a slider to see its whole name and what its variable gets now (a Text value with this node's $name.num filled in)." },
       { term: "Pencil (toolbar)", pin: "page:.wp-tb-icon--edit", desc: "Select the node and the pencil in ComfyUI's selection toolbar opens the edit view: the grips to reorder, the row buttons, Add slider and Add label. Done goes back to the clean view, which shows only the sliders." },
       { term: "Pencil, globe, trash (row)", desc: "Edit view only. The pencil opens the slider's own settings in a window with the row drawn on top as the node will show it; the globe keeps its variable internal (for rules only, never printed); the trash removes it. A new slider's variable shows in the Assembler." },
       { term: "Add slider / Add label", desc: "A new slider (0 to 1, step 0.05), or a label that groups the sliders under it. Click a label's arrow to fold it; a folded label carries its sliders' output dots. Drag a slider's grip under a label to move it into that group; a dragged label takes its sliders along." },
@@ -326,7 +326,7 @@ export const NODE_FIELDS = {
     edit: [
       { term: "Name", desc: "Shown on the row and on its output." },
       { term: "Variable", desc: "What the slider writes. It follows the name until you change it. Show puts it under the name, with the picked word in Words mode." },
-      { term: "Range", desc: "Min, Max and Step of the track, and how many decimals the number is written with (0 writes a whole number, and an Auto output is then an INT). The value is rounded to those decimals." },
+      { term: "Range", desc: "Min, Max and Step of the track, and how many decimals the number is written with (0 writes a whole number, and an Auto output is then an INT). The value is rounded to those decimals. The fields keep each other in step: fewer decimals round the step (0 decimals turns a 0.05 step into 1) and the ends, a finer step adds decimals, and a min past the max moves the max with it." },
       { term: "Snap to step", desc: "On (the default), a drag lands on the step: 0, 0.05, 0.1 … Hold Shift while dragging to land on any value the decimals can write (0.37). Off, every drag does that, and the arrows still move by the step." },
       { term: "Value: Number", desc: "The variable gets the number as text, e.g. 0.45 or 28." },
       { term: "Value: Text", desc: "The variable gets your text, which can read the slider's own number as $name.num and any other $variable: (intricate details:$detail.num) prints (intricate details:1.2). A text box like the Assembler's, with $ suggestions." },
@@ -334,7 +334,7 @@ export const NODE_FIELDS = {
       { term: "$name.num", desc: "Reads the slider's number whatever the variable holds (like $name.bool for a toggle), in a template, a derivation or another text. For any other variable it reads the value when that already is a number, else nothing." },
       { term: "Negative", desc: "Words to keep out of the image, carried by the slider's variable to an Assembler that prints it. In Words mode a word's own negative wins over this one." },
       { term: "Style", desc: "How the slider is drawn. Row: the name, then a thin track. Bar: the whole row is the track, with the name inside it (a LoRA strength you drag anywhere on). Fader: an upright track with its value on top and the name under it; faders next to each other stand side by side, and their output dots line up on a list of their names at the right. The edit view draws every slider as a row or bar." },
-      { term: "Looks", desc: "An icon before the name and colours for the icon, the name and the track. Marks puts ticks at the ends of the track and at each Words range." },
+      { term: "Looks", desc: "An icon before the name and colours for the icon, the name and the track. Marks puts ticks along the track: where each Words range ends, else on the steps (at most 9, evenly spaced)." },
       { term: "Group", desc: "Which label it sits under. You can also drag the slider's grip under another label, or above the first one." },
       { term: "INT / FLOAT output", desc: "Show an output with the number. Off for a new slider; leave it off for a slider only prompts and rules read. Auto makes it an INT at 0 decimals, else a FLOAT; INT sends the number rounded to a whole number, FLOAT sends it at the slider's decimals." },
     ],
@@ -343,7 +343,7 @@ export const NODE_FIELDS = {
     controls: [
       { term: "upstream (in)", sockets: ["in:upstream"], desc: "Optional Context to extend. Only nodes after this one see the pad's variables." },
       { term: "Pad", desc: "Drag the point (or click anywhere on the pad) to set both numbers at once: X grows to the right, Y grows upward. Shift while dragging lands on finer values. With the point focused, the arrow keys move it one step (Shift: ten), Home and End put X at its ends." },
-      { term: "X and Y", desc: "Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now." },
+      { term: "X and Y", desc: "Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now. Hover one for its whole name and what its variable gets. In the edit strip each has a pencil and a globe that keeps its variable internal (for rules only, never printed)." },
       { term: "Pencil (toolbar)", pin: "page:.wp-tb-icon--edit", desc: "Select the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis, the pad's style, shape, size and looks, Swap and Done." },
       { term: "Style", desc: "Edit strip. Pad is the plain pad. Size is for a picture size: the box from the bottom-left corner to the point is shaded, dashed lines mark 1:1, 4:3, 3:4, 16:9 and 9:16, and the corner reads Width × Height. Stick is round with zero in the middle (set both ranges from -1 to 1) and keeps the point inside the circle. Map writes each Words axis's words on the pad as sections, each in its own soft colour, the one the point is in highlighted." },
       { term: "Shape and size", desc: "Edit strip. Square, Wide (3:2), Tall (2:3) or Auto, which follows the two ranges (0–1024 across and 0–1344 up is a 3:4 pad). S, M or L sets how wide the pad is; L fills the node." },
@@ -364,7 +364,7 @@ export const NODE_FIELDS = {
       { term: "Pad and Z fader", desc: "The Pad, Size, Stick and Map styles: the XY pad of WP Slider 2D for X and Y, and an upright fader beside it for Z. A ring round the point grows with Z, and the mouse wheel over the pad moves Z one step." },
       { term: "Orbit", desc: "The Orbit style: a camera or a light round the subject. The top view sets X, the angle round it (0 the front, 90 the right, ±180 the back), and how far from the middle sets Z, the distance; the side view sets Y, the height angle from below to straight above. The arrow keys turn it and move it out and in." },
       { term: "Mix", desc: "The Mix style: a blend of three things, one at each corner of a triangle (X on top, Y bottom left, Z bottom right, named after the axes). The closer the point to a corner, the more of it, and the three shares add up to 100%. Each axis writes its share of its own range: with 0 to 1 a 50% share is 0.50, with 0 to 1.5 it is 0.75. The arrows move the point, Home makes the shares equal and 1, 2, 3 jump to a corner." },
-      { term: "X, Y and Z", desc: "Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now." },
+      { term: "X, Y and Z", desc: "Above the pad: each axis's name, its $variable (with the picked word in Words mode) and its number now. Hover one (or the phrase) for its whole name and what its variable gets. In the edit strip each has a pencil and a globe that keeps its variable internal (for rules only, never printed)." },
       { term: "Phrase", desc: "Under the axes once the Orbit words or the Mix example are on: one $variable that joins the three, like front-left view, high angle, medium shot, or (watercolor:0.40), (ink sketch:0.30), (oil painting:0.30). It is a Text value reading the axes' variables, so you can change its wording in its pencil." },
       { term: "Pencil (toolbar)", pin: "page:.wp-tb-icon--edit", desc: "Select the node and the pencil in ComfyUI's selection toolbar shows the edit strip: a pencil on each axis and the phrase, the style and its looks, and Done." },
       { term: "Style", desc: "Edit strip. Pad, Size, Stick and Map work as in WP Slider 2D, with the Z fader beside the pad. Orbit draws the camera or light round the subject; picking it puts the camera words on the axes unless X already turns from -180 to 180. Mix draws the triangle; picking it puts the style example on the axes unless there is a phrase already." },
@@ -376,7 +376,7 @@ export const NODE_FIELDS = {
     ],
     edit: [
       { term: "Axis window", desc: "An axis's pencil opens the same window as a WP Slider slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way. Output picks Auto, INT or FLOAT; an axis always has its output." },
-      { term: "Phrase window", desc: "The phrase's pencil opens the same window in Text mode: change the variable's name or the wording, for example $view_side shot from $view_height. It has no output." },
+      { term: "Phrase window", desc: "The phrase's pencil opens the same window with only what a phrase needs: its name, variable, wording (for example $view_side shot from $view_height) and negative. It is always text and has no output." },
     ],
   },
   WP_VarToBool: {

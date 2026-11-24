@@ -24,7 +24,7 @@ import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
 import SliderRowView from "./SliderRow.vue";
 import { varColorClass } from "../shared/var-color";
-import { MAX_DECIMALS, fineStepOf, sliderOutputType, wordFor, type SliderMode, type SliderStyle, type SliderRow, type SliderWord } from "../../extension/sliders";
+import { MAX_DECIMALS, fineStepOf, fitRange, sliderOutputType, wordFor, type SliderMode, type SliderStyle, type SliderRow, type SliderWord } from "../../extension/sliders";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
 
@@ -84,11 +84,8 @@ const MODES: { value: SliderMode; label: string; hint: string }[] = [
 
 /** Range fields: Max stays above Min; the value is kept inside. */
 function setRange(p: { min?: number | null; max?: number | null; step?: number | null; decimals?: number | null }): void {
-  const min = p.min ?? d.value.min;
-  const max = p.max ?? d.value.max;
-  const step = p.step != null && p.step > 0 ? p.step : d.value.step;
-  const decimals = p.decimals != null ? Math.max(0, Math.min(MAX_DECIMALS, Math.round(p.decimals))) : d.value.decimals;
-  patch({ min, max, step, decimals, value: Math.min(Math.max(d.value.value, min), Math.max(min, max)) });
+  const next = fitRange(d.value, p);
+  patch({ ...next, value: Math.min(Math.max(d.value.value, next.min), Math.max(next.min, next.max)) });
 }
 
 /* ── words ───────────────────────────────────────────────────────────── */
@@ -216,7 +213,7 @@ function onKey(ev: KeyboardEvent): void {
           </span>
         </span>
       </label>
-      <div class="wp-slw__field">
+      <div v-if="axis !== 'Phrase'" class="wp-slw__field">
         <span>Range <em>min, max, step and the decimals it writes (0 makes a whole number)</em></span>
         <span class="wp-slw__range">
           <label class="wp-slw__num"><span>Min</span><WpNumber :model-value="d.min" :step="d.step" size="sm" aria-label="Min" data-test="sl-min" @update:model-value="(v: number | null) => setRange({ min: v })" /></label>
@@ -233,7 +230,8 @@ function onKey(ev: KeyboardEvent): void {
           <span aria-hidden="true">Snap to step</span>
         </span>
       </div>
-      <div class="wp-slw__field">
+      <!-- The phrase is always text: a Number or Words phrase stopped being one and vanished. -->
+      <div v-if="axis !== 'Phrase'" class="wp-slw__field">
         <span>Value <em>what ${{ d.var || 'name' }} holds</em></span>
         <WpSegmented :model-value="d.mode" :options="MODES" size="sm" block aria-label="Value" test-prefix="sl-mode" @update:model-value="(v: SliderMode) => patch({ mode: v })" />
       </div>
@@ -287,14 +285,14 @@ function onKey(ev: KeyboardEvent): void {
         <span>Style <em>how the slider is drawn on the node</em></span>
         <WpSegmented :model-value="d.style" :options="STYLES" size="sm" block aria-label="Style" test-prefix="sl-style" @update:model-value="(v: SliderStyle) => patch({ style: v })" />
       </div>
-      <div class="wp-slw__field">
+      <div v-if="axis !== 'Phrase'" class="wp-slw__field">
         <span>Looks <em>icon and colours; None keeps the theme's</em></span>
         <span class="wp-slw__looks">
           <IconPicker :model-value="d.icon ?? null" all size="sm" :color="d.icon_color" aria-label="Icon" data-test="sl-icon" @update:model-value="(v: string | null) => patch({ icon: v || undefined })" />
           <span class="wp-slw__look"><ColorField :model-value="colorValue(d.icon_color)" allow-none presets compact aria-label="Icon colour" @update:model-value="(v: string) => patch({ icon_color: pickColor(v) })" />Icon</span>
           <span class="wp-slw__look"><ColorField :model-value="colorValue(d.text_color)" allow-none presets compact aria-label="Name colour" @update:model-value="(v: string) => patch({ text_color: pickColor(v) })" />Name</span>
           <span class="wp-slw__look"><ColorField :model-value="colorValue(d.tint)" allow-none presets compact aria-label="Track colour" data-test="sl-tint" @update:model-value="(v: string) => patch({ tint: pickColor(v) })" />Track</span>
-          <span v-tooltip="'Ticks at the ends of the track and at each Words range'" v-toggle-row class="wp-slw__check">
+          <span v-tooltip="'Ticks along the track: where each Words range ends, else on the steps'" v-toggle-row class="wp-slw__check">
             <Checkbox :model-value="!!d.marks" size="sm" aria-label="Marks" data-test="sl-marks" @update:model-value="(v: boolean) => patch({ marks: v ? true : undefined })" />
             <span aria-hidden="true">Marks</span>
           </span>

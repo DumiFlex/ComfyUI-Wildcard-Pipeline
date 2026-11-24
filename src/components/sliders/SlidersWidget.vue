@@ -41,6 +41,7 @@ import {
   type SliderGroup,
   type SliderLabelRow,
   type SliderRow,
+  sliderWrites,
   type SlidersConfig,
   type SlidersItem,
 } from "../../extension/sliders";
@@ -219,7 +220,7 @@ function onReveal(ev: Event): void {
   if (open.size) setRows(cfg.value.rows.map((r) => (r.kind === "label" && open.has(r.id) ? { ...r, collapsed: false } : r)));
 }
 function rowProps(s: SliderRow) {
-  return { s, problem: problems.value.get(s.id), editing: editing.value === s.id, editable: editMode.value };
+  return { s, problem: problems.value.get(s.id), editing: editing.value === s.id, editable: editMode.value, writes: sliderWrites(cfg.value, s) };
 }
 </script>
 

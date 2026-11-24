@@ -30,6 +30,7 @@ import {
   planOutputs,
   resolveSliders,
   sliderMarks,
+  fitRange,
   sliderNums,
   sliderOutputType,
   sliderProblems,
@@ -128,8 +129,14 @@ describe("helpers", () => {
 
   it("marks words range ends", () => {
     const s = row({ id: "a", mode: "words", marks: true, words: [{ word: "a", upto: 0.3 }, { word: "b", upto: 2 }, { word: "c" }] });
-    expect(sliderMarks(s).map((m) => m.value)).toEqual([0, 0.3, 1]);
+    expect(sliderMarks(s).map((m) => m.value)).toEqual([0.3]);
     expect(sliderMarks({ ...s, marks: undefined })).toEqual([]);
+  });
+
+  it("marks even steps outside Words mode, never the ends", () => {
+    const s = row({ id: "a", mode: "number", marks: true, min: 0, max: 1, step: 0.05 });
+    expect(sliderMarks(s).map((m) => m.value)).toEqual([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]);
+    expect(sliderMarks({ ...s, max: 4, step: 1 }).map((m) => m.value)).toEqual([1, 2, 3]);
   });
 
   it("files the matched word's negative, else the slider's", () => {
@@ -384,3 +391,19 @@ describe("WP Slider 3D pad config", () => {
   });
 });
 
+
+describe("fitRange", () => {
+  const base = { min: 0, max: 1, step: 0.05, decimals: 2 };
+  it("rounds the step up to a whole unit when the decimals drop", () => {
+    expect(fitRange(base, { decimals: 0 })).toEqual({ min: 0, max: 1, step: 1, decimals: 0 });
+    expect(fitRange({ ...base, step: 0.25 }, { decimals: 1 }).step).toBe(0.3);
+  });
+  it("raises the decimals for a finer step", () => {
+    expect(fitRange(base, { step: 0.005 }).decimals).toBe(3);
+    expect(fitRange(base, { step: 0.5 }).decimals).toBe(2);
+  });
+  it("keeps min below max", () => {
+    expect(fitRange(base, { min: 2 })).toEqual({ min: 2, max: 2.05, step: 0.05, decimals: 2 });
+    expect(fitRange(base, { max: -1 }).min).toBe(-1.05);
+  });
+});

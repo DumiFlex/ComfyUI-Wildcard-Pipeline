@@ -13,6 +13,7 @@
  * row, so no link has to be re-pointed. Unpinning removes the slot and
  * every higher `out` drops by one; a new pin takes the next free slot.
  */
+import { stepDots } from "@/kit/xy-pad";
 
 /** Number outputs the node declares. Never lower it (saved links). */
 export const MAX_OUTPUTS = 16;
@@ -571,6 +572,19 @@ export function resolveSliders(cfg: SlidersConfig): Record<string, string> {
   return out;
 }
 
+/** What a slider writes now, as the hover shows it: its number, its word,
+ *  or its text with this node's `$name.num` and `$name` filled in (variables
+ *  from other nodes stay as written; the node resolves them at run time). */
+export function sliderWrites(cfg: SlidersConfig, s: SliderRow): string {
+  if (s.mode === "words") return wordFor(s)?.word ?? fmtSlider(s);
+  if (s.mode !== "text") return fmtSlider(s);
+  const nums = sliderNums(cfg);
+  const vals = resolveSliders(cfg);
+  return (s.text ?? "")
+    .replace(/\$([a-zA-Z_][a-zA-Z0-9_]*)\.num\b/g, (m, name: string) => nums[name] ?? m)
+    .replace(/\$([a-zA-Z_][a-zA-Z0-9_]*)(?![.\w])/g, (m, name: string) => (name === s.var ? m : (vals[name] ?? m)));
+}
+
 /** Each variable's number as text, what `$name.num` reads. */
 export function sliderNums(cfg: SlidersConfig): Record<string, string> {
   const out: Record<string, string> = {};
@@ -785,7 +799,6 @@ export function dropSliderRow(
   return same ? null : rows;
 }
 
-/** Track marks: each Words range end, plus the ends while `marks` is on. */
 /** The finest step a drag can land on: one unit of the last decimal, when
  *  that is finer than `step` (Shift drags at it; `free` always does). */
 export function fineStepOf(s: Pick<SliderRow, "step" | "decimals">): number | undefined {
@@ -807,11 +820,56 @@ export function sliderRuns(sliders: SliderRow[]): SliderRun[] {
   return out;
 }
 
-export function sliderMarks(s: SliderRow): { value: number; label?: string }[] {
-  if (!s.marks) return [];
-  const ends = s.mode === "words" ? (s.words ?? []).map((w) => w.upto).filter((u): u is number => u !== undefined) : [];
-  const vals = [...new Set([s.min, ...ends, s.max])].filter((v) => v >= s.min && v <= s.max).sort((a, b) => a - b);
-  return vals.map((value) => ({ value }));
+/** Decimals a number is written with (0.05 → 2, 1e-7 → 7). */
+function decimalsOf(n: number): number {
+  if (!Number.isFinite(n) || Number.isInteger(n)) return 0;
+  const t = n.toString();
+  const e = /e-(\d+)$/.exec(t);
+  if (e) return Number(e[1]);
+  return t.split(".")[1]?.length ?? 0;
+}
+
+/**
+ * A range edit that keeps the other fields in step with the one changed:
+ * fewer decimals round the step (never below one unit: 0 decimals turns a
+ * 0.05 step into 1) and the min and max; a finer step raises the decimals
+ * so the step can be written; a min past the max moves the max with it.
+ */
+export function fitRange(
+  s: Pick<SliderRow, "min" | "max" | "step" | "decimals">,
+  p: { min?: number | null; max?: number | null; step?: number | null; decimals?: number | null },
+): { min: number; max: number; step: number; decimals: number } {
+  let decimals = p.decimals != null ? Math.max(0, Math.min(MAX_DECIMALS, Math.round(p.decimals))) : s.decimals;
+  let step = p.step != null && p.step > 0 ? p.step : s.step;
+  let min = p.min ?? s.min;
+  let max = p.max ?? s.max;
+  const round = (v: number, d: number): number => Number(v.toFixed(d));
+  if (p.decimals != null) {
+    const unit = round(0.1 ** decimals, decimals);
+    step = Math.max(unit, round(step, decimals));
+    min = round(min, decimals);
+    max = round(max, decimals);
+  } else if (p.step != null) {
+    decimals = Math.min(MAX_DECIMALS, Math.max(decimals, decimalsOf(step)));
+  }
+  if (p.min != null && min >= max) max = round(min + step, decimals);
+  if (p.max != null && max <= min) min = round(max - step, decimals);
+  return { min, max, step, decimals };
+}
+
+/** Most ticks a Number or Text slider draws along its track. */
+export const SLIDER_MARKS_MAX = 9;
+/**
+ * Track marks while `marks` is on: in Words mode a tick where each word's
+ * range ends; otherwise evenly spaced ticks on the steps (at most
+ * `SLIDER_MARKS_MAX`). The two ends never get one: the track ends there.
+ */
+export function sliderMarks(s: SliderRow): { value: number }[] {
+  if (!s.marks || !(s.max > s.min)) return [];
+  const vals = s.mode === "words"
+    ? (s.words ?? []).map((w) => w.upto).filter((u): u is number => u !== undefined && u > s.min && u < s.max)
+    : stepDots(s.min, s.max, s.step, SLIDER_MARKS_MAX);
+  return [...new Set(vals)].sort((a, b) => a - b).map((value) => ({ value }));
 }
 
 export const SLIDER_NODE = "WP_Slider";
