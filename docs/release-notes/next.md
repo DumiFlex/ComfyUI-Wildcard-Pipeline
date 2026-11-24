@@ -20,6 +20,7 @@
 
 ### Fixes
 
+- **The canvas preview of a Match variable row now finds the same option a run does.** An option with a wildcard ref matches the text the editor shows (`red @Hat`), and an option that is just a ref (`@Places`) matches when one of that wildcard's options does, showing that option. Before, the preview fell back to the first option until you ran.
 - **WP Toggles' mute / bypass icon sits on the chip's middle in grid tiles** instead of riding up to the top of the tile.
 - **WP Image Filter's Values and prompt marks no longer miss variables in a big workflow.** The picker got only a frame's first 80 variables, so in a workflow that sets many (WP Parts sets about 170, mostly switches) $subject and other late ones were left out of Values and unmarked in the prompt. Variables the prompt uses now come first, up to 200, and a value a prompt cleaner reordered or trimmed is marked piece by piece. In Detail, a click in the clear space beside the picture steps to the previous (left half) or next (right half) image.
 - **A Pool filter with several `$variables` stops filling WP Debug with notes.** With one term per toggle chip (`$pick_home, $pick_beach, …`), an unset chip is expected: once another term narrowed, the unset ones no longer leave a "Filter variable left out" note.
