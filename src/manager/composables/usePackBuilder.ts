@@ -30,6 +30,7 @@ import type {
 } from "../api/types";
 import { pendingResearch, useAiConversation } from "./useAiConversation";
 import { useAiImages } from "./useAiImages";
+import { aiDone, goTo } from "./useAiDone";
 import { USE_FITS, USE_PICKED, useSearchFound } from "./searchFound";
 
 export type ItemStatus =
@@ -233,6 +234,13 @@ const target = ref<PackTarget | null>(null);
 
 const states = shallowRef<Record<string, ItemState>>({});
 const phase = ref<"plan" | "build" | "installed">("plan");
+/** On the Settings step (after Describe, before the first plan). Kept
+ *  here, not on the page, so leaving the page while the first plan is
+ *  asked comes back to that step and its working line. */
+const settingUp = ref(false);
+/** Whether the Pack Builder page is open (it sets this), so a job that
+ *  ends while it isn't says so. */
+const onPage = ref(false);
 const working = ref(false);
 const stage = ref("");
 /** The item building now (the one Skip stops), or "". */
@@ -326,6 +334,49 @@ const convo = useAiConversation<AiPackPlanResult, null>({
     return bits.join(". ").slice(0, 900);
   },
 });
+
+/** Tell the user a pack job ended when the page is away (`useAiDone`). */
+function packDone(summary: string, detail = "", severity: "success" | "error" | "warn" = "success"): void {
+  aiDone({
+    job: "pack", summary, detail, severity,
+    shown: () => onPage.value,
+    open: () => goTo({ name: "pack-builder" }),
+  });
+}
+
+// A plan round (first plan, update, Fix all round) ends: say how, unless
+// it was stopped (no new answer and no error).
+let planBefore: AiPackPlanResult | null = null;
+watch(() => convo.loading.value, (now, was) => {
+  if (now) {
+    planBefore = convo.result.value;
+    return;
+  }
+  if (!was) return;
+  const res = convo.result.value;
+  if (convo.error.value) packDone("Pack plan failed", convo.error.value, "error");
+  else if (res && res !== planBefore) {
+    const n = res.plan.items.length;
+    const asks = res.plan.questions.length;
+    packDone(`Pack plan ready: ${res.plan.title || "untitled"}`,
+      `${n} item${n === 1 ? "" : "s"}${asks ? `, ${asks} question${asks === 1 ? "" : "s"} for you` : ""}.`);
+  }
+});
+
+/** A build, rebuild or Fix all ended on its own (not stopped). */
+function buildDone(what: "build" | "fix"): void {
+  if (error.value) {
+    packDone(what === "build" ? "Pack build stopped" : "Pack fix stopped", error.value, "error");
+    return;
+  }
+  const s = summary.value;
+  const problems = check.value ? Object.keys(check.value.problems).length : 0;
+  const bits = [`${s.built} built`];
+  if (s.failed) bits.push(`${s.failed} failed`);
+  if (problems) bits.push(`${problems} to look at`);
+  packDone(what === "build" ? "Pack built" : "Pack items rebuilt", `${bits.join(", ")}. Install it from the Pack Builder.`,
+    s.failed || problems ? "warn" : "success");
+}
 
 /** What the model thought while it planned, when its server sends that. */
 const planThinking = computed(() => convo.result.value?.thinking ?? "");
@@ -985,8 +1036,14 @@ async function reviewPlan(recheck?: string[]): Promise<void> {
       review: res.findings.filter((f) => f.by !== "model"),
       ai: res.findings.filter((f) => f.by === "model"),
     });
+    // A Fix all round's recheck says nothing: its plan round already did.
+    if (!recheck?.length) {
+      const n = findings.value.length;
+      packDone("Pack review done", n ? `${n} finding${n === 1 ? "" : "s"} to look at.` : "Nothing to fix.");
+    }
   } catch (err) {
     error.value = message(err);
+    if (!recheck?.length) packDone("Pack review failed", error.value, "error");
   } finally {
     reviewing.value = false;
   }
@@ -1413,6 +1470,7 @@ async function build(): Promise<void> {
       controller = null;
       working.value = false;
       stage.value = "";
+      buildDone("build");
     }
   }
 }
@@ -1442,6 +1500,7 @@ async function rebuild(key: string, note = ""): Promise<void> {
       controller = null;
       working.value = false;
       stage.value = "";
+      buildDone("fix");
     }
   }
 }
@@ -1497,6 +1556,7 @@ async function fixAll(): Promise<void> {
       controller = null;
       working.value = false;
       stage.value = "";
+      buildDone("fix");
     }
   }
 }
@@ -1568,6 +1628,7 @@ function backToPlan(): void {
 /** Forget everything and start a new pack (settings stay). */
 function reset(): void {
   backToPlan();
+  settingUp.value = false;
   convo.clear();
   convo.instruction.value = "";
   decisions.value = [];
@@ -1625,6 +1686,7 @@ export function usePackBuilder() {
     web, useFound, skipFound,
     extendBundle, skipCurrent, skipItem, dismissNote, dismissedNotes, planThinking,
     suggested, recommended, recommendedChanges, loadRecommended, takeRecommended,
+    settingUp, onPage,
   };
 }
 

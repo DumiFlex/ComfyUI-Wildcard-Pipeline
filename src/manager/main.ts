@@ -19,6 +19,7 @@ import { installChunkRecovery } from "./utils/chunk-reload";
 import { FRAMED } from "./router/frame-mode";
 import { useUiStore } from "./stores/uiStore";
 import { useTweaksStore } from "./stores/tweaksStore";
+import { setAiDoneRouter } from "./composables/useAiDone";
 
 // Marks the manager page so the canvas colour tokens (components/shared/theme.css)
 // stay off it; the manager's own tokens use the same names.
@@ -28,6 +29,8 @@ const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
 app.use(router);
+// "AI is done" notices open their page through the router.
+setAiDoneRouter(router);
 
 // Apply persisted theme before mount so the first paint is correct.
 // `useUiStore` reads localStorage and listens to OS preference changes.
