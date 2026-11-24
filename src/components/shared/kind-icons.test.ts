@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
-import { kindIcon, KIND_ICON_MAP } from "./kind-icons";
+import { kindColorVar, kindIcon, KIND_ICON_MAP } from "./kind-icons";
 
 const require = createRequire(import.meta.url);
 
@@ -46,5 +46,12 @@ describe("kind-icons", () => {
   it("falls back to a neutral circle icon for unknown kinds", () => {
     // We pass an unknown string explicitly; cast keeps strict TS happy.
     expect(kindIcon("mystery" as unknown as keyof typeof KIND_ICON_MAP)).toBe("pi pi-circle");
+  });
+});
+
+describe("kindColorVar", () => {
+  it("names the kind's colour token, fixed values as fixed", () => {
+    expect(kindColorVar("wildcard")).toBe("var(--wp-kind-wildcard)");
+    expect(kindColorVar("fixed_values")).toBe("var(--wp-kind-fixed)");
   });
 });

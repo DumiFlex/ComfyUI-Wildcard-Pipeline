@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
 import {
+  canLock,
   contextChoices,
+  unfitTargets,
   emptyRun,
   lockOwner,
   lockPlan,
@@ -148,8 +150,23 @@ describe("missing targets", () => {
   const choices = contextChoices("slate-marten", "WP Context", ctx(mod("a"), mod("b", "fixed_values")));
 
   it("labels choices", () => {
-    expect(choices[0]).toEqual({ node: "slate-marten", uid: "a", label: "slate-marten · WP Context · Row a", wildcard: true });
+    expect(choices[0]).toEqual({ node: "slate-marten", uid: "a", label: "slate-marten · WP Context · Row a", wildcard: true, kind: "wildcard" });
     expect(choices[1]?.wildcard).toBe(false);
+    expect(choices[1]?.kind).toBe("fixed_values");
+  });
+
+  it("offers no constraint rows: they have no seed to lock", () => {
+    const list = contextChoices("slate-marten", "WP Context", ctx(mod("a"), mod("k", "constraint"), mod("d", "derivation")));
+    expect(list.map((c) => c.uid)).toEqual(["a", "d"]);
+  });
+
+  it("only a wildcard can lock its value", () => {
+    const list = contextChoices("slate-marten", "WP Context", ctx(mod("a"), mod("d", "derivation")));
+    expect(list.map((c) => canLock(c, "value"))).toEqual([true, false]);
+    expect(list.map((c) => canLock(c, "seed"))).toEqual([true, true]);
+    const targets = [{ node: "slate-marten", uid: "a" }, { node: "slate-marten", uid: "d" }, { node: "gone-one", uid: "x" }];
+    expect(unfitTargets(targets, list, "value")).toEqual([{ node: "slate-marten", uid: "d" }]);
+    expect(unfitTargets(targets, list, "seed")).toEqual([]);
   });
 
   it("finds and removes targets that are gone", () => {

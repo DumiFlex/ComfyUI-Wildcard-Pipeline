@@ -412,7 +412,10 @@ const ENTRY_LIMIT = 30 * 1024;      // 30 KB
 // RAISED 775 -> 790 KB on 2026-11-17: WP Slider 3D (#474, OrbitPad) and its
 // Mix style (kit TrianglePad), all in the lazy pad chunk, put the total at
 // ~776 KB.
-const TOTAL_LIMIT = 790 * 1024;     // 790 KB
+// RAISED 790 -> 800 KB on 2026-11-23: dev had reached ~790 KB, and WP Seeds'
+// looks (IconPicker + ColorField in its lazy chunk), WP Debug's run seed and
+// the Base frame banner put the total at ~791 KB.
+const TOTAL_LIMIT = 800 * 1024;     // 800 KB
 // The total budget is a guide, not a cap (Dumi, 2026-10-06), so the gate has
 // two bands: over TOTAL_LIMIT it warns (CI stays green and shows a
 // `::warning` annotation), and only past TOTAL_LIMIT + 5% does it fail. A

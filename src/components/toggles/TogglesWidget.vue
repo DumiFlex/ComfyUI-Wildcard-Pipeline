@@ -61,7 +61,8 @@ import {
 } from "../../extension/toggles";
 import { revealTarget } from "../../widgets/flash-target";
 import { ctlInputName, type ControlState, type FocusSpotView } from "../../extension/toggle-control";
-import type { LockChoice } from "../../extension/toggle-lock";
+import { targetKey, type LockChoice } from "../../extension/toggle-lock";
+import type { LockSpot } from "./ToggleLockButton.vue";
 import Banner from "@/kit/Banner.vue";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { vToggleRow } from "@/kit/toggle-row";
@@ -105,8 +106,22 @@ const emit = defineEmits<{
   "remove-missing": [];
   /** Glide the canvas to place `key` of toggle `toggleId`'s targets. */
   "focus-target": [toggleId: string, key: string];
+  /** Glide the canvas to the locked row `key` (`codename|uid`) and blink it. */
+  "focus-lock": [key: string];
 }>();
 const missingCount = computed(() => Object.values(props.missingLocks).reduce((n, l) => n + l.length, 0));
+const choiceByKey = computed(() => new Map(props.lockChoices.map((c) => [targetKey(c), c])));
+/** The rows a toggle locks, as its lock button lists them. */
+function lockSpots(t: ToggleRow): LockSpot[] {
+  return (t.lock_targets ?? []).map((tg) => {
+    const key = targetKey(tg);
+    const c = choiceByKey.value.get(key);
+    if (!c) return { key, label: "Missing row", where: tg.node, kind: "", missing: true };
+    // `codename · title · row`: the row's name is the last part.
+    const parts = c.label.split(" · ");
+    return { key, label: parts.slice(2).join(" · ") || c.label, where: parts.slice(0, 2).join(" · "), kind: c.kind, missing: false };
+  });
+}
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const cfg = computed(() => props.modelValue);
@@ -319,7 +334,7 @@ function toggleEdit(t: ToggleRow): void {
 /** The toggle whose window is open (gone if it was removed meanwhile). */
 const editingRow = computed(() => (editing.value ? byId.value.get(editing.value) : undefined));
 function windowProps(t: ToggleRow) {
-  const { focusSpots: _spots, onShowTarget: _show, ...row } = rowProps(t);
+  const { focusSpots: _spots, onShowTarget: _show, lockSpots: _locks, onShowLock: _lock, ...row } = rowProps(t);
   return { ...row, nodeTitle: props.nodeTitle, lockChoices: props.lockChoices };
 }
 /** Done in a toggle's window: store its draft, moving it to its group. */
@@ -378,6 +393,8 @@ function rowProps(t: ToggleRow) {
     varSuggestions: valueVars.value,
     varProducers: props.varProducers,
     lockMissing: props.missingLocks[t.id],
+    lockSpots: lockSpots(t),
+    onShowLock: (key: string) => emit("focus-lock", key),
   };
 }
 

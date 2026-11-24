@@ -47,4 +47,21 @@ describe("ToggleRow buttons", () => {
     expect(w.emitted("set-on")).toBeUndefined();
     w.unmount();
   });
+
+  it("shows the Upstream icon next to the name, chip style too", () => {
+    for (const style of ["switch", "chip"] as const) {
+      const w = mount(ToggleRowView, { props: { ...base, t: { ...row(true), style, upstream: true }, shownOn: true, effOn: true } });
+      expect(w.find('[data-test="tg-upstream-icon-00000001"]').exists(), style).toBe(true);
+      w.unmount();
+    }
+  });
+
+  it("the lock icon shows its one row on the canvas", async () => {
+    const t: ToggleRow = { ...row(true), lock: "seed", lock_targets: [{ node: "slate-marten", uid: "w" }] };
+    const lockSpots = [{ key: "slate-marten|w", label: "Mood", where: "slate-marten · Ctx", kind: "wildcard", missing: false }];
+    const w = mount(ToggleRowView, { props: { ...base, t, shownOn: true, effOn: true, lockSpots } });
+    await w.find('[data-test="tg-lock-icon-00000001"]').trigger("click");
+    expect(w.emitted("show-lock")).toEqual([["slate-marten|w"]]);
+    w.unmount();
+  });
 });

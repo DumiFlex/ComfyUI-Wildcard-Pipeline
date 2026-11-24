@@ -14,6 +14,8 @@
  * every higher `out` drops by one; a new pin takes the next free slot.
  */
 
+import { hexColor, iconName } from "./looks";
+
 /** BOOLEAN outputs the node declares. Never lower it (saved links). */
 export const MAX_OUTPUTS = 16;
 export const TOGGLE_STYLES = ["switch", "checkbox", "buttons", "chip"] as const;
@@ -243,15 +245,7 @@ export function toggleRows(cfg: TogglesConfig): ToggleRow[] {
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
-const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-const ICON_RE = /^[a-z0-9-]{1,40}$/;
-/** A `#rrggbb` colour, or "" for anything else. */
-const hex = (v: unknown): string => (typeof v === "string" && HEX_RE.test(v.trim()) ? v.trim().toLowerCase() : "");
-/** A PrimeIcons name (without `pi-`), or "" for anything else. */
-const iconName = (v: unknown): string => {
-  const s = str(v).replace(/^pi-/, "");
-  return ICON_RE.test(s) ? s : "";
-};
+const hex = hexColor;
 
 /** Lock targets from saved JSON: well-formed, each one once. */
 export function parseLockTargets(raw: unknown): LockTarget[] {

@@ -45,13 +45,13 @@ class WPDebug(io.ComfyNode):
         #                                   warning in the chain
         #   __wp_picks__                    wildcard picks, by module id
         #   __wp_ref_log__                  nested @{} picks, by owner uid
-        #   __wp_nodes__                    one {node_id, seed} per Context
+        #   __wp_nodes__                    one {node_id, seed, from} per Context
         #   __wp_internal_flags__           variables marked internal
         #   __wp_axes__                     rolled accepts-axis tags
         #   __wp_constraint_hits__          targets each constraint reached
         #   __wp_negatives__                each variable's negative words
         #   __wp_multi__                    multi-pick variables' items
-        #   __wp_node_seed__ / __wp_loop_index__
+        #   __wp_node_seed__ / __wp_loop_index__ / __wp_loop_seed__
         # `__wp_debug_version__` lets the viewer tell this shape from a
         # cached snapshot written by an older build.
         flat: dict = {}
@@ -78,6 +78,9 @@ class WPDebug(io.ComfyNode):
                 flat[key] = internals[key]
         if "__wp_loop_index__" in internals:
             flat["__wp_loop_index__"] = internals["__wp_loop_index__"]
+        # The Loop's seed ({seed, frame0, base}), for the head's run seed.
+        if isinstance(internals.get("__wp_loop_seed__"), dict):
+            flat["__wp_loop_seed__"] = internals["__wp_loop_seed__"]
         if multi:
             flat["__wp_multi__"] = multi
         if "node_seed" in debug:
