@@ -24,6 +24,6 @@ Three numbers set together. The pad styles are an XY pad with a Z fader beside i
 
 ## Editing
 
-- **Axis window**: An axis's pencil opens the same window as a WP Slider slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way. Output picks Auto, INT or FLOAT; an axis always has its output.
+- **Axis window**: An axis's pencil opens the same window as a WP Slider slider: Name, Variable, Range, Snap to step, Value (Number, Text or Words, with $name.num), Negative and Looks work the same way. Output picks Auto, INT or FLOAT; an axis always has its output. Match and Swap with another axis work as in WP Slider 2D.
 - **Phrase window**: The phrase's pencil opens the same window with only what a phrase needs: its name, variable, wording (for example $view_side shot from $view_height) and negative. It is always text and has no output.
 <!-- fields:end -->
