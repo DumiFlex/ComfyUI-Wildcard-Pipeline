@@ -312,8 +312,7 @@ export function create(node: TogglesHostNode, inputName: string) {
   const host = createDomWidgetHost(node, inputName, wrapper, {
     initialValue: serializeWidgetJson(config.value),
     minHeight: 80,
-    minWidth: 300,
-    autoHeight: true,
+    sizing: { width: { min: 300, content: true }, height: "content", container: true },
     onValueRestored: (raw: string) => {
       const parsed = normalizeOuts(parseTogglesConfig(raw));
       if (JSON.stringify(parsed) === JSON.stringify(config.value)) return;

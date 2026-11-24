@@ -64,6 +64,12 @@ const tip = computed(() => {
 });
 const fmt = (v: number): string => fmtSlider({ value: v, decimals: props.s.decimals });
 const broken = computed(() => props.s.max <= props.s.min);
+/** Mute / bypass, as the row says it on the node. */
+const offNote = computed(() => {
+  if (props.s.off === "mute") return "Muted: writes nothing, so what upstream set stays";
+  if (props.s.off === "bypass") return "Bypassed: writes only the plain number";
+  return "";
+});
 const variant = computed(() => {
   if (props.s.style === "bar") return "bar";
   return props.s.style === "fader" && !props.flat ? "fader" : "line";
@@ -83,7 +89,7 @@ function internalHint(): string {
     <div
       v-tooltip="editable ? undefined : tip"
       class="wp-slr__row"
-      :class="{ 'is-editing': editing, 'is-editable': editable, 'has-text-color': !!s.text_color }"
+      :class="{ 'is-editing': editing, 'is-editable': editable, 'has-text-color': !!s.text_color, 'is-off': !!s.off, 'is-locked': !!s.lock }"
       :data-wp-out="s.pin && s.out && variant !== 'fader' ? `value_${s.out}` : undefined"
       :data-test="`sl-row-${s.id}`"
       :style="looks"
@@ -110,7 +116,7 @@ function internalHint(): string {
           :free="!!s.free && !!fine"
           :marks="marks.length ? marks : undefined"
           :format="fmt"
-          :disabled="broken"
+          :disabled="broken || !!s.lock"
           :variant="variant"
           size="sm"
           :with-input="variant !== 'fader'"
@@ -131,6 +137,24 @@ function internalHint(): string {
           </template>
         </Slider>
       </span>
+      <i
+        v-if="offNote"
+        v-tooltip="offNote"
+        class="pi wp-slr__off"
+        :class="s.off === 'mute' ? 'pi-volume-off' : 'pi-forward'"
+        role="img"
+        :aria-label="offNote"
+        :data-test="`sl-off-${s.id}`"
+      />
+      <WpIconButton
+        v-if="s.lock || editable"
+        icon="pi-lock"
+        :pressed="!!s.lock"
+        :label="s.lock ? `Unlock ${s.name}` : `Lock ${s.name}`"
+        :hint="s.lock ? 'Locked: the value can\'t be dragged. Click to unlock' : 'Lock the value so a drag can\'t move it'"
+        :data-test="`sl-lock-${s.id}`"
+        @click="emit('patch', { lock: s.lock ? undefined : true })"
+      />
       <i
         v-if="problem"
         v-tooltip="problem"
@@ -226,6 +250,12 @@ function internalHint(): string {
 .wp-slr--fader .wp-slr__icon { width: 12px; height: 12px; font-size: 11px; }
 .wp-slr--fader .wp-slr__in-name { font-size: 10.5px; text-align: center; }
 .wp-slr--fader .wp-slr__in-var { max-width: 100%; font-size: 9.5px; }
+/* Muted / bypassed: the row stays readable but steps back. */
+.wp-slr__row.is-off .wp-slr__ctl, .wp-slr__row.is-off .wp-slr__head { opacity: 0.5; }
+.wp-slr__off { flex: none; font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
+/* A locked track keeps its colour; only the drag is off. */
+.wp-slr__row.is-locked :deep(.wp-slider[data-disabled]) { opacity: 1; }
+.wp-slr__row.is-locked :deep(.wp-slider[data-disabled] .wp-slider__thumb) { cursor: not-allowed; }
 .wp-slr__warn { flex: none; font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-slr__btns { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 /* A narrow node (the host is the `wp-node` container): a line row puts its

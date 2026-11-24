@@ -128,11 +128,10 @@ export function create(node: CleanerHostNode, inputName: string) {
     initialValue: serializeWidgetJson(config.value),
     // Initial floor sized to fit the typical content footprint (header +
     // intensity segment + rule rows + blocklist button). ResizeObserver
-    // grows the host above this when content asks for more, but
-    // autoHeight stays OFF so the user's manual drag-taller persists
-    // across workflow runs (default delta-check policy).
+    // grows the host above this when content asks for more; height
+    // `grow` keeps a manual drag-taller, also across a reload.
     minHeight: 260,
-    minWidth: 320,
+    sizing: { width: { min: 320, content: true }, height: "grow", container: true },
     onValueRestored: (raw: string) => {
       const restored = parseWidgetJsonWithRecovery<CleanerNodeConfig>(raw, emptyCleanerConfig());
       config.value = restored.value;

@@ -119,8 +119,7 @@ export function mountNodeGroup(node: GroupNode) {
   return createDomWidgetHost(node, "wp_node_group", wrapper, {
     initialValue: "",
     minHeight: 40,
-    minWidth: 240,
-    autoHeight: true,
+    sizing: { width: { min: 240, content: true }, height: "content", container: true },
   });
 }
 

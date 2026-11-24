@@ -232,7 +232,7 @@ function build(node: SeedListHostNode, inputName: string, scope: EffectScope): D
       syncStockWidgetGates();
     },
     minHeight: 120,
-    minWidth: 240,
+    sizing: { width: { min: 240, content: true }, height: "grow", container: true },
   });
 
   // First gate pass. The stock `base_seed` / `count` widgets are added
