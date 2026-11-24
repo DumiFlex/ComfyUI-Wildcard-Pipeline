@@ -16,6 +16,8 @@
 - **Constraints look ahead into the next WP Context nodes.** A target locked, filtered or toggled down in a later WP Context (down a straight line of WP nodes, up to four Contexts) now keeps its source in this node fitting, as one in the same node always did. Lock the place in the second Context and the pose in the first follows.
 - **A "set later" warning when a wildcard reads a variable too early.** When a row's Category filter `$variable` or Match variable is set only by a row further down the same WP Context, the row now shows a "set later" chip: the variable is still empty when it rolls, so the filter or match does nothing. Move the row that sets it above.
 
+- **WP Image Filter: quicker picking.** Values has a search box and can hide on/off switches; while comparing two images it lists what differs between them first. The countdown has an Add time menu (+1, +5, +10 or +30 min), and the node waits that much longer. Grid's **Picked only** hides what you left out, and **Same in every frame** (or Detail's **Image N in every frame**) picks the 1st, 2nd … image of every frame at once. The mouse wheel steps images in Detail. **Zoom now fills the whole window**, so it is a real step up from Detail; ‹ › on the edges, Shift+scroll and a click beside the picture step there too, and fullscreen shows where you are (3 / 8) with a Pick button.
+
 ### Fixes
 
 - **WP Toggles' mute / bypass icon sits on the chip's middle in grid tiles** instead of riding up to the top of the tile.

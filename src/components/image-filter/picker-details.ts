@@ -97,3 +97,44 @@ export function valuesText(rows: readonly ValueRow[], seed?: number): string {
   if (typeof seed === "number") lines.push(`seed: ${seed}`);
   return lines.join("\n");
 }
+
+/** An on/off value: a switch's `true` / `false` (WP Toggles, chips), or yes / no / on / off. */
+const SWITCH = /^(true|false|yes|no|on|off)$/i;
+export function isSwitchValue(value: string): boolean {
+  return SWITCH.test(value.trim());
+}
+
+/** The rows the Values tab shows: those whose name or value holds `query`
+ *  (case-insensitive), minus on/off switches when `hideSwitches`. */
+export function filterValues(rows: readonly ValueRow[], query: string, hideSwitches: boolean): ValueRow[] {
+  const q = query.trim().toLowerCase().replace(/^\$/, "");
+  return rows.filter((r) =>
+    !(hideSwitches && isSwitchValue(r.value))
+    && (!q || r.name.toLowerCase().includes(q) || r.value.toLowerCase().includes(q)));
+}
+
+export interface ValueDiff {
+  name: string;
+  /** The pinned (left) image's value; "" when it has none. */
+  left: string;
+  /** The current (right) image's value; "" when it has none. */
+  right: string;
+  axis: number;
+}
+
+/** The variables whose values differ between two images, in the right
+ *  image's order (then any only the left one has), for Compare. */
+export function valueDiff(left: readonly ValueRow[], right: readonly ValueRow[]): ValueDiff[] {
+  const l = new Map(left.map((r) => [r.name, r]));
+  const out: ValueDiff[] = [];
+  const seen = new Set<string>();
+  for (const r of right) {
+    seen.add(r.name);
+    const other = l.get(r.name)?.value ?? "";
+    if (other !== r.value) out.push({ name: r.name, left: other, right: r.value, axis: r.axis });
+  }
+  for (const r of left) {
+    if (!seen.has(r.name) && r.value) out.push({ name: r.name, left: r.value, right: "", axis: r.axis });
+  }
+  return out;
+}
