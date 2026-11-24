@@ -26,6 +26,7 @@
 import { markLibraryChanged } from "./useLibraryChanged";
 import { computed, nextTick, ref, shallowRef, triggerRef } from "vue";
 import { api, ApiError } from "../api/client";
+import { aiDone } from "./useAiDone";
 import type {
   AiChatStep, AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatStatusEvent, AiChatPage, AiChatProposal, AiChatResult,
   AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall, AiAskAnswer, AiAskAnswered, AiAskQuestion,
@@ -85,6 +86,30 @@ export interface ChatAssistantEntry {
 export type AskCall = Extract<AiPendingCall, { tool: "ask" }>;
 
 export type ChatEntry = ChatUserEntry | ChatAssistantEntry;
+
+/** Tell the user the chat answered while the drawer was closed or the tab
+ *  hidden (`useAiDone`). */
+function chatDone(): void {
+  if (error.value) {
+    aiDone({ job: "chat", summary: "The AI chat stopped", detail: error.value, severity: "error", shown: () => open.value, open: openDrawer });
+    return;
+  }
+  // A thanks that only got a reaction ends on the user's own message.
+  const last = entries.value[entries.value.length - 1];
+  if (last?.role !== "assistant") return;
+  const cards = last.result.proposals.length;
+  const asks = last.result.pending?.some((c) => c.tool === "ask") ?? false;
+  const text = last.result.message.replace(/\s+/g, " ").trim();
+  const detail = cards ? `${cards} card${cards === 1 ? "" : "s"} to review.` : text.length > 140 ? `${text.slice(0, 137)}…` : text;
+  aiDone({
+    job: "chat", summary: asks ? "The assistant has questions for you" : "The assistant answered",
+    detail, shown: () => open.value, open: openDrawer,
+  });
+}
+
+function openDrawer(): void {
+  open.value = true;
+}
 
 const open = ref(false);
 const input = ref("");
@@ -324,7 +349,7 @@ async function send(page?: AiChatPage): Promise<void> {
     if (controller === mine) {
       controller = null;
       loading.value = false;
-      running.value = "";
+      running.value = "";      chatDone();
     }
   }
 }
@@ -393,7 +418,7 @@ async function retry(page?: AiChatPage, text = ""): Promise<void> {
     if (controller === mine) {
       controller = null;
       loading.value = false;
-      running.value = "";
+      running.value = "";      chatDone();
     }
   }
 }
@@ -547,6 +572,10 @@ function approval(id: string, signal: AbortSignal): Promise<SearchApproval | nul
     };
     approvals.set(id, done);
     asking.value = new Set([...asking.value, id]);
+    aiDone({
+      job: "chat", summary: "The assistant asks to search the web", detail: "It waits for your Allow or Deny.",
+      severity: "info", shown: () => open.value, open: openDrawer,
+    });
     signal.addEventListener("abort", () => done(null), { once: true });
   });
 }
@@ -624,7 +653,7 @@ async function answerAsk(callId: string, answers: AiAskAnswer[]): Promise<void> 
     if (controller === mine) {
       controller = null;
       loading.value = false;
-      running.value = "";
+      running.value = "";      chatDone();
     }
   }
 }

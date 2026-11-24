@@ -143,6 +143,21 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       </p>
     </DocSection>
 
+    <DocSection title="Leaving the page while it works">
+      <p>
+        A plan, a build, a review or a fix keeps going when you open another page. Come back and
+        the Pack builder is where you left it, on the same step with its working line and
+        <b>Stop</b>, even while the first plan is still being asked from the Settings step.
+      </p>
+      <p>
+        When a job ends with the page closed, a note in the corner says how it went ("Pack plan
+        ready", "Pack built: 9 built, 1 to look at", or what went wrong), and <b>Open</b> brings you
+        back. In a background tab a dot goes in front of the tab's title, and with <b>Notify when
+        AI work finishes</b> on (<b>Settings › AI assistant › Chat</b>) the browser shows a
+        notification too. A job you stopped says nothing.
+      </p>
+    </DocSection>
+
     <DocSection title="Good to know">
       <DocDetails title="How the pack graph planner works">
         <p>
