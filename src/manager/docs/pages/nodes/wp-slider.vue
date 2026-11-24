@@ -62,7 +62,9 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <code>(intricate details:1.2)</code>. <b>Words</b> splits the track into ranges, each with a
         word: a Camera slider writes <code>close-up</code> up to 0.3, <code>medium shot</code> up to
         0.7 and <code>wide shot</code> past that, and the wide shot's negative
-        <code>cropped</code> goes to the Assembler's negative output only while it is picked.
+        <code>cropped</code> goes to the Assembler's negative output only while it is picked. To put
+        the word inside a text, write it in <b>Around the word</b> with <code>{word}</code> where the
+        word goes: a Colour slider with <code>{word} clothes</code> writes <code>green clothes</code>.
       </p>
       <p>
         Whatever the variable holds, <VarToken>$camera.num</VarToken> reads the number, in a
@@ -88,6 +90,16 @@ import VarToken from "../../../components/docs/VarToken.vue";
         A drag lands on the slider's step. Hold <b>Shift</b> while dragging to land on any value its
         decimals can write, or turn off <b>Snap to step</b> to drag that finely all the time (the
         arrow keys still move by the step).
+      </p>
+    </DocSection>
+
+    <DocSection title="Mute, bypass and lock">
+      <p>
+        A slider's window keeps the rarer settings under <b>Advanced</b>: its negative, marks, the
+        output, and how it runs. <b>Mute</b> makes the slider write nothing, so what an earlier node
+        set stays; <b>Bypass</b> writes only the plain number, without its text, word or negative.
+        Either way the output still sends the number, and the row is dimmed on the node.
+        <b>Lock value</b> stops a drag from moving the slider; the lock on the row unlocks it.
       </p>
     </DocSection>
 

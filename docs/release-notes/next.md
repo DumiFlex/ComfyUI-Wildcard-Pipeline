@@ -24,6 +24,8 @@
 - **WP Debug shows the seed the run depends on.** The head's seed is the Context Loop's seed, a WP Seeds base seed or a Seeds row when the Contexts run on it, labelled so, not just the last Context's chain seed. When Contexts use different seeds, a "+N seeds" chip lists each one and where it came from, and the Trace headers say it beside each node's seed.
 - **Base edits say which frames override the module.** Opening a WP Context row's window with Edit frame on base now names the frames that change that module (`#2 off`, `#4 2 changes`), since a base edit doesn't reach what a frame overrides.
 
+- **WP Slider: a word inside a text, mute, bypass and lock.** In Words mode, write `{word} clothes` and the variable gets "green clothes". A slider's window now keeps its negative, marks and output under **Advanced**, with **Mute** (writes nothing), **Bypass** (writes only the number) and **Lock value** (a drag can't move it; the lock on the row unlocks it).
+
 ### Fixes
 
 - **WP Slider and the pads can't be dragged narrower than their sliders.** Under Nodes 2.0 a node could be dragged down past what its rows need, which squeezed the tracks and cut names. A narrow WP Slider now puts each row's name over its track, and a node made wider or taller by hand keeps that size when the workflow is opened again.

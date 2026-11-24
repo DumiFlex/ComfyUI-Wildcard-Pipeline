@@ -99,7 +99,7 @@ class WPSlider(io.ComfyNode):
         values = sliders.resolve(cfg)
         raw_values = dict(values)
         nums = sliders.nums(cfg)
-        by_var = {s.var: s for s in cfg.sliders if s.var in values}
+        by_var = {s.var: s for s in cfg.sliders if s.var in values and s.off != "mute"}
 
         # The cross-node number table, upstream's plus ours, so a text here
         # (and every node after) can read `$name.num`.
@@ -109,7 +109,10 @@ class WPSlider(io.ComfyNode):
         value_reads: dict[str, list] = {}
         for name in values:
             s = by_var[name]
-            if s.mode == "text" and _has_syntax(values[name]):
+            # A text, or a word set into one (`{word} clothes`), may read `$vars`.
+            wraps_word = s.mode == "words" and sliders.WORD_SLOT in s.text
+            reads_text = s.off != "bypass" and (s.mode == "text" or wraps_word)
+            if reads_text and _has_syntax(values[name]):
                 value_reads[name] = []
                 values[name] = template.resolve_variables(
                     values[name],

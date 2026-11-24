@@ -82,3 +82,19 @@ def test_problems_warn():
     msgs = [w["message"] for w in payload.debug["__wp_warnings__"]]
     assert any("max that is not above" in m for m in msgs)
     assert any("can't be used" in m for m in msgs)
+
+
+def test_word_slot_reads_vars_and_mute_keeps_upstream():
+    up = ContextPayload(context={"mood": "calm", "kept": "upstream"}, debug={}, internals={})
+    cfg = {"rows": [
+        {"id": "a", "kind": "slider", "var": "shot", "value": 0.2, "mode": "words",
+         "words": WORDS, "text": "{word}, $mood light"},
+        {"id": "b", "kind": "slider", "var": "kept", "value": 0.5, "off": "mute"},
+        {"id": "c", "kind": "slider", "var": "plain", "value": 0.9, "mode": "words",
+         "words": WORDS, "text": "{word}", "off": "bypass"},
+    ]}
+    payload, *_ = _run(cfg, upstream=up).values
+    assert payload.context["shot"] == "close-up, calm light"
+    assert payload.context["kept"] == "upstream"
+    assert payload.context["plain"] == "0.90"
+    assert "kept" not in payload.internals[sliders.NUMS_KEY]

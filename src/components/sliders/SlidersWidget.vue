@@ -254,6 +254,7 @@ function rowProps(s: SliderRow) {
               :data-wp-part="`slider:${run.s.id}`"
               :data-wp-part-label="run.s.name || 'Slider'"
               @set-value="(v: number) => patchSlider(run.s.id, { value: v })"
+              @patch="(p: Partial<SliderRow>) => patchSlider(run.s.id, p)"
             />
             <!-- Faders side by side; their output dots line up on the list at the right. -->
             <div v-else class="wp-sl__faders" data-test="sl-faders">
@@ -265,6 +266,7 @@ function rowProps(s: SliderRow) {
                   :data-wp-part="`slider:${f.id}`"
                   :data-wp-part-label="f.name || 'Slider'"
                   @set-value="(v: number) => patchSlider(f.id, { value: v })"
+                  @patch="(p: Partial<SliderRow>) => patchSlider(f.id, p)"
                 />
               </div>
               <div v-if="run.faders.some((f) => f.pin && f.out)" class="wp-sl__fader-outs">

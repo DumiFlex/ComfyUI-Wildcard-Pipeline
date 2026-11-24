@@ -36,6 +36,10 @@ export interface SliderWord {
   negative?: string;
 }
 
+export type SliderOff = "mute" | "bypass";
+/** In Words mode, where the picked word goes in the row's text. */
+export const WORD_SLOT = "{word}";
+
 export interface SliderRow {
   id: string;
   kind: "slider";
@@ -48,7 +52,8 @@ export interface SliderRow {
   step: number;
   decimals: number;
   mode: SliderMode;
-  /** Text mode: what the variable gets (may read `$vars` and `$name.num`). */
+  /** Text mode: what the variable gets (may read `$vars` and `$name.num`).
+   *  Words mode: where `{word}` stands, the picked word goes in. */
   text?: string;
   /** Negative text the variable carries (words: unless the word has one). */
   negative?: string;
@@ -62,6 +67,11 @@ export interface SliderRow {
   internal?: true;
   /** The output's type; absent follows the decimals (INT at 0, else FLOAT). */
   out_type?: "int" | "float";
+  /** `mute` writes nothing; `bypass` writes the plain number (no text,
+   *  word or negative). The output still sends the number. */
+  off?: SliderOff;
+  /** The value can't be moved on the canvas. */
+  lock?: true;
   style: SliderStyle;
   /** Not snapped to `step`: a drag lands on any value the decimals can
    *  write (the arrows still move by `step`). */
@@ -273,6 +283,8 @@ export function parseSlidersConfig(raw: unknown): SlidersConfig {
     if (words.length) s.words = words;
     if (o.internal === true) s.internal = true;
     if (o.out_type === "int" || o.out_type === "float") s.out_type = o.out_type;
+    if (o.off === "mute" || o.off === "bypass") s.off = o.off;
+    if (o.lock === true) s.lock = true;
     if (o.free === true) s.free = true;
     if (o.hide_var === true) s.hide_var = true;
     if (o.marks === true) s.marks = true;
@@ -627,15 +639,26 @@ export function wordFor(s: SliderRow): SliderWord | undefined {
 }
 
 const usable = (s: SliderRow): boolean => !!s.var && VAR_RE.test(s.var);
+/** Whether the row writes its variable at all (a muted row doesn't). */
+const writes = (s: SliderRow): boolean => usable(s) && s.off !== "mute";
+
+/** Words mode: what the variable holds, the picked word set into `text`
+ *  where it says `{word}` (the word alone otherwise). */
+export function wordText(s: SliderRow): string {
+  const word = wordFor(s)?.word ?? fmtSlider(s);
+  const text = s.text ?? "";
+  return text.includes(WORD_SLOT) ? text.split(WORD_SLOT).join(word) : word;
+}
 
 /** Variable → what it holds (text mode unresolved; the node resolves it).
  *  A later row with the same variable wins. */
 export function resolveSliders(cfg: SlidersConfig): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of sliderRows(cfg)) {
-    if (!usable(s)) continue;
-    if (s.mode === "text") out[s.var] = s.text ?? "";
-    else if (s.mode === "words") out[s.var] = wordFor(s)?.word ?? fmtSlider(s);
+    if (!writes(s)) continue;
+    if (s.off === "bypass") out[s.var] = fmtSlider(s);
+    else if (s.mode === "text") out[s.var] = s.text ?? "";
+    else if (s.mode === "words") out[s.var] = wordText(s);
     else out[s.var] = fmtSlider(s);
   }
   return out;
@@ -645,11 +668,14 @@ export function resolveSliders(cfg: SlidersConfig): Record<string, string> {
  *  or its text with this node's `$name.num` and `$name` filled in (variables
  *  from other nodes stay as written; the node resolves them at run time). */
 export function sliderWrites(cfg: SlidersConfig, s: SliderRow): string {
-  if (s.mode === "words") return wordFor(s)?.word ?? fmtSlider(s);
-  if (s.mode !== "text") return fmtSlider(s);
+  if (s.off === "mute") return "";
+  if (s.off === "bypass") return fmtSlider(s);
+  const wordIn = s.mode === "words" && (s.text ?? "").includes(WORD_SLOT);
+  if (s.mode === "words" && !wordIn) return wordText(s);
+  if (s.mode !== "text" && !wordIn) return fmtSlider(s);
   const nums = sliderNums(cfg);
   const vals = resolveSliders(cfg);
-  return (s.text ?? "")
+  return (wordIn ? wordText(s) : s.text ?? "")
     .replace(/\$([a-zA-Z_][a-zA-Z0-9_]*)\.num\b/g, (m, name: string) => nums[name] ?? m)
     .replace(/\$([a-zA-Z_][a-zA-Z0-9_]*)(?![.\w])/g, (m, name: string) => (name === s.var ? m : (vals[name] ?? m)));
 }
@@ -657,7 +683,7 @@ export function sliderWrites(cfg: SlidersConfig, s: SliderRow): string {
 /** Each variable's number as text, what `$name.num` reads. */
 export function sliderNums(cfg: SlidersConfig): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const s of sliderRows(cfg)) if (usable(s)) out[s.var] = fmtSlider(s);
+  for (const s of sliderRows(cfg)) if (writes(s)) out[s.var] = fmtSlider(s);
   return out;
 }
 
@@ -674,8 +700,8 @@ export function sliderNegative(s: SliderRow): string {
 export function ownSliderNegatives(cfg: SlidersConfig): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of sliderRows(cfg)) {
-    if (!usable(s)) continue;
-    const text = sliderNegative(s).trim();
+    if (!writes(s)) continue;
+    const text = s.off === "bypass" ? "" : sliderNegative(s).trim();
     if (text) out[s.var] = text;
     else delete out[s.var];
   }
@@ -685,7 +711,7 @@ export function ownSliderNegatives(cfg: SlidersConfig): Record<string, string> {
 /** Variables marked internal (the last row writing one decides). */
 export function internalSliderVars(cfg: SlidersConfig): Set<string> {
   const flags = new Map<string, boolean>();
-  for (const s of sliderRows(cfg)) if (usable(s)) flags.set(s.var, !!s.internal);
+  for (const s of sliderRows(cfg)) if (writes(s)) flags.set(s.var, !!s.internal);
   return new Set([...flags].filter(([, v]) => v).map(([k]) => k));
 }
 
