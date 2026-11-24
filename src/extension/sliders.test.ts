@@ -24,6 +24,7 @@ import {
   padPhrase,
   padRatio,
   phrasePreview,
+  newPadPhrase,
   normalizeOuts,
   outputNumber,
   outputValues,
@@ -270,7 +271,9 @@ describe("WP Slider 2D pad config", () => {
 
   it("reads the style, Auto shape, dots, snap and size", () => {
     const cfg = padConfig({ pad: { style: "map", fit: true, grid: 0, snap_dots: true, size: "s", ratio: 9, no_tint: true }, rows: [] });
-    expect(cfg.pad).toEqual({ style: "map", fit: true, no_tint: true, grid: 0, snap_dots: true, size: "s" });
+    // A saved Map pad is the plain pad with its words shown.
+    expect(cfg.pad).toEqual({ words: true, fit: true, no_tint: true, grid: 0, snap_dots: true, size: "s" });
+    expect(padConfig({ pad: { style: "stick", words: true }, rows: [] }).pad).toEqual({ style: "stick", words: true });
     expect(padConfig({ pad: { style: "nope", size: "xl", grid: 17 }, rows: [] }).pad).toEqual({});
   });
 
@@ -320,6 +323,22 @@ describe("WP Slider 3D pad config", () => {
     expect(phrasePreview(cfg)).toBe("0.00 and 0.00");
     // A 2D pad never takes the orbit style.
     expect(padConfig({ pad: { style: "orbit" }, rows: [] }).pad).toEqual({});
+  });
+
+  it("keeps a 2D template and makes a new one from the axes", () => {
+    const two = padConfig({
+      rows: [
+        { id: "a", kind: "slider", name: "A", var: "a", value: 3, min: 0, max: 10, step: 1, decimals: 0 },
+        { id: "b", kind: "slider", name: "B", var: "b", value: 7, min: 0, max: 10, step: 1, decimals: 0 },
+        { id: "n", kind: "slider", name: "N", var: "n", value: 1 },
+        { id: "p", kind: "slider", name: "P", var: "p", mode: "text", text: "$b by $a" },
+      ],
+    }, 2);
+    expect((two.rows as SliderRow[]).map((s) => s.id)).toEqual(["a", "b", "p"]);
+    expect(padPhrase(two, 2)?.id).toBe("p");
+    expect(phrasePreview(two, 2)).toBe("7 by 3");
+    const fresh = newPadPhrase(padConfig("", 2), 2);
+    expect(fresh).toMatchObject({ name: "Template", var: "pad_text", mode: "text", text: "$x, $y", pin: false, out: 0 });
   });
 
   it("adds a missing Z and has no phrase until one is made", () => {

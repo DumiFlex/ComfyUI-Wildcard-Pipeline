@@ -22,9 +22,7 @@ AXES = 3
 
 def axes_and_phrase(cfg: sliders.Config) -> sliders.Config:
     """The three axes, plus the first later row in text mode (the phrase)."""
-    axes = cfg.sliders[:AXES]
-    phrase = next((s for s in cfg.sliders[AXES:] if s.mode == "text"), None)
-    return sliders.Config(sliders=[*axes, *([phrase] if phrase else [])])
+    return sliders.axes_and_phrase(cfg, AXES)
 
 
 class WPSlider3D(WPSlider):

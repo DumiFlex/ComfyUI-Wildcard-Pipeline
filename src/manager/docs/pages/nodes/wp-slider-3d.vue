@@ -28,7 +28,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
         Three ways to draw it. The <b>pad</b> styles are the 2D pad with a <b>Z fader</b> beside it; a
         ring round the point grows with Z. The <b>Orbit</b> style puts a camera or a light round the
         subject: X is the angle round it, Y the height, Z the distance. Its <b>Camera</b> and
-        <b>Light</b> words turn the three numbers into one phrase, like
+        <b>Light</b> words turn the three numbers into one template line, like
         <VarToken>$view</VarToken> = <code>front-left view, high angle, medium shot</code>, ready for a
         prompt or a multi-angle LoRA. The <b>Mix</b> style is a triangle with one thing at each corner:
         drag the point to blend them, and the three shares always add up to 100%, like
@@ -55,7 +55,7 @@ import VarToken from "../../../components/docs/VarToken.vue";
       <DocFields node="WP_Slider3D" group="controls" />
     </DocSection>
 
-    <DocSection title="Editing an axis or the phrase">
+    <DocSection title="Editing an axis or the template">
       <DocFields node="WP_Slider3D" group="edit" />
       <Banner tone="info" note>
         The Orbit words are ordinary Words ranges, so you can change any of them in the axis window:

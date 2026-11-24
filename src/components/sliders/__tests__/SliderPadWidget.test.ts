@@ -44,12 +44,18 @@ describe("SliderPadWidget", () => {
   it("sets the style, Auto shape, size, dots and snap", async () => {
     const w = mount(SliderPadWidget, { props: { modelValue: cfg, editRequest: 1 } });
     await w.setProps({ editRequest: 2 });
-    await w.find('[data-test="pad-style-map"]').trigger("click");
-    expect(last(w)?.pad).toEqual({ style: "map" });
+    await w.find('[data-test="pad-words"] input, [data-test="pad-words"]').trigger("click");
+    expect(last(w)?.pad).toEqual({ words: true });
     await w.setProps({ modelValue: last(w) });
     expect(w.findAll(".wp-xypad__band").map((b) => b.text())).toEqual(["calm", "wild"]);
+    await w.find('[data-test="pad-style-stick"]').trigger("click");
+    await w.setProps({ modelValue: last(w) });
+    // Show words stays on in the Stick style.
+    expect(w.findAll(".wp-xypad__band").map((b) => b.text())).toEqual(["calm", "wild"]);
+    await w.find('[data-test="pad-style-pad"]').trigger("click");
+    await w.setProps({ modelValue: last(w) });
     await w.find('[data-test="pad-shape-fit"]').trigger("click");
-    expect(last(w)?.pad).toEqual({ style: "map", fit: true });
+    expect(last(w)?.pad).toEqual({ words: true, fit: true });
     await w.find('[data-test="pad-size-s"]').trigger("click");
     await w.find('[data-test="pad-snap-dots"]').trigger("click");
     expect(last(w)?.pad).toMatchObject({ snap_dots: true });
@@ -133,6 +139,25 @@ function withStyle(style: "stick"): SlidersConfig {
   return { ...padConfig("", 2), pad: { style } };
 }
 
+describe("SliderPadWidget, template line", () => {
+  it("adds a template on a 2D pad, previews it and removes it", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: cfg, editRequest: 0 } });
+    await w.setProps({ editRequest: 1 });
+    expect(w.find('[data-test="pad-phrase"]').exists()).toBe(false);
+    await w.find('[data-test="pad-phrase-add"]').trigger("click");
+    const added = rows(last(w));
+    expect(added.map((s) => s.var)).toEqual(["width", "mood", "pad_text"]);
+    expect(added[2]).toMatchObject({ mode: "text", text: "$width, $mood", out: 0 });
+    await w.setProps({ modelValue: last(w) });
+    await flushPromises();
+    expect(w.find('[data-test="pad-phrase-add"]').exists()).toBe(false);
+    expect(w.find('[data-test="pad-phrase-out"]').text()).toBe("1024, wild");
+    await w.find('[data-test="pad-phrase-remove"]').trigger("click");
+    expect(rows(last(w)).map((s) => s.var)).toEqual(["width", "mood"]);
+    w.unmount();
+  });
+});
+
 describe("SliderPadWidget, 3D", () => {
   const three = padConfig("", 3);
 
@@ -163,7 +188,7 @@ describe("SliderPadWidget, 3D", () => {
     expect(rows(cam).map((s) => s.var)).toEqual(["view_side", "view_height", "view_shot", "view"]);
     await w.setProps({ modelValue: cam });
     expect(w.find('[data-test="orbit"]').exists()).toBe(true);
-    expect(w.find('[data-test="pad-phrase"]').text()).toContain("front-left view, high angle, medium shot");
+    expect(w.find('[data-test="pad-phrase-out"]').text()).toContain("front-left view, high angle, medium shot");
     expect(w.find('[data-test="pad-swap"]').exists()).toBe(false);
     await w.find('[data-test="orbit-light"]').trigger("click");
     expect(last(w)?.pad).toEqual({ style: "orbit", light: true });
@@ -210,7 +235,7 @@ describe("SliderPadWidget, 3D", () => {
     w.unmount();
   });
 
-  it("opens the phrase row in the slider window, named Phrase", async () => {
+  it("opens the phrase row in the slider window, named Template", async () => {
     const plain = mount(SliderPadWidget, { props: { modelValue: three, dims: 3, editRequest: 1 } });
     await plain.setProps({ editRequest: 2 });
     expect(plain.find('[data-test="pad-edit-phrase"]').exists()).toBe(false);
@@ -222,7 +247,7 @@ describe("SliderPadWidget, 3D", () => {
     await flushPromises();
     await vi.dynamicImportSettled();
     await flushPromises();
-    expect(document.body.textContent).toContain("Phrase");
+    expect(document.body.textContent).toContain("Template");
     expect(document.body.querySelector('[data-test="sl-pin"]')).toBeNull();
     w.unmount();
   });

@@ -271,6 +271,14 @@ def resolve(cfg: Config) -> dict[str, str]:
     return values
 
 
+def axes_and_phrase(cfg: Config, axes: int) -> Config:
+    """WP Slider 2D / 3D: the first ``axes`` rows, plus the first later row
+    in ``text`` mode (the pad's template, ``padConfig`` in TS)."""
+    head = cfg.sliders[:axes]
+    phrase = next((s for s in cfg.sliders[axes:] if s.mode == "text"), None)
+    return Config(sliders=[*head, *([phrase] if phrase else [])])
+
+
 def nums(cfg: Config) -> dict[str, str]:
     """Each slider variable's number as text (`$name.num`); a later row wins."""
     return {s.var: fmt(s) for s in cfg.sliders if _writes(s)}

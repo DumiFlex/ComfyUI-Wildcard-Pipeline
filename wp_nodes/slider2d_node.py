@@ -1,7 +1,8 @@
 """WP_Slider2D — two numbers picked at once on one XY pad.
 
-The widget holds the same JSON as WP_Slider with exactly two slider rows,
-X then Y (plus ``pad`` looks the frontend draws), so each axis writes its
+The widget holds the same JSON as WP_Slider with two slider rows, X then
+Y, and optionally a later text row, the template, which joins them into one
+variable (plus ``pad`` looks the frontend draws). Each axis writes its
 variable (number, text or words), its ``$name.num`` and its negative the way
 a slider does; the run is ``WPSlider._context``. The node always has two
 number outputs, ``x`` and ``y``, typed INT or FLOAT by the frontend from
@@ -71,8 +72,7 @@ class WPSlider2D(WPSlider):
         upstream: PipelineContext | None = None,
         wp_sliders: str = "",
     ):
-        cfg = sliders.parse_config(wp_sliders)
+        cfg = sliders.axes_and_phrase(sliders.parse_config(wp_sliders), 2)
         axes = cfg.sliders[:2]
-        cfg = sliders.Config(sliders=axes)
         outs = [sliders.output_number(s) for s in axes] + [0, 0]
         return io.NodeOutput(cls._context(upstream, cfg), outs[0], outs[1])
