@@ -86,7 +86,52 @@ describe("SliderPadWidget", () => {
     expect(rows(last(w))[1]).toMatchObject({ var: "mood", pin: true, out: 2, out_type: "float" });
     w.unmount();
   });
+  it("Match X copies X's range into Y's window", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: cfg }, attachTo: document.body });
+    await w.setProps({ editRequest: 1 });
+    await w.find('[data-test="pad-edit-1"]').trigger("click");
+    for (let i = 0; i < 4; i++) {
+      await vi.dynamicImportSettled();
+      await flushPromises();
+    }
+    expect(document.body.querySelector('[data-test="sl-match-Y"]')).toBeNull();
+    document.body.querySelector<HTMLElement>('[data-test="sl-match-X"]')?.click();
+    await flushPromises();
+    document.body.querySelector<HTMLElement>('[data-test="sl-window-done"]')?.click();
+    await flushPromises();
+    expect(rows(last(w))[1]).toMatchObject({ var: "mood", name: "Mood", min: 512, max: 2048, step: 64, decimals: 0, mode: "words", value: 512 });
+    w.unmount();
+  });
+
+  it("swaps with X from Y's window, keeping each output", async () => {
+    const w = mount(SliderPadWidget, { props: { modelValue: cfg }, attachTo: document.body });
+    await w.setProps({ editRequest: 1 });
+    await w.find('[data-test="pad-edit-1"]').trigger("click");
+    for (let i = 0; i < 4; i++) {
+      await vi.dynamicImportSettled();
+      await flushPromises();
+    }
+    document.body.querySelector<HTMLElement>('[data-test="sl-swap-X"]')?.click();
+    await flushPromises();
+    expect(rows(last(w)).map((s) => [s.var, s.out])).toEqual([["mood", 1], ["width", 2]]);
+    w.unmount();
+  });
+
+  it("Size fills untouched axes, and Stick has no Area", async () => {
+    const fresh = mount(SliderPadWidget, { props: { modelValue: padConfig("", 2) } });
+    await fresh.setProps({ editRequest: 1 });
+    await fresh.find('[data-test="pad-style-size"]').trigger("click");
+    expect(rows(last(fresh)).map((s) => s.var)).toEqual(["width", "height"]);
+    expect(last(fresh)?.pad).toEqual({ style: "size", fit: true });
+    await fresh.setProps({ modelValue: withStyle("stick") });
+    expect(fresh.find('[data-test="pad-area"]').exists()).toBe(false);
+    fresh.unmount();
+  });
 });
+
+function withStyle(style: "stick"): SlidersConfig {
+  return { ...padConfig("", 2), pad: { style } };
+}
 
 describe("SliderPadWidget, 3D", () => {
   const three = padConfig("", 3);

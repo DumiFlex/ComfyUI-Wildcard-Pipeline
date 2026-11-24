@@ -50,6 +50,7 @@ import {
   type OrbitKind,
   sliderProblems,
   sliderWrites,
+  withPadStyle,
   wordFor,
   type PadLooks,
   type SliderRow,
@@ -226,7 +227,8 @@ function setStyle(v: string): void {
   if (v === "orbit" && !orbitReady(props.modelValue)) return usePreset(orbitLook.value);
   // Mix with nothing to blend yet (no phrase): start from the style example.
   if (v === "mix" && !phrase.value) return useMixExample();
-  setPad({ style: v === "pad" ? undefined : (v as PadLooks["style"]) });
+  // Size and Stick also fill good axes in when X and Y are still untouched.
+  emit("update:modelValue", withPadStyle(props.modelValue, props.dims, v === "pad" ? undefined : (v as PadLooks["style"])));
 }
 function setShape(v: string): void {
   if (v === "fit") setPad({ fit: true, ratio: undefined });
@@ -276,6 +278,28 @@ function chipTip(s: SliderRow): string {
   if (!s.var) return s.name || "Slider";
   const got = s === phrase.value ? phraseText.value : sliderWrites(props.modelValue, s);
   return `${s.name || "Slider"}\n$${s.var} → ${got === "" ? "(empty)" : got}`;
+}
+
+/** The other axes, for the window's "Match X" (an axis only, not the phrase). */
+const matchRows = computed(() => {
+  const i = editing.value;
+  if (i === null || i >= axes.value.length) return [];
+  return axes.value.flatMap((s, j) => (j === i ? [] : [{ label: TAGS[j] ?? "", row: s, index: j }]));
+});
+
+/** The window's "Swap with X": the open axis (with its edits) and that axis
+ *  trade settings; each keeps its output slot. */
+function swapWith(next: SliderRow, j: number): void {
+  const i = editing.value;
+  editing.value = null;
+  if (i === null || i >= axes.value.length) return;
+  const other = axes.value[j];
+  if (!other || j === i) return;
+  emitRows(axes.value.map((s, k) => {
+    if (k === i) return { ...other, id: s.id, kind: "slider", pin: true, out: k + 1 };
+    if (k === j) return { ...next, id: s.id, kind: "slider", pin: true, out: k + 1 };
+    return s;
+  }));
 }
 
 function applyWindow(next: SliderRow): void {
@@ -456,7 +480,7 @@ function applyWindow(next: SliderRow): void {
           <Checkbox :model-value="!!pad.snap_dots" size="sm" aria-label="Snap to dots" data-test="pad-snap-dots" @update:model-value="(v: boolean) => setPad({ snap_dots: v ? true : undefined })" />
           <span aria-hidden="true">Snap to dots</span>
         </span>
-        <span v-if="style !== 'size'" v-tooltip="'Shade the box from the bottom-left corner to the point, like a picture size'" v-toggle-row class="wp-pad__check">
+        <span v-if="style !== 'size' && style !== 'stick'" v-tooltip="'Shade the box from the bottom-left corner to the point, like a picture size'" v-toggle-row class="wp-pad__check">
           <Checkbox :model-value="!!pad.area" size="sm" aria-label="Area" data-test="pad-area" @update:model-value="(v: boolean) => setPad({ area: v ? true : undefined })" />
           <span aria-hidden="true">Area</span>
         </span>
@@ -486,7 +510,9 @@ function applyWindow(next: SliderRow): void {
       :var-producers="varProducers"
       :node-title="nodeTitle || (dims === 3 ? 'WP Slider 3D' : 'WP Slider 2D')"
       :axis="windowAxis"
+      :match-rows="matchRows"
       @done="(next: SliderRow) => applyWindow(next)"
+      @swap="swapWith"
       @cancel="editing = null"
     />
   </div>
