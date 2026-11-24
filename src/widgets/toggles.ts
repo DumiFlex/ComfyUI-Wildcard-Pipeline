@@ -36,7 +36,8 @@ import {
   type TogglesConfig,
 } from "../extension/toggles";
 import { ctlInputName } from "../extension/toggle-control";
-import { lockPlan, missingByToggle, withoutMissingTargets, type LockChoice } from "../extension/toggle-lock";
+import { lockPlan, missingByToggle, withLockFrames, withoutMissingTargets, type LockChoice } from "../extension/toggle-lock";
+import { currentFrame } from "../components/context-loop/frame-cursor";
 import { applyLockActions, findLockContext, lockChoices, setMissingBadge, type LockOutcome } from "./toggle-lock-canvas";
 import { revealNode } from "./debug";
 export { missingLocksOnCanvas } from "./toggle-lock-canvas";
@@ -201,9 +202,14 @@ export function create(node: TogglesHostNode, inputName: string) {
     }
     fitCtlInputs(node, plan.config, ctlNames);
     const locks = lockPlan(config.value, plan.config);
-    store(plan.config);
-    applyControl(ctlNode, plan.config);
-    if (locks.length) tellLocks(applyLockActions(rootGraph(), node.id ?? "", locks));
+    let cfg = plan.config;
+    if (locks.length) {
+      const outcome = applyLockActions(rootGraph(), node.id ?? "", locks, currentFrame.value);
+      tellLocks(outcome);
+      cfg = withLockFrames(cfg, outcome.frames);
+    }
+    store(cfg);
+    applyControl(ctlNode, cfg);
     node.setDirtyCanvas?.(true, true);
     queueRowOutputs();
   }

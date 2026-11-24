@@ -64,4 +64,12 @@ describe("ToggleRow buttons", () => {
     expect(w.emitted("show-lock")).toEqual([["slate-marten|w"]]);
     w.unmount();
   });
+
+  it("tags a lock held on one loop frame with its number", () => {
+    const t: ToggleRow = { ...row(true), lock: "seed", lock_targets: [{ node: "slate-marten", uid: "w" }], lock_frame: 2 };
+    const lockSpots = [{ key: "slate-marten|w", label: "Mood", where: "slate-marten · Ctx", kind: "wildcard", missing: false }];
+    const w = mount(ToggleRowView, { props: { ...base, t, shownOn: true, effOn: true, lockSpots } });
+    expect(w.find('[data-test="tg-lock-frame-00000001"]').text()).toBe("#3");
+    w.unmount();
+  });
 });

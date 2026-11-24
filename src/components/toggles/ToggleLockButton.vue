@@ -31,6 +31,8 @@ const props = defineProps<{
   hint: string;
   /** Locking right now. */
   active: boolean;
+  /** The one loop frame (0-based) it holds; shown as `#k` beside the lock. */
+  frame?: number | null | undefined;
   /** For `data-test` hooks. */
   toggleId: string;
 }>();
@@ -53,6 +55,7 @@ const items = computed<ContextMenuEntry[]>(() => props.spots.map((s) => ({
 </script>
 
 <template>
+  <span v-if="frame != null" class="wp-tgr__lockframe" aria-hidden="true" :data-test="`tg-lock-frame-${toggleId}`">#{{ frame + 1 }}</span>
   <WpIconButton
     v-if="one"
     variant="bare"
@@ -102,4 +105,8 @@ const items = computed<ContextMenuEntry[]>(() => props.spots.map((s) => ({
 .wp-tgr__ctlicon.wp-icon-btn[aria-expanded="true"] { opacity: 1; color: var(--wp-text); }
 .wp-tgr__ctlicon.wp-icon-btn.is-active:hover:not(:disabled) { color: var(--wp-accent); }
 .wp-tgr__ctlicon.wp-icon-btn :deep(.pi) { font-size: 10px; }
+/* The frame it holds, a small tag before the lock. */
+.wp-tgr__lockframe {
+  order: 1; flex: none; font: 600 9px/1 var(--wp-font-mono, monospace); color: var(--wp-accent);
+}
 </style>
