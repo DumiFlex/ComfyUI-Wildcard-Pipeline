@@ -1057,10 +1057,10 @@ describe("collectUpstreamResolved derivation condition groups", () => {
 
   /** `$mood` = calm and `$time` = night upstream, then a derivation whose one
    *  branch tests them with the given condition and writes `$light`. */
-  function groupGraph(condition: unknown) {
+  function groupGraph(condition: unknown, time = "night") {
     const ctx = fakeWildcardContextNode(1, [
       { id: "aaaaaaaa", binding: "$mood", options: [{ value: "calm" }] },
-      { id: "cccccccc", binding: "$time", options: [{ value: "night" }] },
+      { id: "cccccccc", binding: "$time", options: [{ value: time }] },
     ]);
     const mods = JSON.parse(String(ctx.widgets![0].value));
     mods.modules.push({
@@ -1103,6 +1103,19 @@ describe("collectUpstreamResolved derivation condition groups", () => {
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_contains", value: "nig" }), asm).light).toBe("hard");
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "^n" }), asm).light).toBe("hard");
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "(" }), asm).light).toBe("hard");
+  });
+
+  it("previews the number tests: is above / is below (schema v13)", () => {
+    const light = (op: string, value: string, time: string) =>
+      collectUpstreamResolved(groupGraph({ var: "time", op, value }, time), asm).light;
+    expect(light("is_above", "0.5", "0.75")).toBe("soft");
+    expect(light("is_above", "0.5", "0.5")).toBe("hard");
+    expect(light("is_below", "10", "-2")).toBe("soft");
+    expect(light("is_below", "0.5", "0.5")).toBe("hard");
+    // Text on either side never passes.
+    expect(light("is_above", "0.5", "night")).toBe("hard");
+    expect(light("is_below", "high", "0.2")).toBe("hard");
+    expect(light("is_above", "1e-3", "0.2")).toBe("hard");
   });
 
   it("an \"Add to negative\" action leaves the variable's value alone", () => {
@@ -1450,6 +1463,32 @@ describe("collectLocalResolvedForModule", () => {
     expect(collectLocalResolvedForModule(graph, ctx).model).toBe("pony");
     ({ ctx, graph } = singleNode([fixed("flux"), wc(["o1", "fb"])]));
     expect(collectLocalResolvedForModule(graph, ctx).model).toBe("other");
+  });
+
+  it("match_variable matches a ref as the editor shows it, and one level deep", () => {
+    const hat = {
+      id: "aaaa0001", type: "wildcard", enabled: true, meta: { name: "Hat" }, entries: [],
+      payload: { var_binding: "hat", options: [{ id: "h1", value: "beret" }] },
+    };
+    const places = {
+      id: "aaaa0002", type: "wildcard", enabled: true, meta: { name: "Places" }, entries: [],
+      payload: { var_binding: "place_pool", options: [{ id: "p1", value: "beach" }, { id: "p2", value: "forest" }] },
+    };
+    const wc = {
+      id: "wc000003", type: "wildcard", enabled: true, meta: { name: "" }, entries: [],
+      instance: { match_variable: "want" },
+      payload: { var_binding: "look", options: [
+        { id: "o1", value: "plain" }, { id: "o2", value: "red @{aaaa0001}" }, { id: "o3", value: "@{aaaa0002}" },
+      ] },
+    };
+    const fixed = (want: string) => ({
+      id: "fv000002", type: "fixed_values", enabled: true, meta: { name: "" }, entries: [],
+      payload: { values: [{ id: "v1", name: "want", value: want }] },
+    });
+    let { ctx, graph } = singleNode([hat, places, fixed("Red @Hat"), wc]);
+    expect(collectLocalResolvedForModule(graph, ctx).look).toBe("red beret");
+    ({ ctx, graph } = singleNode([hat, places, fixed("forest"), wc]));
+    expect(collectLocalResolvedForModule(graph, ctx).look).toBe("forest");
   });
 
   it("excludes the editing module's own binding", () => {

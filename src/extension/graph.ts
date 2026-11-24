@@ -537,7 +537,7 @@ export function collectLocalResolvedForModule(
   const catalog = new Map<string, MinimalWildcard>();
   for (const m of v.modules) {
     if (m.type !== "wildcard" || !m.payload) continue;
-    catalog.set(m.id, m.payload as MinimalWildcard);
+    catalog.set(m.id, { ...(m.payload as MinimalWildcard), name: m.meta?.name });
   }
 
   const bundleEnabled = buildBundleEnabledMap(v.bundles);
@@ -1467,7 +1467,9 @@ export function collectUpstreamProducers(
 const MAX_REF_DEPTH = 8;
 
 interface MinimalWildcard {
-  options?: Array<{ value?: string; weight?: number }>;
+  options?: Array<{ value?: string; weight?: number; id?: string; is_null?: boolean }>;
+  /** The module's name, for a ref shown as the editor shows it (`@Hat`). */
+  name?: string;
   var_binding?: string;
   tag_groups?: Record<string, string[]>;
   tag_group_kinds?: Record<string, string>;
@@ -1615,7 +1617,7 @@ function resolveChainStatic(
     );
     for (const m of v.modules) {
       if (m.type !== "wildcard" || !m.payload) continue;
-      catalog.set(m.id, m.payload as MinimalWildcard);
+      catalog.set(m.id, { ...(m.payload as MinimalWildcard), name: m.meta?.name });
     }
   }
 
@@ -1947,6 +1949,41 @@ export function collectUpstreamVariablesAnyFrame(rootGraph: LiteGraphLike, node:
   return [...new Set([...base, ...loop.anyFrame])];
 }
 
+/** A ref as the engine's tokenizer reads it (`_REF_RE`): uuid, `#name`. */
+const MATCH_REF_RE = /@\{([0-9a-f]{8})(?:#([^#:}@{!]*))?(?::((?:[^}!]|!(?!null\}))*))?(?:!([^}]*))?\}/g;
+
+/** `value` as the editor shows it: each `@{uuid}` ref as `@Name` (engine
+ *  `_editor_text`). */
+function editorText(value: string, catalog: Map<string, MinimalWildcard>): string {
+  return value.replace(MATCH_REF_RE, (_m, id: string, cached?: string) =>
+    `@${String(catalog.get(id)?.name || cached || id).trim()}`);
+}
+
+/** The option "Match variable" takes for `wanted` (engine
+ *  `_match_variable_option`): stored text, then editor text, then one level
+ *  deep through an option that is a lone ref, whose matching inner option's
+ *  text (`inner`) is what the row then writes. */
+function matchOption<O extends { value?: string; is_null?: boolean }>(
+  pool: O[], wanted: string, catalog: Map<string, MinimalWildcard>,
+): { option: O; inner?: string } | undefined {
+  const live = pool.filter((o) => !o.is_null && o.value != null);
+  const same = (t: string): boolean => t.trim().toLowerCase() === wanted;
+  const direct = live.find((o) => same(String(o.value)))
+    ?? live.find((o) => String(o.value).includes("@{") && same(editorText(String(o.value), catalog)));
+  if (direct) return { option: direct };
+  for (const o of live) {
+    const lone = new RegExp(`^${MATCH_REF_RE.source}$`).exec(String(o.value).trim());
+    const inner = lone ? catalog.get(lone[1] ?? "")?.options ?? [] : [];
+    for (const i of inner) {
+      if (i.value == null || i.is_null) continue;
+      if (same(i.value) || (i.value.includes("@{") && same(editorText(i.value, catalog)))) {
+        return { option: o, inner: i.value };
+      }
+    }
+  }
+  return undefined;
+}
+
 function writeBindings(
   ctx: Record<string, ResolvedValue>,
   m: ContextWidgetValue["modules"][number],
@@ -2057,6 +2094,7 @@ function writeBindings(
           ? inst.match_variable.replace(/^\$/, "").trim()
           : "";
         let chosen = options[0];
+        let deepText: string | undefined;
         if (matchVar) {
           const raw = ctx[matchVar];
           const wanted = typeof raw === "string" ? raw.trim().toLowerCase() : "";
@@ -2066,13 +2104,13 @@ function writeBindings(
           const pool = options.filter((o) =>
             isEnabled(o as unknown as WildcardOption, poolInst),
           );
-          chosen = (wanted
-            ? pool.find((o) => !o.is_null && String(o.value ?? "").trim().toLowerCase() === wanted)
-            : undefined)
+          const hit = wanted ? matchOption(pool, wanted, catalog) : undefined;
+          deepText = hit?.inner;
+          chosen = hit?.option
             ?? pool.find((o) => !o.is_null && (o as { fallback?: boolean }).fallback === true)
             ?? pool[0] ?? options[0];
         }
-        ctx[binding] = expandValue(String(chosen.value ?? ""), ctx, catalog, 0);
+        ctx[binding] = expandValue(deepText ?? String(chosen.value ?? ""), ctx, catalog, 0);
       } else {
         // SP2a multi-pick: the static resolver isn't seed-faithful (the engine
         // rolls N at random), so show a representative join of the first N
@@ -2183,11 +2221,24 @@ function matchDerivationCondition(
   if (op === "not_equals") return actual !== value;
   if (op === "contains") return actual.includes(value);
   if (op === "not_contains") return !actual.includes(value);
+  if (op === "is_above" || op === "is_below") {
+    // Mirrors engine derivation_handler: a non-number side is false.
+    const a = asNumber(actual);
+    const b = asNumber(value);
+    if (a === null || b === null) return false;
+    return op === "is_above" ? a > b : a < b;
+  }
   if (op === "matches" || op === "not_matches") {
     // A broken pattern fires neither (mirrors engine derivation_handler).
     try { return new RegExp(value).test(actual) === (op === "matches"); } catch { return false; }
   }
   return false;
+}
+
+/** A plain decimal number (engine `_NUMBER_RE`), else null. */
+const NUMBER_RE = /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*$/;
+function asNumber(text: string): number | null {
+  return NUMBER_RE.test(text) ? Number(text) : null;
 }
 
 function applyDerivationAction(

@@ -328,6 +328,15 @@ def test_bool_accessor_needs_v12(node, expected):
         ]}]},
         NUM_ACCESSOR_SCHEMA_VERSION,
     ),
+    # The number tests stamp v13 on any variable, nested groups included.
+    (
+        {"rules": [{"branches": [
+            {"condition": {"match": "all", "conditions": [
+                {"var": "age", "op": "is_above", "value": "30"}]}},
+        ]}]},
+        NUM_ACCESSOR_SCHEMA_VERSION,
+    ),
+    ({"children": [{"var": "age", "op": "is_below", "value": "3"}]}, NUM_ACCESSOR_SCHEMA_VERSION),
 ])
 def test_num_accessor_needs_v13(node, expected):
     assert schema_version_for_payload(node) == expected

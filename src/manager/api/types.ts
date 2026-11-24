@@ -103,7 +103,10 @@ export type DerivationOp =
   | "is_not_empty"
   // The editor's NOT toggle (schema v10).
   | "not_contains"
-  | "not_matches";
+  | "not_matches"
+  // Number tests (schema v13): false when either side isn't a number.
+  | "is_above"
+  | "is_below";
 /** `negative` (schema v8) is "Add to negative": the value is added to the
  *  target variable's negatives and the variable itself is left alone.
  *  `negative_replace` (v8) is "Replace negative": the value becomes the

@@ -321,8 +321,8 @@ const NUM_ACCESSOR_RE = /\$[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.num(?![A-Za-z0-9_])
 const NUM_VAR_RE = /^\$?[A-Za-z_][A-Za-z0-9_]*(?:\.\d+)?\.num$/;
 
 /**
- * True when ANY text reads `$name.num` or ANY derivation test's `var` is
- * `name.num`, at any depth. Mirror of
+ * True when ANY text reads `$name.num`, ANY derivation test's `var` is
+ * `name.num` or ANY test is `is_above` / `is_below`, at any depth. Mirror of
  * `engine/migrations/stamping.py:uses_num_accessor`.
  */
 export function usesNumAccessor(node: unknown): boolean {
@@ -330,6 +330,8 @@ export function usesNumAccessor(node: unknown): boolean {
   if (Array.isArray(node)) return node.some((child) => usesNumAccessor(child));
   if (!isPlainObject(node)) return false;
   if (typeof node.var === "string" && NUM_VAR_RE.test(node.var.trim())) return true;
+  // The number tests came with `.num` (v13) and stamp it on any variable.
+  if ((node.op === "is_above" || node.op === "is_below") && "var" in node) return true;
   return Object.values(node).some((value) => usesNumAccessor(value));
 }
 
