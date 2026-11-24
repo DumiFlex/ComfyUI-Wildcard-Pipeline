@@ -37,7 +37,8 @@ import {
 } from "../extension/toggles";
 import { ctlInputName } from "../extension/toggle-control";
 import { lockPlan, missingByToggle, withoutMissingTargets, type LockChoice } from "../extension/toggle-lock";
-import { applyLockActions, lockChoices, setMissingBadge, type LockOutcome } from "./toggle-lock-canvas";
+import { applyLockActions, findLockContext, lockChoices, setMissingBadge, type LockOutcome } from "./toggle-lock-canvas";
+import { revealNode } from "./debug";
 export { missingLocksOnCanvas } from "./toggle-lock-canvas";
 import { pushToast } from "../components/shared/toast-store";
 import { jumpToRect } from "./bookmark";
@@ -287,6 +288,7 @@ export function create(node: TogglesHostNode, inputName: string) {
           controls,
           focusSpots: spots,
           onFocusTarget: (toggleId: string, key: string) => focusTarget(ctlNode, config.value, toggleId, key),
+          onFocusLock: (key: string) => focusLock(rootGraph(), key),
           canvasGroups: canvasGroups.value,
           editRequest: editRequest.value,
           nodeTitle: (node as { title?: string }).title ?? "",
@@ -332,6 +334,14 @@ function focusTarget(node: CtlNode, cfg: TogglesConfig, toggleId: string, key: s
   if (spot) jumpToRect(node.graph as LiteGraphLike | null | undefined, spot.rect);
 }
 
+/** Glide the canvas to a locked row (`codename|uid`) and blink it. */
+function focusLock(root: LiteGraphLike | null, key: string): void {
+  const cut = key.lastIndexOf("|");
+  if (cut < 0) return;
+  const hit = findLockContext(root, key.slice(0, cut));
+  if (hit) revealNode(hit.node, hit.graph, { uid: key.slice(cut + 1) });
+}
+
 /** Say what a lock change did when some rows could not follow it. */
 function tellLocks(o: LockOutcome): void {
   if (o.noRun) {
@@ -343,7 +353,7 @@ function tellLocks(o: LockOutcome): void {
 }
 
 function sameChoices(a: LockChoice[], b: LockChoice[]): boolean {
-  return a.length === b.length && a.every((c, i) => c.node === b[i]?.node && c.uid === b[i]?.uid && c.label === b[i]?.label && c.wildcard === b[i]?.wildcard);
+  return a.length === b.length && a.every((c, i) => c.node === b[i]?.node && c.uid === b[i]?.uid && c.label === b[i]?.label && c.wildcard === b[i]?.wildcard && c.kind === b[i]?.kind);
 }
 
 function sameWiring(a: Map<string, CtlNode[]>, b: Map<string, CtlNode[]>): boolean {
