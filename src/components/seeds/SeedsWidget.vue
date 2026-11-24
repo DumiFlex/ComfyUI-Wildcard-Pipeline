@@ -21,6 +21,9 @@ import Input from "@/kit/Input.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import SortableList from "@/kit/SortableList.vue";
+import ColorField from "@/kit/ColorField.vue";
+import IconPicker from "@/kit/IconPicker.vue";
+import { currentFrame, setFrame } from "../context-loop/frame-cursor";
 import SeedRowView from "./SeedRow.vue";
 import { varColorIndex } from "../shared/var-color";
 import {
@@ -44,6 +47,7 @@ import {
   type SeedsItem,
 } from "../../extension/seeds";
 import type { LastRun } from "./types";
+import { pickedColor } from "../../extension/looks";
 
 const SeedEditWindow = defineAsyncComponent(() => import("./SeedEditWindow.vue"));
 
@@ -75,10 +79,24 @@ const emit = defineEmits<{
   "reroll-base": [];
 }>();
 
-const frame = ref(1);
-watch(() => props.frames, (n) => {
-  if (frame.value > n) frame.value = Math.max(1, n);
+/** The frame shown (1-based). It follows the Context Loop's Edit frame
+ *  (`frame-cursor.ts`, shared with the Context rows, Assembler and Debug)
+ *  while one is picked, and stepping it picks that frame there too; on
+ *  Base the node keeps its own. */
+const ownFrame = ref(1);
+const frame = computed<number>({
+  get: () => {
+    const k = currentFrame.value;
+    if (k !== null && props.frames > 1 && k < props.frames) return k + 1;
+    return Math.min(ownFrame.value, Math.max(1, props.frames));
+  },
+  set: (v: number) => {
+    const n = Math.min(Math.max(1, Math.trunc(Number(v) || 1)), Math.max(1, props.frames));
+    ownFrame.value = n;
+    if (props.frames > 1) setFrame(n - 1);
+  },
 });
+const followsLoop = computed(() => currentFrame.value !== null && props.frames > 1 && currentFrame.value < props.frames);
 const index = computed(() => frame.value - 1);
 
 const editMode = ref(!seedRows(props.modelValue).length);
@@ -108,8 +126,22 @@ function seedHint(r: SeedRow): string {
   lines.push(used?.length ? `Read by ${used.join(", ")}` : "No Context reads it yet");
   return lines.join("\n");
 }
+/** A label's colour as CSS: its own pick, else its variable colour (made
+ *  from the name when none was chosen, as before labels had looks). */
 function labelColor(l: SeedLabel): string {
-  return `var(--wp-var-${varColorIndex(l.name || l.id)})`;
+  return l.hex ?? `var(--wp-var-${l.color ?? varColorIndex(l.name || l.id)})`;
+}
+const root = ref<HTMLElement | null>(null);
+/** The colour picker's value for a label: its own pick, else the swatch it
+ *  wears now, so the picker opens on the colour you see. */
+function labelPickerValue(l: SeedLabel): string {
+  if (l.hex) return l.hex;
+  const el = root.value;
+  const v = el ? getComputedStyle(el).getPropertyValue(`--wp-var-${l.color ?? varColorIndex(l.name || l.id)}`).trim() : "";
+  return v || "none";
+}
+function setLabelColor(l: SeedLabel, v: string): void {
+  patchLabel(l, { hex: pickedColor(v) });
 }
 function groupOfLabel(l: SeedLabel): SeedGroup {
   return groups.value.find((g) => g.label?.id === l.id) ?? { label: l, rows: [] };
@@ -158,6 +190,8 @@ function setFromLoop(on: boolean): void {
 function patchLabel(l: SeedLabel, p: Partial<SeedLabel>): void {
   const next: SeedLabel = { ...l, ...p };
   if (!next.collapsed) delete next.collapsed;
+  if (!next.hex) delete next.hex;
+  if (!next.icon) delete next.icon;
   replace(next);
 }
 function addSeed(): void {
@@ -179,7 +213,7 @@ function applyWindow(next: SeedRow): void {
 </script>
 
 <template>
-  <div class="wp-sd" :class="{ 'wp-sd--skipped': skipped, 'wp-sd--edit': editMode }" data-test="seeds-widget">
+  <div ref="root" class="wp-sd" :class="{ 'wp-sd--skipped': skipped, 'wp-sd--edit': editMode }" data-test="seeds-widget">
     <div v-if="editMode || frames > 1 || loopSeed !== null" class="wp-sd__bar">
       <template v-if="frames > 1">
         <span class="wp-sd__cap">Frame</span>
@@ -190,6 +224,8 @@ function applyWindow(next: SeedRow): void {
           size="sm"
           class="wp-sd__frame"
           aria-label="Frame shown"
+          :class="{ 'is-loop': followsLoop }"
+          :title="followsLoop ? 'The frame picked in the Context Loop\'s Edit frame' : 'Pick a frame; the Context Loop\'s Edit frame follows'"
           :suffix="`/ ${frames}`"
           data-test="seeds-frame"
         />
@@ -237,6 +273,7 @@ function applyWindow(next: SeedRow): void {
             :label="g.label.collapsed ? 'Unfold' : 'Fold'"
             @click="g.label && patchLabel(g.label, { collapsed: !g.label.collapsed })"
           />
+          <i v-if="g.label.icon" class="pi wp-sd__label-icon" :class="`pi-${g.label.icon}`" aria-hidden="true" />
           <span class="wp-sd__label-text">{{ g.label.name || "Group" }}</span>
           <span class="wp-sd__rule" />
           <span class="wp-sd__count">{{ countText(g) }}</span>
@@ -292,6 +329,24 @@ function applyWindow(next: SeedRow): void {
             />
             <span class="wp-sd__rule" />
             <span class="wp-sd__count">{{ countText(groupOfLabel(item)) }}</span>
+            <IconPicker
+              :model-value="item.icon ?? null"
+              all
+              compact
+              size="sm"
+              :color="labelColor(item)"
+              aria-label="Group icon"
+              :data-test="`seeds-label-icon-${item.id}`"
+              @update:model-value="(v: string | null) => patchLabel(item, { icon: v || undefined })"
+            />
+            <ColorField
+              :model-value="labelPickerValue(item)"
+              presets
+              compact
+              aria-label="Group colour"
+              :data-test="`seeds-label-color-${item.id}`"
+              @update:model-value="(v: string) => setLabelColor(item, v)"
+            />
             <WpIconButton
               icon="pi-times"
               tone="danger"
@@ -375,6 +430,8 @@ function applyWindow(next: SeedRow): void {
   min-width: 0;
 }
 .wp-sd--edit .wp-sd__label { min-height: 38px; }
+.wp-sd__label-icon { font-size: 11px; }
+.wp-sd__frame.is-loop { box-shadow: 0 0 0 1px color-mix(in srgb, var(--wp-accent) 55%, transparent); border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-sd__label-text {
   font: 600 11px var(--wp-font-sans, sans-serif);
   padding: 0 4px;

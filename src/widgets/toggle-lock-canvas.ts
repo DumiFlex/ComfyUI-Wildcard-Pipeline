@@ -35,6 +35,18 @@ export function contextsByCodename(root: LiteGraphLike | null | undefined): Map<
   return out;
 }
 
+/** The WP Context a lock target names, and the graph it lives in. */
+export function findLockContext(
+  root: LiteGraphLike | null | undefined,
+  codename: string,
+): { node: LiteNodeLike; graph: LiteGraphLike } | null {
+  if (!root) return null;
+  const found: { node: LiteNodeLike; graph: LiteGraphLike }[] = [];
+  for (const hit of walkAllNodes(root)) if (hit.node.type === "WP_Context") found.push(hit);
+  const names = assignCodenames(found.map((h) => h.node.id));
+  return found.find((h) => (names.get(String(h.node.id)) ?? String(h.node.id)) === codename) ?? null;
+}
+
 /** Last parse per node: the picker polls every Context on the canvas. */
 const parsed = new WeakMap<object, { raw: string; value: ContextWidgetValue }>();
 

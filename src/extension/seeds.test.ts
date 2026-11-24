@@ -53,6 +53,19 @@ describe("rowSeed", () => {
 });
 
 describe("parseSeedsConfig", () => {
+  it("keeps looks like WP Toggles and drops bad ones", () => {
+    const cfg = parseSeedsConfig({
+      rows: [
+        { id: "l1", kind: "label", name: "G", color: 3, hex: "#AABBCC", icon: "pi-user" },
+        { id: "l2", kind: "label", name: "H", color: 12, hex: "blue", icon: "<x>" },
+        { id: "s1", kind: "seed", name: "A", icon: "star", icon_color: "#112233", text_color: "nope", tint: "#445566" },
+      ],
+    });
+    expect(cfg.rows[0]).toEqual({ id: "l1", kind: "label", name: "G", color: 3, hex: "#aabbcc", icon: "user" });
+    expect(cfg.rows[1]).toEqual({ id: "l2", kind: "label", name: "H" });
+    expect(cfg.rows[2]).toMatchObject({ icon: "star", icon_color: "#112233", tint: "#445566" });
+    expect(cfg.rows[2]).not.toHaveProperty("text_color");
+  });
   it("never throws and drops junk", () => {
     for (const raw of [null, "", "{", "[]", 5, { rows: "x" }]) expect(parseSeedsConfig(raw).rows).toEqual([]);
     const cfg = parseSeedsConfig({ rows: [

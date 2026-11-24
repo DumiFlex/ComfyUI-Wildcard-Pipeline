@@ -50,3 +50,9 @@ export type WpKind = keyof typeof KIND_ICON_MAP;
 export function kindIcon(kind: string): string {
   return (KIND_ICON_MAP as Record<string, string>)[kind] ?? "pi pi-circle";
 }
+
+/** The colour token (`--wp-kind-*`) of a module kind; `fixed_values` wears
+ *  `--wp-kind-fixed`. */
+export function kindColorVar(kind: string): string {
+  return `var(--wp-kind-${kind === "fixed_values" ? "fixed" : kind})`;
+}

@@ -20,6 +20,7 @@
  */
 import type { ContextWidgetValue, ModuleEntry } from "../widgets/_shared";
 import { hasPick, lockStateOf, valueLock, withBaseLock, withFrameLock, type LockPick } from "../components/context/lock-cycle";
+import { SEED_LOCKABLE_KINDS } from "../components/context/module-state";
 import { effectiveToggles, toggleRows, type LockTarget, type ToggleLock, type TogglesConfig } from "./toggles";
 
 type Instance = NonNullable<ModuleEntry["instance"]>;
@@ -216,6 +217,29 @@ export interface LockChoice extends LockTarget {
   label: string;
   /** The row is a wildcard (it can lock its value). */
   wildcard: boolean;
+  /** The row's module kind (`wildcard`, `derivation` …), for its icon. */
+  kind: string;
+}
+
+/** Whether a row can take `mode`: any seeded kind locks its seed (a
+ *  constraint has none), only a wildcard locks its value. */
+export function canLock(c: Pick<LockChoice, "kind">, mode: ToggleLock): boolean {
+  return mode === "value" ? c.kind === "wildcard" : SEED_LOCKABLE_KINDS.has(c.kind);
+}
+
+/** Targets `mode` can't lock (a derivation picked for Lock value, a row
+ *  that is no longer a seeded kind). Missing rows aren't counted here. */
+export function unfitTargets(
+  targets: readonly LockTarget[] | undefined,
+  choices: readonly LockChoice[],
+  mode: ToggleLock,
+): LockTarget[] {
+  if (!targets?.length) return [];
+  const byKey = new Map(choices.map((c) => [targetKey(c), c]));
+  return targets.filter((t) => {
+    const c = byKey.get(targetKey(t));
+    return !!c && !canLock(c, mode);
+  });
 }
 
 /** A toggle's targets that no Context on the canvas has (node or row gone). */
@@ -251,12 +275,14 @@ export function withoutMissingTargets(cfg: TogglesConfig, choices: readonly Lock
   return { ...cfg, rows };
 }
 
-/** The choices one Context offers: each row, labelled. */
+/** The choices one Context offers: each row that has a seed to lock
+ *  (constraints have none), labelled. */
 export function contextChoices(codename: string, title: string, value: ContextWidgetValue): LockChoice[] {
-  return value.modules.map((m) => ({
+  return value.modules.filter((m) => SEED_LOCKABLE_KINDS.has(m.type)).map((m) => ({
     node: codename,
     uid: rowKey(m),
     label: `${codename} · ${title} · ${m.meta?.name || m.id}`,
     wildcard: m.type === "wildcard",
+    kind: m.type,
   }));
 }

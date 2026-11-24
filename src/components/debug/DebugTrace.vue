@@ -122,7 +122,12 @@ function groupTooltip(g: TraceGroup): string {
           title="The Context's codename"
           data-test="dbg-group-codename"
         >{{ nodeInfo(g.nodeId).codename }}</span>
-        <span v-if="g.seed" class="wp-dbg-group__seed" title="Chain seed this node ran with">seed {{ g.seed }}</span>
+        <span
+          v-if="g.seed"
+          class="wp-dbg-group__seed"
+          :title="g.seedSource ? `Chain seed this node ran with, made from: ${g.seedSource}` : 'Chain seed this node ran with'"
+          data-test="dbg-group-seed"
+        >seed {{ g.seed }}<span v-if="g.seedSource" class="wp-dbg-group__seedsrc"> · {{ g.seedSource }}</span></span>
         <WpIconButton
           v-if="canFocus && g.nodeId"
           class="wp-dbg-group__focus"
@@ -284,6 +289,7 @@ function groupTooltip(g: TraceGroup): string {
 .wp-dbg-group__icon { font-size: 10px; }
 .wp-dbg-group__title { font: 600 11px/1.4 var(--wp-font-sans); color: var(--wp-text); }
 .wp-dbg-group__seed { font-family: var(--wp-font-mono); }
+.wp-dbg-group__seedsrc { font-family: var(--wp-font-sans); color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-dbg-group__title--codename {
   font: 600 10.5px/1.5 var(--wp-font-mono);
   padding: 0 7px;

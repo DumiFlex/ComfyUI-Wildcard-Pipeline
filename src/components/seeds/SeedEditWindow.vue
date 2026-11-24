@@ -17,6 +17,8 @@ import ConfirmModal from "@/kit/ConfirmModal.vue";
 import Button from "@/kit/Button.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
+import ColorField from "@/kit/ColorField.vue";
+import IconPicker from "@/kit/IconPicker.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { vToggleRow } from "@/kit/toggle-row";
 import SeedRowView from "./SeedRow.vue";
@@ -38,6 +40,7 @@ import {
   type SeedsConfig,
 } from "../../extension/seeds";
 import type { LastRun } from "./types";
+import { colorFieldValue, pickedColor } from "../../extension/looks";
 
 /** Frames listed in the window (a longer loop keeps its locks all the same). */
 const MAX_FRAMES = 48;
@@ -61,8 +64,19 @@ const dirty = computed(() => JSON.stringify(d.value) !== JSON.stringify(props.ro
 const asking = ref(false);
 
 function patch(p: Partial<SeedRow>): void {
-  d.value = { ...d.value, ...p };
+  const next: SeedRow = { ...d.value, ...p };
+  // Looks cleared to None leave no key behind.
+  for (const k of ["icon", "icon_color", "text_color", "tint"] as const) if (!next[k]) delete next[k];
+  d.value = next;
 }
+/** The header wears the row's looks: icon colour, name colour, seed tint. */
+const headStyle = computed(() => {
+  const s: Record<string, string> = {};
+  if (d.value.icon_color) s["--wp-sdw-icon"] = d.value.icon_color;
+  if (d.value.text_color) s["--wp-sdw-text"] = d.value.text_color;
+  if (d.value.tint) s["--wp-sdw-tint"] = d.value.tint;
+  return s;
+});
 
 const MODES: { value: SeedMode; label: string; hint: string }[] = [
   { value: "follow", label: "Follow base seed", hint: "Made from the node's base seed and this row's name" },
@@ -140,8 +154,8 @@ function onKey(ev: KeyboardEvent): void {
 <template>
   <Modal :open="true" size="md" @update:open="(v: boolean) => { if (!v) cancel(); }" @keydown="onKey">
     <template #header="{ titleId }">
-      <i class="pi pi-hashtag wp-sdw__icon" aria-hidden="true" />
-      <div class="wp-sdw__titles">
+      <i class="pi wp-sdw__icon" :class="d.icon ? `pi-${d.icon}` : 'pi-hashtag'" :style="headStyle" aria-hidden="true" data-test="seeds-window-icon" />
+      <div class="wp-sdw__titles" :style="headStyle">
         <div class="wp-sdw__title-row">
           <h3 :id="titleId" class="wp-sdw__title">{{ nodeTitle || "WP Seeds" }}</h3>
           <span class="wp-sdw__chip">Seed</span>
@@ -149,7 +163,7 @@ function onKey(ev: KeyboardEvent): void {
         <div class="wp-sdw__sub">
           <span class="wp-sdw__subname">{{ d.name || "Unnamed" }}</span>
           <span aria-hidden="true"> · </span>
-          <span class="wp-sdw__subseed" :class="varColorClass(d.name)">{{ formatSeed(base) }}</span>
+          <span class="wp-sdw__subseed" :class="d.tint ? 'has-tint' : varColorClass(d.name)">{{ formatSeed(base) }}</span>
         </div>
       </div>
     </template>
@@ -163,6 +177,32 @@ function onKey(ev: KeyboardEvent): void {
         <Input size="sm" :model-value="d.name" :tone="nameTaken || !d.name.trim() ? 'warn' : undefined" spellcheck="false" data-test="seeds-name" @keydown.stop @change="patch({ name: ($event.target as HTMLInputElement).value.trim() })" />
       </label>
       <Banner v-if="nameTaken" tone="warn" size="sm">Another row has this name; Contexts read the first one.</Banner>
+      <div class="wp-sdw__field">
+        <span>Looks <em>icon and colours; None keeps the theme's</em></span>
+        <span class="wp-sdw__looks">
+          <IconPicker
+            :model-value="d.icon ?? null"
+            all
+            size="sm"
+            :color="d.icon_color"
+            aria-label="Icon"
+            data-test="seeds-icon"
+            @update:model-value="(v: string | null) => patch({ icon: v || undefined })"
+          />
+          <span class="wp-sdw__look">
+            <ColorField :model-value="colorFieldValue(d.icon_color)" allow-none presets compact aria-label="Icon colour" data-test="seeds-icon-color" @update:model-value="(v: string) => patch({ icon_color: pickedColor(v) })" />
+            Icon
+          </span>
+          <span class="wp-sdw__look">
+            <ColorField :model-value="colorFieldValue(d.text_color)" allow-none presets compact aria-label="Name colour" data-test="seeds-text-color" @update:model-value="(v: string) => patch({ text_color: pickedColor(v) })" />
+            Name
+          </span>
+          <span class="wp-sdw__look">
+            <ColorField :model-value="colorFieldValue(d.tint)" allow-none presets compact aria-label="Seed colour" data-test="seeds-tint" @update:model-value="(v: string) => patch({ tint: pickedColor(v) })" />
+            Seed
+          </span>
+        </span>
+      </div>
       <div class="wp-sdw__field">
         <span>Seed <em>{{ MODE_NOTE[d.mode] }}</em></span>
         <WpSegmented :model-value="d.mode" :options="MODES" size="sm" block aria-label="Mode" test-prefix="seeds-mode" @update:model-value="setMode" />
@@ -253,7 +293,7 @@ function onKey(ev: KeyboardEvent): void {
   border-bottom: 1px solid var(--wp-border);
   background: var(--wp-bg-deep, var(--wp-bg));
 }
-.wp-sdw__icon { color: var(--wp-accent); font-size: 14px; }
+.wp-sdw__icon { color: var(--wp-sdw-icon, var(--wp-accent)); font-size: 14px; }
 .wp-sdw__titles { flex: 1; min-width: 0; }
 .wp-sdw__title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wp-sdw__title { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -269,8 +309,11 @@ function onKey(ev: KeyboardEvent): void {
   color: var(--wp-accent);
 }
 .wp-sdw__sub { margin-top: 3px; font-size: 11px; color: var(--wp-text-dim); }
-.wp-sdw__subname { color: var(--wp-text); font-weight: 600; }
+.wp-sdw__subname { color: var(--wp-sdw-text, var(--wp-text)); font-weight: 600; }
 .wp-sdw__subseed { font-family: var(--wp-font-mono, monospace); }
+.wp-sdw__subseed.has-tint { color: var(--wp-sdw-tint); }
+.wp-sdw__looks { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.wp-sdw__look { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--wp-text-muted, var(--wp-text2)); }
 .wp-sdw__cap { font: 600 9px var(--wp-font-sans, sans-serif); letter-spacing: 0.08em; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-sdw__body { display: flex; flex-direction: column; gap: 10px; }
 .wp-sdw__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

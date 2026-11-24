@@ -1,4 +1,4 @@
-import { defineAsyncComponent, h, ref, type Component } from "vue";
+import { defineAsyncComponent, h, ref, watch, type Component } from "vue";
 import { app } from "#comfyui/app";
 import { createDomWidgetHost, type MountTargetNode } from "./_shared";
 import { attachThemeDetector } from "../extension/theme-detector";
@@ -6,6 +6,7 @@ import { reactiveFromGraph } from "../extension/reactive";
 import { findRootGraph, showGraph, type LiteGraphLike, type LiteNodeLike } from "../extension/graph";
 import { baseCodename } from "../extension/node-codename";
 import { flashInNode, type FlashTarget } from "./flash-target";
+import { currentFrame, setFrame } from "../components/context-loop/frame-cursor";
 
 const DebugViewer = defineAsyncComponent(() => import("../components/debug/DebugViewer.vue"));
 
@@ -48,6 +49,20 @@ function findExecNode(id: string): { node: LiteNodeLike; graph: LiteGraphLike } 
   return null;
 }
 
+/** The Context Loop frame a snapshot belongs to (`__wp_loop_index__`), read
+ *  without parsing the whole snapshot; null when it has none. */
+export function snapshotFrame(snapshot: string): number | null {
+  const m = /"__wp_loop_index__"\s*:\s*(\d+)/.exec(snapshot);
+  return m ? Number(m[1]) : null;
+}
+
+/** The snapshot to show for Edit frame `frame` (0-based): the one the Loop
+ *  numbered so, else none (a frame this Debug didn't receive). */
+export function snapshotForFrame(snapshots: readonly string[], frame: number): number | null {
+  const i = snapshots.findIndex((s) => snapshotFrame(s) === frame);
+  return i >= 0 ? i : null;
+}
+
 function nodeInfo(id: string): { title: string; codename: string } {
   const hit = findExecNode(id);
   if (!hit) return { title: "", codename: "" };
@@ -64,9 +79,14 @@ function nodeInfo(id: string): { title: string; codename: string } {
  *  or the field that writes a variable) blinks once the node is in view. */
 export function focusNode(id: string, target?: FlashTarget): void {
   const hit = findExecNode(id);
+  if (hit) revealNode(hit.node, hit.graph, target);
+}
+
+/** Select + centre `node`, which lives in `graph` (opened first when it
+ *  isn't the one on screen); with a `target`, blink that row of it. */
+export function revealNode(node: LiteNodeLike, graph: LiteGraphLike, target?: FlashTarget): void {
   const canvas = (app as unknown as { canvas?: CanvasLike }).canvas;
-  if (!hit || !canvas) return;
-  const node = hit.node;
+  if (!canvas) return;
   const show = (): void => {
     const c = node as unknown as CollapsibleNode;
     if (c.flags?.collapsed && typeof c.collapse === "function") c.collapse(true);
@@ -75,7 +95,7 @@ export function focusNode(id: string, target?: FlashTarget): void {
     canvas.setDirty?.(true, true);
     if (target) flashInNode(node, target);
   };
-  showGraph(canvas, hit.graph, show);
+  showGraph(canvas, graph, show);
 }
 
 export function create(node: DebugNode, inputName: string) {
@@ -107,7 +127,13 @@ export function create(node: DebugNode, inputName: string) {
         nodeInfo,
         focusNode,
         "onUpdate:iterationIndex": (next: number) => {
-          if (next >= 0 && next < snapshots.value.length) activeIdx.value = next;
+          if (next < 0 || next >= snapshots.value.length) return;
+          activeIdx.value = next;
+          // Stepping Debug picks the same frame in the Loop's Edit frame,
+          // so the Context rows, Assembler and WP Seeds follow (as the
+          // Assembler's own frame picker does).
+          const k = snapshotFrame(snapshots.value[next] ?? "");
+          if (k !== null && snapshots.value.length > 1) setFrame(k);
         },
         onRequestMinWidth: (w: number) => {
           if (w === dynamicMinWidth) return;
@@ -134,6 +160,15 @@ export function create(node: DebugNode, inputName: string) {
     minWidth: () => dynamicMinWidth,
   });
   host.onCleanup(attachThemeDetector(host.widget.element, app));
+  // Follow the Loop's Edit frame: picking frame #k there shows the snapshot
+  // of frame k here. Base keeps whatever Debug shows.
+  const follow = (): void => {
+    const k = currentFrame.value;
+    if (k === null || snapshots.value.length < 2) return;
+    const i = snapshotForFrame(snapshots.value, k);
+    if (i !== null) activeIdx.value = i;
+  };
+  host.onCleanup(watch([currentFrame, snapshots], follow));
   // A copy shown on a subgraph node chains the node's hook too, and stops
   // listening once it is hidden.
   let live = true;

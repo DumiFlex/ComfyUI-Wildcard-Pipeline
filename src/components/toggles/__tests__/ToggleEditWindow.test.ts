@@ -152,4 +152,57 @@ describe("ToggleEditWindow", () => {
     expect(q('[data-test="tg-window-sub"]')?.getAttribute("style")).toContain("--wp-tgw-text: #a9c4ff");
     w.unmount();
   });
+
+  it("folds When off, When on and Upstream into Advanced, open when something is set", async () => {
+    const plain: Row = { ...base, control: undefined };
+    delete (plain as { control?: unknown }).control;
+    const w = open(plain);
+    const head = q('[data-test="tg-advanced"]');
+    expect(head?.getAttribute("aria-expanded")).toBe("false");
+    expect(q('[data-test="tg-advanced-summary"]')).toBeNull();
+    w.unmount();
+    const w2 = open({ ...base, upstream: true });
+    expect(q('[data-test="tg-advanced"]')?.getAttribute("aria-expanded")).toBe("true");
+    expect(q('[data-test="tg-advanced-summary"]')?.textContent).toBe("Bypasses when off · Upstream can set it");
+    w2.unmount();
+  });
+
+  it("the preview shows the mute / bypass icon as soon as When off is set", async () => {
+    const plain: Row = { ...base };
+    delete (plain as { control?: unknown }).control;
+    const w = open(plain);
+    const preview = (): HTMLElement | null => q('[data-test="tg-window-preview"]');
+    expect(preview()?.querySelector(".wp-tgr__ctlicon.is-mute")).toBeNull();
+    q('[data-test="tg-advanced"]')?.click();
+    await flushPromises();
+    q('[data-test="tg-control-mute"]')?.click();
+    await flushPromises();
+    expect(preview()?.querySelector(".wp-tgr__ctlicon.is-mute")).not.toBeNull();
+    w.unmount();
+  });
+
+  it("Lock value offers wildcards only, with each row's icon, and drops seed-only picks", async () => {
+    const lockChoices = [
+      { node: "slate-marten", uid: "w", label: "slate-marten · Ctx · Mood", wildcard: true, kind: "wildcard" },
+      { node: "slate-marten", uid: "d", label: "slate-marten · Ctx · Colour", wildcard: false, kind: "derivation" },
+    ];
+    const t: Row = { ...base, lock: "seed", lock_targets: [{ node: "slate-marten", uid: "w" }, { node: "slate-marten", uid: "d" }] };
+    const w = mount(ToggleEditWindow, {
+      attachTo: document.body,
+      props: {
+        t, pickOne: false, shownOn: true, effOn: true, parentName: "", blocked: false,
+        needsOptions: [], groupOptions: [], groupId: "", outputsFull: false, lockChoices,
+      },
+    });
+    const combo = (): { options: { value: string; icon?: string }[] } =>
+      w.findAllComponents({ name: "Combobox" }).at(-1)?.props() as { options: { value: string; icon?: string }[] };
+    expect(combo().options.map((o) => o.value)).toEqual(["slate-marten|w", "slate-marten|d"]);
+    expect(combo().options[1]?.icon).toBe("pi pi-arrow-right-arrow-left");
+    q('[data-test="tg-lock-value"]')?.click();
+    await flushPromises();
+    expect(combo().options.map((o) => o.value)).toEqual(["slate-marten|w"]);
+    expect(q('[data-test="tg-lock-dropped"]')?.textContent).toContain("1 picked row");
+    expect(done(w)?.[0].lock_targets).toEqual([{ node: "slate-marten", uid: "w" }]);
+    w.unmount();
+  });
 });
