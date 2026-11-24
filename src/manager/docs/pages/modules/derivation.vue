@@ -14,8 +14,9 @@ const conditionOps = [
   { term: "contains", desc: "The text appears somewhere in the value. Capitals count." },
   { term: "matches", desc: "The value fits a regular expression (a text pattern). A broken pattern never matches." },
   { term: "exists", desc: "The variable is there at all. A second switch narrows it: any, is empty (there but empty, such as a wildcard that rolled its null option) or has value." },
+  { term: "is above / is below", desc: "Both the value and your number are numbers and the value is greater or smaller, for example detail.num is above 0.5 (a WP Slider's number). Text on either side never passes, and these two take no NOT: use the other one. They need this version or newer." },
   { term: "is set / is unset", desc: "Is set: there and not empty. Is unset: missing or empty." },
-  { term: "NOT", desc: "The NOT switch turns any test around: equals becomes not equals, contains does not contain, and so on. Does not contain and does not match need this version or newer." },
+  { term: "NOT", desc: "The NOT switch turns a test around: equals becomes not equals, contains does not contain, and so on. Does not contain and does not match need this version or newer." },
 ];
 
 const actionModes = [

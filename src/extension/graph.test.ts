@@ -1057,10 +1057,10 @@ describe("collectUpstreamResolved derivation condition groups", () => {
 
   /** `$mood` = calm and `$time` = night upstream, then a derivation whose one
    *  branch tests them with the given condition and writes `$light`. */
-  function groupGraph(condition: unknown) {
+  function groupGraph(condition: unknown, time = "night") {
     const ctx = fakeWildcardContextNode(1, [
       { id: "aaaaaaaa", binding: "$mood", options: [{ value: "calm" }] },
-      { id: "cccccccc", binding: "$time", options: [{ value: "night" }] },
+      { id: "cccccccc", binding: "$time", options: [{ value: time }] },
     ]);
     const mods = JSON.parse(String(ctx.widgets![0].value));
     mods.modules.push({
@@ -1103,6 +1103,19 @@ describe("collectUpstreamResolved derivation condition groups", () => {
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_contains", value: "nig" }), asm).light).toBe("hard");
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "^n" }), asm).light).toBe("hard");
     expect(collectUpstreamResolved(groupGraph({ var: "time", op: "not_matches", value: "(" }), asm).light).toBe("hard");
+  });
+
+  it("previews the number tests: is above / is below (schema v13)", () => {
+    const light = (op: string, value: string, time: string) =>
+      collectUpstreamResolved(groupGraph({ var: "time", op, value }, time), asm).light;
+    expect(light("is_above", "0.5", "0.75")).toBe("soft");
+    expect(light("is_above", "0.5", "0.5")).toBe("hard");
+    expect(light("is_below", "10", "-2")).toBe("soft");
+    expect(light("is_below", "0.5", "0.5")).toBe("hard");
+    // Text on either side never passes.
+    expect(light("is_above", "0.5", "night")).toBe("hard");
+    expect(light("is_below", "high", "0.2")).toBe("hard");
+    expect(light("is_above", "1e-3", "0.2")).toBe("hard");
   });
 
   it("an \"Add to negative\" action leaves the variable's value alone", () => {

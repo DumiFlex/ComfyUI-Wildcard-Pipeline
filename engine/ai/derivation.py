@@ -139,6 +139,8 @@ $name.AXIS or $name.neg as name.0, name.AXIS, name.neg):
 exactly as listed.
 - contains / not_contains: value is (not) a substring. matches / \
 not_matches: value is a regular expression that does (not) match.
+- is_above / is_below: both are numbers and the variable's is greater / \
+smaller (a slider's name.num is above 0.5). Text never passes.
 - exists / not_exists: the variable was set at all. is_empty: set but empty \
 (a wildcard rolled its empty option). is_not_empty: has a value. is_unset: \
 missing or empty. These take value "".

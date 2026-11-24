@@ -412,6 +412,8 @@ export const OP_LABELS: Record<string, string> = {
   ends_with: "ends with",
   matches: "matches",
   not_matches: "doesn't match",
+  is_above: "is above",
+  is_below: "is below",
   exists: "exists",
   not_exists: "doesn't exist",
   is_set: "is set",
