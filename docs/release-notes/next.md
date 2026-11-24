@@ -26,6 +26,7 @@
 
 ### Fixes
 
+- **WP Slider and the pads can't be dragged narrower than their sliders.** Under Nodes 2.0 a node could be dragged down past what its rows need, which squeezed the tracks and cut names. A narrow WP Slider now puts each row's name over its track, and a node made wider or taller by hand keeps that size when the workflow is opened again.
 - **WP Toggles' window preview shows the mute / bypass icon as you set it.** It used to wait until you pressed Done.
 - **WP Toggles' mute / bypass icon sits on the chip's middle in grid tiles** instead of riding up to the top of the tile.
 - **WP Image Filter's Values and prompt marks no longer miss variables in a big workflow.** The picker got only a frame's first 80 variables, so in a workflow that sets many (WP Parts sets about 170, mostly switches) $subject and other late ones were left out of Values and unmarked in the prompt. Variables the prompt uses now come first, up to 200, and a value a prompt cleaner reordered or trimmed is marked piece by piece. In Detail, a click in the clear space beside the picture steps to the previous (left half) or next (right half) image.

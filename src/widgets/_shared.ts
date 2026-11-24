@@ -6,6 +6,7 @@ import { installClipboardShield } from "./clipboard-shield";
 import { registerOverlapClip } from "./dom-clip";
 import { installWheelShield } from "./wheel-shield";
 import { clearRunError, runErrorOf } from "../extension/run-errors";
+import { flagsOf, heightOwnedAtLoad, resolveSizing, widthBand, widthFloor, type SizingPolicy } from "./node-sizing";
 
 const Banner = defineAsyncComponent(() => import("@/kit/Banner.vue"));
 
@@ -149,6 +150,14 @@ export interface CreateDomWidgetHostOptions<P extends Record<string, unknown>> {
   /** The DOM widget's inset inside the node, in px. ComfyUI's default is 10. */
   margin?: number;
   /**
+   * The node's sizing policy (`node-sizing.ts`): width floor (and whether
+   * the content's own width raises it), height mode, narrow / wide
+   * breakpoints and whether the host is a `wp-node` size container. Folds
+   * in `minWidth` / `autoHeight` / `fillHost` / `fitContent` / `ownSize`,
+   * winning where both speak.
+   */
+  sizing?: SizingPolicy;
+  /**
    * Effect scope the glue already ran its reactive setup in (see
    * {@link buildInScope}). The host adopts it and stops it on unmount.
    * Omitted → the host creates its own (`host.scope`).
@@ -262,6 +271,21 @@ function adoptStaleSlot(node: unknown, widgetName: string, host: HTMLElement): v
   requestAnimationFrame(tick);
 }
 
+/** Each node element's width floor per widget host: a node with two WP
+ *  widgets (the Assembler) takes the larger. */
+const nodeFloors = new WeakMap<HTMLElement, Map<HTMLElement, number>>();
+
+function publishFloor(nodeEl: HTMLElement, host: HTMLElement, px: number): void {
+  let floors = nodeFloors.get(nodeEl);
+  if (!floors) nodeFloors.set(nodeEl, (floors = new Map()));
+  if (px > 0) floors.set(host, px);
+  else floors.delete(host);
+  for (const h of floors.keys()) if (!h.isConnected && h !== host) floors.delete(h);
+  const max = Math.max(0, ...floors.values());
+  const want = max > 0 ? `${max}px` : "";
+  if (nodeEl.style.minWidth !== want) nodeEl.style.minWidth = want;
+}
+
 interface ResizableNode {
   size?: number[];
   computeSize?: () => [number, number] | number[];
@@ -367,7 +391,14 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   const mountName = mirror ? mirror.widgetName : widgetName;
   // A copy shares the subgraph node with other widgets, so a panel that
   // fills its own node (Debug) sizes to its content there instead.
-  if (mirror && options.fillHost) options = { ...options, fillHost: false, minHeight: Math.max(options.minHeight ?? 0, 240) };
+  // One policy from `sizing` and the older flags; the internals below still
+  // branch on the flags, now derived from it.
+  let sizing = resolveSizing(options.sizing, options);
+  if (mirror && sizing.height === "fill") {
+    sizing = { ...sizing, height: "grow" };
+    options = { ...options, minHeight: Math.max(options.minHeight ?? 0, 240) };
+  }
+  options = { ...options, ...flagsOf(sizing) };
   if (mirror) {
     const inner = component;
     const frame = mirror;
@@ -397,6 +428,12 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   }
   host.style.width = "100%";
   host.style.boxSizing = "border-box";
+  if (sizing.container) {
+    // The content reflows with `@container wp-node (max-width: …)`.
+    host.style.containerType = "inline-size";
+    host.style.containerName = "wp-node";
+    host.dataset.wpContainer = "";
+  }
 
   // Inner element receives Vue's mount. Its natural (content) height is what
   // we feed back as the node's required height. Observing the outer host
@@ -520,12 +557,24 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
   // documented in the Comfy-Org frontend source — layout asks us,
   // we don't push back via setSize. No observer cascade is possible
   // because nothing observes the DOM.
-  let minWidthGetter: (() => number) | null = null;
-  if (typeof options.minWidth === "function") {
-    minWidthGetter = options.minWidth;
-  } else if (typeof options.minWidth === "number") {
-    const captured = options.minWidth;
-    minWidthGetter = () => captured;
+  // The floor is the declared minimum, raised to the content's min-content
+  // width when the policy asks (`contentMinW`, measured with the height).
+  let contentMinW: number | null = null;
+  const inset = options.margin ?? 10;
+  const declaredMin = sizing.minWidth;
+  const minWidthGetter: (() => number) | null = declaredMin || sizing.contentWidth
+    ? () => widthFloor(declaredMin ? declaredMin() : 0, contentMinW, inset)
+    : null;
+  /** The content's narrowest width without overflow: its widest word,
+   *  fixed box or control. Read in layout px, so the canvas zoom never
+   *  changes it. */
+  function measureContentMin(): void {
+    if (!sizing.contentWidth) return;
+    const was = inner.style.width;
+    inner.style.width = "min-content";
+    const w = inner.offsetWidth;
+    inner.style.width = was;
+    if (w > 0) contentMinW = w;
   }
   if (minWidthGetter) {
     const getter = minWidthGetter;
@@ -581,6 +630,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       // correct an off-grid value after the fact.
       // An own-size node is exactly its content: LiteGraph grows the node
       // to this minimum, so a grid-snapped value would leave a gap under it.
+      measureContentMin();
       const next = options.ownSize ? Math.max(baseMin, measured) : snapToGrid(Math.max(baseMin, measured));
       if (next !== minHeight) minHeight = next;
       if (options.ownSize) return;
@@ -595,16 +645,20 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       //    tall size that breaks collapse autosizing).
       //  - default → delta-check user's drag and preserve it. Only
       //    grow when content demands more room.
-      const userControlsHeight =
-        !options.autoHeight
-        && lastAutoSetHeight !== 0
-        && Math.abs(cur[1] - lastAutoSetHeight) > 1;
+      // The first measurement after a load: a node a saved workflow made
+      // taller than its content was sized by hand and keeps its height.
+      const userControlsHeight = lastAutoSetHeight === 0
+        ? heightOwnedAtLoad(sizing.height, cur[1], min[1])
+        : !options.autoHeight && Math.abs(cur[1] - lastAutoSetHeight) > 1;
       const rawTargetH = userControlsHeight
         ? Math.max(cur[1], min[1])
         : min[1];
       // Width axis: always preserve user drag (current behavior).
-      const userControlsWidth =
-        lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
+      // Before our first resize, a node wider than its floor was sized by
+      // hand (a saved workflow restores sizes before we measure).
+      const userControlsWidth = lastAutoSetWidth === 0
+        ? cur[0] > min[0] + 1
+        : Math.abs(cur[0] - lastAutoSetWidth) > 1;
       const rawTargetW = userControlsWidth ? Math.max(cur[0], min[0]) : Math.max(cur[0], min[0]);
       // Snap both axes to LiteGraph's 10px node-size grid so auto-grow
       // lands on the same grid the user gets when they drag the corner.
@@ -628,6 +682,37 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
         }
       });
   if (resizeObserver) queueMicrotask(() => resizeObserver.observe(inner));
+
+  // The node's width into the content: `--wp-node-w` (layout px, never the
+  // zoomed screen size) and `data-wp-width` narrow / normal / wide.
+  const bandObserver = (sizing.narrow !== null || sizing.wide !== null || sizing.container) && typeof ResizeObserver !== "undefined"
+    ? new ResizeObserver((entries) => {
+        for (const e of entries) {
+          const w = Math.round(e.contentRect.width);
+          if (!(w > 0)) continue;
+          host.style.setProperty("--wp-node-w", `${w}px`);
+          const band = widthBand(w, sizing);
+          if (host.dataset.wpWidth !== band) host.dataset.wpWidth = band;
+        }
+      })
+    : null;
+  if (bandObserver) queueMicrotask(() => bandObserver.observe(host));
+
+  // Nodes 2.0 reads a node's width floor only off its element's inline
+  // `min-width` (see the fillHost notes below): publish it for every widget,
+  // or a node could be dragged narrower than its content needs.
+  let floorDispose: (() => void) | null = null;
+  if (!options.fillHost && !options.ownSize && minWidthGetter) {
+    const getter = minWidthGetter;
+    const sized = mount as unknown as { id?: string | number };
+    const syncFloor = (): void => {
+      if (!isVueNodes() || typeof document === "undefined" || sized.id == null) return;
+      const nodeEl = document.querySelector<HTMLElement>(`[data-node-id="${String(sized.id)}"]`);
+      if (nodeEl) publishFloor(nodeEl, host, snapToGrid(getter()));
+    };
+    registerFillSync(syncFloor);
+    floorDispose = () => unregisterFillSync(syncFloor);
+  }
 
   /* ── fillHost under the Vue renderer ──────────────────────────────────
    *
@@ -733,9 +818,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       // the west-corner position compensation for free. Writing `node.size[0]`
       // instead does NOT work: the layout store owns the rendered size and
       // syncs one-way into litegraph, so the model and the view disagree.
-      const wantMinW = minWidthGetter ? snapToGrid(minWidthGetter()) : 0;
-      const minPx = wantMinW > 0 ? `${wantMinW}px` : "";
-      if (nodeEl.style.minWidth !== minPx) nodeEl.style.minWidth = minPx;
+      publishFloor(nodeEl, host, minWidthGetter ? snapToGrid(minWidthGetter()) : 0);
     };
     // Keep it applied. A bounded retry is not enough: the renderer is
     // togglable at runtime, so the node element can appear minutes after the
@@ -779,8 +862,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       const min = resizable.computeSize?.();
       const cur = resizable.size;
       if (!min || !cur || !resizable.setSize) return;
-      const userControlsWidth =
-        lastAutoSetWidth !== 0 && Math.abs(cur[0] - lastAutoSetWidth) > 1;
+      // Before our first resize, a node wider than its floor was sized by
+      // hand (a saved workflow restores sizes before we measure).
+      const userControlsWidth = lastAutoSetWidth === 0
+        ? cur[0] > min[0] + 1
+        : Math.abs(cur[0] - lastAutoSetWidth) > 1;
       const rawTargetW = userControlsWidth
         ? Math.max(cur[0], min[0])  // preserve drag; grow only if needed
         : min[0];                    // we own width; follow min up OR down
@@ -799,8 +885,9 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       } else if (options.fillHost) {
         userControlsHeight = true;
       } else {
-        userControlsHeight =
-          lastAutoSetHeight !== 0 && Math.abs(cur[1] - lastAutoSetHeight) > 1;
+        userControlsHeight = lastAutoSetHeight === 0
+          ? heightOwnedAtLoad(sizing.height, cur[1], min[1])
+          : Math.abs(cur[1] - lastAutoSetHeight) > 1;
       }
       const rawTargetH = userControlsHeight
         ? Math.max(cur[1], min[1])
@@ -835,6 +922,8 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       () => scope.stop(),
       ...cleanups.splice(0).reverse(),
       () => resizeObserver?.disconnect(),
+      () => bandObserver?.disconnect(),
+      () => floorDispose?.(),
       () => fillDispose?.(),
       removeWheelShield,
       removeOverlapClip,
