@@ -132,7 +132,11 @@ const lockHint = computed(() => {
   const n = props.t.lock_targets?.length ?? 0;
   const what = props.t.lock === "value" ? "the value" : "the seed";
   const rows = `${n} row${n === 1 ? "" : "s"}`;
-  return props.effOn ? `Locks ${what} of ${rows} now` : `Locks ${what} of ${rows} while on`;
+  const f = props.t.lock_frame;
+  if (props.effOn && f != null) return `Locks ${what} of ${rows} on frame #${f + 1} only (picked in the Loop's Edit frame when it went on)`;
+  return props.effOn
+    ? `Locks ${what} of ${rows} now`
+    : `Locks ${what} of ${rows} while on (on the frame picked in the Loop's Edit frame, if any)`;
 });
 const upstreamHint = computed(() => `Upstream can set it: a yes/no ${props.t.var ? `$${props.t.var}` : "value"} from the Context above switches it`);
 const missingHint = computed(() => {
@@ -183,6 +187,7 @@ const missingHint = computed(() => {
             :spots="lockSpots ?? []"
             :hint="lockHint"
             :active="effOn"
+            :frame="effOn ? t.lock_frame : undefined"
             :toggle-id="t.id"
             @show="(key: string) => emit('show-lock', key)"
           />
@@ -214,6 +219,7 @@ const missingHint = computed(() => {
             :spots="lockSpots ?? []"
             :hint="lockHint"
             :active="effOn"
+            :frame="effOn ? t.lock_frame : undefined"
             :toggle-id="t.id"
             @show="(key: string) => emit('show-lock', key)"
           />
