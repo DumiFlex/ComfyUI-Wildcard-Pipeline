@@ -31,6 +31,15 @@ two packs with a rule on a drawn list / a multi-value accepts target).
 readable sheet (items with their options and tags, constraint cells,
 rules, the template, the check and sample prompts) and ``.json`` the plan
 and built payloads, so a pack can be read, or judged, after the run.
+With ``--save``, ``DIR/<n>-<slug>.calls.jsonl`` also holds every model
+call of that pack in order (schema name, settings, system + user text,
+history, the answer or error, the reasoning and seconds), so a failure can
+be traced to the call that made it and the calls replayed later.
+
+``--base-url URL`` runs against an OpenAI-compatible server (llama.cpp and
+its forks) without touching the saved settings: the provider becomes
+llama.cpp at that address, and without ``--model`` the server's first
+listed model is used.
 
 Exit 0 always; the report is the result. Reads the AI settings file the
 same way ComfyUI does (`WP_AI_CONFIG_PATH` overrides it).
@@ -351,6 +360,52 @@ def pack_sheet(request: str, result: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+class CallLog:
+    """Wraps a ``complete`` function and keeps every call it makes, so each
+    pack's calls can be written next to its sheet (``--save``)."""
+
+    def __init__(self, complete: Any) -> None:
+        self._complete = complete
+        self.calls: list[dict[str, Any]] = []
+
+    async def __call__(self, **kwargs: Any) -> Any:
+        from wp_api import _ai_client
+
+        entry: dict[str, Any] = {
+            "n": len(self.calls) + 1,
+            **{k: kwargs.get(k) for k in ("schema_name", "temperature", "max_tokens", "quick",
+                                          "partial", "num_ctx")},
+            "system": kwargs.get("system"), "user": kwargs.get("user"),
+            "history": kwargs.get("history"),
+        }
+        self.calls.append(entry)
+        started = time.perf_counter()
+        try:
+            answer = await self._complete(**kwargs)
+        except Exception as e:  # noqa: BLE001 - logged, then raised as before
+            entry["error"] = f"{type(e).__name__}: {e}"
+            raise
+        else:
+            entry["answer"] = answer
+            return answer
+        finally:
+            entry["seconds"] = round(time.perf_counter() - started, 1)
+            entry["thinking"] = _ai_client.last_thinking()
+
+    def take(self) -> list[dict[str, Any]]:
+        out, self.calls = self.calls, []
+        return out
+
+
+def save_calls(folder: Path, n: int, request: str, calls: list[dict[str, Any]]) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{n:02d}-{_slug(request)}.calls.jsonl"
+    with path.open("w", encoding="utf-8") as f:
+        for c in calls:
+            f.write(json.dumps(c, default=str, ensure_ascii=False) + "\n")
+    return path
+
+
 def save_pack(folder: Path, n: int, request: str, result: dict[str, Any]) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     base = folder / f"{n:02d}-{_slug(request)}"
@@ -376,13 +431,16 @@ async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
             continue
         req, feature = entry if isinstance(entry, tuple) else (entry, "")
         started = time.perf_counter()
+        log = CallLog(complete) if save is not None else None
         try:
-            result = await pack.run_pack(complete, req, seeds=seeds, settings=settings)
+            result = await pack.run_pack(log or complete, req, seeds=seeds, settings=settings)
         except Exception as e:  # noqa: BLE001 - every request is scored
             rows.append({"request": req, "plan": False, "feature": feature,
                          "error": f"{type(e).__name__}: {e}",
-                         "seconds": round(time.perf_counter() - started, 1)})
+                         "seconds": round(time.perf_counter() - started, 1),
+                         **_call_stats(log, save, n, req)})
             continue
+        calls = _call_stats(log, save, n, req)
         if save is not None:
             try:
                 save_pack(save, n, req, result)
@@ -390,9 +448,52 @@ async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
                 print(f"could not save pack {n}: {type(e).__name__}: {e}")
         rows.append({"request": req, "plan": True, **_score(result),
                      **(feature_scores(feature, result) if feature else {}),
-                     "log": result["log"][-12:],
-                     "seconds": round(time.perf_counter() - started, 1)})
+                     "log": result["log"][-12:], "issues": _issues(result),
+                     "seconds": round(time.perf_counter() - started, 1), **calls})
     return rows
+
+
+def _call_stats(log: CallLog | None, save: Path | None, n: int, req: str) -> dict[str, Any]:
+    """Writes the pack's calls (``--save``) and counts them per schema."""
+    if log is None or save is None:
+        return {}
+    calls = log.take()
+    try:
+        save_calls(save, n, req, calls)
+    except Exception as e:  # noqa: BLE001 - a log that fails is said, not fatal
+        print(f"could not save calls of pack {n}: {type(e).__name__}: {e}")
+    per: dict[str, int] = {}
+    for c in calls:
+        per[str(c.get("schema_name"))] = per.get(str(c.get("schema_name")), 0) + 1
+    return {"calls": len(calls), "call_errors": sum(1 for c in calls if c.get("error")),
+            "calls_by_schema": per,
+            "model_seconds": round(sum(c.get("seconds") or 0 for c in calls), 1)}
+
+
+def _issues(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every problem the check found, one row each, for the failure census:
+    where it was filed (item key / kind / name, or the pack), its text, and
+    relations that broke on the engine runs."""
+    plan, check = result["plan"], result.get("check") or {}
+    items = {i["key"]: i for i in plan.get("items") or []}
+    out: list[dict[str, Any]] = []
+    for key, problems in (check.get("problems") or {}).items():
+        item = items.get(key) or {}
+        for p in problems:
+            out.append({"where": key or "pack", "kind": item.get("kind"),
+                        "name": item.get("name"), "text": str(p)})
+    out += [{"where": "pack", "kind": "note", "name": None, "text": str(x)}
+            for x in check.get("notes") or []]
+    out += [{"where": "relation", "kind": "broken", "name": None, "text": r.get("text"),
+             "broken": r.get("broken"), "seen": r.get("seen")}
+            for r in check.get("relations") or []
+            if r.get("checked") and r.get("seen") and not r.get("holds")]
+    if not result["built"] and plan.get("items"):
+        out.append({"where": "pack", "kind": "unbuilt", "name": None,
+                    "text": "no item built"})
+    out += [{"where": "plan", "kind": "dropped_ref", "name": None, "text": str(b)}
+            for b in plan.get("bad_refs") or []]
+    return out
 
 
 def report(rows: list[dict], model: str) -> str:
@@ -443,6 +544,18 @@ def report(rows: list[dict], model: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _served_model(base_url: str) -> str:
+    """The first model an OpenAI-compatible server lists (``/models``)."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(base_url.rstrip("/") + "/models", timeout=10) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return str((data.get("data") or [{}])[0].get("id") or "local")
+    except Exception:  # noqa: BLE001 - llama.cpp takes any name
+        return "local"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--set", choices=("full", "smoke"), default="full",
@@ -452,6 +565,9 @@ def main() -> int:
     ap.add_argument("--only", default="",
                     help="run only these request numbers, e.g. 11,15 (as the report numbers them)")
     ap.add_argument("--model", default="")
+    ap.add_argument("--base-url", default="",
+                    help="an OpenAI-compatible server (llama.cpp and forks) to run against "
+                         "instead of the saved provider, e.g. http://127.0.0.1:18080/v1")
     ap.add_argument("--seeds", type=int, default=100)
     ap.add_argument("--out", default="pack-evals.md")
     ap.add_argument("--save", default="",
@@ -465,6 +581,9 @@ def main() -> int:
     from wp_api import _ai_client
 
     cfg = ai_config.load_effective()
+    if args.base_url:
+        cfg = {**cfg, "provider": "llamacpp", "api": "openai", "base_url": args.base_url,
+               "api_key": "", "local": True, "model": args.model or _served_model(args.base_url)}
     if args.model:
         cfg = {**cfg, "model": args.model}
     if not cfg.get("model"):
@@ -480,6 +599,9 @@ def main() -> int:
                                 save=Path(args.save) if args.save else None,
                                 only={int(x) for x in args.only.split(",") if x.strip().isdigit()}))
     title = f"{cfg['model']} ({args.planner} planner, drafts: {args.drafts})"
+    print("Settings: " + json.dumps({k: cfg.get(k) for k in (
+        "provider", "base_url", "model", "thinking", "sampling", "context_max",
+        "lean_prompt")}, default=str))
     Path(args.out).write_text(report(rows, title), encoding="utf-8")
     Path(args.out).with_suffix(".json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     print(f"Wrote {args.out}")
