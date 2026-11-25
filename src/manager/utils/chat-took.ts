@@ -17,17 +17,18 @@ export function tokensShort(n: number): string {
 
 interface Spent { prompt?: number; cached?: number; output?: number; calls?: number }
 
-/** What an answer used, short, under the reply: "12.4k tokens". */
+/** What an answer used, short, under the reply: "12.4k" (the icon and
+ *  the tooltip say tokens, so the row fits a narrow chat on one line). */
 export function spentLabel(s: Spent | undefined): string {
   const total = (s?.prompt ?? 0) + (s?.output ?? 0);
-  return total > 0 ? `${tokensShort(total)} tokens` : "";
+  return total > 0 ? tokensShort(total) : "";
 }
 
 /** The same, in full, for its tooltip. */
 export function spentTitle(s: Spent | undefined): string {
   if (!s) return "";
   const fmt = (n: number): string => n.toLocaleString();
-  const lines = [`Read ${fmt(s.prompt ?? 0)} tokens`];
+  const lines = [`${fmt((s.prompt ?? 0) + (s.output ?? 0))} tokens used`, `Read ${fmt(s.prompt ?? 0)} tokens`];
   if (s.cached) {
     const share = s.prompt ? Math.round((s.cached / s.prompt) * 100) : 0;
     lines.push(`  ${fmt(s.cached)} of them from the cache (${share}%)`);

@@ -28,7 +28,7 @@ describe("usage and time", () => {
   it("labels what an answer used, read plus written", async () => {
     const { spentLabel, spentTitle } = await import("../chat-took");
     const s = { prompt: 12_000, output: 400, cached: 9_000, calls: 2 };
-    expect(spentLabel(s)).toBe("12.4k tokens");
+    expect(spentLabel(s)).toBe("12.4k");
     expect(spentLabel(undefined)).toBe("");
     const title = spentTitle(s);
     expect(title).toContain("from the cache (75%)");

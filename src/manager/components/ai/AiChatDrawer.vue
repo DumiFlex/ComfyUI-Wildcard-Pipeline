@@ -1041,16 +1041,12 @@ onMounted(() => {
                 size="sm"
                 icon="pi-refresh"
                 :disabled="!!chat.retryBlocked()"
-                :title="chat.retryBlocked() || 'Ask the same message again for a new answer'"
+                aria-label="Try again"
+                :title="chat.retryBlocked() || undefined"
+                :hint="chat.retryBlocked() || 'Try again: ask the same message again for a new answer'"
                 data-test="ai-chat-retry"
                 @click="retry"
-              >Try again</Button>
-              <span
-                v-if="tookLabel(entry.result.elapsed_ms)"
-                class="wp-ai-chat__took"
-                title="How long this answer took (time waiting on you left out)"
-                data-test="ai-chat-took"
-              ><i class="pi pi-clock" aria-hidden="true" /> {{ tookLabel(entry.result.elapsed_ms) }}</span>
+              />
               <template v-if="entry.result.at">
                 <Button
                   variant="ghost"
@@ -1082,19 +1078,29 @@ onMounted(() => {
                   data-test="ai-chat-delete-turn"
                   @click="deleting = i"
                 />
+              </template>
+              <span class="wp-ai-chat__meta">
+                <span
+                  v-if="tookLabel(entry.result.elapsed_ms)"
+                  class="wp-ai-chat__took"
+                  title="How long this answer took (time waiting on you left out)"
+                  data-test="ai-chat-took"
+                ><i class="pi pi-clock" aria-hidden="true" /> {{ tookLabel(entry.result.elapsed_ms) }}</span>
                 <span
                   v-if="spentLabel(entry.result.spent)"
-                  class="wp-ai-chat__took wp-ai-chat__usage"
+                  class="wp-ai-chat__took"
                   :title="spentTitle(entry.result.spent)"
+                  :aria-label="`${spentLabel(entry.result.spent)} tokens used`"
                   data-test="ai-chat-usage"
                 ><i class="pi pi-database" aria-hidden="true" /> {{ spentLabel(entry.result.spent) }}</span>
                 <time
-                  class="wp-ai-chat__took wp-ai-chat__at"
+                  v-if="entry.result.at"
+                  class="wp-ai-chat__took"
                   :datetime="entry.result.at"
                   :title="fullTime(entry.result.at)"
                   data-test="ai-chat-at"
                 >{{ shortTime(entry.result.at) }}</time>
-              </template>
+              </span>
             </div>
 
             <article
@@ -1616,9 +1622,9 @@ onMounted(() => {
 .wp-ai-chat__editing { margin: 0 0 4px; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 8px; }
 .wp-ai-chat__msg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: -4px; }
 .wp-ai-chat__took { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 11px; color: var(--wp-text-dim); white-space: nowrap; }
-/* Usage and time sit at the right end; on a narrow chat they wrap together. */
-.wp-ai-chat__usage, .wp-ai-chat__at { margin-left: auto; }
-.wp-ai-chat__usage + .wp-ai-chat__at { margin-left: 8px; }
+/* Actions on the left; how long, tokens and when at the right end. */
+.wp-ai-chat__meta { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.wp-ai-chat__meta .wp-ai-chat__took { margin-left: 0; }
 .wp-ai-chat__took .pi { font-size: 10px; }
 .wp-ai-chat__card-summary { font-size: 12px; color: var(--wp-text-muted); }
 .wp-ai-chat__card-parts { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }

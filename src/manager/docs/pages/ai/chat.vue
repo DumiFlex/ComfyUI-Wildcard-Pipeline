@@ -231,10 +231,10 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <DocKeyList
         :items="[
           { term: 'Stop', desc: 'Ends the answer.' },
-          { term: 'Try again', desc: 'Asks the same message again; the new answer replaces the old one. It waits until you undo changes you applied from that answer.' },
+          { term: 'Try again', desc: 'The circular arrow under the last answer asks the same message again; the new answer replaces the old one. It waits until you undo changes you applied from that answer.' },
           { term: 'Edit', desc: 'The pencil on your last message puts it back in the box to change and send again (Esc cancels).' },
           { term: 'Copy', desc: 'Copies an answer as Markdown.' },
-          { term: 'Time', desc: 'Beside Copy, how long the answer took. Time spent waiting on you (a question, a web search to allow) is left out.' },
+          { term: 'Time', desc: 'At the right under an answer (clock), how long it took. Time spent waiting on you (a question, a web search to allow) is left out.' },
           { term: 'Thumbs up / down', desc: 'Rates an answer; the same thumb again takes it back. The rating is kept with the chat on this computer only and is never sent anywhere.' },
           { term: 'Delete this turn', desc: 'The bin under an answer removes it and the message it answered, for you and for the model from the next message on. A summary written before keeps what it said. Not while an answer is being written.' },
           { term: 'Usage and time', desc: 'Under each answer: the tokens it used (hover for what was read, how much came from the cache, what was written and how many model calls) and when it finished.' },
