@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { defineComponent, h } from "vue";
 import { flagsOf, heightOwnedAtLoad, resolveSizing, widthBand, widthFloor } from "./node-sizing";
 import { createDomWidgetHost, type DomWidget } from "./_shared";
@@ -100,5 +100,34 @@ describe("createDomWidgetHost sizing", () => {
     createDomWidgetHost(n, "w", Leaf, { sizing: { width: { min: 255 } } });
     // Snapped up to the 10 px grid.
     expect(made.w?.computeLayoutSize?.().minWidth).toBe(260);
+  });
+
+  describe("while a pointer is held", () => {
+    const real = globalThis.ResizeObserver;
+    afterEach(() => { globalThis.ResizeObserver = real; });
+
+    it("waits for the release before resizing the node", async () => {
+      const fire: Array<(e: ResizeObserverEntry[]) => void> = [];
+      globalThis.ResizeObserver = class {
+        constructor(cb: (e: ResizeObserverEntry[]) => void) { fire.push(cb); }
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      } as unknown as typeof ResizeObserver;
+      const setSize = vi.fn((s: number[]) => { n.size = s; });
+      const n = { ...node(), size: [300, 100], computeSize: () => [300, 180], setSize, setDirtyCanvas: () => {} };
+      createDomWidgetHost(n, "w", Leaf, { sizing: { height: "content" } });
+      await Promise.resolve();
+      const grow = (): void => { for (const cb of fire) cb([{ contentRect: { height: 160 } } as unknown as ResizeObserverEntry]); };
+
+      window.dispatchEvent(new Event("pointerdown"));
+      grow();
+      await Promise.resolve();
+      expect(setSize).not.toHaveBeenCalled();
+
+      window.dispatchEvent(new Event("pointerup"));
+      await Promise.resolve();
+      expect(setSize).toHaveBeenCalledWith([300, 180]);
+    });
   });
 });
