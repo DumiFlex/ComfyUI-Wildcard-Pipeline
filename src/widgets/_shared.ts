@@ -271,6 +271,31 @@ function adoptStaleSlot(node: unknown, widgetName: string, host: HTMLElement): v
   requestAnimationFrame(tick);
 }
 
+/* ── No resizing under a held pointer ─────────────────────────────────
+ *
+ * While the user drags a node's corner, both canvases set the node's size
+ * from the pointer on every move. A setSize of ours in between (the content
+ * got taller as it reflowed narrower) fights that drag: the node flicks
+ * between our height and the pointer's on each move. So while any pointer
+ * button is down, a widget only notes that it wants a resize and does it once
+ * the button comes up. */
+let pointerHeld = false;
+const afterRelease = new Map<HTMLElement, () => void>();
+function flushAfterRelease(): void {
+  pointerHeld = false;
+  const pending = [...afterRelease.values()];
+  afterRelease.clear();
+  for (const run of pending) {
+    try { run(); } catch (err) { console.error("[wp] deferred resize failed", err); }
+  }
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", () => { pointerHeld = true; }, true);
+  window.addEventListener("pointerup", flushAfterRelease, true);
+  window.addEventListener("pointercancel", flushAfterRelease, true);
+  window.addEventListener("blur", flushAfterRelease);
+}
+
 /** Each node element's width floor per widget host: a node with two WP
  *  widgets (the Assembler) takes the larger. */
 const nodeFloors = new WeakMap<HTMLElement, Map<HTMLElement, number>>();
@@ -580,10 +605,19 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
         el.style.contain = "inline-size";
       }
     }
+    // A container widget is measured in its NARROWEST layout (the host
+    // squeezed to nothing, so every `@container wp-node (max-width: …)` rule
+    // applies). Measured in the layout it happens to be in, the floor jumped
+    // as the node crossed a breakpoint: the wide layout's floor sat above the
+    // narrow one's, so a drag into the narrow layout let the floor drop, and a
+    // drag back out raised it under the pointer.
+    const hostWas = host.style.width;
+    if (sizing.container) host.style.width = "0px";
     const was = inner.style.width;
     inner.style.width = "min-content";
     const w = inner.offsetWidth;
     inner.style.width = was;
+    if (sizing.container) host.style.width = hostWas;
     for (const [el, c] of cut) el.style.contain = c;
     if (w > 0) contentMinW = w;
   }
@@ -645,6 +679,11 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       const next = options.ownSize ? Math.max(baseMin, measured) : snapToGrid(Math.max(baseMin, measured));
       if (next !== minHeight) minHeight = next;
       if (options.ownSize) return;
+      // Mid-drag: resize once the pointer comes up (see `pointerHeld`).
+      if (pointerHeld) {
+        afterRelease.set(host, () => pushSize(inner.offsetHeight || measured));
+        return;
+      }
 
       const min = resizable.computeSize?.();
       const cur = resizable.size;
@@ -933,6 +972,7 @@ export function createDomWidgetHost<P extends Record<string, unknown>>(
       () => scope.stop(),
       ...cleanups.splice(0).reverse(),
       () => resizeObserver?.disconnect(),
+      () => { afterRelease.delete(host); },
       () => bandObserver?.disconnect(),
       () => floorDispose?.(),
       () => fillDispose?.(),
