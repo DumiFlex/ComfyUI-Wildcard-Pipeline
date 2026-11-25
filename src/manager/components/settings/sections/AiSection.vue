@@ -267,7 +267,7 @@ const autoLabel = computed(() => {
   const f = contextFound.value;
   if (!f?.detected) return "Automatic · from the model when it says (recommended)";
   return f.used < f.detected
-    ? `Automatic · ${sizeLabel(f.used)} (the model takes ${sizeLabel(f.detected)}) (recommended)`
+    ? `Automatic · ${sizeLabel(f.used)} (model: ${sizeLabel(f.detected)}) (recommended)`
     : `Automatic · ${sizeLabel(f.used)} from the model (recommended)`;
 });
 const contextOptions = computed<SelectOption[]>(() => [

@@ -245,7 +245,7 @@ describe("Settings › AI assistant", { timeout: 20_000 }, () => {
     await flushPromises();
     const preset = () => w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-context-preset");
     const labels = preset()?.props("options").map((o) => o.label) ?? [];
-    expect(labels[0]).toBe("Automatic · 32k (the model takes 128k) (recommended)");
+    expect(labels[0]).toBe("Automatic · 32k (model: 128k) (recommended)");
     expect(labels).toContain("16k · 16,384 tokens (minimum)");
     expect(preset()?.props("modelValue")).toBe(8192);
     await w.get('[data-test="ai-reset"]').trigger("click");
