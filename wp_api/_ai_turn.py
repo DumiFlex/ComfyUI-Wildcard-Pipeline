@@ -629,7 +629,7 @@ async def _prepare(
                 text, last=step >= ai_chat.MAX_STEPS - 1, native=fmt == "native",
                 split=_splits(cfg, meta, fmt))
         new.append(ai_chatlog.results_entry(items, tail))
-    num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
+    num_ctx = await _ai_client.context_cap(cfg)
     window = await _window(cfg, meta)
     base_prof = prof
     prof, fixed = _chat_profile(base_prof, cfg, meta, fmt, snapshot, window)

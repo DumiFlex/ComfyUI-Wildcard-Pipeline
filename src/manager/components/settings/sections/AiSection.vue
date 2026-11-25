@@ -102,15 +102,13 @@ const perModelNote = computed(() => {
  * stays: the provider, addresses, keys, models, embedding and web search,
  * and the Danbooru lookup (its recommendation depends on the image model). */
 const RECOMMENDED = {
-  model_size: "auto", thinking: "auto", unload_after_s: 60,
+  model_size: "auto", thinking: "auto", unload_after_s: 60, context_auto: true,
   tool_format: "auto", choose_first: false, lean_prompt: false, allow_delete: false,
   auto_apply: false, request_language: "auto",
   web_always_allow: false,
 } as const;
-/* Context is a floor, not a pick: under 16k the chat's instructions don't
- * fit, so Reset raises a smaller window to 32k and leaves a bigger one. */
+/* Under 16k the chat's instructions don't fit (labelled "minimum"). */
 const CONTEXT_MIN = 16384;
-const CONTEXT_RESET = 32768;
 const RECOMMENDED_UI = {
   explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true, chatTyping: false,
   chatDetail: "standard",
@@ -122,7 +120,7 @@ const DETAIL_OPTIONS: SelectOption[] = [
   { value: "verbose", label: "Verbose · everything open, answers never fold" },
 ];
 const RESET_LABELS: Record<string, string> = {
-  model_size: "Model size", context_max: "Most context to use", thinking: "Thinking",
+  model_size: "Model size", context_auto: "Most context to use", thinking: "Thinking",
   unload_after_s: "Unload the model after", tool_format: "Tool format",
   choose_first: "Choose the tool first", lean_prompt: "Short tool list", allow_delete: "Let the assistant delete items",
   auto_apply: "Apply small changes automatically", web_always_allow: "Don't ask before web calls",
@@ -139,7 +137,6 @@ const resetChanges = computed<string[]>(() => {
   if (!c) return [];
   const server = (Object.keys(RECOMMENDED) as Array<keyof typeof RECOMMENDED>)
     .filter((k) => (c[k] ?? RECOMMENDED[k]) !== RECOMMENDED[k]);
-  if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) server.push("context_max" as never);
   if (Object.keys(c.sampling ?? {}).length) server.push("sampling" as never);
   const local = (Object.keys(RECOMMENDED_UI) as Array<keyof typeof RECOMMENDED_UI>)
     .filter((k) => ui[k] !== RECOMMENDED_UI[k]);
@@ -151,7 +148,6 @@ async function resetToRecommended(): Promise<void> {
   if (!c) return;
   const p: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(RECOMMENDED)) if ((c[k as keyof typeof RECOMMENDED] ?? v) !== v) p[k] = v;
-  if ((c.context_max ?? CONTEXT_MIN) < CONTEXT_MIN) p.context_max = CONTEXT_RESET;
   const samplers = Object.keys(c.sampling ?? {});
   if (samplers.length) p.sampling = Object.fromEntries(samplers.map((k) => [k, null]));
   if (Object.keys(p).length && !(await patch(p as Parameters<typeof save>[0]))) return;
@@ -256,17 +252,43 @@ const CONTEXT_PRESETS = [4096, 8192, 16384, 24576, 32768, 65536, 131072, 262144,
 /** The engine's ceiling (`config.CONTEXT_MAX`): 1M, the largest window any provider offers. */
 const CONTEXT_CEIL = 1048576;
 const contextCustom = ref(false);
+/* Automatic: the window the model reports (`GET /ai/context`), asked again
+   when the provider or model changes. */
+const AUTO = "auto";
+const contextFound = ref<{ detected: number | null; used: number } | null>(null);
+const sizeLabel = (n: number): string => (n >= 1048576 ? `${n / 1048576}M` : `${Math.round(n / 1024)}k`);
+watch(() => [config.value?.enabled, config.value?.provider, config.value?.base_url, config.value?.model] as const,
+  async ([on]) => {
+    contextFound.value = null;
+    if (!on) return;
+    try { contextFound.value = await api.ai.context(); } catch { contextFound.value = null; }
+  }, { immediate: true });
+const autoLabel = computed(() => {
+  const f = contextFound.value;
+  if (!f?.detected) return "Automatic · from the model when it says (recommended)";
+  return f.used < f.detected
+    ? `Automatic · ${sizeLabel(f.used)} (model: ${sizeLabel(f.detected)}) (recommended)`
+    : `Automatic · ${sizeLabel(f.used)} from the model (recommended)`;
+});
 const contextOptions = computed<SelectOption[]>(() => [
+  { value: AUTO, label: autoLabel.value },
   ...CONTEXT_PRESETS.map((n) => ({
     value: n,
-    label: `${n >= 1048576 ? `${n / 1048576}M` : `${n / 1024}k`} · ${n.toLocaleString("en-US")} tokens${n === CONTEXT_MIN ? " (minimum)" : n === CONTEXT_RESET ? " (recommended)" : ""}`,
+    label: `${n >= 1048576 ? `${n / 1048576}M` : `${n / 1024}k`} · ${n.toLocaleString("en-US")} tokens${n === CONTEXT_MIN ? " (minimum)" : ""}`,
   })),
   { value: CUSTOM, label: "Custom…" },
 ]);
 const contextChoice = computed(() =>
-  !contextCustom.value && CONTEXT_PRESETS.includes(contextDraft.value) ? contextDraft.value : CUSTOM);
+  contextCustom.value ? CUSTOM
+    : config.value?.context_auto ? AUTO
+      : CONTEXT_PRESETS.includes(contextDraft.value) ? contextDraft.value : CUSTOM);
 async function pickContext(v: string | number | null): Promise<void> {
   if (v === CUSTOM) { contextCustom.value = true; return; }
+  if (v === AUTO) {
+    contextCustom.value = false;
+    if (!config.value?.context_auto) await patch({ context_auto: true });
+    return;
+  }
   if (typeof v !== "number") return;
   contextCustom.value = false;
   contextDraft.value = v;
@@ -294,7 +316,9 @@ async function commitContext(): Promise<void> {
   const n = Math.min(CONTEXT_CEIL, Math.max(4096, Math.round(Number(contextDraft.value))));
   if (!Number.isFinite(n)) { contextDraft.value = config.value?.context_max ?? 16384; return; }
   contextDraft.value = n;
-  if (n !== config.value?.context_max) await patch({ context_max: n });
+  if (n !== config.value?.context_max || config.value?.context_auto) {
+    await patch({ context_max: n, context_auto: false });
+  }
 }
 
 /* ── Sampling ─────────────────────────────────────────────────────────
@@ -920,8 +944,8 @@ const off = computed(() => !config.value?.enabled);
             v-if="isLocal"
             form
             label="Most context to use"
-            recommended="At least 16k; 32k or more for chats that take several steps"
-            hint="Tokens of context the assistant uses. Ollama gets this much for the whole chat (changing it reloads the model, which throws away what it already read); drafts ask for what they need, up to this. Lower it if the model runs out of GPU memory; 16k or more keeps the chat's instructions whole. LM Studio and llama.cpp set this when the model loads, so set it there too."
+            recommended="Automatic"
+            hint="Tokens of context the assistant uses. Automatic reads it from the model: what LM Studio or llama.cpp loaded it with, or what an Ollama model was trained for, up to 32k (Ollama reserves GPU memory for the whole window, and changing it reloads the model). Pick a size to set it yourself: lower it if the model runs out of GPU memory; 16k or more keeps the chat's instructions whole."
             setting-key="ai-context"
             for="ai-context"
           >

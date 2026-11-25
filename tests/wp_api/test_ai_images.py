@@ -178,3 +178,4 @@ async def test_llamacpp_props_say_vision(monkeypatch):
     monkeypatch.setattr(_ai_chat.client, "_request", req)
     assert await _ai_chat.vision_support({"api": "openai", "local": True,
                                           "base_url": "http://h/v1", "model": "g"}) is True
+

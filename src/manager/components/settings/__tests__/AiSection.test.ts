@@ -10,7 +10,7 @@ import { _resetAiConfigForTests } from "../../../composables/useAiConfig";
 import type { AiConfig, AiConfigPatch, AiIndexStatus, AiSampling } from "../../../api/types";
 
 vi.mock("../../../api/client", () => ({
-  api: { ai: { config: vi.fn(), saveConfig: vi.fn(), models: vi.fn(), test: vi.fn(), index: vi.fn(), rebuildIndex: vi.fn() } },
+  api: { ai: { config: vi.fn(), saveConfig: vi.fn(), models: vi.fn(), test: vi.fn(), index: vi.fn(), rebuildIndex: vi.fn(), context: vi.fn() } },
   ApiError: class ApiError extends Error {},
 }));
 
@@ -33,7 +33,7 @@ function cfg(over: Omit<Partial<AiConfig>, "sampling"> & { sampling?: AiConfigPa
   const { sampling, ...rest } = over;
   return {
     enabled: false, provider: "ollama", base_url: "", model: "", unload_after_s: 60,
-    context_max: 16384, model_size: "auto", model_size_auto: "medium", tool_format: "auto", thinking: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, reader_engine: "builtin", reader_url: "", reader_keys_saved: [], reader_engines: { builtin: { label: "Built in (page text)", needs_key: false, needs_url: false, base_url: "" }, crawl4ai: { label: "Crawl4AI (your server)", needs_key: false, needs_url: true, base_url: "" }, firecrawl: { label: "Firecrawl", needs_key: true, needs_url: false, base_url: "https://api.firecrawl.dev" } }, danbooru_lookup: false, web_always_allow: false, key_for_host: null,
+    context_max: 16384, context_auto: false, model_size: "auto", model_size_auto: "medium", tool_format: "auto", thinking: "auto", allow_delete: false, auto_apply: false, embed_model: "", embed_base_url: "", embed_api: "auto", search_engine: "off", search_url: "", search_keys_saved: [], search_engines: { searxng: { label: "SearXNG", needs_key: false }, brave: { label: "Brave Search", needs_key: true }, tavily: { label: "Tavily", needs_key: true }, kagi: { label: "Kagi", needs_key: true } }, reader_engine: "builtin", reader_url: "", reader_keys_saved: [], reader_engines: { builtin: { label: "Built in (page text)", needs_key: false, needs_url: false, base_url: "" }, crawl4ai: { label: "Crawl4AI (your server)", needs_key: false, needs_url: true, base_url: "" }, firecrawl: { label: "Firecrawl", needs_key: true, needs_url: false, base_url: "https://api.firecrawl.dev" } }, danbooru_lookup: false, web_always_allow: false, key_for_host: null,
     key_set: false, key_from_env: false, keys_saved: [], presets: PRESETS, embed_key_set: false, embed_key_own: false,
     local: PRESETS[over.provider ?? "ollama"].local, ...rest,
     ...(sampling ? { sampling: samplers(sampling) } : {}),
@@ -56,6 +56,7 @@ describe("Settings › AI assistant", { timeout: 20_000 }, () => {
     vi.mocked(api.ai.test).mockReset();
     vi.mocked(api.ai.index).mockReset().mockResolvedValue(INDEX);
     vi.mocked(api.ai.rebuildIndex).mockReset();
+    vi.mocked(api.ai.context).mockReset().mockResolvedValue({ detected: null, used: 16384, model: "" });
   });
 
   it("starts off, with Test connection disabled and the local privacy note", async () => {
@@ -231,25 +232,28 @@ describe("Settings › AI assistant", { timeout: 20_000 }, () => {
     await w.get('[data-test="ai-reset-confirm"]').trigger("click");
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({
-      thinking: "auto", tool_format: "auto", allow_delete: false,
+      thinking: "auto", tool_format: "auto", allow_delete: false, context_auto: true,
     });
     expect(w.get('[data-test="ai-reset"]').attributes("disabled")).toBeDefined();
   });
 
-  it("treats 16k context as a floor: Reset raises a smaller window and keeps a bigger one", async () => {
+  it("offers Automatic context, read from the model, and Reset turns it back on", async () => {
     vi.mocked(api.ai.config).mockResolvedValue(cfg({ enabled: true, context_max: 8192 }));
+    vi.mocked(api.ai.context).mockResolvedValue({ detected: 131072, used: 32768, model: "qwen" });
     vi.mocked(api.ai.saveConfig).mockImplementation(async (p) => cfg({ enabled: true, ...(p as Partial<AiConfig>) }));
     const w = mount(AiSection, { global: { plugins: [router] } });
     await flushPromises();
-    const labels = w.findAllComponents(Select)
-      .find((c) => c.attributes("data-test") === "ai-context-preset")?.props("options").map((o) => o.label) ?? [];
+    const preset = () => w.findAllComponents(Select).find((c) => c.attributes("data-test") === "ai-context-preset");
+    const labels = preset()?.props("options").map((o) => o.label) ?? [];
+    expect(labels[0]).toBe("Automatic · 32k (model: 128k) (recommended)");
     expect(labels).toContain("16k · 16,384 tokens (minimum)");
-    expect(labels).toContain("32k · 32,768 tokens (recommended)");
+    expect(preset()?.props("modelValue")).toBe(8192);
     await w.get('[data-test="ai-reset"]').trigger("click");
     expect(w.get('[data-test="ai-reset-list"]').text()).toContain("Most context to use");
     await w.get('[data-test="ai-reset-confirm"]').trigger("click");
     await flushPromises();
-    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 32768 });
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_auto: true });
+    expect(preset()?.props("modelValue")).toBe("auto");
   });
 
   it("marks cloud providers that already have a saved key", async () => {
@@ -342,7 +346,7 @@ describe("Settings › AI assistant", { timeout: 20_000 }, () => {
     expect(w.find('[data-test="ai-context"]').exists()).toBe(false);
     pick("ai-context-preset").vm.$emit("update:modelValue", 32768);
     await flushPromises();
-    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 32768 });
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 32768, context_auto: false });
     pick("ai-unload-preset").vm.$emit("update:modelValue", 300);
     await flushPromises();
     expect(api.ai.saveConfig).toHaveBeenCalledWith({ unload_after_s: 300 });
@@ -352,7 +356,7 @@ describe("Settings › AI assistant", { timeout: 20_000 }, () => {
     await ctx.setValue(1000);
     await ctx.trigger("blur");
     await flushPromises();
-    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 4096 });
+    expect(api.ai.saveConfig).toHaveBeenCalledWith({ context_max: 4096, context_auto: false });
   });
 
   it("turns meaning search on from the embedding model list", async () => {

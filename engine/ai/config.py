@@ -140,6 +140,11 @@ DEFAULTS: dict[str, Any] = {
     "model": "",
     "unload_after_s": 60,
     "context_max": 16384,
+    # Use the window the model itself reports (LM Studio / llama.cpp: what it
+    # was loaded with; Ollama: what the model was trained on, up to
+    # `AUTO_OLLAMA_CAP`; Claude and OpenRouter: what the provider lists)
+    # instead of `context_max`, which stays the fallback when nothing says.
+    "context_auto": True,
     # How the chat calls tools: "auto" (native tool calls where the server
     # says the model takes them, else the JSON step format), "native" or
     # "json".
@@ -192,8 +197,8 @@ SAMPLING: dict[str, tuple[float, float, bool]] = {
 TOOL_FORMATS = ("auto", "native", "json")
 #: Settings that follow the provider and model (see the module docstring).
 #: `RESET_ON_NEW_MODEL` start at "auto" for a model with nothing saved.
-MODEL_FIELDS = ("thinking", "model_size", "context_max", "tool_format", "sampling",
-                "choose_first", "lean_prompt")
+MODEL_FIELDS = ("thinking", "model_size", "context_max", "context_auto", "tool_format",
+                "sampling", "choose_first", "lean_prompt")
 RESET_ON_NEW_MODEL = ("thinking", "model_size")
 #: How many models per provider keep their own settings (the oldest go).
 MODELS_KEPT = 40
@@ -315,6 +320,12 @@ def _normalize_model_fields(src: dict[str, Any], fallback: dict[str, Any]) -> di
         return got is True
 
     raw_context = src.get("context_max", fallback.get("context_max"))
+    context_max = _clamp_int(raw_context, CONTEXT_MIN, CONTEXT_MAX, DEFAULTS["context_max"])
+    # Saved before Automatic existed: a size the user changed stays theirs,
+    # the untouched default becomes Automatic.
+    raw_auto = src.get("context_auto", fallback.get("context_auto"))
+    context_auto = raw_auto if isinstance(raw_auto, bool) \
+        else context_max == DEFAULTS["context_max"]
     raw_sampling = src.get("sampling")
     if not isinstance(raw_sampling, dict):
         got = fallback.get("sampling")
@@ -330,7 +341,8 @@ def _normalize_model_fields(src: dict[str, Any], fallback: dict[str, Any]) -> di
     return {
         "thinking": pick("thinking", THINKING),
         "model_size": pick("model_size", MODEL_SIZES),
-        "context_max": _clamp_int(raw_context, CONTEXT_MIN, CONTEXT_MAX, DEFAULTS["context_max"]),
+        "context_max": context_max,
+        "context_auto": context_auto,
         "tool_format": pick("tool_format", TOOL_FORMATS),
         "sampling": sampling,
         "choose_first": flag("choose_first"),
@@ -511,6 +523,7 @@ def _active(cfg: dict[str, Any]) -> dict[str, Any]:
         "model": slot["model"],
         "unload_after_s": slot["unload_after_s"],
         "context_max": slot["context_max"],
+        "context_auto": slot["context_auto"],
         "model_size": slot["model_size"],
         "tool_format": slot["tool_format"],
         "thinking": slot["thinking"],
@@ -767,7 +780,7 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
     with _lock:
         cfg = _read()
         for flag in ("enabled", "allow_delete", "auto_apply", "danbooru_lookup",
-                     "web_always_allow", "choose_first", "lean_prompt"):
+                     "web_always_allow", "choose_first", "lean_prompt", "context_auto"):
             if flag in patch and not isinstance(patch[flag], bool):
                 raise ConfigError(f"{flag} must be true or false")
         for flag in ("enabled", "allow_delete", "auto_apply", "danbooru_lookup",
@@ -795,7 +808,7 @@ def update(patch: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(patch["model"], str):
                 raise ConfigError("model must be a string")
             _switch_model(slot, patch["model"].strip()[:200])
-        for flag in ("choose_first", "lean_prompt"):
+        for flag in ("choose_first", "lean_prompt", "context_auto"):
             if flag in patch:
                 slot[flag] = patch[flag]
         if "embed_model" in patch:
