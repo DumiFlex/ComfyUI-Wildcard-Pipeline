@@ -225,6 +225,24 @@ async def test_run_pack_and_eval_report():
     [bad] = await evals.evaluate(broken, ["x"], seeds=5)
     assert bad["plan"] is False and "down" in bad["error"]
 
+    # --save keeps every model call of a pack (the failure census) and
+    # lists the check's problems one by one.
+    import json
+    import tempfile
+
+    refines.clear()
+    with tempfile.TemporaryDirectory() as tmp:
+        [saved] = await evals.evaluate(complete, ["fantasy"], seeds=20, save=Path(tmp))
+        log = Path(tmp) / "01-fantasy.calls.jsonl"
+        calls = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
+        [bad_saved] = await evals.evaluate(broken, ["x"], seeds=5, save=Path(tmp))
+        failed = (Path(tmp) / "01-x.calls.jsonl").read_text(encoding="utf-8")
+    assert saved["calls"] == len(calls) > 0 and saved["calls_by_schema"]["pack_plan"] == 3
+    assert calls[0]["schema_name"] == "pack_plan" and calls[0]["user"] and "answer" in calls[0]
+    assert [c["n"] for c in calls] == list(range(1, len(calls) + 1))
+    assert len(saved["issues"]) == saved["problems"] == 1, saved["issues"]
+    assert bad_saved["call_errors"] == 1 and "down" in failed
+
 
 PLAN2 = {
     "title": "Winter Looks", "summary": "Winter outfits.", "rating": "safe", "questions": [],
