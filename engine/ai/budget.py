@@ -20,7 +20,7 @@ CHARS_PER_TOKEN = 3.2
 #: Room left for the answer when sizing the window.
 ANSWER_TOKENS = 3072
 CONTEXT_MIN = 4096
-CONTEXT_MAX = 131072
+CONTEXT_MAX = 1048576
 CONTEXT_DEFAULT = 16384
 
 SIZES = ("small", "medium", "large")

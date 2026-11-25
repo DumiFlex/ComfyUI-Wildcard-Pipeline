@@ -1548,6 +1548,13 @@ export interface AiChatStep {
   /** What the model thought in that step (its reasoning, or a JSON-mode
    *  step's plan): shown folded as "Thinking". */
   think?: boolean;
+  /** Not the model's work: a retry or fallback the server made ("Asked
+   *  again in JSON steps"), shown as its own muted row. */
+  notice?: boolean;
+  /** When the step ended, in ms since the answer started. */
+  at?: number;
+  /** The library item a read step read, so the drawer can link it. */
+  item?: { id: string; type: string; name: string };
   card?: AiTestCard;
 }
 
@@ -1800,6 +1807,8 @@ export type AiChatStreamEvent =
   | { type: "thinking"; v?: string }
   | { type: "text"; v: string }
   | { type: "tool"; step: AiChatStep }
+  /** A call about to run, said from its own args ("Reading Hair Color"). */
+  | { type: "doing"; tool: string; v: string }
   /** An emoji on the user's message, sent as soon as it is decided. */
   | { type: "reaction"; emoji: string }
   | { type: "done"; result: AiChatResult }

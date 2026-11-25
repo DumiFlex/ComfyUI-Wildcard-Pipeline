@@ -62,7 +62,9 @@ FALLBACK_FILENAME = "wp-ai.json"
 UNLOAD_AFTER_MIN = 0
 UNLOAD_AFTER_MAX = 3600
 CONTEXT_MIN = 4096
-CONTEXT_MAX = 131072
+#: 1M: the largest window any provider offers (Claude, Gemini); local
+#: servers go to 256k and past.
+CONTEXT_MAX = 1048576
 #: "auto" reads the size from the model's name (engine/ai/budget.py).
 MODEL_SIZES = ("auto", "small", "medium", "large")
 

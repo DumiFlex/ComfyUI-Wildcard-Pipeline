@@ -234,3 +234,9 @@ def test_only_so_many_models_are_remembered():
     models = stored["providers"]["ollama"]["models"]
     assert len(models) == ai_config.MODELS_KEPT
     assert "m0" not in models and f"m{ai_config.MODELS_KEPT + 4}" in models
+
+
+def test_context_goes_up_to_one_million_and_no_further():
+    # Dumi: a custom size stopped at 128k; Claude and Gemini take 1M.
+    assert ai_config.update({"context_max": 262144})["context_max"] == 262144
+    assert ai_config.update({"context_max": 5_000_000})["context_max"] == 1048576

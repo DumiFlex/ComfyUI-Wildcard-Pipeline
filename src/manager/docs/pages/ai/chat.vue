@@ -243,16 +243,35 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         ]"
       />
       <p>
-        While it works, a line shows what the model is doing (reading, thinking, writing) and for
-        how long; the same line shows in the top bar on every page. What it writes between steps
-        folds into a <b>Working note</b>, and a thinking model's reasoning folds into
-        <b>Thinking</b>. To see only replies and cards, turn off <b>Show thinking</b>, <b>Show
-        working notes</b> or <b>Show what it did</b> under <b>Settings › AI assistant › Chat</b>.
-        The reply arrives whole when it is done; turn on <b>Type out replies</b> there to watch it
-        appear word by word instead (and the Thinking box fill as the model thinks). When nothing
-        has come back for ten seconds the line says so: the model may be busy with another
-        request (LM Studio answers one at a time unless its model allows more in parallel),
-        still loading, or reading a long prompt. The server can't tell which.
+        While it works, a line shows what the model is doing and for how long: "Reading your
+        message", "Thinking", "Reading Hair Color", "Searching "red hair"", "Testing Outfit on
+        100 seeds", "Writing the answer". The same line shows in the top bar on every page. Only
+        when nothing new has happened for a while does it say something playful now and then
+        ("Shuffling…"), never over a real action.
+      </p>
+      <p>
+        Above the reply, the work is folded. Everything the model did between two things it said
+        is one <b>group</b>, titled by what it did ("Read 2 items and searched once · 4 s"); open
+        it to see each step, with each thinking block as one line you can open, and the item a
+        read looked at as a chip that opens it. What the model says between groups stays in
+        view. While it works, the group it is on names its newest step or its thinking so far.
+        Once the answer is done, all of its work folds under one line, <b>Worked for 1 min
+        12 s</b> and what it did in short; click it to open the groups. A retry the server made
+        (asked again in JSON steps, asked for the rest of a cut-off reply) shows as its own
+        muted line.
+      </p>
+      <p>
+        <b>Settings › AI assistant › Chat › Work details</b> sets how much shows:
+        <b>Compact</b> (one line per answer while it works), <b>Standard</b> (groups folded),
+        <b>Detailed</b> (the group being worked on stays open) or <b>Verbose</b> (everything open,
+        answers never fold). To leave kinds out altogether, turn off <b>Show thinking</b>,
+        <b>Show working notes</b> or <b>Show what it did</b> there. The reply arrives whole when
+        it is done; turn on <b>Type out replies</b> to watch it appear word by word instead (and
+        the thinking fill in as the model thinks). Without it, the group being worked on still
+        shows the last line the model thought as its title. When nothing has come back for ten seconds the
+        line says so: the model may be busy with another request (LM Studio answers one at a time
+        unless its model allows more in parallel), still loading, or reading a long prompt. The
+        server can't tell which.
       </p>
       <p>
         You can close the chat while it works: the answer keeps coming. When it lands with the chat

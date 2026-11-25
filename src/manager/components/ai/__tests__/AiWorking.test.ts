@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import AiWorking, { formatElapsed, pickVariant } from "../AiWorking.vue";
+import AiWorking, { QUIET_MS, formatElapsed, pickVariant, playfulNow } from "../AiWorking.vue";
 import { activeAiRequests, endAiRequest, startAiRequest, watchesProgress } from "../../../api/ai-progress";
 import { api } from "../../../api/client";
 
@@ -24,23 +24,50 @@ describe("AiWorking", () => {
     w.unmount();
   });
 
-  it("mixes playful words with what is really happening", async () => {
+  it("says what is really happening, with a playful word only in a long quiet stretch", async () => {
     vi.useFakeTimers();
-    const w = mount(AiWorking, { props: { text: "Searching the library…", phase: "thinking", variant: "orbit" } });
+    const w = mount(AiWorking, { props: { text: "Thinking…", phase: "thinking", variant: "orbit" } });
     const word = () => w.get('[data-test="working-line-word"]').text();
-    expect(word()).toBe("Searching the library…");
-    vi.advanceTimersByTime(3500);
-    await flushPromises();
-    expect(word()).not.toBe("Searching the library…");
-    vi.advanceTimersByTime(7000);
-    await flushPromises();
-    expect(word()).toBe("Searching the library…");
+    const seen: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(3500);
+      await flushPromises();
+      seen.push(word());
+    }
+    // The first 12 s: always the real status.
+    expect(seen).toEqual(["Thinking…", "Thinking…", "Thinking…"]);
+    // Past it, one tick in three is playful, then back.
+    const later: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      vi.advanceTimersByTime(3500);
+      await flushPromises();
+      later.push(word());
+    }
+    expect(later.filter((x) => x !== "Thinking…")).toHaveLength(2);
+    expect(later.filter((x) => x === "Thinking…")).toHaveLength(4);
     // A new status is said straight away.
-    vi.advanceTimersByTime(3500);
     await w.setProps({ text: "Writing…", phase: "writing" });
     expect(word()).toBe("Writing…");
     expect(w.findAll(".wp-wl__logo circle")).toHaveLength(4);
     w.unmount();
+  });
+
+  it("never swaps a running action for a playful word", async () => {
+    vi.useFakeTimers();
+    const w = mount(AiWorking, { props: { text: "Reading Hair Color…", exact: true } });
+    for (let i = 0; i < 12; i++) {
+      vi.advanceTimersByTime(3500);
+      await flushPromises();
+      expect(w.get('[data-test="working-line-word"]').text()).toBe("Reading Hair Color…");
+    }
+    w.unmount();
+  });
+
+  it("plays only after the quiet time, one tick in three", () => {
+    expect(playfulNow(2, QUIET_MS - 1)).toBe(false);
+    expect(playfulNow(2, QUIET_MS)).toBe(true);
+    expect(playfulNow(3, QUIET_MS)).toBe(false);
+    expect(playfulNow(2, QUIET_MS, true)).toBe(false);
   });
 
   it("picks the typing stars most often", () => {
