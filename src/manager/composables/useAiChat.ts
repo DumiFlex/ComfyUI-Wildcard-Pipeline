@@ -29,7 +29,7 @@ import { api, ApiError } from "../api/client";
 import { aiDone } from "./useAiDone";
 import type {
   AiChatStep, AiTestCard, AiCallAnswer, AiChatContext, AiChatEvent, AiChatStatusEvent, AiChatPage, AiChatProposal, AiChatResult,
-  AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall, AiAskAnswer, AiAskAnswered, AiAskQuestion,
+  AiChatRetry, AiChatRequest, AiChatResume, AiChatStreamEvent, AiPendingCall, AiAskAnswer, AiAskAnswered, AiAskQuestion, AiChatRating,
   ModuleUpdateInput,
 } from "../api/types";
 import { useModuleStore } from "../stores/moduleStore";
@@ -81,6 +81,8 @@ export interface ChatAssistantEntry {
   skip?: Record<string, string[]>;
   /** What the user answered to this answer's questions (`ask`), by call id. */
   answered?: Record<string, AiAskAnswered>;
+  /** The user's thumbs up or down. */
+  rating?: AiChatRating;
 }
 
 export type AskCall = Extract<AiPendingCall, { tool: "ask" }>;
@@ -157,6 +159,8 @@ export interface LiveAnswer {
   doingTool?: string;
   /** When this answer started (ms), for the group times. */
   startedAt?: number;
+  /** How much of the prompt the server has read (percent, llama.cpp). */
+  progress?: number;
 }
 const EMPTY_LIVE: LiveAnswer = { text: "", status: "", thinking: false, steps: [] };
 const live = shallowRef<LiveAnswer>(EMPTY_LIVE);
@@ -179,6 +183,17 @@ function record(pid: string, status: AiChatStatusEvent["status"], created?: stri
   if (id) void api.ai.patchChat(id, { events: [ev] }).catch(() => undefined);
 }
 
+/** Whether `next` (the reply so far) starts the way `note` does: the
+ *  model writing the same text again. Spaces don't count. */
+export function repeats(note: string, next: string): boolean {
+  const a = note.replace(/\s+/g, " ").trim();
+  const b = next.replace(/\s+/g, " ").trim();
+  return b.length >= 12 && a.length >= b.length && a.startsWith(b);
+}
+function longer(a: string, b: string): string {
+  return b.trim().length > a.trim().length ? b : a;
+}
+
 function onEvent(ev: AiChatStreamEvent): void {
   const cur = live.value;
   if (ev.type === "step") {
@@ -186,21 +201,32 @@ function onEvent(ev: AiChatStreamEvent): void {
     const kept = cur.text.trim() && !cur.steps.some((s) => s.say && s.note === cur.text)
       ? [...cur.steps, { tool: "say", note: cur.text, ok: true, say: true }] : cur.steps;
     live.value = { ...cur, steps: kept, text: "", thinking: false, status: "", thought: "",
-                   doing: "", doingTool: "", waitingSince: Date.now(),
+                   doing: "", doingTool: "", waitingSince: Date.now(), progress: undefined,
                    ...(ev.n !== undefined ? { n: ev.n } : {}) };
   }
   // Typing out is a choice (Settings › AI assistant › Chat); off, the reply
   // arrives whole with the answer.
   else if (ev.type === "text") {
-    live.value = useUiStore().chatTyping
-      ? { ...cur, text: ev.v, thinking: false, waitingSince: undefined }
-      : { ...cur, waitingSince: undefined };
+    if (!useUiStore().chatTyping) live.value = { ...cur, waitingSince: undefined };
+    else {
+      // A model that wrote its answer as a working note and now writes it
+      // again as the reply: the note becomes the reply where it stands,
+      // instead of being typed a second time.
+      const last = cur.steps[cur.steps.length - 1];
+      const again = last?.say && repeats(last.note, ev.v);
+      live.value = again
+        ? { ...cur, steps: cur.steps.slice(0, -1), text: longer(last.note, ev.v), thinking: false,
+            waitingSince: undefined }
+        : { ...cur, text: cur.text && repeats(cur.text, ev.v) ? longer(cur.text, ev.v) : ev.v,
+            thinking: false, waitingSince: undefined };
+    }
   }
   else if (ev.type === "thinking") {
-    live.value = { ...cur, thinking: true, waitingSince: undefined,
+    live.value = { ...cur, thinking: true, waitingSince: undefined, progress: undefined,
                    ...(ev.v !== undefined ? { thought: ev.v } : {}) };
   }
   else if (ev.type === "status") live.value = { ...cur, status: ev.v, waitingSince: undefined };
+  else if (ev.type === "progress") live.value = { ...cur, progress: ev.v, waitingSince: undefined };
   // As soon as it is decided, not when the answer is done.
   else if (ev.type === "reaction") react(ev.emoji);
   else if (ev.type === "doing") {
@@ -378,6 +404,60 @@ function lastUserIndex(): number {
   return -1;
 }
 
+/** Thumbs up or down on answer `i` (again on the same thumb clears it).
+ *  Kept with the chat on this computer only. */
+async function rate(i: number, rating: AiChatRating): Promise<void> {
+  const e = entries.value[i];
+  const id = chatId.value;
+  if (e?.role !== "assistant" || !id || !e.result.at) return;
+  const next = e.rating === rating ? "" : rating;
+  const set = (r: AiChatRating | ""): void => {
+    entries.value = entries.value.map((x, j) => {
+      if (j !== i || x.role !== "assistant") return x;
+      const copy = { ...x };
+      delete copy.rating;
+      return r ? { ...copy, rating: r } : copy;
+    });
+  };
+  const was = e.rating ?? "";
+  set(next);
+  try {
+    await api.ai.rateAnswer(id, e.result.at, next);
+  } catch (err) {
+    set(was);
+    error.value = `Couldn't save the rating: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+/** Why answer `i` can't be deleted, else "". */
+function deleteBlocked(i: number): string {
+  const e = entries.value[i];
+  if (e?.role !== "assistant" || !e.result.at || !chatId.value) return "Older answers can't be deleted";
+  if (loading.value) return "Wait for the answer to finish";
+  return "";
+}
+
+/** Delete this turn: answer `i` and the message it answered go from the
+ *  chat, for you and for the model. */
+async function deleteTurn(i: number): Promise<void> {
+  const e = entries.value[i];
+  const id = chatId.value;
+  if (deleteBlocked(i) || e?.role !== "assistant" || !id || !e.result.at) return;
+  let start = i;
+  while (start > 0 && entries.value[start - 1].role !== "user") start--;
+  if (start > 0) start--;
+  let end = i + 1;
+  while (end < entries.value.length && entries.value[end].role !== "user") end++;
+  const before = entries.value;
+  entries.value = [...before.slice(0, start), ...before.slice(end)];
+  try {
+    await api.ai.deleteTurn(id, e.result.at);
+  } catch (err) {
+    entries.value = before;
+    error.value = `Couldn't delete that turn: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
 /** Why the last answer can't be run again, else "". */
 function retryBlocked(): string {
   const start = lastUserIndex();
@@ -461,8 +541,11 @@ async function load(id: string): Promise<void> {
           ...(t.view.format ? { format: t.view.format } : {}),
           ...(t.view.tool_use ? { tool_use: t.view.tool_use } : {}),
           ...(typeof t.view.elapsed_ms === "number" ? { elapsed_ms: t.view.elapsed_ms } : {}),
+          ...(t.view.spent ? { spent: t.view.spent } : {}),
+          ...(t.view.at ? { at: t.view.at } : {}),
         },
         status: { ...t.status }, created: { ...t.created }, errors: {},
+        ...(t.view.at && chat.ratings?.[t.view.at] ? { rating: chat.ratings[t.view.at] } : {}),
         ...(t.view.answered ? { answered: { ...t.view.answered } } : {}),
       });
 }
@@ -1234,7 +1317,7 @@ export function useAiChat() {
     context, compacting, editing,
     send, stop, reset, apply, applyAll, fix, fixAll, askFix, chainOf, linkWarnings, undo, dismiss, blockedReason, ask, answerSearch, attach,
     toggleOption, setAllOptions, openInEditor, openTest,
-    retry, retryBlocked, load, compact,
+    retry, retryBlocked, load, compact, rate, deleteTurn, deleteBlocked,
     askCalls, answerAsk, editLast, editBlocked, cancelEdit,
     attachments, vision, visionModel, addFiles, removeAttachment, checkVision,
   };

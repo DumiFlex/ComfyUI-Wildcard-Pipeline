@@ -14,7 +14,7 @@ import {
 } from "../../api/ai-debug";
 import { copyText } from "@/kit/clipboard";
 
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; view: [row: AiDebugRow] }>();
 
 const rows = ref<AiDebugRow[]>([]);
 const folder = ref("");
@@ -95,7 +95,7 @@ watch(() => aiDebugSent.value.length, () => {
     </header>
     <p class="wp-ai-debug__note">
       Each AI request with every model call it made: the prompt as sent, the reply, thinking,
-      tool calls and tokens. <b>Copy debug</b> gives a readable copy to paste anywhere.
+      tool calls and tokens. <b>View</b> opens one in a window; <b>Copy debug</b> gives a readable copy to paste anywhere.
       <template v-if="folder"> Also saved as files in <code>{{ folder }}</code>.</template>
     </p>
     <Banner v-if="failed" tone="danger" size="sm" class="wp-ai-debug__error">{{ failed }}</Banner>
@@ -124,6 +124,12 @@ watch(() => aiDebugSent.value.length, () => {
         </div>
         <div class="wp-ai-debug__actions">
           <Button
+            variant="ghost" size="sm"
+            :disabled="r.seconds === null"
+            data-test="ai-debug-view"
+            @click="emit('view', r)"
+          >View</Button>
+          <Button
             variant="outline" size="sm"
             :disabled="busy === r.id + 'md'"
             data-test="ai-debug-copy"
@@ -143,7 +149,7 @@ watch(() => aiDebugSent.value.length, () => {
 
 <style scoped>
 .wp-ai-debug {
-  width: min(396px, calc(100vw - 40px));
+  width: min(440px, calc(100vw - 40px));
   max-height: min(70vh, 640px);
   display: flex;
   flex-direction: column;

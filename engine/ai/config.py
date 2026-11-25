@@ -207,7 +207,7 @@ MODELS_KEPT = 40
 #: Each model takes only some of these (Extra high and Max are Claude's,
 #: OpenAI's and OpenRouter's top levels): `wp_api/_ai_thinking.py` fits the
 #: setting to the model.
-THINKING_LEVELS = ("low", "medium", "high", "xhigh", "max")
+THINKING_LEVELS = ("minimal", "low", "medium", "high", "xhigh", "max")
 THINKING = ("auto", "off", "on", *THINKING_LEVELS)
 
 #: Web search engines the user can bring (Settings › AI assistant › Web

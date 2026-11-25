@@ -15,7 +15,7 @@ import { useUiStore } from "../stores/uiStore";
 import { useAiChat } from "../composables/useAiChat";
 import AiWorking from "../components/ai/AiWorking.vue";
 import { activeAiRequests } from "../api/ai-progress";
-import { aiDebugEnabled, aiDebugUnseen } from "../api/ai-debug";
+import { aiDebugEnabled, aiDebugUnseen, type AiDebugRow } from "../api/ai-debug";
 import { useAiConfig } from "../composables/useAiConfig";
 import { useTweaksStore } from "../stores/tweaksStore";
 import { useEngagementStore } from "../stores/engagementStore";
@@ -34,7 +34,14 @@ const chatBusy = computed(() => aiChat.loading.value && !aiChat.open.value);
 const { ready: aiReady } = useAiConfig();
 /** The AI debug log's list (Settings › AI assistant › Debug log). */
 const AiDebugList = defineAsyncComponent(() => import("../components/ai/AiDebugList.vue"));
+const AiDebugView = defineAsyncComponent(() => import("../components/ai/AiDebugView.vue"));
 const debugOpen = ref(false);
+/** The record open in the View window (it outlives the list's popover). */
+const debugViewed = ref<AiDebugRow | null>(null);
+function viewDebug(row: AiDebugRow): void {
+  debugOpen.value = false;
+  debugViewed.value = row;
+}
 
 // Version is injected at build time from package.json via vite's
 // `define` config (see vite.config.mts). The release check composable
@@ -192,8 +199,9 @@ function openPalette(): void {
           <span v-if="aiDebugUnseen" class="wp-topbar__debug-count" aria-hidden="true">{{ aiDebugUnseen > 9 ? "9+" : aiDebugUnseen }}</span>
         </span>
       </template>
-      <AiDebugList @close="debugOpen = false" />
+      <AiDebugList @close="debugOpen = false" @view="viewDebug" />
     </Popover>
+    <AiDebugView v-if="debugViewed" :row="debugViewed" @close="debugViewed = null" />
 
     <Button
       v-if="aiReady || aiChat.open.value"

@@ -115,6 +115,12 @@ function makeRouter() {
   return r;
 }
 
+/** Lets the word-by-word pacing (useSmoothText) catch up. */
+async function typedOut(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 400));
+  await flushPromises();
+}
+
 describe("AiChatDrawer", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -858,6 +864,7 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').setValue("what is in Weather?");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
+    await typedOut();
     const live = w.get('[data-test="ai-chat-live"]');
     // The group being worked on names the newest thing it did.
     expect(live.get('[data-test="ai-activity-group"]').text()).toBe("Read Weather");
@@ -910,10 +917,11 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').setValue("what is in Weather?");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
-    // The group's title previews the last finished line; opening it shows all.
+    await typedOut();
+    // The group's title previews the last finished line; it opens by itself
+    // while the model thinks, so the thought shows as it is written.
     const group = w.get('[data-test="ai-activity-group"]');
     expect(group.text()).toBe("Thinking · The user wants weather");
-    await group.trigger("click");
     expect(w.get('[data-test="ai-chat-live-thought"]').text()).toContain("so I read");
     ui.setChatShow("typing", false);
     await flushPromises();

@@ -1411,6 +1411,22 @@ class ChatRepository:
         if cur.rowcount == 0:
             raise ChatNotFound(chat_id)
 
+    def drop(self, chat_id: str, start: int, end: int, *, meta: dict[str, Any]) -> None:
+        """Delete entries `start` to `end` (not included) of the log, the
+        user's Delete this turn, and store the new meta. The entries after
+        them keep their order."""
+        seqs = [r[0] for r in self._conn.execute(
+            "SELECT seq FROM ai_chat_messages WHERE chat_id = ? ORDER BY seq;", (chat_id,))]
+        gone = seqs[max(0, start):max(0, end)]
+        with self._conn:
+            for seq in gone:
+                self._conn.execute(
+                    "DELETE FROM ai_chat_messages WHERE chat_id = ? AND seq = ?;", (chat_id, seq))
+            cur = self._conn.execute("UPDATE ai_chats SET meta = ? WHERE id = ?;",
+                                     (json.dumps(meta, sort_keys=True), chat_id))
+        if cur.rowcount == 0:
+            raise ChatNotFound(chat_id)
+
     def get(self, chat_id: str) -> dict[str, Any]:
         row = self._conn.execute("SELECT * FROM ai_chats WHERE id = ?;", (chat_id,)).fetchone()
         if row is None:

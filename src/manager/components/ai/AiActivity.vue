@@ -64,7 +64,9 @@ const items = computed<ActivityItem[]>(() => {
   const list = groupSteps(shown.value, props.said);
   // While it runs, the group being worked on shows before its first step
   // lands, under the key that group will have.
-  if (props.running && list[list.length - 1]?.kind !== "group") {
+  // With Show thinking off it would be an empty "Thinking" line: the
+  // working line below already says it is thinking.
+  if (props.running && ui.chatThinking && list[list.length - 1]?.kind !== "group") {
     list.push({ kind: "group", key: `g${props.steps.length}`, steps: [] });
   }
   return list;
@@ -88,9 +90,15 @@ const processShown = computed(() => !canFold.value || turnOpen.value);
 
 /* ── Groups ── */
 const opened = reactive(new Map<string, boolean>());
+/** Verbose: always open. Detailed: every group stays open while it works.
+ *  Standard: the group being worked on opens while its reasoning types out,
+ *  then folds again, as DeepSeek's Think block does. */
 function startsOpen(key: string): boolean {
   if (detail.value === "verbose") return true;
-  return detail.value === "detailed" && props.running && key === liveKey.value;
+  if (!props.running) return false;
+  if (detail.value === "detailed") return true;
+  return detail.value === "standard" && key === liveKey.value && props.typing
+    && props.thinking && !!props.thought;
 }
 function isOpen(key: string): boolean {
   return opened.get(key) ?? startsOpen(key);

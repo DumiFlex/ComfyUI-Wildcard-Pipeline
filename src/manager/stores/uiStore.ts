@@ -260,7 +260,7 @@ export const useUiStore = defineStore("ui", () => {
   const chatThinking = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_THINKING, ["1", "0"] as const, "1") === "1");
   const chatNotes = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_NOTES, ["1", "0"] as const, "1") === "1");
   const chatSteps = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_STEPS, ["1", "0"] as const, "1") === "1");
-  const chatTyping = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_TYPING, ["1", "0"] as const, "0") === "1");
+  const chatTyping = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_TYPING, ["1", "0"] as const, "1") === "1");
   const chatDetail = ref<ChatDetail>(readStoredEnum(STORAGE_KEY_CHAT_DETAIL, CHAT_DETAILS, "standard"));
   const usageStats = ref<boolean>(readStoredEnum(STORAGE_KEY_USAGE_STATS, ["1", "0"] as const, "1") === "1");
   const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());

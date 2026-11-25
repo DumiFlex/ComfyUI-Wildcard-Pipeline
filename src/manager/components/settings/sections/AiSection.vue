@@ -6,6 +6,7 @@
  * (`/wp/api/ai/config`), and the API key is write-only: the page can set or
  * remove it, never read it back.
  */
+import { modelState } from "../../../utils/ai-models";
 import Banner from "@/kit/Banner.vue";
 import WpNumber from "@/kit/WpNumber.vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
@@ -110,7 +111,7 @@ const RECOMMENDED = {
 /* Under 16k the chat's instructions don't fit (labelled "minimum"). */
 const CONTEXT_MIN = 16384;
 const RECOMMENDED_UI = {
-  explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true, chatTyping: false,
+  explainChip: true, chatThinking: true, chatNotes: true, chatSteps: true, chatTyping: true,
   chatDetail: "standard",
 } as const;
 const DETAIL_OPTIONS: SelectOption[] = [
@@ -192,6 +193,8 @@ async function removeKey(): Promise<void> {
 
 /* ── Models ──────────────────────────────────────────────────────────── */
 const models = ref<string[]>([]);
+/** The models the server has in memory now (null: it doesn't say). */
+const loadedModels = ref<string[] | null>(null);
 const modelsError = ref("");
 const loadingModels = ref(false);
 async function refreshModels(): Promise<void> {
@@ -199,9 +202,12 @@ async function refreshModels(): Promise<void> {
   loadingModels.value = true;
   modelsError.value = "";
   try {
-    models.value = (await api.ai.models()).models;
+    const got = await api.ai.models();
+    models.value = got.models;
+    loadedModels.value = got.loaded ?? null;
   } catch (err) {
     models.value = [];
+    loadedModels.value = null;
     modelsError.value = err instanceof Error ? err.message : "Couldn't list models";
   } finally {
     loadingModels.value = false;
@@ -210,7 +216,9 @@ async function refreshModels(): Promise<void> {
 const modelOptions = computed<SelectOption[]>(() => {
   const names = new Set(models.value);
   if (config.value?.model) names.add(config.value.model);
-  return [...names].map((m) => ({ value: m, label: m }));
+  // Only a server that says which models are loaded gets dots here.
+  return [...names].map((m) => (loadedModels.value
+    ? { value: m, label: m, ...modelState(m, true, loadedModels.value) } : { value: m, label: m }));
 });
 const modelDraft = ref("");
 watch(() => config.value?.model, (v) => { modelDraft.value = v ?? ""; }, { immediate: true });
@@ -700,6 +708,7 @@ const testSummary = computed(() => {
   if (t.json_ok === null) return `Connected · ${t.models.length} model${t.models.length === 1 ? "" : "s"} found. Pick one to finish the test.`;
   const parts = ["Connected"];
   parts.push(t.json_ok ? "JSON answers ✓" : "JSON answers ✗ (try another model)");
+  if (t.thinks_anyway) parts.push("thinks even with Off");
   if (t.tool_steps) {
     parts.push(!t.tool_steps.typed ? "tool steps: arguments as text (the server refused typed ones)"
       : t.tool_steps.picked ? "tool steps ✓" : "tool steps ✗ (picked the wrong tool)");
@@ -1199,7 +1208,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Show thinking"
-            recommended="Off"
+            recommended="On"
             hint="A folded Thinking line with what a thinking model reasoned before each step. Off hides it; the model still thinks as Thinking above says. Saved in this browser."
             setting-key="ai-chat-show-thinking"
           >
@@ -1241,7 +1250,7 @@ const off = computed(() => !config.value?.enabled);
           </SettingRow>
           <SettingRow
             label="Type out replies"
-            recommended="Off"
+            recommended="On"
             hint="The reply appears word by word as the model writes it, instead of all at once when it is done, and with Show thinking on, the Thinking box fills as the model thinks. Works with every provider that streams, local ones included. Saved in this browser."
             setting-key="ai-chat-type-out"
           >

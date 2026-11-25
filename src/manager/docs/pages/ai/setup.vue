@@ -32,7 +32,9 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
       <p>
         Test connection lists the models, asks the chosen one for a tiny answer and tells you
         whether it worked and how long it took. It also checks that the model has enough room
-        (context) for the chat, and warns when it doesn't.
+        (context) for the chat, and warns when it doesn't. A model that thinks even with thinking off
+        (Inkling, some hybrids) uses up the tiny answer on its reasoning, so the test asks once more
+        with room to think and says "thinks even with Off": give it a level instead of Off.
       </p>
       <DocImage
         src="images/docs/ai-setup.png"
@@ -57,7 +59,7 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
           { term: 'Model', desc: 'Picked from your server\'s list (refresh after downloading a new one), or typed in.' },
           { term: 'Unload after', desc: 'For local servers: how long an idle model stays loaded, so ComfyUI gets the GPU memory back. From right after each answer up to 1 hour, or Custom.' },
           { term: 'About my library', desc: 'A short note (up to 600 characters) every chat, Draft with AI and Pack builder request reads. Suggest drafts one from your library. See the Chat page.' },
-          { term: 'Thinking', desc: 'How much a thinking model reasons before it answers. The list shows what the chosen model takes: Off and On for a model with an on/off switch, or its own levels (Low to Max) for a model with levels, and a line under it says which. The same picker sits in the chat header. For a small or medium local model, As the model does means Off, and a choice you pick holds for the whole answer (switching between steps made LM Studio re-read the whole prompt).' },
+          { term: 'Thinking', desc: 'How much a thinking model reasons before it answers. The list shows what the chosen model takes: Off and On for a model with an on/off switch, or its own levels (Minimal to Max) for a model with levels, and a line under it says which. The same picker sits in the chat header. For a small or medium local model, As the model does means Off, and a choice you pick holds for the whole answer (switching between steps made LM Studio re-read the whole prompt).' },
         ]"
       />
       <p>
@@ -83,7 +85,7 @@ const MODELFILE = "FROM hf.co/<repo>:<quant>\nRENDERER qwen3.5\nPARSER qwen3.5\n
             { term: 'Tool format', desc: 'How the chat calls its tools. Native tool calls are what most models are trained for; JSON steps work with any model. Automatic uses JSON steps for small and medium local models (a 9B on LM Studio did twice as well that way) and for any server that refuses or garbles native calls. A chat keeps the format it started with.' },
             { term: 'Choose the tool first', desc: 'Off by default. A small or medium model names the tool it will call, then writes only that tool\'s arguments. Some models pick better this way; each step is a little slower.' },
             { term: 'Short tool list', desc: 'Off by default. A small model in JSON steps gets one line per tool in its instructions, and a tool\'s full description (its arguments and an example) the first time a step offers it. About 2,000 fewer tokens per step, which helps when the context is tight. Applies to new chats.' },
-            { term: 'Debug log', desc: 'Off by default. Records every AI request you make in this browser: each model call with the prompt as sent, the reply, thinking, tool calls and tokens. A Debug button in the top bar lists them with Copy debug, a readable copy to paste into a bug report. Images are left out (only their size is noted) and keys are hidden. Copies are also saved in the ai-debug folder of the Wildcard Pipeline data folder; the last 300 are kept.' },
+            { term: 'Debug log', desc: 'Off by default. Records every AI request you make in this browser: each model call with the prompt as sent, the reply, thinking, tool calls and tokens. A Debug button in the top bar lists them with View (the readable copy in a window, to read without pasting it anywhere) and Copy debug, the same copy to paste into a bug report. Images are left out (only their size is noted) and keys are hidden. Copies are also saved in the ai-debug folder of the Wildcard Pipeline data folder; the last 300 are kept.' },
             { term: 'Sampling', desc: 'Optional top K, top P, min P, repeat penalty and presence penalty, sent with every request to a local or OpenAI-compatible server. Empty uses the server\'s own setting for the model (LM Studio\'s, Ollama\'s). The assistant still sets the temperature itself, low for tool steps. Claude and OpenAI\'s own API get none. For Qwen 3.5 and later, top K 20, top P 0.8, min P 0 and repeat penalty 1.0 follow the model card.' },
             { term: 'Embedding model', desc: 'Under Search. Turns on meaning search, so “warm colors” finds a wildcard of amber and crimson. Pick a small embedding model such as nomic-embed-text or embeddinggemma (Ollama) or text-embedding-3-small (OpenAI). Off by default; word search already covers most questions. Claude has no embeddings.' },
             { term: 'Embedding server', desc: 'Leave empty to use the server above. A llama.cpp server only serves embeddings when started with --embeddings, so run a second one and put its address here.' },

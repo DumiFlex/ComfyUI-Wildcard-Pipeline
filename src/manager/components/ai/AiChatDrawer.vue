@@ -29,6 +29,7 @@ import Textarea from "@/kit/Textarea.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { isNavigationFailure, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import Button from "@/kit/Button.vue";
+import ConfirmModal from "@/kit/ConfirmModal.vue";
 import ImageGrid from "@/kit/ImageGrid.vue";
 import Checkbox from "@/kit/Checkbox.vue";
 import Chip from "@/kit/Chip.vue";
@@ -50,9 +51,11 @@ import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import AiWorking from "./AiWorking.vue";
 import AiActivity from "./AiActivity.vue";
+import { useSmoothText } from "../../composables/useSmoothText";
 import ChatCompletions from "./ChatCompletions.vue";
 import ChatInputMarks from "./ChatInputMarks.vue";
-import { tookLabel } from "../../utils/chat-took";
+import { fullTime, shortTime, spentLabel, spentTitle, tookLabel } from "../../utils/chat-took";
+import { modelState } from "../../utils/ai-models";
 import { findPage } from "../../docs/registry";
 import { mentionItems, mentionRefs } from "../../utils/chat-completions";
 import { useModuleStore } from "../../stores/moduleStore";
@@ -166,24 +169,31 @@ const isLocal = computed(() => {
 /** Names that look like embedding models: they can't chat. */
 const EMBED_NAME = /embed|bge|minilm|e5-|gte-|nomic|arctic/i;
 const models = ref<string[]>([]);
+/** The models the server has in memory now (null: it doesn't say). */
+const loaded = ref<string[] | null>(null);
 /** A line under the header after the model changed (or failed to). */
 const modelNote = ref("");
 const modelOptions = computed<SelectOption[]>(() => {
   const names = models.value.filter((m) => !EMBED_NAME.test(m));
   const cur = modelLabel.value;
   if (cur && !names.includes(cur)) names.unshift(cur);
-  const dot = isLocal.value ? "var(--wp-success)" : "var(--wp-warn)";
-  return names.map((m) => ({ value: m, label: m, dot }));
+  return names.map((m) => ({ value: m, label: m, ...modelState(m, isLocal.value, loaded.value) }));
 });
 
 let modelsSeq = 0;
 async function loadModels(): Promise<void> {
   const seq = ++modelsSeq;
   try {
-    const got = (await api.ai.models()).models;
-    if (seq === modelsSeq) models.value = got;
+    const got = await api.ai.models();
+    if (seq === modelsSeq) {
+      models.value = got.models;
+      loaded.value = got.loaded ?? null;
+    }
   } catch {
-    if (seq === modelsSeq) models.value = []; // the picker still shows the current model
+    if (seq === modelsSeq) {
+      models.value = []; // the picker still shows the current model
+      loaded.value = null;
+    }
   }
 }
 // Another provider or server (Settings › AI assistant): its own models, not
@@ -192,8 +202,12 @@ watch(() => [config.value?.provider, config.value?.base_url], (now, old) => {
   // The first load of the settings is not a change (mounting fetched them).
   if (old[0] === undefined || (now[0] === old[0] && now[1] === old[1])) return;
   models.value = [];
+  loaded.value = null;
   void loadModels();
 });
+// Loading a model takes a while: what is in memory is asked again after
+// each answer, so the dot follows the server.
+watch(() => chat.loading.value, (busy, was) => { if (was && !busy && isLocal.value) void loadModels(); });
 
 async function pickModel(v: string | number | null): Promise<void> {
   if (typeof v !== "string" || !v || v === modelLabel.value || chat.loading.value) return;
@@ -255,7 +269,7 @@ async function pickChat(id: string): Promise<void> {
   if (id === chat.chatId.value) return;
   try {
     await chat.load(id);
-    scrollDown();
+    scrollDown(true);
   } catch (err) {
     chat.error.value = `Couldn't open that chat: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -353,6 +367,13 @@ const placeholder = computed(() => chat.editing.value ? "Edit your message…"
 
 /* ── Copy an answer ── */
 const copied = ref<number | null>(null);
+/** The answer whose Delete this turn is being confirmed. */
+const deleting = ref<number | null>(null);
+function confirmDeleteTurn(): void {
+  const i = deleting.value;
+  deleting.value = null;
+  if (i !== null) void chat.deleteTurn(i);
+}
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 async function copyAnswer(i: number, text: string, refs?: Record<string, { name: string }>): Promise<void> {
   if (!(await copyText(plainText(text, refs)))) return;
@@ -400,6 +421,8 @@ const liveStatus = computed(() => {
   if (l.doing) return `${l.doing}…`;
   if (l.text) return "Writing the answer…";
   if (l.thinking) return "Thinking…";
+  // llama.cpp says how far it has read the prompt.
+  if (l.progress !== undefined && l.progress < 100) return `Reading the prompt · ${l.progress}%`;
   if (waitedS.value >= WAIT_HINT_S) {
     return "Waiting for the model… nothing back yet: it may be busy with another request, "
       + "loading, or still reading the prompt.";
@@ -411,7 +434,9 @@ const liveStatus = computed(() => {
 /** The reasoning as it streams, while Type out replies and Show thinking are on. */
 // The title previews the reasoning's last line; it shows in full only while
 // Type out replies is on.
-const liveThought = computed(() => (ui.chatThinking ? chat.live.value.thought ?? "" : ""));
+const liveThought = useSmoothText(() => (ui.chatThinking ? chat.live.value.thought ?? "" : ""));
+/** The reply as it types out, paced word by word (`useSmoothText`). */
+const liveText = useSmoothText(() => chat.live.value.text);
 
 /** Compact is offered from here; amber from where it happens by itself. */
 const OFFER_COMPACT = 0.5;
@@ -757,14 +782,27 @@ function toEditor(p: AiChatProposal): boolean {
   return p.op.op === "update" && p.op.basis === "editor";
 }
 
-function scrollDown(): void {
+/** Whether the view sits at the bottom: text typing out only follows it
+ *  down from there, so scrolling up to read stays put. */
+const STICK_PX = 48;
+const stuck = ref(true);
+function onScroll(): void {
+  const el = scroller.value;
+  if (el) stuck.value = el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_PX;
+}
+function scrollDown(force = false): void {
+  if (!force && !stuck.value) return;
   void nextTick(() => {
     const el = scroller.value;
     if (el) el.scrollTop = el.scrollHeight;
+    stuck.value = true;
   });
 }
 
-watch(() => [chat.entries.value.length, chat.loading.value, chat.live.value], scrollDown);
+// A new message (yours or the answer) goes to the bottom; what streams in
+// follows only while you are there.
+watch(() => chat.entries.value.length, () => scrollDown(true));
+watch(() => [chat.loading.value, chat.live.value, liveText.value, liveThought.value], () => scrollDown());
 
 /** The kit Drawer asks to close on Escape (from anywhere on the page, as
  *  before). Esc with the card preview open closes only the preview, and a
@@ -780,7 +818,7 @@ onMounted(() => {
   root.value?.closest(".wp-drawer")?.setAttribute("aria-label", "AI assistant");
   void loadModels();
   void chat.checkVision();
-  scrollDown();
+  scrollDown(true);
   void nextTick(() => box.value?.focus());
 });
 </script>
@@ -891,7 +929,7 @@ onMounted(() => {
       <div v-if="showList" class="wp-ai-chat__body" data-test="ai-chat-list-view">
         <AiChatList :current="chat.chatId.value" @pick="pickChat" @deleted="onDeleted" />
       </div>
-      <div v-show="!showList" id="wp-ai-chat-body" ref="scroller" class="wp-ai-chat__body" data-test="ai-chat-body">
+      <div v-show="!showList" id="wp-ai-chat-body" ref="scroller" class="wp-ai-chat__body" data-test="ai-chat-body" @scroll.passive="onScroll">
         <div v-if="!chat.started.value" class="wp-ai-chat__empty" data-test="ai-chat-empty">
           <p>Ask about your library, or ask for a change. The assistant reads what you have and proposes changes as cards; nothing is saved until you press Apply.</p>
           <ListRow
@@ -985,7 +1023,7 @@ onMounted(() => {
               @answer="(a) => chat.answerAsk(c.id, a)"
             />
             <div
-              v-if="entry.result.message.trim() || (canRetry && i === chat.entries.value.length - 1) || tookLabel(entry.result.elapsed_ms)"
+              v-if="entry.result.message.trim() || (canRetry && i === chat.entries.value.length - 1) || tookLabel(entry.result.elapsed_ms) || entry.result.at"
               class="wp-ai-chat__msg-tools"
             >
               <Button
@@ -1013,6 +1051,50 @@ onMounted(() => {
                 title="How long this answer took (time waiting on you left out)"
                 data-test="ai-chat-took"
               ><i class="pi pi-clock" aria-hidden="true" /> {{ tookLabel(entry.result.elapsed_ms) }}</span>
+              <template v-if="entry.result.at">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="pi-thumbs-up"
+                  :pressed="entry.rating === 'up'"
+                  aria-label="Good answer"
+                  hint="Good answer (kept with this chat)"
+                  data-test="ai-chat-rate-up"
+                  @click="chat.rate(i, 'up')"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="pi-thumbs-down"
+                  :pressed="entry.rating === 'down'"
+                  aria-label="Bad answer"
+                  hint="Bad answer (kept with this chat)"
+                  data-test="ai-chat-rate-down"
+                  @click="chat.rate(i, 'down')"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="pi-trash"
+                  :disabled="!!chat.deleteBlocked(i)"
+                  aria-label="Delete this turn"
+                  :hint="chat.deleteBlocked(i) || 'Delete this turn'"
+                  data-test="ai-chat-delete-turn"
+                  @click="deleting = i"
+                />
+                <span
+                  v-if="spentLabel(entry.result.spent)"
+                  class="wp-ai-chat__took wp-ai-chat__usage"
+                  :title="spentTitle(entry.result.spent)"
+                  data-test="ai-chat-usage"
+                ><i class="pi pi-database" aria-hidden="true" /> {{ spentLabel(entry.result.spent) }}</span>
+                <time
+                  class="wp-ai-chat__took wp-ai-chat__at"
+                  :datetime="entry.result.at"
+                  :title="fullTime(entry.result.at)"
+                  data-test="ai-chat-at"
+                >{{ shortTime(entry.result.at) }}</time>
+              </template>
             </div>
 
             <article
@@ -1279,7 +1361,7 @@ onMounted(() => {
             :thought="liveThought"
             :typing="ui.chatTyping"
           />
-          <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" live />
+          <AiMessage v-if="liveText" :text="liveText" live />
           <AiWorking class="wp-ai-chat__status" :text="liveStatus" :phase="livePhase" :exact="!!(chat.running.value || chat.live.value.doing)" :size="22" data-test="ai-chat-loading" />
         </div>
       </div>
@@ -1382,6 +1464,15 @@ onMounted(() => {
         @open-test="zoomTest && openTest(zoomTest); zoomTest = null"
       />
     </div>
+    <ConfirmModal
+      :open="deleting !== null"
+      title="Delete this turn?"
+      body="Your message and this answer go from the chat, for you and for the assistant. Changes you applied from it stay. This can't be undone."
+      confirm-label="Delete"
+      tone="danger"
+      @confirm="confirmDeleteTurn"
+      @cancel="deleting = null"
+    />
   </Drawer>
 </template>
 
@@ -1523,8 +1614,11 @@ onMounted(() => {
 .wp-ai-chat__edit { position: absolute; left: -28px; bottom: 2px; opacity: 0.5; }
 .wp-ai-chat__user:hover .wp-ai-chat__edit, .wp-ai-chat__edit:focus-visible { opacity: 1; }
 .wp-ai-chat__editing { margin: 0 0 4px; font-size: 12px; color: var(--wp-text-muted); display: flex; gap: 8px; }
-.wp-ai-chat__msg-tools { display: flex; align-items: center; gap: 4px; margin-top: -4px; }
-.wp-ai-chat__took { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 11px; color: var(--wp-text-dim); }
+.wp-ai-chat__msg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: -4px; }
+.wp-ai-chat__took { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 11px; color: var(--wp-text-dim); white-space: nowrap; }
+/* Usage and time sit at the right end; on a narrow chat they wrap together. */
+.wp-ai-chat__usage, .wp-ai-chat__at { margin-left: auto; }
+.wp-ai-chat__usage + .wp-ai-chat__at { margin-left: 8px; }
 .wp-ai-chat__took .pi { font-size: 10px; }
 .wp-ai-chat__card-summary { font-size: 12px; color: var(--wp-text-muted); }
 .wp-ai-chat__card-parts { margin: 0; font-size: 11.5px; color: var(--wp-text-muted); }

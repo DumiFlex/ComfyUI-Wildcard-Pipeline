@@ -153,6 +153,32 @@ async def _one_turn(request: web.Request, body: dict[str, Any], emit: Any) -> we
         _BUSY.discard(chat_id)
 
 
+
+#: The usage counts an answer adds up (`spent`).
+def _answered_at() -> str:
+    """When an answer finished, UTC to the millisecond: it names the turn
+    for its rating and Delete this turn, so two answers in one second
+    still differ."""
+    now = time.time()
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + f".{int(now * 1000) % 1000:03d}Z"
+
+
+SPENT_KEYS = ("prompt", "cached", "output")
+
+
+def add_usage(total: dict[str, Any], usage: dict[str, Any] | None,
+              calls: bool = True) -> dict[str, int]:
+    """`total` with one model step's `usage` (or another total) added:
+    prompt, cached and output tokens, and `calls` (the model steps)."""
+    out = {k: int(v) for k, v in total.items() if isinstance(v, int) and not isinstance(v, bool)}
+    for k in (*SPENT_KEYS, *(() if calls else ("calls",))):
+        v = (usage or {}).get(k)
+        if isinstance(v, int) and not isinstance(v, bool) and v > 0:
+            out[k] = out.get(k, 0) + v
+    if calls:
+        out["calls"] = out.get("calls", 0) + 1
+    return out
+
 @dataclass
 class _Ask:
     """What the browser sent for this turn, checked (`_read_ask`)."""
@@ -278,6 +304,8 @@ class _Turn:
     read_budget: int = 0
     last_answer: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
+    #: Tokens every model step of this answer used, summed (`add_usage`).
+    spent: dict[str, int] = field(default_factory=dict)
     #: The tail blocks the user's message carried (`ai_trace.TAIL_KINDS`).
     tail_kinds: list[str] = field(default_factory=list)
     #: The tools the current step's grammar offers (None: all of the chat's).
@@ -1089,6 +1117,7 @@ async def _step(t: _Turn) -> str | web.Response:
     t.step += 1
     t.ran += 1
     t.usage = usage = st["usage"]
+    t.spent = add_usage(t.spent, usage)
     calls = st["calls"][:ai_chat.MAX_CALLS_PER_STEP]
     t.trace.append(ai_trace.step_record(t.step, t.offered, calls, usage,
                                         asyncio.get_running_loop().time() - started))
@@ -1851,10 +1880,16 @@ async def _close(t: _Turn) -> web.Response:
     # turn that paused on a page tool, a search or a question.
     took = int((time.monotonic() - t.started) * 1000)
     meta["turn_ms"] = took + (int(meta.get("turn_ms") or 0) if t.ask.resume else 0)
+    # The answer's tokens over all its model steps (the earlier requests of
+    # a paused turn too), for the Usage under the reply.
+    meta["turn_usage"] = add_usage(dict(meta.get("turn_usage") or {}) if t.ask.resume else {},
+                                   t.spent, calls=False)
     out: dict[str, Any] = {
         "message": message, "proposals": proposals, "steps": t.steps,
         "model": t.cfg["model"], "format": t.fmt, "usage": t.usage, "tool_use": t.tool_use,
         "elapsed_ms": meta["turn_ms"],
+        "spent": meta["turn_usage"],
+        "at": _answered_at(),
         # Card warnings name items too ("$coat is already set by [[id#Coat]]").
         "refs": t.lib.message_refs("\n".join([message, *(w for p_ in proposals
                                                             for w in p_.get("warnings") or [])])),
@@ -1869,7 +1904,7 @@ async def _close(t: _Turn) -> web.Response:
     # reads it).
     t.new.append(ai_chatlog.shown_entry({k: out[k] for k in (
         "message", "proposals", "steps", "refs", "model", "pending", "format", "tool_use",
-        "elapsed_ms", "reaction") if k in out}, trace=_trace(t)))
+        "elapsed_ms", "spent", "at", "reaction") if k in out}, trace=_trace(t)))
     out["context"] = _context(t.cfg, meta, t.log + t.new, t.fixed, t.usage, t.window)
     chat = t.chat
     with db_session(t.request) as conn:
