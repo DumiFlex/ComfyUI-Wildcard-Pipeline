@@ -999,9 +999,9 @@ export type AiReaderId = "builtin" | "crawl4ai" | "firecrawl";
 export type AiModelSize = "small" | "medium" | "large";
 export type AiToolFormat = "auto" | "native" | "json";
 /** The Thinking setting: left to the model, off, on, or a reasoning level. */
-export type AiThinking = "auto" | "off" | "on" | "low" | "medium" | "high" | "xhigh" | "max";
+export type AiThinking = "auto" | "off" | "on" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 /** A reasoning level, least to most. */
-export type AiThinkingLevel = "low" | "medium" | "high" | "xhigh" | "max";
+export type AiThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 /** What the chosen model takes for Thinking (`POST /wp/api/ai/thinking`). */
 export interface AiThinkingInfo {
@@ -1074,6 +1074,9 @@ export interface AiTestResult {
   /** `null` when no model is chosen yet. */
   model_found: boolean | null;
   json_ok: boolean | null;
+  /** The model thought before answering even with thinking off, so the
+   *  test asked again with room for it. */
+  thinks_anyway?: boolean;
   /** A small model's tool step on a local server: whether the server took
    *  typed arguments and the model picked the right tool (null elsewhere). */
   tool_steps?: { typed: boolean; picked: boolean; error: string | null } | null;
@@ -1744,6 +1747,10 @@ export interface AiChatResult {
   /** How long the answer took, pauses for page tools and questions left out. */
   elapsed_ms?: number;
   usage?: AiChatUsage;
+  /** Tokens over the whole answer, and when it finished (UTC ISO): the
+   *  answer's id for Delete this turn and its rating. */
+  spent?: AiChatSpent;
+  at?: string;
   /** [[Name]] mentions in `message` that name a real item. */
   refs?: Record<string, AiChatRef>;
   /** Calls the turn waits on; answer them with `AiChatResume`. */
@@ -1801,12 +1808,27 @@ export interface AiChatDetail {
   /** The chat paused on a page tool or search when it was left. */
   waiting: boolean;
   context: AiChatContext;
+  /** Thumbs up / down, by the answer's `at`. */
+  ratings?: Record<string, AiChatRating>;
+}
+
+export type AiChatRating = "up" | "down";
+
+/** Tokens one answer used over all its model calls. */
+export interface AiChatSpent {
+  prompt?: number;
+  cached?: number;
+  output?: number;
+  /** Model calls the answer took. */
+  calls?: number;
 }
 
 /** What a streamed chat turn sends while the model works. */
 export type AiChatStreamEvent =
   | { type: "step"; n?: number }
   | { type: "status"; v: string }
+  /** llama.cpp: percent of the prompt read so far, of `total` tokens. */
+  | { type: "progress"; v: number; total?: number }
   /** Without `v`: it started thinking; with it, the reasoning so far. */
   | { type: "thinking"; v?: string }
   | { type: "text"; v: string }

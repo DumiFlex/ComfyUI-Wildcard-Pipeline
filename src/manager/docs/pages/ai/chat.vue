@@ -231,13 +231,16 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
       <DocKeyList
         :items="[
           { term: 'Stop', desc: 'Ends the answer.' },
-          { term: 'Try again', desc: 'Asks the same message again; the new answer replaces the old one. It waits until you undo changes you applied from that answer.' },
+          { term: 'Try again', desc: 'The circular arrow under the last answer asks the same message again; the new answer replaces the old one. It waits until you undo changes you applied from that answer.' },
           { term: 'Edit', desc: 'The pencil on your last message puts it back in the box to change and send again (Esc cancels).' },
           { term: 'Copy', desc: 'Copies an answer as Markdown.' },
-          { term: 'Time', desc: 'Beside Copy, how long the answer took. Time spent waiting on you (a question, a web search to allow) is left out.' },
+          { term: 'Time', desc: 'At the right under an answer (clock), how long it took. Time spent waiting on you (a question, a web search to allow) is left out.' },
+          { term: 'Thumbs up / down', desc: 'Rates an answer; the same thumb again takes it back. The rating is kept with the chat on this computer only and is never sent anywhere.' },
+          { term: 'Delete this turn', desc: 'The bin under an answer removes it and the message it answered, for you and for the model from the next message on. A summary written before keeps what it said. Not while an answer is being written.' },
+          { term: 'Usage and time', desc: 'Under each answer: the tokens it used (hover for what was read, how much came from the cache, what was written and how many model calls) and when it finished.' },
           { term: 'Chats', desc: 'Your saved chats, newest first, with search. Rename, pin or delete each. ComfyUI keeps the newest 100 plus every pinned one.' },
           { term: 'New chat', desc: 'Starts over with an empty box.' },
-          { term: 'Model menu', desc: 'The model name in the header: switch models from the next message on. If the new model can\'t carry on, start a new chat.' },
+          { term: 'Model menu', desc: 'The model name in the header: switch models from the next message on. If the new model can\'t carry on, start a new chat. When the server says which models are in memory (Ollama, LM Studio, llama.cpp\'s router, a launcher with /v1/model-status), a loaded one has a green dot and \'loaded\'; a grey dot means the server loads it first, which takes a while.' },
           { term: 'Width', desc: 'Drag the chat\'s left edge (or focus it and use the arrow keys). Double-click to reset.' },
           { term: 'Context bar', desc: 'How much of the model\'s memory the chat uses. Past three quarters, older messages are summarised into a short note; Compact does it now.' },
         ]"
@@ -265,10 +268,13 @@ import CrossLinks from "../../../components/docs/CrossLinks.vue";
         <b>Compact</b> (one line per answer while it works), <b>Standard</b> (groups folded),
         <b>Detailed</b> (the group being worked on stays open) or <b>Verbose</b> (everything open,
         answers never fold). To leave kinds out altogether, turn off <b>Show thinking</b>,
-        <b>Show working notes</b> or <b>Show what it did</b> there. The reply arrives whole when
-        it is done; turn on <b>Type out replies</b> to watch it appear word by word instead (and
-        the thinking fill in as the model thinks). Without it, the group being worked on still
-        shows the last line the model thought as its title. When nothing has come back for ten seconds the
+        <b>Show working notes</b> or <b>Show what it did</b> there. <b>Type out replies</b> (on
+        by default) shows the reply word by word as it is written, each word fading in, while
+        cards and chips appear whole; the thinking fills in as the model thinks, in a box that
+        opens by itself. Scroll up while it writes and the chat stays where you are; scroll back
+        to the bottom to follow it again. Turn it off to get the reply whole when it is done; the
+        group being worked on still shows the last line the model thought as its title. While
+        llama.cpp reads a long prompt the line says how far it is ("Reading the prompt · 40%"). When nothing has come back for ten seconds the
         line says so: the model may be busy with another request (LM Studio answers one at a time
         unless its model allows more in parallel), still loading, or reading a long prompt. The
         server can't tell which.

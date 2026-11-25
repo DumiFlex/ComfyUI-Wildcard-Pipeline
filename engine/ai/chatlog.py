@@ -274,6 +274,21 @@ def last_user_text(entries: list[dict[str, Any]]) -> str:
     return ""
 
 
+def turn_span(entries: list[dict[str, Any]], at: str) -> tuple[int, int] | None:
+    """Where the turn answered at `at` (its `shown` view's stamp) sits in the
+    log: from the user's message that opened it up to the next one. None
+    when no answer has that stamp."""
+    start = 0
+    for i, e in enumerate(entries):
+        if e.get("kind") in ("user", "aside"):
+            start = i
+        elif e.get("kind") == "shown" and (e.get("view") or {}).get("at") == at:
+            end = next((j for j in range(i + 1, len(entries))
+                        if entries[j].get("kind") in ("user", "aside")), len(entries))
+            return start, end
+    return None
+
+
 def last_reply(entries: list[dict[str, Any]]) -> str:
     """What the user last saw from the assistant: the newest step's text
     that called nothing (the JSON-mode message, when it has one)."""

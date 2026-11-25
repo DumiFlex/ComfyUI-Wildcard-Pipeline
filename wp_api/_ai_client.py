@@ -382,6 +382,77 @@ async def list_models(cfg: dict[str, Any]) -> list[str]:
     return sorted({n for n in names if isinstance(n, str) and n})
 
 
+#: Words a server uses for a model that is in memory now.
+_LOADED_WORDS = {"loaded", "running", "ready", "active"}
+
+
+def entry_loaded(entry: Any) -> bool | None:
+    """Whether one model-list entry says its model is loaded: llama.cpp's
+    router (`status: {value: "loaded"}`), LM Studio (`state: "loaded"`),
+    a model launcher's status list (`loaded: true` or `status: "loaded"`).
+    None when the entry doesn't say."""
+    if not isinstance(entry, dict):
+        return None
+    if isinstance(entry.get("loaded"), bool):
+        return entry["loaded"]
+    for key in ("status", "state"):
+        v = entry.get(key)
+        if isinstance(v, dict):
+            v = v.get("value") if isinstance(v.get("value"), str) else v.get("state")
+        if isinstance(v, str) and v:
+            return v.lower() in _LOADED_WORDS
+    inst = entry.get("loaded_instances")
+    if isinstance(inst, list):
+        return bool(inst)
+    return None
+
+
+def _loaded_from(items: Any, key: str = "id") -> list[str] | None:
+    """The loaded models a list says, or None when no entry says either way."""
+    said = False
+    out: list[str] = []
+    for m in items or []:
+        state = entry_loaded(m)
+        if state is None:
+            continue
+        said = True
+        name = m.get(key) or m.get("id") or m.get("model") or m.get("key") or m.get("name")
+        if state and isinstance(name, str) and name:
+            out.append(name)
+    return sorted(set(out)) if said else None
+
+
+async def loaded_models(cfg: dict[str, Any]) -> list[str] | None:
+    """The models a local server has in memory now, for the model list's
+    green dot; None when it can't say (cloud providers, older servers).
+    Ollama: `/api/ps`. Others: a model launcher's `/v1/model-status`
+    (a proxy in front of llama.cpp), else the model list's own status
+    (llama.cpp's router, LM Studio's `/api/v0/models`)."""
+    if not cfg.get("local") or not cfg.get("base_url"):
+        return None
+    if cfg["api"] == "ollama":
+        try:
+            data = await _request(cfg, "GET", "/api/ps", timeout=_LIST_TIMEOUT)
+        except AIError:
+            return None
+        items = data.get("models") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return None
+        return sorted({str(m.get("name") or m.get("model")) for m in items
+                       if isinstance(m, dict) and (m.get("name") or m.get("model"))})
+    root = {**cfg, "base_url": re.sub(r"/v1$", "", str(cfg["base_url"]).rstrip("/"))}
+    for c, path in ((cfg, "/model-status"), (cfg, "/models"), (root, "/api/v0/models")):
+        try:
+            data = await _request(c, "GET", path, timeout=_LIST_TIMEOUT)
+        except AIError:
+            continue
+        items = data.get("data") if isinstance(data, dict) else data
+        found = _loaded_from(items if isinstance(items, list) else None)
+        if found is not None:
+            return found
+    return None
+
+
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _TRAILING_COMMA = re.compile(r",(\s*[}\]])")
@@ -980,7 +1051,7 @@ async def server_context(cfg: dict[str, Any]) -> int | None:
     model = urllib.parse.quote(str(cfg.get("model") or ""), safe="")
     for path, read in (
         (f"/api/v0/models/{model}", lambda d: d.get("loaded_context_length")),
-        ("/props", lambda d: (d.get("default_generation_settings") or {}).get("n_ctx")
+        (props_path(cfg), lambda d: (d.get("default_generation_settings") or {}).get("n_ctx")
             or d.get("n_ctx")),
     ):
         try:
@@ -1044,6 +1115,15 @@ _CONTEXT_TTL_S = 600.0
 _found_context: dict[tuple[str, str, str], tuple[float, int | None]] = {}
 
 
+def props_path(cfg: dict[str, Any]) -> str:
+    """llama.cpp's `/props` for the chosen model: a llama-server in router
+    mode (several models behind one address, as model launchers and
+    proxies run it) answers `/props` only with `?model=`; a single-model
+    server ignores it."""
+    model = str(cfg.get("model") or "")
+    return f"/props?model={urllib.parse.quote(model, safe='')}" if model else "/props"
+
+
 async def model_context(cfg: dict[str, Any]) -> int | None:
     """The window the model reports, or None when nothing says: what LM
     Studio or llama.cpp loaded it with, what an Ollama model was trained
@@ -1081,6 +1161,11 @@ async def context_cap(cfg: dict[str, Any]) -> int:
     return max(budget.CONTEXT_MIN, min(found, budget.CONTEXT_MAX))
 
 
+#: Test connection's second try, for a model that thinks before it answers
+#: even with thinking off.
+PROBE_THINK_ROOM = 1024
+
+
 async def probe(cfg: dict[str, Any]) -> dict[str, Any]:
     """Test connection: list models, then (if one is chosen) a tiny JSON call."""
     result: dict[str, Any] = {"ok": False, "models": [], "model_found": None,
@@ -1098,15 +1183,26 @@ async def probe(cfg: dict[str, Any]) -> dict[str, Any]:
     # file name, so a miss here is a hint, not a failure.
     result["model_found"] = cfg["model"] in result["models"]
     started = time.monotonic()
-    try:
-        answer = await complete_json(
-            cfg, system="Answer with JSON only.", user='Reply with {"ok": true}.',
-            schema=_PROBE_SCHEMA, schema_name="probe", temperature=0, max_tokens=64,
-        )
-        result["json_ok"] = isinstance(answer, dict) and answer.get("ok") is True
-        result["ok"] = True
-    except AIError as e:
-        result["error"] = e.message
+    # A model that thinks even when asked not to (Inkling, some hybrids)
+    # spends 64 tokens on its reasoning and leaves no answer: the server
+    # answered, so it is asked once more with room to think.
+    for cap in (64, PROBE_THINK_ROOM):
+        try:
+            answer = await complete_json(
+                cfg, system="Answer with JSON only.", user='Reply with {"ok": true}.',
+                schema=_PROBE_SCHEMA, schema_name="probe", temperature=0, max_tokens=cap,
+            )
+            result["json_ok"] = isinstance(answer, dict) and answer.get("ok") is True
+            result["ok"] = True
+            result["error"] = None
+            if cap != 64:
+                result["thinks_anyway"] = True
+            break
+        except AIError as e:
+            result["error"] = e.message
+            # The server itself refused or failed: no second try.
+            if e.upstream is not None:
+                break
     result["latency_ms"] = int((time.monotonic() - started) * 1000)
     if result["ok"]:
         result["context"] = await server_context(cfg)

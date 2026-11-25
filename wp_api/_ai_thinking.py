@@ -198,7 +198,7 @@ def from_template(template: str) -> dict[str, Any] | None:
     `enable_thinking` is on/off, a `reasoning_effort` variable has levels
     (Qwen 3.8: low, medium, xhigh). None when it has neither."""
     if "reasoning_effort" in template:
-        named = set(re.findall(r"['\"](low|medium|high|xhigh|max)['\"]", template))
+        named = set(re.findall(r"['\"](minimal|low|medium|high|xhigh|max)['\"]", template))
         if named:
             return _info("levels", sorted(named, key=LEVELS.index),
                          can_off="enable_thinking" in template)
@@ -235,7 +235,7 @@ async def _ask_server(cfg: dict[str, Any]) -> dict[str, Any] | None:
     if cfg.get("local"):
         # llama.cpp's llama-server shows the chat template it renders with.
         try:
-            data = await client._request(_root(cfg), "GET", "/props", timeout=t)
+            data = await client._request(_root(cfg), "GET", client.props_path(cfg), timeout=t)
         except AIError:
             return None
         template = data.get("chat_template") if isinstance(data, dict) else None
@@ -371,8 +371,8 @@ def _note(info: dict[str, Any], gone: list[str], spent: bool = False) -> str:
         line = "This model only has thinking on or off."
     elif kind == "levels":
         line = "This model takes " + ", ".join(
-            {"low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high",
-             "max": "Max"}[o] for o in info["options"]) + "."
+            {"minimal": "Minimal", "low": "Low", "medium": "Medium", "high": "High",
+             "xhigh": "Extra high", "max": "Max"}[o] for o in info["options"]) + "."
         if not info["can_off"]:
             line += " It always thinks, so Off asks for its lowest level."
     else:

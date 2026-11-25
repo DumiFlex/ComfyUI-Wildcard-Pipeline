@@ -73,12 +73,14 @@ from wp_api import (
 )
 from wp_api._ai_chats import (
     delete_chat,
+    delete_turn,
     get_chat,
     get_chats,
     get_context,
     get_vision,
     patch_chat,
     post_compact,
+    put_rating,
 )
 from wp_api._ai_common import (
     _body,
@@ -180,7 +182,8 @@ async def post_models(request: web.Request) -> web.Response:
     try:
         if body.get("for") == "embed":
             return json_ok({"models": await _ai_embed.list_models(cfg)})
-        return json_ok({"models": await _ai_client.list_models(cfg)})
+        models = await _ai_client.list_models(cfg)
+        return json_ok({"models": models, "loaded": await _ai_client.loaded_models(cfg)})
     except _ai_client.AIError as e:
         return json_error(e.message, status=e.status)
 
@@ -333,6 +336,8 @@ def register(router: web.UrlDispatcher) -> None:
     add("PATCH", "/wp/api/ai/chats/{chat_id}", patch_chat, cut_short=False)
     add("DELETE", "/wp/api/ai/chats/{chat_id}", delete_chat, cut_short=False)
     add("POST", "/wp/api/ai/chats/{chat_id}/compact", post_compact)
+    add("PUT", "/wp/api/ai/chats/{chat_id}/rating", put_rating, cut_short=False)
+    add("DELETE", "/wp/api/ai/chats/{chat_id}/turns/{at}", delete_turn, cut_short=False)
     add("POST", "/wp/api/ai/pack/plan", post_pack_plan)
     add("POST", "/wp/api/ai/pack/change", post_pack_change)
     add("POST", "/wp/api/ai/pack/images", post_pack_images)

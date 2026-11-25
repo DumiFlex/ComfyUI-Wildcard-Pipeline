@@ -88,6 +88,7 @@ async def get_chat(request: web.Request) -> web.Response:
         "updated_at": chat["updated_at"], "model": meta.get("model"),
         "turns": ai_chatlog.display(log, meta),
         "waiting": bool(meta.get("pending")),
+        "ratings": dict(meta.get("ratings") or {}),
         "summary": str(meta.get("summary") or ""),
         "context": _context(cfg, meta, log, len(chat.get("snapshot") or "") + 12000, usage,
                             window),
@@ -182,6 +183,60 @@ def _record_fix(log: list[dict[str, Any]], meta: dict[str, Any], pid: str,
     meta["fixes"] = fixes
     body = ai_lint.fixed_body(card, keys)
     return body if body is not None else (card.get("op") or {}).get("body")
+
+
+#: The ratings an answer can get (thumbs up / down), or "" to clear it.
+RATINGS = ("up", "down", "")
+
+
+async def put_rating(request: web.Request) -> web.Response:
+    """Body: {at, rating}. The user's thumbs up or down on one answer (its
+    `at` stamp), kept in the chat's meta only; nothing is
+    sent anywhere."""
+    body = await _body(request)
+    if isinstance(body, web.Response):
+        return body
+    at, rating = body.get("at"), body.get("rating")
+    if not isinstance(at, str) or not at or len(at) > 40 or rating not in RATINGS:
+        return json_error("a rating needs the answer's time and up, down or \"\"", status=400)
+    with db_session(request) as conn:
+        repo = ChatRepository(conn)
+        try:
+            chat = repo.get(_chat_id(request))
+        except ChatNotFound:
+            return json_error("that chat is gone", status=404)
+        if ai_chatlog.turn_span(repo.messages(chat["id"]), at) is None:
+            return json_error("that answer is gone", status=404)
+        meta = dict(chat["meta"])
+        ratings = {k: v for k, v in (meta.get("ratings") or {}).items() if k != at}
+        if rating:
+            ratings[at] = rating
+        meta["ratings"] = ratings
+        repo.set_meta(chat["id"], meta)
+    return json_ok({"at": at, "rating": rating})
+
+
+async def delete_turn(request: web.Request) -> web.Response:
+    """Delete one turn (your message and its answer) from a chat, the
+    answer's Delete this turn. The model no longer sees it from the next
+    message on; a summary made before keeps what it said."""
+    at = str(request.match_info.get("at") or "")[:40]
+    with db_session(request) as conn:
+        repo = ChatRepository(conn)
+        try:
+            chat = repo.get(_chat_id(request))
+        except ChatNotFound:
+            return json_error("that chat is gone", status=404)
+        log = repo.messages(chat["id"])
+        span = ai_chatlog.turn_span(log, at)
+        if span is None:
+            return json_error("that answer is gone", status=404)
+        meta = dict(chat["meta"])
+        if meta.get("pending") and span[1] == len(log):
+            return json_error("this chat is waiting for an answer", status=409)
+        meta["ratings"] = {k: v for k, v in (meta.get("ratings") or {}).items() if k != at}
+        repo.drop(chat["id"], span[0], span[1], meta=meta)
+    return json_ok({"deleted": True})
 
 
 async def delete_chat(request: web.Request) -> web.Response:

@@ -145,7 +145,7 @@ async def tool_support(cfg: dict[str, Any]) -> bool | None:
             found = None
         if found is None:
             try:
-                data = await client._request(rooted, "GET", "/props",
+                data = await client._request(rooted, "GET", client.props_path(cfg),
                                              timeout=client._LIST_TIMEOUT)
                 caps = data.get("chat_template_caps") if isinstance(data, dict) else None
                 if isinstance(caps, dict) and "supports_tool_calls" in caps:
@@ -198,7 +198,7 @@ async def vision_support(cfg: dict[str, Any]) -> bool | None:
             found = None
         if found is None:
             try:
-                data = await client._request(rooted, "GET", "/props",
+                data = await client._request(rooted, "GET", client.props_path(cfg),
                                              timeout=client._LIST_TIMEOUT)
                 mods = data.get("modalities") if isinstance(data, dict) else None
                 if isinstance(mods, dict) and "vision" in mods:
@@ -913,6 +913,7 @@ class _Live:
         self.sent = ""
         self.last = 0.0
         self.thought = False
+        self.pct = -1
 
     async def add(self, delta: str) -> None:
         if not delta or self.emit is None:
@@ -969,6 +970,19 @@ class _Live:
             self.think_sent = v
             await self.emit({"type": "thinking", "v": v})
 
+    async def progress(self, pp: Any) -> None:
+        """llama.cpp's `prompt_progress` ({total, cache, processed}): how
+        much of the prompt it has read, sent when the percent moves."""
+        if self.emit is None or not isinstance(pp, dict):
+            return
+        total, done = pp.get("total"), pp.get("processed")
+        if not isinstance(total, int) or not isinstance(done, int) or total <= 0:
+            return
+        pct = max(0, min(100, int(done * 100 / total)))
+        if pct != self.pct:
+            self.pct = pct
+            await self.emit({"type": "progress", "v": pct, "total": total})
+
     async def flush_thinking(self) -> None:
         """The rest of the reasoning the throttle held back, if any."""
         await self._send_thinking()
@@ -985,6 +999,8 @@ def _openai_collect(live: _Live, show: bool) -> tuple[dict[str, Any], Any]:
             data["usage"] = obj["usage"]
         if isinstance(obj.get("timings"), dict):
             data["timings"] = obj["timings"]
+        if isinstance(obj.get("prompt_progress"), dict):
+            await live.progress(obj["prompt_progress"])
         if isinstance(obj.get("error"), dict | str):
             raise client._upstream_error(500, obj)
         for ch in obj.get("choices") or []:
@@ -1163,6 +1179,10 @@ async def _post(cfg: dict[str, Any], path: str, body: dict[str, Any], *, kind: s
     streamed = {**body, "stream": True}
     if kind == "openai":
         streamed["stream_options"] = {"include_usage": True}
+        if cfg.get("provider") == "llamacpp":
+            # llama-server streams how far it has read the prompt
+            # (`prompt_progress`), for the working line.
+            streamed["return_progress"] = True
     started = time.monotonic()
     try:
         plain = await client.stream_request(cfg, path, body=streamed, on_obj=on)

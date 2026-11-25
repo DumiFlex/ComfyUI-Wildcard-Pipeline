@@ -27,6 +27,7 @@ import type {
   AiChatResult,
   AiChatRetry,
   AiChatContext,
+  AiChatRating,
   AiChatDetail,
   AiChatEvent,
   AiChatStreamEvent,
@@ -523,7 +524,7 @@ export const api = {
     },
     /** The chat server's models, or with `"embed"` the embedding server's. */
     models(of: "chat" | "embed" = "chat") {
-      return request<{ models: string[] }>("/wp/api/ai/models", {
+      return request<{ models: string[]; loaded?: string[] | null }>("/wp/api/ai/models", {
         method: "POST", body: JSON.stringify(of === "embed" ? { for: "embed" } : {}),
       });
     },
@@ -623,6 +624,18 @@ export const api = {
       return request<{ deleted: true }>(`/wp/api/ai/chats/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
+    },
+    rateAnswer(id: string, at: string, rating: AiChatRating | "") {
+      return request<{ at: string; rating: AiChatRating | "" }>(
+        `/wp/api/ai/chats/${encodeURIComponent(id)}/rating`,
+        { method: "PUT", body: JSON.stringify({ at, rating }) },
+      );
+    },
+    deleteTurn(id: string, at: string) {
+      return request<{ deleted: true }>(
+        `/wp/api/ai/chats/${encodeURIComponent(id)}/turns/${encodeURIComponent(at)}`,
+        { method: "DELETE" },
+      );
     },
     compactChat(id: string) {
       return request<{ compacted: true; context: AiChatContext }>(

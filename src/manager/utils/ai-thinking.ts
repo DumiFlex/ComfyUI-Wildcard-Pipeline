@@ -6,6 +6,7 @@ export const THINKING_OPTIONS: Array<{ value: AiThinking; label: string; short: 
   { value: "auto", label: "As the model does", short: "Auto" },
   { value: "off", label: "Off: answer straight away", short: "Off" },
   { value: "on", label: "On", short: "On" },
+  { value: "minimal", label: "Minimal: barely think", short: "Minimal" },
   { value: "low", label: "Low: think a little", short: "Low" },
   { value: "medium", label: "Medium", short: "Medium" },
   { value: "high", label: "High", short: "High" },
