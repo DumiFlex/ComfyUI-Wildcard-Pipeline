@@ -286,10 +286,14 @@ export function wantedCtlInputs(cfg: TogglesConfig): string[] {
 
 interface PromptEntry { class_type?: string; inputs?: Record<string, unknown> }
 
+/** Nodes whose `ctl_*` inputs are control links (WP Toggles, and WP
+ *  Slider's levels, `slider-control.ts`). */
+const CTL_NODE_TYPES = new Set(["WP_Toggles", "WP_Slider"]);
+
 /** Drop control links from an API prompt (`graphToPrompt().output`). */
 export function stripControlInputs(output: Record<string, PromptEntry | undefined> | null | undefined): void {
   for (const entry of Object.values(output ?? {})) {
-    if (entry?.class_type !== "WP_Toggles" || !entry.inputs) continue;
+    if (!CTL_NODE_TYPES.has(entry?.class_type ?? "") || !entry?.inputs) continue;
     for (const key of Object.keys(entry.inputs)) if (isCtlInput(key)) delete entry.inputs[key];
   }
 }

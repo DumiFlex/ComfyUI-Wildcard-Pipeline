@@ -57,11 +57,10 @@ describe("SliderRow", () => {
   });
 
   it("a locked row can't be dragged, and its lock unlocks it", async () => {
-    const s = slider({ id: "a", lock: true, off: "mute" });
+    const s = slider({ id: "a", lock: true });
     const w = mount(SliderRowView, { props: { s, editing: false, editable: false } });
     await w.find('[role="slider"]').trigger("keydown", { key: "ArrowRight" });
     expect(w.emitted("set-value")).toBeUndefined();
-    expect(w.find('[data-test="sl-off-a"]').exists()).toBe(true);
     await w.find('[data-test="sl-lock-a"]').trigger("click");
     expect(w.emitted("patch")?.[0]).toEqual([{ lock: undefined }]);
     w.unmount();
@@ -202,25 +201,27 @@ describe("SliderEditWindow", () => {
     w.unmount();
   });
 
-  it("mutes and locks from Advanced, which says so when closed", async () => {
+  it("adds mute / bypass ranges and a lock from Advanced, which says so when closed", async () => {
     const w = open(slider({ id: "c" }));
     await settle();
     q('[data-test="sl-advanced"]')?.click();
     await flushPromises();
-    q('[data-test="sl-off-mute"]')?.click();
+    q('[data-test="sl-level-add"]')?.click();
+    await flushPromises();
+    q('[data-test="sl-level-mode-0-mute"]')?.click();
     await flushPromises();
     const lock = [...document.body.querySelectorAll<HTMLElement>(".wp-slw__check > span")].find((x) => x.textContent === "Lock value");
     lock?.click();
     await flushPromises();
-    expect(q('[data-test="sl-advanced-summary"]')?.textContent).toContain("Muted · Locked");
-    expect(done(w)).toMatchObject({ off: "mute", lock: true });
+    expect(q('[data-test="sl-advanced-summary"]')?.textContent).toContain("2 levels · Locked");
+    expect(done(w)).toMatchObject({ levels: [{ upto: 0.5, mode: "mute" }, { mode: "bypass" }], lock: true });
     w.unmount();
   });
 
-  it("opens Advanced on its own for a muted row and warns on text without {word}", async () => {
-    const w = open(slider({ id: "c", mode: "words", off: "bypass", text: "green clothes", words: [{ word: "a" }] }));
+  it("opens Advanced on its own for a row with levels and warns on text without {word}", async () => {
+    const w = open(slider({ id: "c", mode: "words", levels: [{ mode: "bypass" }], text: "green clothes", words: [{ word: "a" }] }));
     await settle();
-    expect(q('[data-test="sl-off-bypass"]')?.getAttribute("aria-pressed") ?? q('[data-test="sl-off-bypass"]')?.getAttribute("aria-checked")).toBe("true");
+    expect(q('[data-test="sl-level-0"]')).not.toBeNull();
     expect(q('[data-test="sl-word-text"]')?.textContent).toContain("Write {word} where the word goes");
     w.unmount();
   });

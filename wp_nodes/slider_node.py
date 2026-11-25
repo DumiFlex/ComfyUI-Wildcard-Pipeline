@@ -99,7 +99,7 @@ class WPSlider(io.ComfyNode):
         values = sliders.resolve(cfg)
         raw_values = dict(values)
         nums = sliders.nums(cfg)
-        by_var = {s.var: s for s in cfg.sliders if s.var in values and s.off != "mute"}
+        by_var = {s.var: s for s in cfg.sliders if s.var in values}
 
         # The cross-node number table, upstream's plus ours, so a text here
         # (and every node after) can read `$name.num`.
@@ -111,7 +111,7 @@ class WPSlider(io.ComfyNode):
             s = by_var[name]
             # A text, or a word set into one (`{word} clothes`), may read `$vars`.
             wraps_word = s.mode == "words" and sliders.WORD_SLOT in s.text
-            reads_text = s.off != "bypass" and (s.mode == "text" or wraps_word)
+            reads_text = s.mode == "text" or wraps_word
             if reads_text and _has_syntax(values[name]):
                 value_reads[name] = []
                 values[name] = template.resolve_variables(
@@ -120,12 +120,7 @@ class WPSlider(io.ComfyNode):
                     reads=value_reads[name],
                 )
 
-        def resolve_neg(text: str) -> str:
-            if _has_syntax(text):
-                text = template.resolve_variables(text, {**read_ctx, **values})
-            return text.strip()
-
-        own_negs = {k: resolve_neg(v) for k, v in sliders.own_negatives(cfg).items()}
+        own_raw = sliders.own_negatives(cfg)
 
         hidden = getattr(cls, "hidden", None)
         node_id = getattr(hidden, "unique_id", None) if hidden is not None else None
@@ -140,7 +135,17 @@ class WPSlider(io.ComfyNode):
             k: v for k, v in (out_internals.get(negatives.NEG_KEY) or {}).items()
             if k not in values
         }
+        # In row order, so a negative can read an earlier slider's with
+        # `$name.neg` (a template's `$view_height.neg`).
+        own_negs: dict[str, str] = {}
         for k in values:
+            text = own_raw.get(k, "")
+            if _has_syntax(text):
+                text = template.resolve_variables(
+                    text, {**read_ctx, **values, negatives.NEG_KEY: table},
+                )
+            if text.strip():
+                own_negs[k] = text.strip()
             entries = negatives.entries_for_reads(
                 {negatives.NEG_KEY: table}, value_reads.get(k, []),
             )

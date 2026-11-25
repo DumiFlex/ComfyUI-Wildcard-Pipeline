@@ -50,8 +50,9 @@ describe("SliderPadWidget", () => {
     expect(w.findAll(".wp-xypad__band").map((b) => b.text())).toEqual(["calm", "wild"]);
     await w.find('[data-test="pad-style-stick"]').trigger("click");
     await w.setProps({ modelValue: last(w) });
-    // Show words stays on in the Stick style.
-    expect(w.findAll(".wp-xypad__band").map((b) => b.text())).toEqual(["calm", "wild"]);
+    // A round stick has no bands to name: Show words is off there.
+    expect(w.findAll(".wp-xypad__band")).toHaveLength(0);
+    expect(w.find('[data-test="pad-words"]').exists()).toBe(false);
     await w.find('[data-test="pad-style-pad"]').trigger("click");
     await w.setProps({ modelValue: last(w) });
     await w.find('[data-test="pad-shape-fit"]').trigger("click");

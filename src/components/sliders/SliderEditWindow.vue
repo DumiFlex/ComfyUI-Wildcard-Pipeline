@@ -23,9 +23,10 @@ import Button from "@/kit/Button.vue";
 import Kbd from "@/kit/Kbd.vue";
 import Banner from "@/kit/Banner.vue";
 import Disclosure from "@/kit/Disclosure.vue";
+import Combobox from "@/kit/Combobox.vue";
 import SliderRowView from "./SliderRow.vue";
 import { varColorClass } from "../shared/var-color";
-import { MAX_DECIMALS, WORD_SLOT, fineStepOf, fitRange, matchAxis, sliderOutputType, wordFor, type SliderMode, type SliderOff, type SliderStyle, type SliderRow, type SliderWord } from "../../extension/sliders";
+import { MAX_DECIMALS, WORD_SLOT, fineStepOf, fitRange, matchAxis, sliderOutputType, wordFor, levelFor, type SliderLevel, type SliderLevelMode, type SliderMode, type SliderStyle, type SliderRow, type SliderWord } from "../../extension/sliders";
 import type { VarProducerLike } from "../../manager/components/RefChip.vue";
 import { INLINE_PICKS_NOTE, hasInlinePicks, tokenize } from "../context/editors/_shared/preview-tokens";
 
@@ -52,6 +53,8 @@ const props = defineProps<{
   /** A pad axis's other axes: "Match X" copies one's range, decimals,
    *  snap, marks and words here. */
   matchRows?: { label: string; row: SliderRow; index: number }[] | undefined;
+  /** Canvas group titles a level can mute or bypass (WP Slider only). */
+  canvasGroups?: string[] | undefined;
 }>();
 const emit = defineEmits<{ done: [next: SliderRow, groupId: string]; cancel: []; swap: [next: SliderRow, index: number] }>();
 
@@ -80,11 +83,10 @@ const STYLES: { value: SliderStyle; label: string; hint: string }[] = [
   { value: "bar", label: "Bar", hint: "The whole row is the track, the name inside it" },
   { value: "fader", label: "Fader", hint: "An upright track; faders next to each other stand side by side" },
 ];
-type RunPick = "" | SliderOff;
-const RUNS: { value: RunPick; label: string; hint: string }[] = [
-  { value: "", label: "Runs", hint: "Writes its variable as set" },
-  { value: "bypass", label: "Bypass", hint: "Writes only the plain number: no text, word or negative" },
-  { value: "mute", label: "Mute", hint: "Writes nothing, so what upstream set stays. The output still sends the number" },
+const LEVEL_MODES: { value: SliderLevelMode; label: string; hint: string }[] = [
+  { value: "run", label: "Run", hint: "What it drives runs while the value is in this range" },
+  { value: "mute", label: "Mute", hint: "Mutes what it drives while the value is in this range" },
+  { value: "bypass", label: "Bypass", hint: "Bypasses what it drives while the value is in this range" },
 ];
 const MODES: { value: SliderMode; label: string; hint: string }[] = [
   { value: "number", label: "Number", hint: "The variable gets the number, e.g. 0.45" },
@@ -133,18 +135,58 @@ function removeWord(i: number): void {
   setWords(words.value.filter((_, j) => j !== i));
 }
 
+/* ── levels (mute / bypass other nodes by value) ──────────────────────── */
+
+const levels = computed<SliderLevel[]>(() => d.value.levels ?? []);
+const levelNow = computed(() => levelFor(d.value));
+function setLevels(list: SliderLevel[]): void {
+  patch({ levels: list.length ? list : undefined, ...(list.length ? {} : { hide_dot: undefined }) });
+}
+function patchLevel(i: number, p: Partial<SliderLevel>): void {
+  setLevels(levels.value.map((l, j) => {
+    if (j !== i) return l;
+    const next: Record<string, unknown> = { ...l, ...p };
+    for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
+    return next as unknown as SliderLevel;
+  }));
+}
+/** Like Add range for words: a new level goes before the last one, ending
+ *  halfway to the max. The first add makes two: run below, bypass above. */
+function addLevel(): void {
+  const list = [...levels.value];
+  const ends = list.map((l) => l.upto).filter((u): u is number => u !== undefined);
+  const from = ends.length ? Math.max(...ends) : d.value.min;
+  const upto = Number((from + (d.value.max - from) / 2).toFixed(d.value.decimals));
+  if (!list.length) {
+    setLevels([{ upto, mode: "run" }, { mode: "bypass" }]);
+    return;
+  }
+  const last = list[list.length - 1];
+  if (last && last.upto === undefined) list.splice(list.length - 1, 0, { upto, mode: "run" });
+  else list.push({ mode: "bypass" });
+  setLevels(list);
+}
+function removeLevel(i: number): void {
+  setLevels(levels.value.filter((_, j) => j !== i));
+}
+const groupChoices = computed(() => {
+  const titles = new Set(props.canvasGroups ?? []);
+  for (const l of levels.value) for (const g of l.groups ?? []) titles.add(g);
+  return [...titles].map((g) => ({ value: g, label: g }));
+});
+
 /** The Advanced section's one-line summary, so a closed section still says
  *  what it changes. */
 const advSummary = computed(() => {
   const parts: string[] = [];
-  if (d.value.off) parts.push(d.value.off === "mute" ? "Muted" : "Bypassed");
+  if (levels.value.some((l) => l.mode !== "run")) parts.push(`${levels.value.length} levels`);
   if (d.value.lock) parts.push("Locked");
   if (d.value.negative) parts.push("Negative");
   if (d.value.marks) parts.push("Marks");
   if (!props.axis && d.value.pin) parts.push(`${sliderOutputType(d.value)} output`);
   return parts.join(" · ");
 });
-const advOpen = ref(!!(props.s.off || props.s.lock));
+const advOpen = ref(!!(props.s.levels?.length || props.s.lock));
 
 /** `$names` the Text reads that nothing upstream (nor this node) sets. */
 const missingVars = computed(() => {
@@ -204,17 +246,19 @@ function onKey(ev: KeyboardEvent): void {
         </div>
       </div>
     </template>
-    <div class="wp-slw__preview" data-test="sl-window-preview">
+    <!-- The template has no track or number of its own: the node shows its
+         text, which the Text field below is. -->
+    <div v-if="axis !== 'Phrase'" class="wp-slw__preview" data-test="sl-window-preview">
       <span class="wp-slw__cap">ON THE NODE</span>
       <SliderRowView :s="d" :problem="problem" :editing="false" :editable="false" @set-value="(v: number) => patch({ value: v })" />
     </div>
     <div class="wp-slw__body">
-      <label class="wp-slw__field">
+      <label v-if="axis !== 'Phrase'" class="wp-slw__field">
         <span>Name <em>on the row and its output</em></span>
         <Input size="sm" :model-value="d.name" spellcheck="false" data-test="sl-name" @keydown.stop @change="patch({ name: value($event) })" />
       </label>
       <label class="wp-slw__field">
-        <span>Variable <em>{{ d.mode === 'number' ? 'gets the number' : `${numHint} always reads the number` }}</em></span>
+        <span>Variable <em>{{ axis === 'Phrase' ? 'gets the text' : d.mode === 'number' ? 'gets the number' : `${numHint} always reads the number` }}</em></span>
         <span class="wp-slw__var-row">
           <Input
             size="sm"
@@ -281,7 +325,7 @@ function onKey(ev: KeyboardEvent): void {
         <WpSegmented :model-value="d.mode" :options="MODES" size="sm" block aria-label="Value" test-prefix="sl-mode" @update:model-value="(v: SliderMode) => patch({ mode: v })" />
       </div>
       <div v-if="d.mode === 'text'" class="wp-slw__field">
-        <span>Text <em>may read {{ numHint }} and other $variables</em></span>
+        <span>Text <em>{{ axis === 'Phrase' ? 'joins the axes: $variables, $name.num for a number' : `may read ${numHint} and other $variables` }}</em></span>
         <RichTextInput
           :model-value="d.text ?? ''"
           surface="combine"
@@ -356,7 +400,7 @@ function onKey(ev: KeyboardEvent): void {
             <NegativeField
               :model-value="d.negative"
               surface="combine"
-              :label="d.mode === 'words' ? 'slider (when the word has none)' : 'slider'"
+              :label="d.mode === 'words' ? 'slider (the word\'s is added, or goes where it says {neg})' : 'slider'"
               test-id="sl-negative"
               :var-suggestions="varSuggestions ?? []"
               :var-producers="varProducers"
@@ -364,9 +408,39 @@ function onKey(ev: KeyboardEvent): void {
               @update:model-value="(v: string | undefined) => patch({ negative: v })"
             />
           </div>
-          <div v-if="axis !== 'Phrase'" class="wp-slw__field">
-            <span>When it runs <em>{{ d.off === 'mute' ? 'writes nothing' : d.off === 'bypass' ? 'writes only the number' : 'writes its variable as set' }}</em></span>
-            <WpSegmented :model-value="d.off ?? ''" :options="RUNS" size="sm" block aria-label="When it runs" test-prefix="sl-off" @update:model-value="(v: RunPick) => patch({ off: v || undefined })" />
+          <div v-if="!axis" class="wp-slw__field" data-test="sl-levels">
+            <span>Mute or bypass <em>other nodes by value: what is wired into the dot in front of the row, plus each range's own canvas groups</em></span>
+            <div v-for="(l, i) in levels" :key="i" class="wp-slw__level" :class="{ 'is-hit': levelNow === l }" :data-test="`sl-level-${i}`">
+              <span class="wp-slw__upto">
+                <template v-if="l.upto !== undefined || i < levels.length - 1">
+                  <span>up to</span>
+                  <WpNumber :model-value="l.upto ?? null" nullable :step="d.step" size="sm" aria-label="Up to" @update:model-value="(v: number | null) => patchLevel(i, { upto: v ?? undefined })" />
+                </template>
+                <span v-else class="wp-slw__rest">the rest</span>
+              </span>
+              <WpSegmented :model-value="l.mode" :options="LEVEL_MODES" size="sm" aria-label="What it does" :test-prefix="`sl-level-mode-${i}`" @update:model-value="(v: SliderLevelMode) => patchLevel(i, { mode: v })" />
+              <Combobox
+                :model-value="l.groups ?? []"
+                multiple
+                :options="groupChoices"
+                placeholder="No groups"
+                size="sm"
+                aria-label="Canvas groups for this range"
+                :data-test="`sl-level-groups-${i}`"
+                @update:model-value="(v: string[] | string | null) => patchLevel(i, { groups: Array.isArray(v) && v.length ? v : undefined })"
+              />
+              <WpIconButton icon="pi-times" tone="danger" label="Remove range" @click="removeLevel(i)" />
+            </div>
+            <Button size="sm" variant="add" icon="pi-plus" block data-test="sl-level-add" @click="addLevel">Add range</Button>
+            <span
+              v-if="levels.some((l) => l.mode !== 'run')"
+              v-tooltip="d.hide_dot ? 'Only the ranges\' canvas groups are muted or bypassed' : 'Untick for a slider that drives only canvas groups; a wire in the dot is dropped'"
+              v-toggle-row
+              class="wp-slw__check"
+            >
+              <Checkbox :model-value="!d.hide_dot" size="sm" aria-label="Wire dot" data-test="sl-dot" @update:model-value="(v: boolean) => patch({ hide_dot: v ? undefined : true })" />
+              <span aria-hidden="true">Wire dot in front of the row</span>
+            </span>
           </div>
           <span class="wp-slw__checks">
             <span v-if="axis !== 'Phrase'" v-tooltip="'The value can\'t be dragged on the node; unlock it here or with the row\'s lock'" v-toggle-row class="wp-slw__check">
@@ -474,6 +548,8 @@ function onKey(ev: KeyboardEvent): void {
 .wp-slw__num { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-slw__word { display: grid; grid-template-columns: 128px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 4px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
 .wp-slw__word.is-hit { box-shadow: inset 0 0 0 1px var(--wp-accent); }
+.wp-slw__level { display: grid; grid-template-columns: 128px auto minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 4px; border-radius: min(4px, var(--wp-radius-cap, 999px)); }
+.wp-slw__level.is-hit { box-shadow: inset 0 0 0 1px var(--wp-accent); }
 .wp-slw__upto { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10.5px; color: var(--wp-text-dim, var(--wp-text3)); }
 .wp-slw__upto :deep(.wp-number) { flex: 1; min-width: 0; }
 .wp-slw__rest { font-style: italic; }

@@ -142,10 +142,12 @@ describe("helpers", () => {
     expect(sliderMarks({ ...s, max: 4, step: 1 }).map((m) => m.value)).toEqual([1, 2, 3]);
   });
 
-  it("files the matched word's negative, else the slider's", () => {
+  it("adds the matched word's negative to the slider's, at {neg} when it has one", () => {
     const s = row({ id: "a", mode: "words", value: 0.2, negative: "base",
       words: [{ word: "near", upto: 0.5, negative: "cropped" }, { word: "far" }] });
-    expect(ownSliderNegatives(cfgOf(s))).toEqual({ a: "cropped" });
+    expect(ownSliderNegatives(cfgOf(s))).toEqual({ a: "base, cropped" });
+    expect(ownSliderNegatives(cfgOf({ ...s, negative: "{neg}, base" }))).toEqual({ a: "cropped, base" });
+    expect(ownSliderNegatives(cfgOf({ ...s, value: 0.9, negative: "x, {neg}, base" }))).toEqual({ a: "x, base" });
     expect(ownSliderNegatives(cfgOf({ ...s, value: 0.9 }))).toEqual({ a: "base" });
     const node = { widgets: [{ name: "wp_sliders", value: JSON.stringify(cfgOf({ ...s, value: 0.9 }, row({ id: "b" }))) }] };
     expect(staticSliderNegatives(node)).toEqual({ a: "base", b: "" });
@@ -274,7 +276,8 @@ describe("WP Slider 2D pad config", () => {
     // A saved Map pad is the plain pad with its words shown.
     expect(cfg.pad).toEqual({ words: true, fit: true, no_tint: true, grid: 0, snap_dots: true, size: "s" });
     expect(padConfig({ pad: { style: "stick", words: true }, rows: [] }).pad).toEqual({ style: "stick", words: true });
-    expect(padConfig({ pad: { style: "nope", size: "xl", grid: 17 }, rows: [] }).pad).toEqual({});
+    expect(padConfig({ pad: { style: "nope", size: "xl", grid: 65 }, rows: [] }).pad).toEqual({});
+    expect(padConfig({ pad: { grid: 40 }, rows: [] }).pad).toEqual({ grid: 40 });
   });
 
   it("padRatio follows the ranges with fit, and a stick is square", () => {

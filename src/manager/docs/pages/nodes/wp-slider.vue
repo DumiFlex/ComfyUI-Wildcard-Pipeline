@@ -62,7 +62,10 @@ import VarToken from "../../../components/docs/VarToken.vue";
         <code>(intricate details:1.2)</code>. <b>Words</b> splits the track into ranges, each with a
         word: a Camera slider writes <code>close-up</code> up to 0.3, <code>medium shot</code> up to
         0.7 and <code>wide shot</code> past that, and the wide shot's negative
-        <code>cropped</code> goes to the Assembler's negative output only while it is picked. To put
+        <code>cropped</code> goes to the Assembler's negative output only while it is picked, added
+        after the slider's own negative (or where it says <code>{neg}</code>). A Text value carries
+        the negatives of the variables it reads, and <VarToken>$camera.neg</VarToken> reads them in
+        a negative. To put
         the word inside a text, write it in <b>Around the word</b> with <code>{word}</code> where the
         word goes: a Colour slider with <code>{word} clothes</code> writes <code>green clothes</code>.
       </p>
@@ -93,12 +96,15 @@ import VarToken from "../../../components/docs/VarToken.vue";
       </p>
     </DocSection>
 
-    <DocSection title="Mute, bypass and lock">
+    <DocSection title="Mute or bypass by level, and lock">
       <p>
         A slider's window keeps the rarer settings under <b>Advanced</b>: its negative, marks, the
-        output, and how it runs. <b>Mute</b> makes the slider write nothing, so what an earlier node
-        set stays; <b>Bypass</b> writes only the plain number, without its text, word or negative.
-        Either way the output still sends the number, and the row is dimmed on the node.
+        output, levels and the lock. <b>Levels</b> split the value into ranges, each set to
+        <b>Run</b>, <b>Mute</b> or <b>Bypass</b>, the way a toggle's When off does. The row gets one
+        dot at its front: a node wired into it takes the mode of the range the value is in, so a
+        Detail slider can bypass the upscaler below 0.5 and run it above. Each range can also pick
+        canvas groups, which take that range's mode while the value is in it: below 0.5 bypass the
+        Hires group, above it bypass the Fast preview group.
         <b>Lock value</b> stops a drag from moving the slider; the lock on the row unlocks it.
       </p>
     </DocSection>

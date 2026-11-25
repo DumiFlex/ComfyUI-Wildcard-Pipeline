@@ -48,6 +48,7 @@ import {
   padRatio,
   phrasePreview,
   newPadPhrase,
+  PAD_DOTS_MAX,
   type OrbitKind,
   sliderProblems,
   sliderWrites,
@@ -231,7 +232,7 @@ function dotsOf(s: SliderRow): number[] {
 const xDots = computed(() => (ax.value ? dotsOf(ax.value) : []));
 const yDots = computed(() => (ay.value ? dotsOf(ay.value) : []));
 /** Show words: each Words axis's ranges as labelled sections (pad styles only). */
-const showWords = computed(() => !!pad.value.words && !special.value);
+const showWords = computed(() => !!pad.value.words && !special.value && style.value !== "stick");
 const hasWordAxis = computed(() => axes.value.slice(0, 2).some((s) => s.mode === "words" && !!s.words?.length));
 const xBands = computed(() => (showWords.value && ax.value ? padBands(ax.value) : []));
 const yBands = computed(() => (showWords.value && ay.value ? padBands(ay.value) : []));
@@ -518,7 +519,7 @@ function applyWindow(next: SliderRow): void {
       <div v-if="!special" class="wp-pad__looks-row">
         <label v-tooltip="'Dots per side. Empty (Auto) puts one on every step, 0 hides them'" class="wp-pad__grid">
           <span>Dots</span>
-          <WpNumber class="wp-pad__grid-num" :model-value="pad.grid ?? null" nullable placeholder="Auto" :min="0" :max="16" :step="1" size="sm" aria-label="Dots per side" data-test="pad-grid" @update:model-value="(v: number | null) => setPad({ grid: v === null ? undefined : v })" />
+          <WpNumber class="wp-pad__grid-num" :model-value="pad.grid ?? null" nullable placeholder="Auto" :min="0" :max="PAD_DOTS_MAX" :step="1" size="sm" aria-label="Dots per side" data-test="pad-grid" @update:model-value="(v: number | null) => setPad({ grid: v === null ? undefined : v })" />
         </label>
         <span v-tooltip="'The point lands on a dot (or an edge); the arrow keys walk dot to dot'" v-toggle-row class="wp-pad__check">
           <Checkbox :model-value="!!pad.snap_dots" size="sm" aria-label="Snap to dots" data-test="pad-snap-dots" @update:model-value="(v: boolean) => setPad({ snap_dots: v ? true : undefined })" />
@@ -528,11 +529,13 @@ function applyWindow(next: SliderRow): void {
           <Checkbox :model-value="!!pad.area" size="sm" aria-label="Area" data-test="pad-area" @update:model-value="(v: boolean) => setPad({ area: v ? true : undefined })" />
           <span aria-hidden="true">Area</span>
         </span>
-        <span v-tooltip="hasWordAxis ? 'Write each Words axis\'s words on the pad as sections' : 'Set an axis to Words to show its words on the pad'" v-toggle-row class="wp-pad__check">
+        <!-- Not on Stick: straight word sections cut by the circle left their
+             words outside it, half hidden. -->
+        <span v-if="style !== 'stick'" v-tooltip="hasWordAxis ? 'Write each Words axis\'s words on the pad as sections' : 'Set an axis to Words to show its words on the pad'" v-toggle-row class="wp-pad__check">
           <Checkbox :model-value="!!pad.words" size="sm" :disabled="!hasWordAxis && !pad.words" aria-label="Show words" data-test="pad-words" @update:model-value="(v: boolean) => setPad({ words: v ? true : undefined })" />
           <span aria-hidden="true">Show words</span>
         </span>
-        <span v-if="pad.words" v-tooltip="'A colour for each word section, the point\'s one a little stronger'" v-toggle-row class="wp-pad__check">
+        <span v-if="pad.words && style !== 'stick'" v-tooltip="'A colour for each word section, the point\'s one a little stronger'" v-toggle-row class="wp-pad__check">
           <Checkbox :model-value="!pad.no_tint" size="sm" aria-label="Colours" data-test="pad-tint" @update:model-value="(v: boolean) => setPad({ no_tint: v ? undefined : true })" />
           <span aria-hidden="true">Colours</span>
         </span>
@@ -576,6 +579,14 @@ function applyWindow(next: SliderRow): void {
 </template>
 
 <style scoped>
+/* The kit draws the cross lines 1px wide: on a canvas scaled under 1 a
+   1px stroke drops out at some positions and not others (Dumi's video at
+   66%). 1.5px always keeps at least one device pixel, as the kit's own axis
+   stroke does. Move to the kit with its next release. */
+.wp-pad :deep(.wp-xypad__line--v) { border-left-width: 1.5px; margin-left: -0.75px; }
+.wp-pad :deep(.wp-xypad__line--h) { border-bottom-width: 1.5px; margin-bottom: -0.75px; }
+.wp-pad :deep(.wp-xypad__band--x + .wp-xypad__band--x) { border-left-width: 1.5px; }
+.wp-pad :deep(.wp-xypad__band--y + .wp-xypad__band--y) { border-bottom-width: 1.5px; }
 .wp-pad {
   display: flex;
   flex-direction: column;
@@ -623,6 +634,9 @@ function applyWindow(next: SliderRow): void {
 /* The pad's height is capped (below), so its width is too, at the shape:
  * otherwise a square pad on a wide node turned into a wide strip. */
 .wp-pad__box > .wp-xypad { width: min(100%, calc(420px * var(--wp-pad-r, 1))); }
+/* L fills the node's width at the pad's shape, as tall as that makes it, so
+ * a tall shape on a wide node isn't shrunk by a height cap. */
+.wp-pad__box[data-size="l"] > .wp-xypad { width: 100%; max-height: none; }
 .wp-pad__box > .wp-pad__z { flex: none; }
 .wp-pad__box > * { max-height: 420px; }
 .wp-pad__box > .wp-tri { max-width: 320px; }
