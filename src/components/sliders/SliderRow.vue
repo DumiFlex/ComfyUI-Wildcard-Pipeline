@@ -18,7 +18,9 @@ import Slider from "@/kit/Slider.vue";
 import WpIconButton from "@/kit/WpIconButton.vue";
 import { vTooltip } from "@/kit/tooltip";
 import { varColorClass } from "../shared/var-color";
-import { fineStepOf, fmtSlider, sliderMarks, wordFor, type SliderRow } from "../../extension/sliders";
+import { fineStepOf, fmtSlider, hasSliderDot, sliderMarks, wordFor, type SliderRow } from "../../extension/sliders";
+import ToggleCtlButton from "../toggles/ToggleCtlButton.vue";
+import { ctlInputName, type ControlState, type FocusSpotView } from "../../extension/toggle-control";
 
 const props = defineProps<{
   s: SliderRow;
@@ -30,6 +32,10 @@ const props = defineProps<{
   flat?: boolean | undefined;
   /** What the variable gets now (`sliderWrites`), for the hover. */
   writes?: string | undefined;
+  /** What its levels do to other nodes now (WP Slider), for the row icon. */
+  control?: ControlState | undefined;
+  /** Where those nodes are, for the icon's menu. */
+  spots?: FocusSpotView[] | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -37,6 +43,8 @@ const emit = defineEmits<{
   patch: [patch: Partial<SliderRow>];
   edit: [];
   remove: [];
+  /** Glide the canvas to one of its mute / bypass targets. */
+  show: [key: string];
 }>();
 
 const looks = computed(() => {
@@ -64,12 +72,9 @@ const tip = computed(() => {
 });
 const fmt = (v: number): string => fmtSlider({ value: v, decimals: props.s.decimals });
 const broken = computed(() => props.s.max <= props.s.min);
-/** Mute / bypass, as the row says it on the node. */
-const offNote = computed(() => {
-  if (props.s.off === "mute") return "Muted: writes nothing, so what upstream set stays";
-  if (props.s.off === "bypass") return "Bypassed: writes only the plain number";
-  return "";
-});
+/** The wire dot of its levels sits level with the row (not in the edit
+ *  view's list, which is another copy of the row). */
+const socket = computed(() => (!props.editable && hasSliderDot(props.s) ? ctlInputName(props.s.id) : undefined));
 const variant = computed(() => {
   if (props.s.style === "bar") return "bar";
   return props.s.style === "fader" && !props.flat ? "fader" : "line";
@@ -87,16 +92,16 @@ function internalHint(): string {
 <template>
   <div class="wp-slr" :class="`wp-slr--${variant}`" :data-wp-vars="s.var || undefined">
     <div
-      v-tooltip="editable ? undefined : tip"
       class="wp-slr__row"
-      :class="{ 'is-editing': editing, 'is-editable': editable, 'has-text-color': !!s.text_color, 'is-off': !!s.off, 'is-locked': !!s.lock }"
+      :class="{ 'is-editing': editing, 'is-editable': editable, 'has-text-color': !!s.text_color, 'is-locked': !!s.lock }"
+      :data-wp-socket="socket"
       :data-wp-out="s.pin && s.out && variant !== 'fader' ? `value_${s.out}` : undefined"
       :data-test="`sl-row-${s.id}`"
       :style="looks"
     >
       <span v-if="variant === 'line'" class="wp-slr__head">
       <i v-if="s.icon" class="pi wp-slr__icon" :class="`pi-${s.icon}`" aria-hidden="true" />
-      <span class="wp-slr__name">
+      <span v-tooltip="editable ? undefined : tip" class="wp-slr__name">
         <b>{{ s.name }}</b>
         <span v-if="!s.hide_var" class="wp-slr__sub">
           <span :class="s.var ? varColorClass(s.var) : 'is-dim'">{{ s.var ? `$${s.var}` : "no variable" }}</span>
@@ -127,7 +132,7 @@ function internalHint(): string {
         >
           <template v-if="variant !== 'line'" #label>
             <span class="wp-slr__in">
-              <span class="wp-slr__in-head">
+              <span v-tooltip="editable ? undefined : tip" class="wp-slr__in-head">
                 <i v-if="s.icon" class="pi wp-slr__icon" :class="`pi-${s.icon}`" aria-hidden="true" />
                 <span class="wp-slr__in-name">{{ s.name }}</span>
               </span>
@@ -137,15 +142,7 @@ function internalHint(): string {
           </template>
         </Slider>
       </span>
-      <i
-        v-if="offNote"
-        v-tooltip="offNote"
-        class="pi wp-slr__off"
-        :class="s.off === 'mute' ? 'pi-volume-off' : 'pi-forward'"
-        role="img"
-        :aria-label="offNote"
-        :data-test="`sl-off-${s.id}`"
-      />
+      <ToggleCtlButton v-if="control" :state="control" :spots="spots ?? []" :toggle-id="s.id" @show="(k: string) => emit('show', k)" />
       <WpIconButton
         v-if="s.lock || editable"
         icon="pi-lock"
@@ -251,8 +248,11 @@ function internalHint(): string {
 .wp-slr--fader .wp-slr__in-name { font-size: 10.5px; text-align: center; }
 .wp-slr--fader .wp-slr__in-var { max-width: 100%; font-size: 9.5px; }
 /* Muted / bypassed: the row stays readable but steps back. */
-.wp-slr__row.is-off .wp-slr__ctl, .wp-slr__row.is-off .wp-slr__head { opacity: 0.5; }
-.wp-slr__off { flex: none; font-size: 11px; color: var(--wp-text-dim, var(--wp-text3)); }
+/* The levels' mute / bypass icon (ToggleCtlButton), coloured like WP Toggles'. */
+.wp-tgr__ctlicon { flex: none; font-size: 10px; color: var(--wp-text-dim, var(--wp-text3)); opacity: 0.7; }
+.wp-tgr__ctlicon.is-active { opacity: 1; }
+.wp-tgr__ctlicon.is-active.is-bypass { color: var(--wp-violet); }
+.wp-tgr__ctlicon.is-active.is-mute { color: var(--wp-amber, var(--wp-warn)); }
 /* A locked track keeps its colour; only the drag is off. */
 .wp-slr__row.is-locked :deep(.wp-slider[data-disabled]) { opacity: 1; }
 .wp-slr__row.is-locked :deep(.wp-slider[data-disabled] .wp-slider__thumb) { cursor: not-allowed; }

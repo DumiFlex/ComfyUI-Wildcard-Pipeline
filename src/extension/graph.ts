@@ -781,10 +781,17 @@ export function collectUpstreamInjectorNegatives(
     }
     if (isSliderNode(n.type) && !isSkippedMode(n)) {
       // As Toggles: a text that reads `$vars` carries theirs, then its own.
+      // In row order, as the node files them, so a later row reads an
+      // earlier one's (and its own negative's `$name.neg` resolves).
       const values = staticSliderValues(n);
       const negs = staticSliderNegatives(n);
-      const before = { ...out };
-      for (const v of Object.keys(negs)) out[v] = inheritNegatives(before, values[v] ?? "", negs[v] ?? "");
+      const known = { ...out };
+      for (const v of Object.keys(negs)) delete known[v];
+      for (const v of Object.keys(negs)) {
+        const own = (negs[v] ?? "").replace(NEG_READ_RE, (_m, name: string) => known[name] ?? "");
+        known[v] = inheritNegatives(known, values[v] ?? "", own.replace(/(?:\s*,){2,}\s*/g, ", ").replace(/^[\s,]+|[\s,]+$/g, ""));
+        out[v] = known[v] ?? null;
+      }
       continue;
     }
     if (n.type !== "WP_ContextInjector" || isSkippedMode(n)) continue;
@@ -810,6 +817,7 @@ export function collectUpstreamInjectorNegatives(
 }
 
 const READ_RE = /\$\$|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+const NEG_READ_RE = /\$([A-Za-z_][A-Za-z0-9_]*)\.neg\b/g;
 const SOCKET_RE = /^input_\d+$/;
 
 /** `own` after the negatives (in `known`) of each `$var` `text` reads, or

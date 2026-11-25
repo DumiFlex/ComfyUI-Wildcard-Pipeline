@@ -570,121 +570,125 @@
    "outputs": []
   },
   {
-   "name": "mute writes nothing, an earlier row of the same variable stands",
+   "name": "word negative adds to the slider's, at {neg} when it says so",
    "config": {
     "version": 1,
     "rows": [
      {
-      "kind": "slider",
-      "min": 0,
-      "max": 1,
-      "step": 0.05,
-      "decimals": 2,
-      "style": "row",
       "id": "00000001",
+      "kind": "slider",
       "name": "a",
-      "var": "mood",
-      "value": 0.25,
-      "negative": "dull"
-     },
-     {
-      "kind": "slider",
+      "var": "a",
+      "value": 0.2,
       "min": 0,
       "max": 1,
       "step": 0.05,
       "decimals": 2,
       "style": "row",
-      "id": "00000002",
-      "name": "b",
-      "var": "mood",
-      "value": 0.75,
-      "off": "mute",
-      "negative": "sharp",
-      "pin": true,
-      "out": 1
-     },
-     {
-      "kind": "slider",
-      "min": 0,
-      "max": 1,
-      "step": 0.05,
-      "decimals": 2,
-      "style": "row",
-      "id": "00000003",
-      "name": "c",
-      "var": "solo",
-      "value": 0.5,
-      "off": "mute"
-     }
-    ]
-   },
-   "values": {
-    "mood": "0.25"
-   },
-   "nums": {
-    "mood": "0.25"
-   },
-   "negatives": {
-    "mood": "dull"
-   },
-   "outputs": [
-    0.75
-   ]
-  },
-  {
-   "name": "bypass writes the plain number, no word, text or negative",
-   "config": {
-    "version": 1,
-    "rows": [
-     {
-      "kind": "slider",
-      "min": 0,
-      "max": 1,
-      "step": 0.05,
-      "decimals": 2,
-      "style": "row",
-      "id": "00000001",
-      "name": "w",
-      "var": "colour",
-      "value": 0.8,
       "mode": "words",
+      "negative": "blurry",
       "words": [
        {
         "upto": 0.5,
-        "word": "green",
-        "negative": "red"
+        "word": "close-up",
+        "negative": "cropped"
        },
        {
-        "word": "blue"
+        "word": "wide shot"
        }
-      ],
-      "negative": "x",
-      "off": "bypass"
+      ]
      },
      {
+      "id": "00000002",
       "kind": "slider",
+      "name": "b",
+      "var": "b",
+      "value": 0.2,
       "min": 0,
       "max": 1,
       "step": 0.05,
       "decimals": 2,
       "style": "row",
-      "id": "00000002",
-      "name": "t",
-      "var": "detail",
-      "value": 0.4,
-      "mode": "text",
-      "text": "(detail:$detail.num)",
-      "off": "bypass"
+      "mode": "words",
+      "negative": "{neg}, blurry",
+      "words": [
+       {
+        "upto": 0.5,
+        "word": "close-up",
+        "negative": "cropped"
+       },
+       {
+        "word": "wide shot"
+       }
+      ]
+     },
+     {
+      "id": "00000003",
+      "kind": "slider",
+      "name": "c",
+      "var": "c",
+      "value": 0.9,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "mode": "words",
+      "negative": "x, {neg}, blurry",
+      "words": [
+       {
+        "upto": 0.5,
+        "word": "close-up",
+        "negative": "cropped"
+       },
+       {
+        "word": "wide shot"
+       }
+      ]
+     },
+     {
+      "id": "00000004",
+      "kind": "slider",
+      "name": "d",
+      "var": "d",
+      "value": 0.9,
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "decimals": 2,
+      "style": "row",
+      "mode": "words",
+      "negative": "blurry",
+      "words": [
+       {
+        "upto": 0.5,
+        "word": "close-up",
+        "negative": "cropped"
+       },
+       {
+        "word": "wide shot"
+       }
+      ]
      }
     ]
    },
    "values": {
-    "colour": "0.80",
-    "detail": "0.40"
+    "a": "close-up",
+    "b": "close-up",
+    "c": "wide shot",
+    "d": "wide shot"
    },
    "nums": {
-    "colour": "0.80",
-    "detail": "0.40"
+    "a": "0.20",
+    "b": "0.20",
+    "c": "0.90",
+    "d": "0.90"
+   },
+   "negatives": {
+    "a": "blurry, cropped",
+    "b": "cropped, blurry",
+    "c": "x, blurry",
+    "d": "blurry"
    },
    "outputs": []
   }

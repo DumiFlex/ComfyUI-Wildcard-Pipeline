@@ -24,6 +24,7 @@ import WpIconButton from "@/kit/WpIconButton.vue";
 import ColorField from "@/kit/ColorField.vue";
 import IconPicker from "@/kit/IconPicker.vue";
 import SortableList from "@/kit/SortableList.vue";
+import type { ControlState, FocusSpotView } from "../../extension/toggle-control";
 import SliderRowView from "./SliderRow.vue";
 import {
   MAX_OUTPUTS,
@@ -61,10 +62,16 @@ const props = withDefaults(
     upstreamVars?: string[];
     varProducers?: Map<string, VarProducerLike> | undefined;
     nodeTitle?: string;
+    /** Row id → what its levels do to other nodes now (row icon). */
+    controls?: Record<string, ControlState>;
+    /** Row id → where those nodes are (the icon's menu). */
+    focusSpots?: Record<string, FocusSpotView[]>;
+    /** Canvas group titles a level can drive. */
+    canvasGroups?: string[];
   }>(),
-  { nodeMode: 0, editRequest: 0, upstreamVars: () => [], varProducers: undefined, nodeTitle: "" },
+  { nodeMode: 0, editRequest: 0, upstreamVars: () => [], varProducers: undefined, nodeTitle: "", controls: () => ({}), focusSpots: () => ({}), canvasGroups: () => [] },
 );
-const emit = defineEmits<{ "update:modelValue": [next: SlidersConfig] }>();
+const emit = defineEmits<{ "update:modelValue": [next: SlidersConfig]; "focus-target": [rowId: string, key: string] }>();
 
 const isSkipped = computed(() => props.nodeMode === 2 || props.nodeMode === 4);
 const cfg = computed(() => props.modelValue);
@@ -220,7 +227,16 @@ function onReveal(ev: Event): void {
   if (open.size) setRows(cfg.value.rows.map((r) => (r.kind === "label" && open.has(r.id) ? { ...r, collapsed: false } : r)));
 }
 function rowProps(s: SliderRow) {
-  return { s, problem: problems.value.get(s.id), editing: editing.value === s.id, editable: editMode.value, writes: sliderWrites(cfg.value, s) };
+  return {
+    s,
+    problem: problems.value.get(s.id),
+    editing: editing.value === s.id,
+    editable: editMode.value,
+    writes: sliderWrites(cfg.value, s),
+    control: props.controls[s.id],
+    spots: props.focusSpots[s.id],
+    onShow: (key: string) => emit("focus-target", s.id, key),
+  };
 }
 </script>
 
@@ -377,6 +393,7 @@ function rowProps(s: SliderRow) {
       :var-suggestions="valueVars"
       :var-producers="varProducers"
       :node-title="nodeTitle"
+      :canvas-groups="canvasGroups"
       @done="(next: SliderRow, groupId: string) => editingRow && applyWindow(editingRow, next, groupId)"
       @cancel="editing = null"
     />

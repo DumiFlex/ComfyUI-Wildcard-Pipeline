@@ -36,9 +36,28 @@ export interface SliderWord {
   negative?: string;
 }
 
-export type SliderOff = "mute" | "bypass";
+/** What the nodes a slider drives do while its value is in a level. */
+export const SLIDER_LEVEL_MODES = ["run", "mute", "bypass"] as const;
+export type SliderLevelMode = (typeof SLIDER_LEVEL_MODES)[number];
+
+/**
+ * A value range of a slider, read like a Words range: it ends at `upto`
+ * (inclusive); one without `upto` catches the rest. While the value is in
+ * it, the nodes wired into the row's dot run, are muted or are bypassed, and
+ * so are this level's own canvas `groups` (another level's groups run).
+ * Frontend only, like WP Toggles' control
+ * (`extension/slider-control.ts`); the run never sees it.
+ */
+export interface SliderLevel {
+  upto?: number;
+  mode: SliderLevelMode;
+  /** Canvas groups by title that this level drives. */
+  groups?: string[];
+}
 /** In Words mode, where the picked word goes in the row's text. */
 export const WORD_SLOT = "{word}";
+/** In words mode, where the picked word's negative goes in the slider's. */
+export const NEG_SLOT = "{neg}";
 
 export interface SliderRow {
   id: string;
@@ -67,9 +86,11 @@ export interface SliderRow {
   internal?: true;
   /** The output's type; absent follows the decimals (INT at 0, else FLOAT). */
   out_type?: "int" | "float";
-  /** `mute` writes nothing; `bypass` writes the plain number (no text,
-   *  word or negative). The output still sends the number. */
-  off?: SliderOff;
+  /** Value ranges that run, mute or bypass other nodes (see `SliderLevel`).
+   *  Any level that mutes or bypasses gives the row a wire dot in front. */
+  levels?: SliderLevel[];
+  /** No wire dot: the levels drive only their groups. */
+  hide_dot?: true;
   /** The value can't be moved on the canvas. */
   lock?: true;
   style: SliderStyle;
@@ -215,6 +236,50 @@ const iconName = (v: unknown): string => {
 const num = (v: unknown, fallback: number): number =>
   typeof v === "number" && Number.isFinite(v) ? v : fallback;
 
+function parseLevels(raw: unknown): SliderLevel[] {
+  const out: SliderLevel[] = [];
+  for (const l of Array.isArray(raw) ? raw : []) {
+    if (!l || typeof l !== "object" || Array.isArray(l)) continue;
+    const o = l as Record<string, unknown>;
+    const level: SliderLevel = { mode: SLIDER_LEVEL_MODES.includes(o.mode as SliderLevelMode) ? (o.mode as SliderLevelMode) : "run" };
+    if (typeof o.upto === "number" && Number.isFinite(o.upto)) level.upto = o.upto;
+    const groups = Array.isArray(o.groups) ? [...new Set(o.groups.map(str).filter(Boolean))] : [];
+    if (groups.length) level.groups = groups;
+    out.push(level);
+  }
+  return out;
+}
+
+/** Whether the slider mutes or bypasses anything at some value. */
+export function drivesNodes(s: Pick<SliderRow, "levels">): boolean {
+  return (s.levels ?? []).some((l) => l.mode !== "run");
+}
+
+/** Every canvas group any level names, in order. */
+export function levelGroups(s: Pick<SliderRow, "levels">): string[] {
+  return [...new Set((s.levels ?? []).flatMap((l) => l.groups ?? []))];
+}
+
+/** The row has a wire dot in front (its levels drive something and it
+ *  isn't groups-only). */
+export function hasSliderDot(s: Pick<SliderRow, "levels" | "hide_dot">): boolean {
+  return drivesNodes(s) && !s.hide_dot;
+}
+
+/** The level the value is in (absent `upto` catches the rest; past every
+ *  `upto` the last level decides), or undefined without levels. */
+export function levelFor(s: Pick<SliderRow, "value" | "decimals" | "levels">): SliderLevel | undefined {
+  const levels = s.levels ?? [];
+  if (!levels.length) return undefined;
+  const v = sliderNumber(s);
+  return levels.find((l) => l.upto === undefined || v <= l.upto) ?? levels[levels.length - 1];
+}
+
+/** What the slider's targets do now: run while no level says otherwise. */
+export function levelMode(s: Pick<SliderRow, "value" | "decimals" | "levels">): SliderLevelMode {
+  return levelFor(s)?.mode ?? "run";
+}
+
 function parseWords(raw: unknown): SliderWord[] {
   const out: SliderWord[] = [];
   for (const w of Array.isArray(raw) ? raw : []) {
@@ -285,7 +350,9 @@ export function parseSlidersConfig(raw: unknown): SlidersConfig {
     if (words.length) s.words = words;
     if (o.internal === true) s.internal = true;
     if (o.out_type === "int" || o.out_type === "float") s.out_type = o.out_type;
-    if (o.off === "mute" || o.off === "bypass") s.off = o.off;
+    const levels = parseLevels(o.levels);
+    if (levels.length) s.levels = levels;
+    if (o.hide_dot === true) s.hide_dot = true;
     if (o.lock === true) s.lock = true;
     if (o.free === true) s.free = true;
     if (o.hide_var === true) s.hide_var = true;
@@ -314,6 +381,8 @@ function hasRows(raw: unknown): boolean {
   return !!data && typeof data === "object" && Array.isArray((data as { rows?: unknown }).rows);
 }
 
+/** Most dots per side the Dots field takes. */
+export const PAD_DOTS_MAX = 64;
 const PAD_STYLES = new Set(["size", "stick", "orbit", "mix"]);
 function parsePad(raw: unknown): PadLooks | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
@@ -327,7 +396,7 @@ function parsePad(raw: unknown): PadLooks | undefined {
   if (o.area === true) pad.area = true;
   if (o.no_crosshair === true) pad.no_crosshair = true;
   if (o.no_tint === true) pad.no_tint = true;
-  if (typeof o.grid === "number" && Number.isInteger(o.grid) && o.grid >= 0 && o.grid <= 16) pad.grid = o.grid;
+  if (typeof o.grid === "number" && Number.isInteger(o.grid) && o.grid >= 0 && o.grid <= PAD_DOTS_MAX) pad.grid = o.grid;
   if (o.snap_dots === true) pad.snap_dots = true;
   if (o.size === "s" || o.size === "m") pad.size = o.size;
   if (o.light === true) pad.light = true;
@@ -653,8 +722,8 @@ export function wordFor(s: SliderRow): SliderWord | undefined {
 }
 
 const usable = (s: SliderRow): boolean => !!s.var && VAR_RE.test(s.var);
-/** Whether the row writes its variable at all (a muted row doesn't). */
-const writes = (s: SliderRow): boolean => usable(s) && s.off !== "mute";
+/** Whether the row writes its variable at all. */
+const writes = usable;
 
 /** Words mode: what the variable holds, the picked word set into `text`
  *  where it says `{word}` (the word alone otherwise). */
@@ -670,8 +739,7 @@ export function resolveSliders(cfg: SlidersConfig): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of sliderRows(cfg)) {
     if (!writes(s)) continue;
-    if (s.off === "bypass") out[s.var] = fmtSlider(s);
-    else if (s.mode === "text") out[s.var] = s.text ?? "";
+    if (s.mode === "text") out[s.var] = s.text ?? "";
     else if (s.mode === "words") out[s.var] = wordText(s);
     else out[s.var] = fmtSlider(s);
   }
@@ -682,8 +750,6 @@ export function resolveSliders(cfg: SlidersConfig): Record<string, string> {
  *  or its text with this node's `$name.num` and `$name` filled in (variables
  *  from other nodes stay as written; the node resolves them at run time). */
 export function sliderWrites(cfg: SlidersConfig, s: SliderRow): string {
-  if (s.off === "mute") return "";
-  if (s.off === "bypass") return fmtSlider(s);
   const wordIn = s.mode === "words" && (s.text ?? "").includes(WORD_SLOT);
   if (s.mode === "words" && !wordIn) return wordText(s);
   if (s.mode !== "text" && !wordIn) return fmtSlider(s);
@@ -701,13 +767,20 @@ export function sliderNums(cfg: SlidersConfig): Record<string, string> {
   return out;
 }
 
-/** The negative a slider's variable carries now ("" for none). */
+/** Drop the empty pieces a missing word negative leaves ("a, , b"). */
+function tidyNegative(text: string): string {
+  return text.replace(/(?:\s*,){2,}\s*/g, ", ").trim().replace(/^,+|,+$/g, "").trim();
+}
+
+/**
+ * The negative a slider's variable carries now ("" for none): its own, with
+ * the matched word's (words mode) set in at `{neg}`, else added after it.
+ */
 export function sliderNegative(s: SliderRow): string {
-  if (s.mode === "words") {
-    const w = wordFor(s);
-    if (w?.negative) return w.negative;
-  }
-  return s.negative ?? "";
+  const own = s.negative ?? "";
+  const word = s.mode === "words" ? (wordFor(s)?.negative ?? "").trim() : "";
+  if (own.includes(NEG_SLOT)) return tidyNegative(own.split(NEG_SLOT).join(word));
+  return tidyNegative(own.trim() && word ? `${own.trim()}, ${word}` : own || word);
 }
 
 /** Variable → its negative, left out when empty; the last row decides. */
@@ -715,7 +788,7 @@ export function ownSliderNegatives(cfg: SlidersConfig): Record<string, string> {
   const out: Record<string, string> = {};
   for (const s of sliderRows(cfg)) {
     if (!writes(s)) continue;
-    const text = s.off === "bypass" ? "" : sliderNegative(s).trim();
+    const text = sliderNegative(s).trim();
     if (text) out[s.var] = text;
     else delete out[s.var];
   }

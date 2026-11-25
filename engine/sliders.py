@@ -26,17 +26,18 @@ What the variable holds (``mode``):
   last word wins). A ``text`` holding ``{word}`` wraps it: ``"{word}
   clothes"`` writes ``"green clothes"`` (the node resolves it like ``text``).
 
-``off`` (stored only when set): ``"mute"`` writes nothing (no variable, no
-``$name.num``, no negative); ``"bypass"`` writes the plain number, as
-``number`` mode does, with no negative. The row's output still sends its
-number. ``lock`` (stored only as ``true``) stops the value moving on the
-canvas; the engine reads nothing from it.
+``lock`` (stored only as ``true``) stops the value moving on the canvas,
+and ``controls`` mute or bypass other nodes while the value sits in a level;
+both are frontend only and the engine reads nothing from them.
 
 ``$name.num`` reads the number whatever the variable holds, from the
 cross-node table :data:`NUMS_KEY` (like ``$name.bool`` for WP Toggles).
 
-A slider's negative: the matched word's ``negative`` in ``words`` mode
-(else the slider's own ``negative``), the slider's ``negative`` otherwise.
+A slider's negative is its own ``negative``; in ``words`` mode the matched
+word's ``negative`` is added to it, where the slider's says ``{neg}``, else
+after it (``"blurry, {neg}"`` / ``"blurry"`` + ``"red"`` both give ``"blurry,
+red"``). A ``text`` row (and a ``{word}`` text) also carries the negatives of
+the variables it reads; the node files those (``slider_node.py``).
 
 ``internal`` (stored only as ``true``) keeps the variable out of the
 Assembler's "every variable" listing, as WP Toggles' default does.
@@ -61,9 +62,10 @@ from typing import Any
 #: link any slot up to it, and validation indexes RETURN_TYPES by slot.
 MAX_OUTPUTS = 16
 MODES = ("number", "text", "words")
-OFF = ("mute", "bypass")
 #: In ``words`` mode, where the picked word goes in the row's ``text``.
 WORD_SLOT = "{word}"
+#: In ``words`` mode, where the picked word's negative goes in the slider's.
+NEG_SLOT = "{neg}"
 STYLES = ("row", "bar", "fader")
 MAX_DECIMALS = 6
 
@@ -102,8 +104,6 @@ class Slider:
     #: ``"int"`` / ``"float"`` picks the output's type; empty follows the
     #: decimals (INT at 0, else FLOAT).
     out_type: str = ""
-    #: ``"mute"`` / ``"bypass"`` (see the module doc); empty runs as set.
-    off: str = ""
 
     @property
     def is_int(self) -> bool:
@@ -177,7 +177,6 @@ def parse_config(raw: Any) -> Config:
         negative = row.get("negative")
         step = _num(row.get("step"), 0.01)
         out_type = row.get("out_type")
-        off = row.get("off")
         sliders.append(Slider(
             id=sid,
             name=_str(row.get("name")) or sid,
@@ -195,7 +194,6 @@ def parse_config(raw: Any) -> Config:
             out=out if isinstance(out, int) and not isinstance(out, bool) else 0,
             internal=row.get("internal") is True,
             out_type=out_type if out_type in ("int", "float") else "",
-            off=off if off in OFF else "",
         ))
     return Config(sliders=sliders)
 
@@ -241,8 +239,8 @@ def _usable(s: Slider) -> bool:
 
 
 def _writes(s: Slider) -> bool:
-    """Whether the row writes its variable at all (a muted row doesn't)."""
-    return _usable(s) and s.off != "mute"
+    """Whether the row writes its variable at all."""
+    return _usable(s)
 
 
 def word_text(s: Slider) -> str:
@@ -260,9 +258,7 @@ def resolve(cfg: Config) -> dict[str, str]:
     for s in cfg.sliders:
         if not _writes(s):
             continue
-        if s.off == "bypass":
-            values[s.var] = fmt(s)
-        elif s.mode == "text":
+        if s.mode == "text":
             values[s.var] = s.text
         elif s.mode == "words":
             values[s.var] = word_text(s)
@@ -284,6 +280,24 @@ def nums(cfg: Config) -> dict[str, str]:
     return {s.var: fmt(s) for s in cfg.sliders if _writes(s)}
 
 
+def _tidy(text: str) -> str:
+    """Drop the empty pieces a missing word negative leaves (``"a, , b"``)."""
+    return re.sub(r"(?:\s*,){2,}\s*", ", ", text).strip().strip(",").strip()
+
+
+def own_negative(s: Slider) -> str:
+    """The slider's negative now: its own, with the matched word's (in
+    ``words`` mode) set in at ``{neg}``, else added after it."""
+    word = ""
+    if s.mode == "words":
+        w = word_for(s)
+        word = w.negative.strip() if w is not None else ""
+    if NEG_SLOT in s.negative:
+        return _tidy(s.negative.replace(NEG_SLOT, word))
+    own = s.negative.strip()
+    return _tidy(f"{own}, {word}" if own and word else own or word)
+
+
 def own_negatives(cfg: Config) -> dict[str, str]:
     """Slider variable → its negative (see the module doc), left out when
     empty. A later row writing the same variable decides."""
@@ -291,14 +305,7 @@ def own_negatives(cfg: Config) -> dict[str, str]:
     for s in cfg.sliders:
         if not _writes(s):
             continue
-        if s.off == "bypass":
-            out.pop(s.var, None)
-            continue
-        text = s.negative
-        if s.mode == "words":
-            w = word_for(s)
-            if w is not None and w.negative:
-                text = w.negative
+        text = own_negative(s)
         if text.strip():
             out[s.var] = text.strip()
         else:

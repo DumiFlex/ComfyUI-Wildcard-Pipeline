@@ -278,6 +278,34 @@ describe("collectUpstreamProducers", () => {
     });
   });
 
+  it("collectUpstreamInjectorNegatives: slider rows add up word negatives, earlier rows and $name.neg", () => {
+    const words = [{ upto: 0.5, word: "close-up", negative: "cropped" }, { word: "wide shot" }];
+    const base = { kind: "slider", min: 0, max: 1, step: 0.05, decimals: 2, style: "row" };
+    const sl: LiteNodeLike = {
+      id: 1,
+      type: "WP_Slider",
+      outputs: [{ name: "context", links: [100], type: "PIPELINE_CONTEXT" }],
+      widgets: [{
+        name: "wp_sliders",
+        value: JSON.stringify({
+          version: 1,
+          rows: [
+            { ...base, id: "a", name: "shot", var: "shot", value: 0.2, mode: "words", words, negative: "blurry" },
+            { ...base, id: "b", name: "phrase", var: "phrase", value: 0, mode: "text", text: "$shot light" },
+            { ...base, id: "c", name: "copy", var: "copy", value: 0, mode: "text", text: "x", negative: "$shot.neg, extra" },
+          ],
+        }),
+      }],
+    };
+    const pov = ctxWriting(2, "Other", "unused", 100);
+    const g = chain([sl, pov], { 100: { origin_id: 1, target_id: 2 } });
+    expect(collectUpstreamInjectorNegatives(g, pov)).toEqual({
+      shot: "blurry, cropped",
+      phrase: "blurry, cropped",
+      copy: "blurry, cropped, extra",
+    });
+  });
+
   it("collectUpstreamInjectorNegatives: a template row carries the negatives of what it reads", () => {
     const inj: LiteNodeLike = {
       id: 1,

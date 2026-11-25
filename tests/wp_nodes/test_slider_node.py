@@ -84,17 +84,36 @@ def test_problems_warn():
     assert any("can't be used" in m for m in msgs)
 
 
-def test_word_slot_reads_vars_and_mute_keeps_upstream():
+def test_word_slot_reads_vars():
     up = ContextPayload(context={"mood": "calm", "kept": "upstream"}, debug={}, internals={})
     cfg = {"rows": [
         {"id": "a", "kind": "slider", "var": "shot", "value": 0.2, "mode": "words",
          "words": WORDS, "text": "{word}, $mood light"},
-        {"id": "b", "kind": "slider", "var": "kept", "value": 0.5, "off": "mute"},
         {"id": "c", "kind": "slider", "var": "plain", "value": 0.9, "mode": "words",
-         "words": WORDS, "text": "{word}", "off": "bypass"},
+         "words": WORDS, "text": "{word}"},
     ]}
     payload, *_ = _run(cfg, upstream=up).values
     assert payload.context["shot"] == "close-up, calm light"
     assert payload.context["kept"] == "upstream"
-    assert payload.context["plain"] == "0.90"
-    assert "kept" not in payload.internals[sliders.NUMS_KEY]
+    assert payload.context["plain"] == "wide shot"
+
+
+def test_negatives_add_up_and_read_earlier_rows():
+    cfg = {"rows": [
+        {"id": "a", "kind": "slider", "var": "shot", "value": 0.9, "mode": "words",
+         "words": WORDS, "negative": "blurry"},
+        {"id": "b", "kind": "slider", "var": "tilt", "value": 0.9, "mode": "words",
+         "words": WORDS, "negative": "{neg}, tilted"},
+        # A template with no negative of its own carries what it reads.
+        {"id": "c", "kind": "slider", "var": "phrase", "value": 0, "mode": "text",
+         "text": "$shot, $tilt"},
+        # `$name.neg` reads an earlier row's negatives.
+        {"id": "d", "kind": "slider", "var": "copy", "value": 0, "mode": "text",
+         "text": "x", "negative": "$shot.neg, extra"},
+    ]}
+    payload, *_ = _run(cfg).values
+    negs = {k: [e["text"] for e in v] for k, v in payload.internals[negatives.NEG_KEY].items()}
+    assert negs["shot"] == ["blurry, cropped"]
+    assert negs["tilt"] == ["cropped, tilted"]
+    assert negs["phrase"] == ["blurry, cropped", "cropped, tilted"]
+    assert negs["copy"] == ["blurry, cropped, extra"]
