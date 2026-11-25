@@ -212,6 +212,15 @@ const style = computed(() => pad.value.style ?? "pad");
 const special = computed(() => style.value === "orbit" || style.value === "mix");
 const shape = computed(() => (pad.value.fit ? "fit" : String(pad.value.ratio ?? 1)));
 const ratio = computed(() => (ax.value && ay.value ? padRatio(pad.value, ax.value, ay.value) : 1));
+/** The pad's shape reaches the CSS so its width follows the height cap: a
+ *  square on a wide node stays square instead of a 100% wide, 420 px tall
+ *  strip. */
+const boxStyle = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = { "--wp-pad-r": String(style.value === "stick" ? 1 : ratio.value) };
+  const tint = ax.value?.tint ?? ay.value?.tint;
+  if (tint) out["--wp-accent"] = tint;
+  return out;
+});
 /** Dots along one axis: one per step (Auto), N on steps, or none. */
 function dotsOf(s: SliderRow): number[] {
   const g = pad.value.grid;
@@ -437,7 +446,7 @@ function applyWindow(next: SliderRow): void {
       />
     </div>
     <!-- eslint-disable-next-line vuejs-accessibility/no-static-element-interactions -->
-    <div v-else-if="ax && ay" :ref="az ? watchPadHeight : undefined" class="wp-pad__box" :data-size="pad.size ?? 'l'" :data-z="az ? '' : undefined" :style="ay.tint || ax.tint ? { '--wp-accent': ax.tint ?? ay.tint } : undefined" @pointerdown.stop @wheel="onWheel">
+    <div v-else-if="ax && ay" :ref="az ? watchPadHeight : undefined" class="wp-pad__box" :data-size="pad.size ?? 'l'" :data-z="az ? '' : undefined" :style="boxStyle" @pointerdown.stop @wheel="onWheel">
       <XYPad
         :model-value="[ax.value, ay.value]"
         :x-min="ax.min"
@@ -610,7 +619,10 @@ function applyWindow(next: SliderRow): void {
 .wp-pad__warn { flex: none; font-size: 11px; color: var(--wp-amber, var(--wp-warn)); }
 .wp-pad__box { display: flex; justify-content: center; min-width: 0; }
 .wp-pad__box[data-z] { gap: 8px; align-items: stretch; }
-.wp-pad__box[data-z] > .wp-xypad { flex: 1 1 auto; min-width: 0; }
+.wp-pad__box[data-z] > .wp-xypad { flex: 0 1 auto; min-width: 0; }
+/* The pad's height is capped (below), so its width is too, at the shape:
+ * otherwise a square pad on a wide node turned into a wide strip. */
+.wp-pad__box > .wp-xypad { width: min(100%, calc(420px * var(--wp-pad-r, 1))); }
 .wp-pad__box > .wp-pad__z { flex: none; }
 .wp-pad__box > * { max-height: 420px; }
 .wp-pad__box > .wp-tri { max-width: 320px; }
