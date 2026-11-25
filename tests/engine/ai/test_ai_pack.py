@@ -230,9 +230,19 @@ async def test_run_pack_and_eval_report():
     import json
     import tempfile
 
+    from wp_api import _ai_progress
+
+    seen_progress = []
+
+    async def watched(**kw):
+        # Each pack runs under a progress id, as the manager's requests do,
+        # so a real model's answers are streamed.
+        seen_progress.append(_ai_progress.active())
+        return await complete(**kw)
+
     refines.clear()
     with tempfile.TemporaryDirectory() as tmp:
-        [saved] = await evals.evaluate(complete, ["fantasy"], seeds=20, save=Path(tmp))
+        [saved] = await evals.evaluate(watched, ["fantasy"], seeds=20, save=Path(tmp))
         log = Path(tmp) / "01-fantasy.calls.jsonl"
         calls = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
         [bad_saved] = await evals.evaluate(broken, ["x"], seeds=5, save=Path(tmp))
@@ -242,6 +252,7 @@ async def test_run_pack_and_eval_report():
     assert [c["n"] for c in calls] == list(range(1, len(calls) + 1))
     assert len(saved["issues"]) == saved["problems"] == 1, saved["issues"]
     assert bad_saved["call_errors"] == 1 and "down" in failed
+    assert seen_progress and all(seen_progress) and not _ai_progress.active()
 
 
 PLAN2 = {

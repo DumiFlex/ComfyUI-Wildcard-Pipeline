@@ -31,7 +31,10 @@ two packs with a rule on a drawn list / a multi-value accepts target).
 readable sheet (items with their options and tags, constraint cells,
 rules, the template, the check and sample prompts) and ``.json`` the plan
 and built payloads, so a pack can be read, or judged, after the run.
-With ``--save``, ``DIR/<n>-<slug>.calls.jsonl`` also holds every model
+Each pack runs as the manager's Pack builder does, under a progress id,
+so answers are streamed and only silence times out. With ``--save``,
+``DIR/debug/`` also gets the server's raw requests and replies per pack
+(the AI debug log's JSON), and ``DIR/<n>-<slug>.calls.jsonl`` holds every model
 call of that pack in order (schema name, settings, system + user text,
 history, the answer or error, the reasoning and seconds), so a failure can
 be traced to the call that made it and the calls replayed later.
@@ -48,10 +51,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import re
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -433,7 +438,9 @@ async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
         started = time.perf_counter()
         log = CallLog(complete) if save is not None else None
         try:
-            result = await pack.run_pack(log or complete, req, seeds=seeds, settings=settings)
+            with _like_manager(save, n, req):
+                result = await pack.run_pack(log or complete, req, seeds=seeds,
+                                             settings=settings)
         except Exception as e:  # noqa: BLE001 - every request is scored
             rows.append({"request": req, "plan": False, "feature": feature,
                          "error": f"{type(e).__name__}: {e}",
@@ -451,6 +458,39 @@ async def evaluate(complete: Any, requests: list[Any], *, seeds: int = 100,
                      "log": result["log"][-12:], "issues": _issues(result),
                      "seconds": round(time.perf_counter() - started, 1), **calls})
     return rows
+
+
+@contextlib.contextmanager
+def _like_manager(save: Path | None, n: int, req: str) -> Iterator[None]:
+    """Runs one pack the way the manager's Pack builder does: under a
+    progress id, so model answers are streamed (no 300 s cap on the whole
+    answer, only on silence) as the browser's requests are. With ``save``,
+    the server's raw requests and replies (reasoning, content as sent,
+    timings) also go to ``save/debug/`` as the AI debug log keeps them."""
+    from engine.ai import debug_log
+    from wp_api import _ai_debug, _ai_progress
+
+    pid = f"eval-{n:02d}-{int(time.time())}"
+    _ai_progress.begin(pid)
+    ptoken = _ai_progress.current.set(pid)
+    dtoken = None
+    if save is not None:
+        debug_log.begin(pid, "/wp/api/ai/pack/eval",
+                        meta={"label": f"Pack eval {n}", "asked": req[:400]})
+        dtoken = _ai_debug.current.set(pid)
+    error: str | None = None
+    try:
+        yield
+    except BaseException as e:
+        error = f"{type(e).__name__}: {e}"[:500]
+        raise
+    finally:
+        _ai_progress.current.reset(ptoken)
+        _ai_progress.finish(pid)
+        if dtoken is not None and save is not None:
+            _ai_debug.current.reset(dtoken)
+            debug_log.finish(pid, status=200 if error is None else 500, error=error,
+                             folder=save / "debug")
 
 
 def _call_stats(log: CallLog | None, save: Path | None, n: int, req: str) -> dict[str, Any]:
