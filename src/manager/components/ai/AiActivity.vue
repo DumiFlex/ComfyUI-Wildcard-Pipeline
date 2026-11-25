@@ -159,8 +159,9 @@ function kindIcon(type: string): string {
 
     <div class="wp-ai-act__body" :data-folded="canFold ? 'true' : undefined">
       <template v-for="item in items" :key="item.key">
-        <div v-if="item.kind === 'say'" class="wp-ai-act__said" data-test="ai-chat-said">
-          <AiMessage :text="item.step.note" :refs="refs" />
+        <div v-if="item.kind === 'say'" class="wp-ai-act__said" title="A note it wrote while working" data-test="ai-chat-said">
+          <i class="pi pi-comment wp-ai-act__said-icon" aria-hidden="true" />
+          <AiMessage class="wp-ai-act__said-text" :text="item.step.note" :refs="refs" />
         </div>
         <p v-else-if="item.kind === 'notice' && processShown" class="wp-ai-act__notice" data-test="ai-activity-notice">
           <i class="pi pi-replay" aria-hidden="true" /> {{ item.step.note }}
@@ -243,7 +244,10 @@ function kindIcon(type: string): string {
   white-space: pre-wrap; font-size: 11px; color: var(--wp-text-dim);
   max-height: 240px; overflow-y: auto;
 }
-.wp-ai-act__said { font-size: 12px; color: var(--wp-text-muted); margin: 2px 0; }
+.wp-ai-act__said { display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--wp-text-muted); margin: 2px 0; }
+/* Marks a note it wrote while working, so it doesn't read as the reply. */
+.wp-ai-act__said-icon { flex: none; font-size: 10px; color: var(--wp-text-dim); }
+.wp-ai-act__said-text { min-width: 0; flex: 1; }
 .wp-ai-act__notice { margin: 0; padding-left: 8px; font-size: 11px; color: var(--wp-text-dim); font-style: italic; }
 .wp-ai-act__notice .pi { font-size: 10px; }
 </style>
