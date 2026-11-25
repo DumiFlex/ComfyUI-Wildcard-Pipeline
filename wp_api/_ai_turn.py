@@ -995,6 +995,9 @@ async def _model_step(t: _Turn) -> dict[str, Any] | str | web.Response:
             # chat stays in them (earlier native steps render as JSON
             # steps, `_ai_chat.json_answer`).
             t.fmt = "json"
+            t.steps.append({"tool": "retry", "ok": True, "notice": True,
+                            "note": "Asked again in JSON steps "
+                                    "(the server didn't take tool calls)"})
             return _NEXT
         switched = meta.get("model") and meta.get("model") != cfg.get("model")
         hint = (" This chat started with another model; start a new chat to keep going "
@@ -1046,6 +1049,25 @@ def _said(t: _Turn, st: dict[str, Any], calls: list[dict[str, Any]]) -> str:
     return said
 
 
+def _stamp(t: _Turn) -> None:
+    """Mark each new step with when it ended (`at`, ms since the turn
+    started, counting earlier requests of a paused turn), so the drawer can
+    say how long each part of the work took."""
+    base = int(t.meta.get("turn_ms") or 0) if t.ask.resume else 0
+    now = base + int((time.monotonic() - t.started) * 1000)
+    for s_ in t.steps:
+        s_.setdefault("at", now)
+
+
+async def _flush_steps(t: _Turn) -> None:
+    """Stamp the new steps and send them to the drawer."""
+    _stamp(t)
+    if t.emit:
+        for s_ in t.steps[t.sent_steps:]:
+            await t.emit({"type": "tool", "step": s_})
+        t.sent_steps = len(t.steps)
+
+
 async def _step(t: _Turn) -> str | web.Response:
     """One model step and its calls; `_NEXT` or `_STOP` for the loop."""
     # The first step always runs.
@@ -1087,6 +1109,7 @@ async def _step(t: _Turn) -> str | web.Response:
         # (display only: steps are never sent to the model).
         t.steps.append({"tool": "think", "note": thought.strip(), "ok": True,
                         "think": True})
+    _stamp(t)
     if t.carry and not calls:
         said = ai_chat.join_continuation(t.carry, said)
         t.carry = ""
@@ -1100,6 +1123,8 @@ async def _step(t: _Turn) -> str | web.Response:
         t.continued += 1
         t.carry = said
         t.new.append(ai_chatlog.note_entry(ai_chat.CONTINUE_NUDGE))
+        t.steps.append({"tool": "retry", "ok": True, "notice": True,
+                        "note": "The reply was cut off: asked for the rest"})
         return _NEXT
     # A message sent along with calls is usually "I'll search…": keep it
     # only as a fallback, so the answer is the step that stops calling.
@@ -1125,15 +1150,17 @@ async def _step(t: _Turn) -> str | web.Response:
     run.asked = [c for i, c in enumerate(calls) if i not in run.waiting]
     made_before = len(t.proposals)
     for at, call in enumerate(calls):
+        if t.emit and call["tool"] not in ai_chat.PAUSE_TOOLS:
+            # What it is doing now, before the result is back.
+            await t.emit({"type": "doing", "tool": call["tool"],
+                          "v": _doing(t, call)})
         await _run_call(t, run, at, call)
+        await _flush_steps(t)
     if run.repeats:
         t.trace[-1]["repeats"] = run.repeats
     if t.queue is not None and t.queue.active and not run.planned_now:
         t.queue.after_step(len(t.proposals) > made_before)
-    if t.emit:
-        for s_ in t.steps[t.sent_steps:]:
-            await t.emit({"type": "tool", "step": s_})
-        t.sent_steps = len(t.steps)
+    await _flush_steps(t)
     if calls and not said and t.split:
         # A split step's act ask can't write: after its cards, one more
         # step lets it say what it proposed (or carry on).
@@ -1273,6 +1300,11 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
                 await t.emit({"type": "reaction", "emoji": t.lib.reaction})
             return  # shown on the user's message, not as a step
         step_ = {"tool": tool, "note": ai_chat.args_note(tool, args, t.lib), "ok": True}
+        row = t.lib.get(args.get("id")) if tool == "read" else None
+        if row is not None:
+            # The item it read, so the drawer can link it.
+            step_["item"] = {"id": args["id"], "type": t.lib.kind_of(args["id"]),
+                             "name": str(row.get("name") or "")}
         card = getattr(t.lib, "last_card", None) if tool == "run_test" else None
         if card:
             # The run as a card the user can open in the Test Runner.
@@ -1281,6 +1313,19 @@ async def _run_call(t: _Turn, run: _Calls, at: int, call: dict[str, Any]) -> Non
         t.steps.append(step_)
     else:
         _add_card(t, run, call, args, key, out, extra)
+
+
+def _doing(t: _Turn, call: dict[str, Any]) -> str:
+    """The live line for a call about to run, from its own args."""
+    try:
+        raw = call["args"] if isinstance(call.get("args"), dict) else call.get("args_text")
+        args = ai_chat.parse_args(raw)
+    except Exception:  # noqa: BLE001 - a bad call is refused later; this is a label
+        args = {}
+    tool = str(call.get("tool") or "")
+    if tool == ai_plan.TOOL:
+        return "Planning the items"
+    return ai_chat.doing_note(tool, args if isinstance(args, dict) else {}, t.lib)
 
 
 def _plan_call(t: _Turn, run: _Calls, call: dict[str, Any]) -> None:
@@ -1796,6 +1841,7 @@ async def _close(t: _Turn) -> web.Response:
     the reply the drawer shows."""
     _end_answer(t)
     await _test_if_asked(t)
+    _stamp(t)
     _claim_notes(t)
     meta, message, proposals = t.meta, t.message, t.proposals
     meta["format"] = t.fmt

@@ -173,6 +173,19 @@ def test_rules_constraint_info_open():
         lib.run("delete_everything", {})
 
 
+def test_doing_note_says_the_call_in_the_present():
+    assert chat.doing_note("search", {"query": "coat"}) == 'Searching "coat"'
+    assert chat.doing_note("read", {"id": "aaaa0001"}) == "Reading aaaa0001"
+    assert chat.doing_note("docs_read", {"page": "combine"}) == "Reading the docs: Combine"
+    assert chat.doing_note("run_test", {"stack": ["x"], "seeds": 20}) == "Testing x on 20 seeds"
+    assert chat.doing_note("variables", {}) == "Listing the library's variables"
+    assert chat.doing_note("create_wildcard", {"name": "Hair"}) == "Drafting a wildcard: Hair"
+    assert chat.doing_note("create_fixed_values", {}) == "Drafting fixed values"
+    assert chat.doing_note("add_options", {"id": "zz"}) == "Preparing a change"
+    assert chat.doing_note("plan_pack", {}) == "Planning a pack"
+    assert chat.doing_note("lookup", {}) == "Looking up your tags and LoRAs"
+
+
 def test_args_note():
     assert chat.args_note("search", {"query": "coat", "tag": "warm"}) == \
         'Searched "coat" tagged #warm'

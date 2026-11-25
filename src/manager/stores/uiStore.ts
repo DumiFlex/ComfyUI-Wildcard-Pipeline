@@ -47,6 +47,13 @@ const STORAGE_KEY_EXPLAIN_CHIP = "wp-explain-chip";
 const STORAGE_KEY_CHAT_THINKING = "wp-ai-chat-show-thinking";
 const STORAGE_KEY_CHAT_NOTES = "wp-ai-chat-show-notes";
 const STORAGE_KEY_CHAT_STEPS = "wp-ai-chat-show-steps";
+/** How much of the work behind each chat answer shows (`ChatDetail`). */
+const STORAGE_KEY_CHAT_DETAIL = "wp-ai-chat-detail";
+export const CHAT_DETAILS = ["compact", "standard", "detailed", "verbose"] as const;
+/** compact: one line per answer, groups without the live action; standard:
+ *  groups folded, live action in their titles; detailed: groups open while
+ *  the answer runs; verbose: everything open, answers never fold. */
+export type ChatDetail = typeof CHAT_DETAILS[number];
 /** Replies type out as the model writes them, instead of arriving whole. */
 const STORAGE_KEY_CHAT_TYPING = "wp-ai-chat-type-out";
 /** Anonymous usage pings from the Community tab (passed to the embed). */
@@ -254,6 +261,7 @@ export const useUiStore = defineStore("ui", () => {
   const chatNotes = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_NOTES, ["1", "0"] as const, "1") === "1");
   const chatSteps = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_STEPS, ["1", "0"] as const, "1") === "1");
   const chatTyping = ref<boolean>(readStoredEnum(STORAGE_KEY_CHAT_TYPING, ["1", "0"] as const, "0") === "1");
+  const chatDetail = ref<ChatDetail>(readStoredEnum(STORAGE_KEY_CHAT_DETAIL, CHAT_DETAILS, "standard"));
   const usageStats = ref<boolean>(readStoredEnum(STORAGE_KEY_USAGE_STATS, ["1", "0"] as const, "1") === "1");
   const testRunnerDefaults = ref<TestRunnerDefaults>(readTestRunnerDefaults());
   const maxRefDepth = ref<number>(readStoredMaxRefDepth());
@@ -396,6 +404,11 @@ export const useUiStore = defineStore("ui", () => {
     try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* ignore */ }
   }
 
+  function setChatDetail(v: ChatDetail): void {
+    chatDetail.value = v;
+    try { localStorage.setItem(STORAGE_KEY_CHAT_DETAIL, v); } catch { /* ignore */ }
+  }
+
   function setUsageStats(v: boolean): void {
     usageStats.value = v;
     try { localStorage.setItem(STORAGE_KEY_USAGE_STATS, v ? "1" : "0"); } catch { /* ignore */ }
@@ -484,6 +497,8 @@ export const useUiStore = defineStore("ui", () => {
     chatSteps,
     chatTyping,
     setChatShow,
+    chatDetail,
+    setChatDetail,
     usageStats,
     setUsageStats,
     testRunnerDefaults,

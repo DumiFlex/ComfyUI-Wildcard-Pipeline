@@ -8,7 +8,7 @@ import pytest
 from aiohttp import web
 
 from engine.ai import config as ai_config
-from tests.wp_api.test_ai_api import _chat, _two_wildcards
+from tests.wp_api.test_ai_api import _chat, _no_at, _two_wildcards
 from wp_api import _ai_chat, _ai_client
 
 
@@ -212,9 +212,17 @@ async def test_a_streamed_turn_sends_events_then_the_answer(wp_client, fake_llm)
     assert kinds[0] == "step" and kinds[-1] == "done" and "tool" in kinds
     tools = [e["step"] for e in events if e["type"] == "tool"]
     # What it streamed before reading stays, as a "say" step ahead of the read.
-    assert tools[0] == {"tool": "say", "note": "Reading.", "ok": True, "say": True}
+    assert _no_at(tools[0]) == {"tool": "say", "note": "Reading.", "ok": True, "say": True}
     assert tools[1]["note"] == "Read Weapon"
     assert events[-1]["result"]["message"] == "It has two options."
+    # Before the read runs the drawer is told what it is doing, then the
+    # finished line follows; every step carries when it ended.
+    doing = next(i for i, e in enumerate(events) if e["type"] == "doing")
+    assert events[doing]["v"] == "Reading Weapon" and events[doing]["tool"] == "read"
+    assert any(e["type"] == "tool" and e["step"]["note"] == "Read Weapon"
+               for e in events[doing:])
+    assert all(isinstance(s["at"], int) for s in events[-1]["result"]["steps"])
+    assert tools[1]["item"] == {"id": tgt, "type": "wildcard", "name": "Weapon"}
     assert events[-1]["result"]["chat_id"]
 
 

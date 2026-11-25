@@ -49,6 +49,7 @@ import AiCardPreview from "./AiCardPreview.vue";
 import AiPointer from "./AiPointer.vue";
 import AiChatList from "./AiChatList.vue";
 import AiWorking from "./AiWorking.vue";
+import AiActivity from "./AiActivity.vue";
 import ChatCompletions from "./ChatCompletions.vue";
 import ChatInputMarks from "./ChatInputMarks.vue";
 import { tookLabel } from "../../utils/chat-took";
@@ -221,10 +222,6 @@ function goneNames(entry: ChatAssistantEntry): string[] {
 /* ── What the chat shows (Settings › AI assistant › Chat) ── */
 
 const ui = useUiStore();
-/** The steps above a reply, without the kinds the user hid. */
-function shownSteps(steps: AiChatStep[]): AiChatStep[] {
-  return steps.filter((s) => (s.think ? ui.chatThinking : s.say ? ui.chatNotes : ui.chatSteps));
-}
 
 /* ── Thinking picker (the same setting as Settings › AI › Thinking) ── */
 
@@ -400,16 +397,21 @@ const liveStatus = computed(() => {
   const l = chat.live.value;
   if (chat.running.value) return `${chat.running.value}…`;
   if (l.status) return `${l.status}…`;
-  if (l.text) return "Writing…";
+  if (l.doing) return `${l.doing}…`;
+  if (l.text) return "Writing the answer…";
   if (l.thinking) return "Thinking…";
   if (waitedS.value >= WAIT_HINT_S) {
     return "Waiting for the model… nothing back yet: it may be busy with another request, "
       + "loading, or still reading the prompt.";
   }
-  return "Working… it may read a few items first.";
+  // Nothing back yet: the model is reading the prompt (the message, or
+  // what its last calls found).
+  return (l.n ?? 1) > 1 ? "Reading what it found…" : "Reading your message…";
 });
 /** The reasoning as it streams, while Type out replies and Show thinking are on. */
-const liveThought = computed(() => (ui.chatTyping && ui.chatThinking ? chat.live.value.thought ?? "" : ""));
+// The title previews the reasoning's last line; it shows in full only while
+// Type out replies is on.
+const liveThought = computed(() => (ui.chatThinking ? chat.live.value.thought ?? "" : ""));
 
 /** Compact is offered from here; amber from where it happens by itself. */
 const OFFER_COMPACT = 0.5;
@@ -902,7 +904,7 @@ onMounted(() => {
         </div>
 
         <template v-for="(entry, i) in chat.entries.value" :key="i">
-          <div v-if="entry.role === 'user'" class="wp-ai-chat__user" data-test="ai-chat-user" :data-reacted="entry.reaction ? 'true' : undefined">
+          <div v-if="entry.role === 'user'" :class="['wp-ai-chat__user', { 'wp-enter-grow': chat.loading.value && i === chat.entries.value.length - 1 }]" data-test="ai-chat-user" :data-reacted="entry.reaction ? 'true' : undefined">
             <ImageGrid
               v-if="entry.images?.length"
               class="wp-ai-chat__pics"
@@ -953,26 +955,14 @@ onMounted(() => {
             >
               <i class="pi pi-exclamation-triangle" aria-hidden="true" /> {{ rescued(i) }} tool call{{ rescued(i) === 1 ? "" : "s" }} written as text
             </p>
-            <ul v-if="shownSteps(entry.result.steps).length" class="wp-ai-chat__steps" data-test="ai-chat-steps">
-              <template v-for="(s, j) in shownSteps(entry.result.steps)" :key="j">
-                <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought" data-test="ai-chat-thought">
-                  <details>
-                    <summary>Thinking</summary>
-                    <p class="wp-ai-chat__thought-text">{{ s.note }}</p>
-                  </details>
-                </li>
-                <li v-else-if="s.say" v-show="s.note !== entry.result.message" class="wp-ai-chat__said" data-test="ai-chat-said">
-                  <details>
-                    <summary>Working note</summary>
-                    <AiMessage :text="s.note" :refs="entry.result.refs" />
-                  </details>
-                </li>
-                <li v-else :data-ok="s.ok ? 'true' : 'false'">
-                  <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
-                  {{ s.note }}
-                </li>
-              </template>
-            </ul>
+            <AiActivity
+              v-if="entry.result.steps.length"
+              :steps="entry.result.steps"
+              :said="entry.result.message"
+              :refs="entry.result.refs"
+              :elapsed-ms="entry.result.elapsed_ms"
+              data-test="ai-chat-steps"
+            />
             <AiTestCard
               v-for="(card, j) in testCards(entry.result.steps)"
               :key="`t${j}`"
@@ -1282,21 +1272,15 @@ onMounted(() => {
         </template>
 
         <div v-if="chat.loading.value && !chat.asking.value.size" class="wp-ai-chat__reply wp-ai-chat__live" data-test="ai-chat-live">
-          <ul v-if="shownSteps(chat.live.value.steps).length || liveThought" class="wp-ai-chat__steps">
-            <template v-for="(s, j) in shownSteps(chat.live.value.steps)" :key="j">
-              <li v-if="s.think" class="wp-ai-chat__said wp-ai-chat__thought"><details><summary>Thinking</summary><p class="wp-ai-chat__thought-text">{{ s.note }}</p></details></li>
-              <li v-else-if="s.say" class="wp-ai-chat__said"><details><summary>Working note</summary><AiMessage :text="s.note" /></details></li>
-              <li v-else :data-ok="s.ok ? 'true' : 'false'">
-                <i :class="['pi', s.ok ? 'pi-check' : 'pi-exclamation-circle']" aria-hidden="true" />
-                {{ s.note }}
-              </li>
-            </template>
-            <li v-if="liveThought" class="wp-ai-chat__said wp-ai-chat__thought" data-test="ai-chat-live-thought">
-              <details open><summary>Thinking</summary><p class="wp-ai-chat__thought-text">{{ liveThought }}</p></details>
-            </li>
-          </ul>
+          <AiActivity
+            :steps="chat.live.value.steps"
+            running
+            :thinking="chat.live.value.thinking"
+            :thought="liveThought"
+            :typing="ui.chatTyping"
+          />
           <AiMessage v-if="chat.live.value.text" :text="chat.live.value.text" live />
-          <AiWorking class="wp-ai-chat__status" :text="liveStatus" :phase="livePhase" :size="22" data-test="ai-chat-loading" />
+          <AiWorking class="wp-ai-chat__status" :text="liveStatus" :phase="livePhase" :exact="!!(chat.running.value || chat.live.value.doing)" :size="22" data-test="ai-chat-loading" />
         </div>
       </div>
 
@@ -1520,15 +1504,6 @@ onMounted(() => {
   border: 1px solid var(--wp-border); box-shadow: var(--wp-shadow-sm);
 }
 .wp-ai-chat__reply { display: flex; flex-direction: column; gap: 8px; }
-.wp-ai-chat__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.wp-ai-chat__steps li { font-size: 11px; color: var(--wp-text-dim); display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
-.wp-ai-chat__steps li[data-ok="false"] { color: var(--wp-warn); }
-.wp-ai-chat__steps .pi { font-size: 10px; }
-/* Text the model wrote before acting: a normal-size paragraph between the steps. */
-.wp-ai-chat__steps li.wp-ai-chat__said { display: block; font-size: 12px; color: var(--wp-text-muted); margin: 2px 0; }
-.wp-ai-chat__said summary { cursor: pointer; font-style: italic; }
-.wp-ai-chat__said details[open] { border-left: 2px solid var(--wp-border); padding-left: 8px; }
-.wp-ai-chat__thought-text { white-space: pre-wrap; margin: 4px 0 0; max-height: 320px; overflow-y: auto; }
 .wp-ai-chat__card {
   border: 1px solid color-mix(in oklab, var(--wp-accent-500) 35%, var(--wp-border));
   border-radius: min(8px, var(--wp-radius-cap, 999px)); padding: 10px; display: flex; flex-direction: column; gap: 6px;

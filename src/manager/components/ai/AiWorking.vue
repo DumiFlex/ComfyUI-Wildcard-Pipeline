@@ -15,8 +15,14 @@ function pickWord(not: string): string {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-/** Every few words the line says what is really happening instead. */
-const REAL_EVERY = 3;
+/** The line says what is really happening. Only once nothing new has
+ *  happened for QUIET_MS does a playful word show, one tick in PLAY_EVERY,
+ *  so a long think still looks alive without the words taking over. */
+export const QUIET_MS = 12_000;
+const PLAY_EVERY = 3;
+export function playfulNow(step: number, quietMs: number, exact = false): boolean {
+  return !exact && quietMs >= QUIET_MS && step % PLAY_EVERY === PLAY_EVERY - 1;
+}
 
 /* ── One ticker for every line ─────────────────────────────────────────
    The top bar and the page often show a line for the same job. They share
@@ -29,6 +35,10 @@ const shared = {
   step: ref(0),
   mark: ref<AiWorkingVariant>("typing"),
   startedAt: 0,
+  /** The real status every line shows and when it last changed, so a line
+   *  that joins later knows how quiet it has been. */
+  realKey: ref(""),
+  realSince: ref(0),
   lines: 0,
   timer: null as ReturnType<typeof setInterval> | null,
 };
@@ -39,9 +49,11 @@ function join(): void {
     shared.step.value = 0;
     shared.mark.value = pickVariant();
     shared.startedAt = Date.now();
+    shared.realKey.value = "";
+    shared.realSince.value = Date.now();
     shared.timer = setInterval(() => {
       shared.step.value += 1;
-      if (shared.step.value % REAL_EVERY !== 0) shared.word.value = pickWord(shared.word.value);
+      if (shared.step.value % PLAY_EVERY === PLAY_EVERY - 1) shared.word.value = pickWord(shared.word.value);
     }, WORD_EVERY_MS);
   }
 }
@@ -81,9 +93,11 @@ export function formatElapsed(s: number): string {
  * The "the model is working" line, one line like Claude Code's: a small
  * animated mark, a word that changes every few seconds and the time so far.
  * The kit's WorkingLine draws it; this component only decides what it says.
- * Most words are playful ("Shuffling…"); every third one, and right away
- * whenever it changes, is what is really happening ("Reading the prompt…",
- * "Thinking…", "Writing · 420 tokens…", or the chat's own status). The full
+ * It says what is really happening ("Reading the prompt…", "Thinking…",
+ * "Writing · 420 tokens…", or the chat's own status, "Reading Hair Color…").
+ * Only when nothing new has happened for a while (`QUIET_MS`) does a playful
+ * word ("Shuffling…") show now and then, and never over an `exact` status
+ * (a call or page tool running). The full
  * status is also the line's accessible name.
  *
  * The mark is one of four drawings of the logo's sparkles, picked once per
@@ -114,7 +128,10 @@ const props = withDefaults(defineProps<{
   inline?: boolean;
   /** A fixed drawing instead of a random one. */
   variant?: AiWorkingVariant;
-}>(), { label: "", text: undefined, phase: undefined, size: 22, inline: false, variant: undefined });
+  /** The status names a real action (a call running): never swapped for a
+   *  playful word. */
+  exact?: boolean;
+}>(), { label: "", text: undefined, phase: undefined, size: 22, inline: false, variant: undefined, exact: false });
 
 join();
 const mark = computed(() => props.variant ?? shared.mark.value);
@@ -175,7 +192,17 @@ const real = computed(() => {
 
 const word = shared.word;
 const step = shared.step;
-const showReal = computed(() => step.value % REAL_EVERY === 0);
+/** When the real status last changed (a token count ticking up doesn't
+ *  count), to tell a quiet stretch; shared, like the word. */
+const nowMs = ref(Date.now());
+const realKey = computed(() => (props.text !== undefined
+  ? props.text.replace(/\d[\d,.]*/g, "#") : shownPhase.value));
+watch(realKey, (k) => {
+  if (k === shared.realKey.value) return;
+  shared.realKey.value = k;
+  shared.realSince.value = Date.now();
+}, { immediate: true });
+const showReal = computed(() => !playfulNow(step.value, nowMs.value - shared.realSince.value, props.exact));
 const shown = computed(() => (showReal.value ? real.value : word.value));
 /** What the word transition keys on: a new status animates in, a token
  *  count ticking up while writing doesn't (nor does a number in the chat's
@@ -189,7 +216,10 @@ const wordKey = computed(() => {
 watch(() => [shownPhase.value, props.text], () => { step.value = 0; });
 
 onMounted(() => {
-  const count = (): void => { elapsed.value = Math.floor((Date.now() - shared.startedAt) / 1000); };
+  const count = (): void => {
+    nowMs.value = Date.now();
+    elapsed.value = Math.floor((Date.now() - shared.startedAt) / 1000);
+  };
   count();
   tick = setInterval(count, 1000);
   if (watching.value) {

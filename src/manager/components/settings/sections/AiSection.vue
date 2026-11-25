@@ -25,7 +25,7 @@ import { api } from "../../../api/client";
 import type { AiConfigPatch, AiEmbedApi, AiIndexStatus, AiModelSize, AiProviderId, AiRequestLanguage, AiSamplerId, AiTestResult, AiToolFormat } from "../../../api/types";
 import { useAiConfig } from "../../../composables/useAiConfig";
 import { SUGGESTIONS_SOURCE_NOTE, suggestionsFor } from "../ai-models";
-import { useUiStore } from "../../../stores/uiStore";
+import { CHAT_DETAILS, useUiStore, type ChatDetail } from "../../../stores/uiStore";
 import { isThinking, thinkingChoices } from "../../../utils/ai-thinking";
 import { useAiThinking } from "../../../composables/useAiThinking";
 import { useAiDone } from "../../../composables/useAiDone";
@@ -113,7 +113,14 @@ const CONTEXT_MIN = 16384;
 const CONTEXT_RESET = 32768;
 const RECOMMENDED_UI = {
   explainChip: true, chatThinking: false, chatNotes: true, chatSteps: true, chatTyping: false,
+  chatDetail: "standard",
 } as const;
+const DETAIL_OPTIONS: SelectOption[] = [
+  { value: "compact", label: "Compact · one line per answer" },
+  { value: "standard", label: "Standard · groups folded, what it's doing live (recommended)" },
+  { value: "detailed", label: "Detailed · groups open while it works" },
+  { value: "verbose", label: "Verbose · everything open, answers never fold" },
+];
 const RESET_LABELS: Record<string, string> = {
   model_size: "Model size", context_max: "Most context to use", thinking: "Thinking",
   unload_after_s: "Unload the model after", tool_format: "Tool format",
@@ -122,7 +129,11 @@ const RESET_LABELS: Record<string, string> = {
   request_language: "Language you write in",
   explainChip: "Show Explain on selected text", chatThinking: "Show thinking",
   chatNotes: "Show working notes", chatSteps: "Show what it did", chatTyping: "Type out replies", sampling: "Sampling",
+  chatDetail: "Work details",
 };
+function isDetail(v: unknown): v is ChatDetail {
+  return (CHAT_DETAILS as readonly unknown[]).includes(v);
+}
 const resetChanges = computed<string[]>(() => {
   const c = config.value;
   if (!c) return [];
@@ -149,6 +160,7 @@ async function resetToRecommended(): Promise<void> {
   ui.setChatShow("notes", RECOMMENDED_UI.chatNotes);
   ui.setChatShow("steps", RECOMMENDED_UI.chatSteps);
   ui.setChatShow("typing", RECOMMENDED_UI.chatTyping);
+  ui.setChatDetail(RECOMMENDED_UI.chatDetail);
   contextCustom.value = false;
   unloadCustom.value = false;
   resetAsk.value = false;
@@ -240,12 +252,14 @@ watch(() => config.value?.context_max, (v) => { if (typeof v === "number") conte
 /* Presets for both numbers; "Custom" (or a saved value that isn't one)
    shows the number box next to the dropdown. */
 const CUSTOM = "custom";
-const CONTEXT_PRESETS = [4096, 8192, 16384, 24576, 32768, 65536, 131072];
+const CONTEXT_PRESETS = [4096, 8192, 16384, 24576, 32768, 65536, 131072, 262144, 1048576];
+/** The engine's ceiling (`config.CONTEXT_MAX`): 1M, the largest window any provider offers. */
+const CONTEXT_CEIL = 1048576;
 const contextCustom = ref(false);
 const contextOptions = computed<SelectOption[]>(() => [
   ...CONTEXT_PRESETS.map((n) => ({
     value: n,
-    label: `${n / 1024}k · ${n.toLocaleString("en-US")} tokens${n === CONTEXT_MIN ? " (minimum)" : n === CONTEXT_RESET ? " (recommended)" : ""}`,
+    label: `${n >= 1048576 ? `${n / 1048576}M` : `${n / 1024}k`} · ${n.toLocaleString("en-US")} tokens${n === CONTEXT_MIN ? " (minimum)" : n === CONTEXT_RESET ? " (recommended)" : ""}`,
   })),
   { value: CUSTOM, label: "Custom…" },
 ]);
@@ -277,7 +291,7 @@ async function pickUnload(v: string | number | null): Promise<void> {
   await commitUnload();
 }
 async function commitContext(): Promise<void> {
-  const n = Math.min(131072, Math.max(4096, Math.round(Number(contextDraft.value))));
+  const n = Math.min(CONTEXT_CEIL, Math.max(4096, Math.round(Number(contextDraft.value))));
   if (!Number.isFinite(n)) { contextDraft.value = config.value?.context_max ?? 16384; return; }
   contextDraft.value = n;
   if (n !== config.value?.context_max) await patch({ context_max: n });
@@ -924,7 +938,7 @@ const off = computed(() => !config.value?.enabled);
               size="md"
               commit="input"
               :min="4096"
-              :max="131072"
+              :max="CONTEXT_CEIL"
               :step="4096"
               class="wp-set-num"
               aria-label="Most context to use, in tokens"
@@ -1143,6 +1157,20 @@ const off = computed(() => !config.value?.enabled);
               aria-label="Show Explain on selected text"
               data-test="ai-explain-chip"
               @update:model-value="(v: boolean) => ui.setExplainChip(v)"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Work details"
+            recommended="Standard"
+            hint="How much of the work behind each answer the chat shows. When an answer is done its work folds under one “Worked for …” line (except in Verbose); the work between two replies is one group titled by what it did. Compact shows the groups without the live action, Standard says what it is doing as it goes, Detailed keeps the groups open while it works. Saved in this browser."
+            setting-key="ai-chat-detail"
+          >
+            <Select
+              :model-value="ui.chatDetail"
+              :options="DETAIL_OPTIONS"
+              aria-label="Work details"
+              data-test="ai-chat-detail"
+              @update:model-value="(v) => ui.setChatDetail(isDetail(v) ? v : 'standard')"
             />
           </SettingRow>
           <SettingRow

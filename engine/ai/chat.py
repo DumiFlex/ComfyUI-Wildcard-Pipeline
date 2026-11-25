@@ -2950,6 +2950,38 @@ def _item_name(raw: Any, lib: Library | None) -> Any:
     return row.get("name") or raw if row is not None else raw
 
 
+#: What `args_note`'s past-tense line becomes while the call runs.
+_DOING = (("Read the docs", "Reading the docs"), ("Searched", "Searching"),
+          ("Read ", "Reading "), ("Ran ", "Testing "), ("Looked for", "Looking for"),
+          ("Looked up", "Looking up"), ("Listed", "Listing"))
+
+
+def doing_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> str:
+    """A short present-tense line for the user saying what a call is doing
+    right now ("Reading Hair Color", "Searching "red hair""), for the live
+    status before its result is back."""
+    if tool in CHANGE_TOOLS:
+        item = lib.get(args.get("id")) if lib and isinstance(args.get("id"), str) else None
+        name = _short(item.get("name") if item else args.get("name"), 40)
+        if tool == "plan_pack":
+            return "Planning a pack"
+        if tool == "delete_items":
+            return "Preparing a delete"
+        if tool.startswith("create_"):
+            kind = tool[len("create_"):].replace("_", " ")
+            what = kind if kind == "fixed values" else f"a {kind}"
+            return f"Drafting {what}" + (f": {name}" if name else "")
+        return "Preparing a change" + (f" to {name}" if name else "")
+    if tool in ("explain", "react", "lookup"):
+        return {"explain": "Explaining", "react": "Reacting",
+                "lookup": "Looking up your tags and LoRAs"}[tool]
+    note = args_note(tool, args, lib)
+    for done, doing in _DOING:
+        if note.startswith(done):
+            return doing + note[len(done):]
+    return note
+
+
 def args_note(tool: str, args: dict[str, Any], lib: Library | None = None) -> str:
     """A short line for the user saying what a read tool looked at."""
     if tool == "search":

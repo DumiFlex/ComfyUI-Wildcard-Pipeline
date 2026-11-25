@@ -17,6 +17,12 @@ from wp_api import _ai_turn as ai_turn
 pytestmark = pytest.mark.usefixtures("items_planner")
 
 
+def _no_at(step: dict) -> dict:
+    """A step without its `at` time stamp."""
+    return {k: v for k, v in step.items() if k != "at"}
+
+
+
 async def _chat(wp_client, message, **extra):
     resp = await wp_client.post("/wp/api/ai/chat", json={"message": message, **extra})
     assert resp.status == 200, await resp.text()
@@ -1168,7 +1174,10 @@ async def test_chat_falls_back_to_json_steps_when_the_server_cant_read_native_ca
     second = await _chat(wp_client, "any staffs?", chat_id=first["chat_id"],
                          page={"route": "wildcards"})
     assert second["format"] == "json" and second["message"] == "One: the oak staff."
-    assert [s["tool"] for s in second["steps"] if not s.get("think")] == ["search"]
+    assert [s["tool"] for s in second["steps"] if not s.get("think")
+            and not s.get("notice")] == ["search"]
+    # The switch shows as its own muted row.
+    assert any(s.get("notice") and "JSON steps" in s["note"] for s in second["steps"])
     # The JSON asks carry the first turn's native call as a JSON step.
     body = fake_llm.seen[-1]["body"]
     assert "response_format" in body and "tools" not in body
@@ -1735,7 +1744,7 @@ async def test_native_text_next_to_calls_stays_as_a_note(wp_client, fake_llm):
         {"content": "You have a Weapon."},
     ])
     out = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
-    assert out["steps"][0] == {"tool": "say", "note": "Looking.", "ok": True, "say": True}
+    assert _no_at(out["steps"][0]) == {"tool": "say", "note": "Looking.", "ok": True, "say": True}
     assert out["message"] == "You have a Weapon."
 
 
@@ -1749,7 +1758,7 @@ async def test_what_the_model_thought_is_kept_as_a_thinking_step(wp_client, fake
         {"content": "</think>You have a Weapon."},
     ])
     out = await _chat(wp_client, "what weapons do I have?", page={"route": "wildcards"})
-    assert out["steps"][0] == {"tool": "think", "note": "Find the weapons first.",
+    assert _no_at(out["steps"][0]) == {"tool": "think", "note": "Find the weapons first.",
                                "ok": True, "think": True}
     assert out["message"] == "You have a Weapon."
 

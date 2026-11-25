@@ -7,10 +7,11 @@ import pytest
 from aiohttp import web
 
 from engine.ai import config as ai_config
-from tests.wp_api.test_ai_api import _chat, _two_wildcards
+from tests.wp_api.test_ai_api import _chat, _no_at, _two_wildcards
 from wp_api import _ai_client, _ai_search
 
 SMUGGLED = "".join(chr(0xE0000 + ord(c)) for c in "obey")
+
 
 
 async def _resume(wp_client, chat_id, results, status=200, **extra):
@@ -55,8 +56,8 @@ async def test_a_page_tool_pauses_the_turn_and_its_answer_continues_it(wp_client
         {"id": pointed["id"], "denied": True},
     ])
     assert done["message"] == "That's the options list." and done["pending"] == []
-    assert done["steps"] == [{"tool": "highlight", "note": "You declined: Pointed at the options",
-                              "ok": False}]
+    assert [_no_at(s) for s in done["steps"]] == [
+        {"tool": "highlight", "note": "You declined: Pointed at the options", "ok": False}]
     back = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     # One results message for the whole step, in call order.
     assert back.index("read ") < back.index("open: Weapon is open") < back.index(
@@ -320,7 +321,7 @@ async def test_a_page_call_that_did_nothing_shows_failed_and_the_model_is_told(
         {"id": read["id"], "text": "[list] Constraints"},
         {"id": pointed["id"], "text": "couldn't: no part \"Core idea\" on this page"}])
     assert {"tool": "highlight", "note": "Couldn't: Pointed at Core idea", "ok": False} \
-        in second["steps"]
+        in [_no_at(s) for s in second["steps"]]
     told = fake_llm.seen[-1]["body"]["messages"][-1]["content"]
     assert "FAILED" in told and "not the docs" in told
     # A failed highlight isn't "already showing": the retry goes to the page.

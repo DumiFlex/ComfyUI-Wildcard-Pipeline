@@ -199,12 +199,20 @@ describe("AiChatDrawer", () => {
       page: { route: "dashboard" },
     });
     expect(w.get('[data-test="ai-chat-user"]').text()).toBe("make weather and more outfits");
+    // The work folds under one line once the answer is done.
+    const turn = w.get('[data-test="ai-activity-turn"]');
+    expect(turn.text()).toContain("searched once");
+    expect(turn.attributes("aria-expanded")).toBe("false");
+    expect(w.find('[data-test="ai-activity-group"]').exists()).toBe(false);
+    await turn.trigger("click");
+    const group = w.get('[data-test="ai-activity-group"]');
+    expect(group.text()).toBe("Searched once");
+    await group.trigger("click");
     expect(w.get('[data-test="ai-chat-steps"]').text()).toContain('Searched "outfit"');
-    // What it thought is folded under the steps, not shown as the answer.
-    const thought = w.get('[data-test="ai-chat-thought"] details');
-    expect(thought.find("summary").text()).toBe("Thinking");
-    expect((thought.element as HTMLDetailsElement).open).toBe(false);
-    expect(thought.text()).toContain("Look for outfits first.");
+    // What it thought is one folded line in its group, not the answer.
+    const thought = w.get('[data-test="ai-chat-thought"]');
+    expect(thought.text()).toBe("Thinking · Look for outfits first.");
+    expect(thought.get("button").attributes("aria-expanded")).toBe("false");
     const cards = w.findAll('[data-test="ai-chat-proposal"]');
     expect(cards).toHaveLength(3);
     // The third builds on the second, so it waits.
@@ -783,6 +791,8 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-input"]').setValue("hi");
     await w.get('[data-test="ai-chat-input"]').trigger("keydown", { key: "Enter" });
     await flushPromises();
+    await w.get('[data-test="ai-activity-turn"]').trigger("click");
+    await w.get('[data-test="ai-activity-group"]').trigger("click");
     expect(w.find('[data-test="ai-chat-thought"]').exists()).toBe(false);
     expect(w.get('[data-test="ai-chat-steps"]').text()).toContain('Searched "outfit"');
     ui.setChatShow("steps", false);
@@ -849,9 +859,10 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
     const live = w.get('[data-test="ai-chat-live"]');
-    expect(live.text()).toContain("Read Weather");
+    // The group being worked on names the newest thing it did.
+    expect(live.get('[data-test="ai-activity-group"]').text()).toBe("Read Weather");
     expect(live.get("strong").text()).toBe("two");
-    expect(live.get('[data-test="ai-chat-loading"]').attributes("aria-label")).toBe("Writing…");
+    expect(live.get('[data-test="ai-chat-loading"]').attributes("aria-label")).toBe("Writing the answer…");
     expect(live.get('[data-test="ai-chat-loading"]').attributes("data-tempo")).toBe("fast");
     finish({ ...RESULT, proposals: [], message: "Weather has two options." });
     await flushPromises();
@@ -875,7 +886,7 @@ describe("AiChatDrawer", () => {
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
     const live = w.get('[data-test="ai-chat-live"]');
-    expect(live.text()).toContain("Read Weather");
+    expect(live.get('[data-test="ai-activity-group"]').text()).toBe("Read Weather");
     expect(live.text()).not.toContain("two");
     finish({ ...RESULT, proposals: [], message: "Weather has two options." });
     await flushPromises();
@@ -892,14 +903,18 @@ describe("AiChatDrawer", () => {
     vi.mocked(api.ai.chatStream).mockImplementationOnce(async (_body, onEvent) => {
       onEvent({ type: "step", n: 1 });
       onEvent({ type: "thinking" });
-      onEvent({ type: "thinking", v: "The user wants weather" });
+      onEvent({ type: "thinking", v: "The user wants weather\nso I read" });
       return new Promise<AiChatResult>((resolve) => { finish = resolve; });
     });
     const { w } = await mountIt();
     await w.get('[data-test="ai-chat-input"]').setValue("what is in Weather?");
     await w.get('[data-test="ai-chat-send"]').trigger("click");
     await flushPromises();
-    expect(w.get('[data-test="ai-chat-live-thought"]').text()).toContain("The user wants weather");
+    // The group's title previews the last finished line; opening it shows all.
+    const group = w.get('[data-test="ai-activity-group"]');
+    expect(group.text()).toBe("Thinking · The user wants weather");
+    await group.trigger("click");
+    expect(w.get('[data-test="ai-chat-live-thought"]').text()).toContain("so I read");
     ui.setChatShow("typing", false);
     await flushPromises();
     expect(w.find('[data-test="ai-chat-live-thought"]').exists()).toBe(false);

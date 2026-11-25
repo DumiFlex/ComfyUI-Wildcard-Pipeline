@@ -149,6 +149,14 @@ export interface LiveAnswer {
   /** When the step was asked, while the model has sent nothing back
    *  (busy with another request, loading, or reading the prompt). */
   waitingSince?: number;
+  /** The model step being asked (1, 2 …). */
+  n?: number;
+  /** The call running now, from its own args ("Reading Hair Color"), and
+   *  its tool. */
+  doing?: string;
+  doingTool?: string;
+  /** When this answer started (ms), for the group times. */
+  startedAt?: number;
 }
 const EMPTY_LIVE: LiveAnswer = { text: "", status: "", thinking: false, steps: [] };
 const live = shallowRef<LiveAnswer>(EMPTY_LIVE);
@@ -178,7 +186,8 @@ function onEvent(ev: AiChatStreamEvent): void {
     const kept = cur.text.trim() && !cur.steps.some((s) => s.say && s.note === cur.text)
       ? [...cur.steps, { tool: "say", note: cur.text, ok: true, say: true }] : cur.steps;
     live.value = { ...cur, steps: kept, text: "", thinking: false, status: "", thought: "",
-                   waitingSince: Date.now() };
+                   doing: "", doingTool: "", waitingSince: Date.now(),
+                   ...(ev.n !== undefined ? { n: ev.n } : {}) };
   }
   // Typing out is a choice (Settings › AI assistant › Chat); off, the reply
   // arrives whole with the answer.
@@ -194,10 +203,15 @@ function onEvent(ev: AiChatStreamEvent): void {
   else if (ev.type === "status") live.value = { ...cur, status: ev.v, waitingSince: undefined };
   // As soon as it is decided, not when the answer is done.
   else if (ev.type === "reaction") react(ev.emoji);
+  else if (ev.type === "doing") {
+    live.value = { ...cur, doing: ev.v, doingTool: ev.tool, waitingSince: undefined };
+  }
   else if (ev.type === "tool") {
     // A "say" step is the text that just streamed: it moves into the list.
+    // A finished call ends what was "doing".
     live.value = { ...cur, steps: [...cur.steps, ev.step], ...(ev.step.say ? { text: "" } : {}),
-                   ...(ev.step.think ? { thought: "" } : {}), waitingSince: undefined };
+                   ...(ev.step.think ? { thought: "" } : { doing: "", doingTool: "" }),
+                   waitingSince: undefined };
   }
 }
 
@@ -205,7 +219,7 @@ function onEvent(ev: AiChatStreamEvent): void {
 async function turn(
   body: AiChatRequest | AiChatResume | AiChatRetry, signal: AbortSignal,
 ): Promise<AiChatResult> {
-  live.value = { ...EMPTY_LIVE, waitingSince: Date.now() };
+  live.value = { ...EMPTY_LIVE, waitingSince: Date.now(), startedAt: Date.now() };
   try {
     const result = await api.ai.chatStream(body, onEvent, signal);
     if (result.context) context.value = result.context;
