@@ -83,6 +83,8 @@ def _isolated_ai(tmp_path, monkeypatch):
     from wp_api import _ai_thinking
     _ai_thinking._cache.clear()
     _ai_thinking._refused.clear()
+    from wp_api import _ai_client
+    _ai_client._found_context.clear()
     for var in ("WP_AI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
 
@@ -243,6 +245,16 @@ async def fake_llm(aiohttp_server):
         fenced = "```json\n" + json.dumps(ANSWER) + "\n```"
         return web.json_response({"message": {"content": fenced}})
 
+    async def ollama_show(request):
+        # What the model was trained for (`overrides["_trained"]`).
+        return web.json_response({"model_info": {
+            "general.architecture": "qwen3",
+            "qwen3.context_length": overrides.get("_trained", 131072)}})
+
+    async def anthropic_model(request):
+        return web.json_response({"id": request.match_info["mid"],
+                                  "max_input_tokens": overrides.get("_claude_ctx", 1000000)})
+
     async def anthropic_models(request):
         return web.json_response({"data": [{"id": "claude-x"}]})
 
@@ -280,7 +292,9 @@ async def fake_llm(aiohttp_server):
     app.router.add_get("/api/v1/models", lmstudio_v1_models)
     app.router.add_get("/api/tags", ollama_tags)
     app.router.add_post("/api/chat", ollama_chat)
+    app.router.add_post("/api/show", ollama_show)
     app.router.add_get("/anthropic/v1/models", anthropic_models)
+    app.router.add_get("/anthropic/v1/models/{mid}", anthropic_model)
     app.router.add_post("/anthropic/v1/messages", anthropic_messages)
     server = await aiohttp_server(app)
     server.seen = seen

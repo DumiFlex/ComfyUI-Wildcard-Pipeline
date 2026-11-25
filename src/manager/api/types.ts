@@ -915,6 +915,9 @@ export interface AiConfig {
   unload_after_s: number;
   /** Most tokens of context a request may ask a local server for. */
   context_max: number;
+  /** Automatic: use the window the model reports, `context_max` when it
+   *  doesn't say. */
+  context_auto: boolean;
   /** How much the assistant asks of the model ("auto" reads the name). */
   model_size: "auto" | AiModelSize;
   /** What "auto" picks for the chosen model. */
@@ -1028,6 +1031,7 @@ export interface AiConfigPatch {
   model?: string;
   unload_after_s?: number;
   context_max?: number;
+  context_auto?: boolean;
   model_size?: "auto" | AiModelSize;
   tool_format?: AiToolFormat;
   thinking?: AiThinking;

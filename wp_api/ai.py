@@ -75,6 +75,7 @@ from wp_api._ai_chats import (
     delete_chat,
     get_chat,
     get_chats,
+    get_context,
     get_vision,
     patch_chat,
     post_compact,
@@ -325,6 +326,7 @@ def register(router: web.UrlDispatcher) -> None:
     add("POST", "/wp/api/ai/library-note/suggest", post_library_note)
     add("POST", "/wp/api/ai/chat", post_chat)
     add("GET", "/wp/api/ai/vision", get_vision)
+    add("GET", "/wp/api/ai/context", get_context)
     add("GET", "/wp/api/ai/progress/{pid}", get_progress, cut_short=False)
     add("GET", "/wp/api/ai/chats", get_chats, cut_short=False)
     add("GET", "/wp/api/ai/chats/{chat_id}", get_chat, cut_short=False)

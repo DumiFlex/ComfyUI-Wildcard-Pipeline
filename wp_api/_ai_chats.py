@@ -19,6 +19,7 @@ from engine.db.repositories import (
 )
 from wp_api import (
     _ai_chat,
+    _ai_client,
 )
 from wp_api._ai_common import (
     _body,
@@ -46,6 +47,17 @@ async def get_vision(request: web.Request) -> web.Response:
     if isinstance(cfg, web.Response):
         return cfg
     return json_ok({"vision": await _ai_chat.vision_support(cfg), "model": cfg.get("model")})
+
+
+async def get_context(request: web.Request) -> web.Response:
+    """The chosen model's own window (`detected`, null when nothing says)
+    and the size the assistant uses with the current setting (`used`)."""
+    cfg = _enabled_cfg()
+    if isinstance(cfg, web.Response):
+        return cfg
+    detected = await _ai_client.model_context(cfg)
+    return json_ok({"detected": detected, "used": await _ai_client.context_cap(cfg),
+                    "model": cfg.get("model")})
 
 
 async def get_chats(request: web.Request) -> web.Response:
@@ -200,7 +212,7 @@ async def post_compact(request: web.Request) -> web.Response:
         return json_error("nothing to summarize yet: your latest message always stays whole",
                           status=409)
     prof = ai_budget.profile(cfg)
-    num_ctx = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
+    num_ctx = await _ai_client.context_cap(cfg)
     window = await _window(cfg, meta)
     after = await _maybe_compact(cfg, log, meta, prof, num_ctx, window,
                                  len(chat.get("snapshot") or "") + 12000, None, force=True)

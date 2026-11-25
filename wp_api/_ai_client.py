@@ -794,7 +794,7 @@ async def _complete_json(
                         budget.prompt_chars(system, history, user, schema)
                         # An image costs about a thousand tokens.
                         + 4000 * len(images or []),
-                        int(cfg.get("context_max") or budget.CONTEXT_DEFAULT),
+                        await context_cap(cfg),
                     ),
                 },
                 "messages": _chat_messages(system, history, user, images, "ollama"),
@@ -1011,6 +1011,74 @@ async def cloud_context(cfg: dict[str, Any]) -> int | None:
             if isinstance(value, int) and not isinstance(value, bool) and value > 0:
                 return value
     return None
+
+
+async def ollama_context(cfg: dict[str, Any]) -> int | None:
+    """The window an Ollama model was trained for (`/api/show`'s
+    `<arch>.context_length`). Ollama loads whatever `num_ctx` it is sent,
+    so this is the most it can take, not what it has loaded."""
+    if cfg["api"] != "ollama":
+        return None
+    data = await _request(cfg, "POST", "/api/show", body={"model": cfg.get("model")},
+                          timeout=_LIST_TIMEOUT)
+    info = data.get("model_info") if isinstance(data, dict) else None
+    for key, value in (info or {}).items():
+        if str(key).endswith(".context_length") and isinstance(value, int) \
+                and not isinstance(value, bool) and value > 0:
+            return value
+    return None
+
+
+async def claude_context(cfg: dict[str, Any]) -> int | None:
+    """A Claude model's window, from the Models API (`max_input_tokens`)."""
+    if cfg["api"] != "anthropic" or not cfg.get("model"):
+        return None
+    model = urllib.parse.quote(str(cfg["model"]), safe="")
+    data = await _request(cfg, "GET", f"/models/{model}", timeout=_LIST_TIMEOUT)
+    value = data.get("max_input_tokens") if isinstance(data, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+#: (api, address, model) → (when, window or None): asked again after this long.
+_CONTEXT_TTL_S = 600.0
+_found_context: dict[tuple[str, str, str], tuple[float, int | None]] = {}
+
+
+async def model_context(cfg: dict[str, Any]) -> int | None:
+    """The window the model reports, or None when nothing says: what LM
+    Studio or llama.cpp loaded it with, what an Ollama model was trained
+    for, or what Claude's or OpenRouter's model list gives. Remembered for
+    a few minutes per model."""
+    key = (str(cfg.get("api")), str(cfg.get("base_url") or ""), str(cfg.get("model") or ""))
+    hit = _found_context.get(key)
+    if hit and time.monotonic() - hit[0] < _CONTEXT_TTL_S:
+        return hit[1]
+    found: int | None = None
+    for ask in (server_context, ollama_context, claude_context, cloud_context):
+        try:
+            found = await ask(cfg)
+        except AIError:
+            found = None
+        if found:
+            break
+    _found_context[key] = (time.monotonic(), found)
+    return found
+
+
+async def context_cap(cfg: dict[str, Any]) -> int:
+    """The most context the assistant uses: the user's size, or on
+    Automatic (`context_auto`) the model's own window. Ollama reserves
+    memory for the whole window it is sent, so Automatic stays at
+    `budget.AUTO_OLLAMA_CAP` there; a larger size is the user's call."""
+    setting = int(cfg.get("context_max") or budget.CONTEXT_DEFAULT)
+    if not cfg.get("context_auto"):
+        return setting
+    found = await model_context(cfg)
+    if not found:
+        return setting
+    if cfg["api"] == "ollama":
+        found = min(found, budget.AUTO_OLLAMA_CAP)
+    return max(budget.CONTEXT_MIN, min(found, budget.CONTEXT_MAX))
 
 
 async def probe(cfg: dict[str, Any]) -> dict[str, Any]:

@@ -21,6 +21,9 @@ CHARS_PER_TOKEN = 3.2
 ANSWER_TOKENS = 3072
 CONTEXT_MIN = 4096
 CONTEXT_MAX = 1048576
+#: Automatic context on Ollama stops here: Ollama reserves GPU memory for
+#: the whole window it is sent, and most models list far more than fits.
+AUTO_OLLAMA_CAP = 32768
 CONTEXT_DEFAULT = 16384
 
 SIZES = ("small", "medium", "large")

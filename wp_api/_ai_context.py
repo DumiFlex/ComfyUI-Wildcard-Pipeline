@@ -321,7 +321,7 @@ async def _window(cfg: dict[str, Any], meta: dict[str, Any]) -> int:
         found = await _ai_client.server_context(cfg)
     except Exception:  # noqa: BLE001 - only a hint for the meter
         found = None
-    setting = int(cfg.get("context_max") or ai_budget.CONTEXT_DEFAULT)
+    setting = await _ai_client.context_cap(cfg)
     window = min(found, setting) if found and cfg.get("api") == "ollama" else (found or setting)
     meta["window"] = window
     meta["window_model"] = cfg.get("model")

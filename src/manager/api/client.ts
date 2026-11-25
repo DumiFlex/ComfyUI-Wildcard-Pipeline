@@ -599,6 +599,12 @@ export const api = {
     vision() {
       return request<{ vision: boolean | null; model: string }>("/wp/api/ai/vision", { method: "GET" });
     },
+    /** The chosen model's own window (null when nothing says) and what the
+     *  assistant uses with the current setting. */
+    context() {
+      return request<{ detected: number | null; used: number; model: string }>(
+        "/wp/api/ai/context", { method: "GET" });
+    },
     chats(q = "") {
       return request<{ chats: AiChatSummary[] }>(`/wp/api/ai/chats${qs({ q })}`, { method: "GET" });
     },
